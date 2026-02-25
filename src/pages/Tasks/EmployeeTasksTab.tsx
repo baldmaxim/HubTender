@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Table, message } from 'antd';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Table, Tabs, message } from 'antd';
 import { supabase, type UserTaskWithRelations, type TaskStatus, type WorkMode, type WorkStatus } from '../../lib/supabase';
 import dayjs from 'dayjs';
 
@@ -7,24 +7,30 @@ interface EmployeeTasksTabProps {
   searchUserId?: string;
 }
 
+const STATUS_TABS: { key: TaskStatus; label: string }[] = [
+  { key: 'running', label: 'В работе' },
+  { key: 'paused', label: 'Остановлены' },
+  { key: 'completed', label: 'Завершены' },
+];
+
 const EmployeeTasksTab: React.FC<EmployeeTasksTabProps> = ({ searchUserId }) => {
   const [allTasks, setAllTasks] = useState<UserTaskWithRelations[]>([]);
-  const [filteredTasks, setFilteredTasks] = useState<UserTaskWithRelations[]>([]);
   const [loading, setLoading] = useState(false);
+  const [activeStatus, setActiveStatus] = useState<TaskStatus>('running');
 
   useEffect(() => {
     fetchAllTasks();
   }, []);
 
-  useEffect(() => {
-    let filtered = [...allTasks];
+  const filteredTasks = useMemo(() => {
+    let filtered = allTasks.filter(t => t.task_status === activeStatus);
 
     if (searchUserId) {
       filtered = filtered.filter(t => t.user_id === searchUserId);
     }
 
-    setFilteredTasks(filtered);
-  }, [searchUserId, allTasks]);
+    return filtered;
+  }, [searchUserId, allTasks, activeStatus]);
 
   const fetchAllTasks = async () => {
     setLoading(true);
@@ -141,15 +147,35 @@ const EmployeeTasksTab: React.FC<EmployeeTasksTabProps> = ({ searchUserId }) => 
     },
   ];
 
+  const statusTabItems = STATUS_TABS.map(({ key, label }) => {
+    const count = allTasks.filter(t => {
+      if (t.task_status !== key) return false;
+      if (searchUserId) return t.user_id === searchUserId;
+      return true;
+    }).length;
+
+    return {
+      key,
+      label: `${label} (${count})`,
+      children: (
+        <Table
+          dataSource={filteredTasks}
+          loading={loading}
+          rowKey="id"
+          rowClassName={getRowClassName}
+          columns={columns}
+          scroll={{ x: 1400, y: 'calc(100vh - 340px)' }}
+          pagination={false}
+        />
+      ),
+    };
+  });
+
   return (
-    <Table
-      dataSource={filteredTasks}
-      loading={loading}
-      rowKey="id"
-      rowClassName={getRowClassName}
-      columns={columns}
-      scroll={{ x: 1400, y: 600 }}
-      pagination={false}
+    <Tabs
+      activeKey={activeStatus}
+      onChange={(key) => setActiveStatus(key as TaskStatus)}
+      items={statusTabItems}
     />
   );
 };
