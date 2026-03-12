@@ -248,21 +248,26 @@ export function MatchingTable({
         // Случай: старая позиция без сопоставления
         if (record.oldPosition && !record.newPosition) {
           return (
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 180 }}>
               <Select
                 placeholder="Сопоставить с..."
                 style={{ width: '100%' }}
                 size="small"
                 showSearch
-                optionFilterProp="children"
+                optionFilterProp="label"
                 onChange={(value: number) => onManualMatch(record.oldPosition!.id, value)}
-              >
-                {newPositions.map((pos, idx) => (
-                  <Select.Option key={idx} value={idx}>
-                    {pos.work_name.substring(0, 40)}...
-                  </Select.Option>
-                ))}
-              </Select>
+                options={newPositions.map((pos, idx) => {
+                  const fullName = (pos.item_no ? `${pos.item_no} — ` : '') + pos.work_name;
+                  return { value: idx, label: fullName, title: '' };
+                })}
+                optionRender={(option) => (
+                  <Tooltip title={option.label} placement="left" mouseEnterDelay={0.4}>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {option.label}
+                    </div>
+                  </Tooltip>
+                )}
+              />
             </Space>
           );
         }
