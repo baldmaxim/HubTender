@@ -57,6 +57,7 @@ export function VersionMatchModal({ open, onClose, tender }: VersionMatchModalPr
     state,
     performAutoMatch,
     toggleTransfer,
+    acceptAllLowConfidence,
     manualMatch,
     breakMatch,
     setFilter,
@@ -241,7 +242,9 @@ export function VersionMatchModal({ open, onClose, tender }: VersionMatchModalPr
                   filter={state.filter}
                   onFilterChange={setFilter}
                   onAutoMatch={performAutoMatch}
+                  onAcceptAllLowConfidence={acceptAllLowConfidence}
                   autoMatchDisabled={state.matches.length > 0}
+                  acceptAllDisabled={!state.matches.some(m => m.matchType === 'low_confidence' && !m.transferData)}
                   loading={state.loading}
                 />
               </Space>

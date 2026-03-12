@@ -44,6 +44,7 @@ export type MatchAction =
   | { type: 'SET_ADDITIONAL_WORKS'; payload: AdditionalWorkTransfer[] }
   | { type: 'UPDATE_MATCH'; payload: { index: number; match: MatchPair } }
   | { type: 'TOGGLE_TRANSFER'; payload: { oldId: string } }
+  | { type: 'ACCEPT_ALL_LOW_CONFIDENCE' }
   | { type: 'MANUAL_MATCH'; payload: { oldId: string; newIdx: number } }
   | { type: 'BREAK_MATCH'; payload: { oldId: string } }
   | { type: 'SET_FILTER'; payload: VersionMatchState['filter'] }
@@ -85,6 +86,16 @@ export function matchReducer(
       const newMatches = state.matches.map(match => {
         if (match.oldPosition?.id === action.payload.oldId) {
           return { ...match, transferData: !match.transferData };
+        }
+        return match;
+      });
+      return { ...state, matches: newMatches };
+    }
+
+    case 'ACCEPT_ALL_LOW_CONFIDENCE': {
+      const newMatches = state.matches.map(match => {
+        if (match.matchType === 'low_confidence' && !match.transferData) {
+          return { ...match, transferData: true };
         }
         return match;
       });

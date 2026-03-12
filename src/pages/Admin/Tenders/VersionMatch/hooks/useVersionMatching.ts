@@ -28,6 +28,7 @@ export interface UseVersionMatchingResult {
   // Действия
   performAutoMatch: () => void;
   toggleTransfer: (oldId: string) => void;
+  acceptAllLowConfidence: () => void;
   manualMatch: (oldId: string, newIdx: number) => void;
   breakMatch: (oldId: string) => void;
   setFilter: (filter: VersionMatchState['filter']) => void;
@@ -178,6 +179,14 @@ export function useVersionMatching({
    */
   const toggleTransfer = useCallback((oldId: string) => {
     dispatch({ type: 'TOGGLE_TRANSFER', payload: { oldId } });
+  }, []);
+
+  /**
+   * Принять все строки с низкой уверенностью (включить перенос данных)
+   */
+  const acceptAllLowConfidence = useCallback(() => {
+    dispatch({ type: 'ACCEPT_ALL_LOW_CONFIDENCE' });
+    message.success('Все строки с низкой уверенностью приняты для переноса');
   }, []);
 
   /**
@@ -349,6 +358,7 @@ export function useVersionMatching({
     state,
     performAutoMatch,
     toggleTransfer,
+    acceptAllLowConfidence,
     manualMatch,
     breakMatch,
     setFilter,

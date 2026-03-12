@@ -6,6 +6,7 @@ import { Space, Button, Radio, Tooltip } from 'antd';
 import type { RadioChangeEvent } from 'antd';
 import {
   CheckCircleOutlined,
+  CheckSquareOutlined,
   QuestionCircleOutlined,
   SwapOutlined,
   StarOutlined,
@@ -17,7 +18,9 @@ interface MatchControlsProps {
   filter: VersionMatchState['filter'];
   onFilterChange: (filter: VersionMatchState['filter']) => void;
   onAutoMatch: () => void;
+  onAcceptAllLowConfidence?: () => void;
   autoMatchDisabled?: boolean;
+  acceptAllDisabled?: boolean;
   loading?: boolean;
 }
 
@@ -32,7 +35,9 @@ export function MatchControls({
   filter,
   onFilterChange,
   onAutoMatch,
+  onAcceptAllLowConfidence,
   autoMatchDisabled = false,
+  acceptAllDisabled = true,
   loading = false,
 }: MatchControlsProps) {
   const handleFilterChange = (e: RadioChangeEvent) => {
@@ -55,6 +60,20 @@ export function MatchControls({
             Автоматическое сопоставление
           </Button>
         </Tooltip>
+
+        {onAcceptAllLowConfidence && (
+          <Tooltip title="Принять все строки с низкой уверенностью для переноса данных">
+            <Button
+              icon={<CheckSquareOutlined />}
+              onClick={onAcceptAllLowConfidence}
+              disabled={acceptAllDisabled}
+              loading={loading}
+              size="large"
+            >
+              Сопоставить все
+            </Button>
+          </Tooltip>
+        )}
       </Space>
 
       {/* Фильтры отображения */}
