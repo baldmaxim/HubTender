@@ -14,6 +14,7 @@ import {
   UploadOutlined,
   EyeOutlined,
   EyeInvisibleOutlined,
+  VerticalAlignBottomOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { ClientPosition, Tender } from '../../../lib/supabase';
@@ -53,6 +54,14 @@ interface PositionTableProps {
   onBulkDeleteBoqItems?: () => void;
   onDeleteAdditionalPosition: (positionId: string, positionName: string, event: React.MouseEvent) => void;
   onClearPositionBoqItems: (positionId: string, positionName: string, event: React.MouseEvent) => void;
+  isLevelChangeMode?: boolean;
+  selectedLevelChangeIds?: Set<string>;
+  isLevelChanging?: boolean;
+  onStartLevelChange: (event: React.MouseEvent) => void;
+  onToggleLevelChangeSelection?: (positionId: string, event: React.MouseEvent) => void;
+  onCancelLevelChange?: () => void;
+  onBulkLevelChange?: () => void;
+  canChangeLevel?: boolean;
   onExportToExcel: () => void;
   onMassImport?: () => void;
   tempSelectedPositionIds?: Set<string>;
@@ -93,6 +102,14 @@ export const PositionTable: React.FC<PositionTableProps> = ({
   onBulkDeleteBoqItems,
   onDeleteAdditionalPosition,
   onClearPositionBoqItems,
+  isLevelChangeMode = false,
+  selectedLevelChangeIds = new Set(),
+  isLevelChanging = false,
+  onStartLevelChange,
+  onToggleLevelChangeSelection,
+  onCancelLevelChange,
+  onBulkLevelChange,
+  canChangeLevel = false,
   onExportToExcel,
   onMassImport,
   isFilterActive = false,
@@ -344,6 +361,24 @@ export const PositionTable: React.FC<PositionTableProps> = ({
                 </Tooltip>
               )}
 
+              {/* Тег выбора для изменения уровня иерархии */}
+              {isLevelChangeMode && (
+                <Tooltip title={selectedLevelChangeIds.has(record.id) ? 'Отменить выбор' : 'Выбрать для понижения уровня'} {...tooltipColor}>
+                  <Tag
+                    color={selectedLevelChangeIds.has(record.id) ? 'processing' : 'default'}
+                    style={{
+                      cursor: 'pointer', margin: 0,
+                      backgroundColor: selectedLevelChangeIds.has(record.id) ? '#1890ff' : undefined,
+                      borderColor: selectedLevelChangeIds.has(record.id) ? '#1890ff' : undefined,
+                      color: selectedLevelChangeIds.has(record.id) ? '#fff' : undefined,
+                    }}
+                    onClick={(e) => { e.stopPropagation(); onToggleLevelChangeSelection?.(record.id, e); }}
+                  >
+                    <VerticalAlignBottomOutlined />
+                  </Tag>
+                </Tooltip>
+              )}
+
               {/* Раскрывающиеся кнопки действий */}
               {isExpanded && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -397,6 +432,13 @@ export const PositionTable: React.FC<PositionTableProps> = ({
                         </Tag>
                       </Tooltip>
                     )}
+                    {canChangeLevel && (
+                      <Tooltip title="Понизить уровень иерархии" {...tooltipColor}>
+                        <Tag color="geekblue" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onStartLevelChange(e); }}>
+                          <VerticalAlignBottomOutlined />
+                        </Tag>
+                      </Tooltip>
+                    )}
                   </div>
                 </div>
               )}
@@ -438,6 +480,11 @@ export const PositionTable: React.FC<PositionTableProps> = ({
     onToggleDeleteSelection,
     onStartDeleteSelection,
     onClearPositionBoqItems,
+    isLevelChangeMode,
+    selectedLevelChangeIds,
+    onToggleLevelChangeSelection,
+    onStartLevelChange,
+    canChangeLevel,
   ]);
 
   return (
@@ -498,6 +545,16 @@ export const PositionTable: React.FC<PositionTableProps> = ({
               <Button onClick={onCancelDeleteSelection}>Отменить выбор</Button>
             </>
           )}
+          {isLevelChangeMode && (
+            <>
+              {selectedLevelChangeIds.size > 0 && (
+                <Button type="primary" icon={<VerticalAlignBottomOutlined />} onClick={onBulkLevelChange} loading={isLevelChanging} disabled={loading}>
+                  Понизить уровень ({selectedLevelChangeIds.size})
+                </Button>
+              )}
+              <Button onClick={onCancelLevelChange}>Отменить выбор</Button>
+            </>
+          )}
           <Button
             icon={<UploadOutlined />}
             onClick={onMassImport}
@@ -544,6 +601,8 @@ export const PositionTable: React.FC<PositionTableProps> = ({
               opacity: (showAllPositions && isFilterActive && !tempSelectedPositionIds.has(record.id)) ? 0.5 : 1,
               backgroundColor: (isDeleteSelectionMode && selectedDeleteIds.has(record.id))
                 ? (currentTheme === 'dark' ? 'rgba(255, 77, 79, 0.15)' : 'rgba(255, 77, 79, 0.08)')
+                : (isLevelChangeMode && selectedLevelChangeIds.has(record.id))
+                ? (currentTheme === 'dark' ? 'rgba(24, 144, 255, 0.15)' : 'rgba(24, 144, 255, 0.08)')
                 : undefined,
             },
           };

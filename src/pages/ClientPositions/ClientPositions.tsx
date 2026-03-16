@@ -76,6 +76,13 @@ const ClientPositions: React.FC = () => {
     handleClearPositionBoqItems,
     handleExportToExcel,
     handleDeleteAdditionalPosition,
+    isLevelChangeMode,
+    selectedLevelChangeIds,
+    isLevelChanging,
+    handleStartLevelChange,
+    handleToggleLevelChangeSelection,
+    handleCancelLevelChange,
+    handleBulkLevelChange,
   } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, currentTheme);
 
   // Хук фильтрации позиций и получение информации о пользователе
@@ -83,6 +90,9 @@ const ClientPositions: React.FC = () => {
 
   // Проверка роли для фильтрации архивных тендеров
   const shouldFilterArchived = user?.role_code === 'engineer' || user?.role_code === 'moderator';
+
+  // Роли с доступом к изменению уровня иерархии
+  const canChangeLevel = ['senior_group', 'administrator', 'developer', 'director'].includes(user?.role_code || '');
 
   const {
     selectedPositionIds,
@@ -364,6 +374,14 @@ const ClientPositions: React.FC = () => {
           onClearPositionBoqItems={(positionId, positionName, event) =>
             handleClearPositionBoqItems(positionId, positionName, selectedTenderId, event)
           }
+          isLevelChangeMode={isLevelChangeMode}
+          selectedLevelChangeIds={selectedLevelChangeIds}
+          isLevelChanging={isLevelChanging}
+          onStartLevelChange={handleStartLevelChange}
+          onToggleLevelChangeSelection={handleToggleLevelChangeSelection}
+          onCancelLevelChange={handleCancelLevelChange}
+          onBulkLevelChange={() => handleBulkLevelChange(selectedTenderId)}
+          canChangeLevel={canChangeLevel}
           onExportToExcel={() => handleExportToExcel(selectedTender)}
           onMassImport={() => setMassImportModalOpen(true)}
           tempSelectedPositionIds={tempSelectedPositionIds}

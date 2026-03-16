@@ -20,52 +20,9 @@ export const usePositionActions = (
   const [isDeleteSelectionMode, setIsDeleteSelectionMode] = useState(false);
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-
-  // Обновление позиции в БД
-  const handleUpdatePosition = async (
-    positionId: string,
-    field: 'manual_volume' | 'manual_note',
-    value: number | string | null
-  ) => {
-    try {
-      // Валидация для количества
-      if (field === 'manual_volume') {
-        if (value === null || value === '') {
-          message.error('Количество ГП обязательно для заполнения');
-          return;
-        }
-
-        const numValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
-
-        if (isNaN(numValue) || numValue <= 0) {
-          message.error('Количество должно быть положительным числом');
-          return;
-        }
-
-        value = numValue;
-      }
-
-      // Обновление в БД
-      const { error } = await supabase
-        .from('client_positions')
-        .update({ [field]: value })
-        .eq('id', positionId);
-
-      if (error) throw error;
-
-      // Обновление локального состояния
-      setClientPositions(prev =>
-        prev.map(pos =>
-          pos.id === positionId ? { ...pos, [field]: value } : pos
-        )
-      );
-
-      message.success('Данные сохранены');
-    } catch (error: any) {
-      console.error('Ошибка обновления позиции:', error);
-      message.error('Ошибка сохранения: ' + error.message);
-    }
-  };
+  const [isLevelChangeMode, setIsLevelChangeMode] = useState(false);
+  const [selectedLevelChangeIds, setSelectedLevelChangeIds] = useState<Set<string>>(new Set());
+  const [isLevelChanging, setIsLevelChanging] = useState(false);
 
   // Копирование позиции
   const handleCopyPosition = (positionId: string, event: React.MouseEvent) => {
@@ -477,6 +434,99 @@ export const usePositionActions = (
     });
   };
 
+  // Вход в режим изменения уровня иерархии
+  const handleStartLevelChange = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    setCopiedPositionId(null);
+    setCopiedNoteValue(null);
+    setCopiedNotePositionId(null);
+    setSelectedTargetIds(new Set());
+    setIsDeleteSelectionMode(false);
+    setSelectedDeleteIds(new Set());
+    setIsLevelChangeMode(true);
+    setSelectedLevelChangeIds(new Set());
+  };
+
+  // Toggle выбора строки для изменения уровня
+  const handleToggleLevelChangeSelection = (positionId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedLevelChangeIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(positionId)) {
+        newSet.delete(positionId);
+      } else {
+        newSet.add(positionId);
+      }
+      return newSet;
+    });
+  };
+
+  // Отмена режима изменения уровня
+  const handleCancelLevelChange = () => {
+    setIsLevelChangeMode(false);
+    setSelectedLevelChangeIds(new Set());
+  };
+
+  // Массовое понижение уровня иерархии на 1
+  const handleBulkLevelChange = async (selectedTenderId: string | null) => {
+    if (selectedLevelChangeIds.size === 0) return;
+
+    const count = selectedLevelChangeIds.size;
+
+    Modal.confirm({
+      title: 'Понизить уровень иерархии?',
+      content: `Понизить уровень иерархии на 1 у ${count} ${pluralize(count, 'позиции', 'позиций', 'позиций')}?`,
+      okText: 'Подтвердить',
+      cancelText: 'Отмена',
+      rootClassName: currentTheme === 'dark' ? 'dark-modal' : '',
+      onOk: async () => {
+        setIsLevelChanging(true);
+        setLoading(true);
+        try {
+          const positionIds = Array.from(selectedLevelChangeIds);
+
+          // Загружаем текущие уровни позиций
+          const { data: positions, error: fetchError } = await supabase
+            .from('client_positions')
+            .select('id, hierarchy_level')
+            .in('id', positionIds);
+
+          if (fetchError) throw fetchError;
+
+          // Обновляем каждую позицию, понижая уровень на 1 (минимум 0)
+          for (const pos of positions || []) {
+            const currentLevel = pos.hierarchy_level || 0;
+            const newLevel = currentLevel + 1;
+
+            const { error } = await supabase
+              .from('client_positions')
+              .update({ hierarchy_level: newLevel })
+              .eq('id', pos.id);
+
+            if (error) throw error;
+          }
+
+          setSelectedLevelChangeIds(new Set());
+          setIsLevelChangeMode(false);
+
+          if (selectedTenderId) {
+            await fetchClientPositions(selectedTenderId);
+          }
+
+          message.success(
+            `Уровень иерархии понижен у ${count} ${pluralize(count, 'позиции', 'позиций', 'позиций')}`
+          );
+        } catch (error: any) {
+          console.error('Ошибка изменения уровня:', error);
+          message.error('Ошибка изменения уровня: ' + error.message);
+        } finally {
+          setIsLevelChanging(false);
+          setLoading(false);
+        }
+      },
+    });
+  };
+
   return {
     copiedPositionId,
     copiedNotePositionId,
@@ -485,7 +535,9 @@ export const usePositionActions = (
     isDeleteSelectionMode,
     selectedDeleteIds,
     isBulkDeleting,
-    handleUpdatePosition,
+    isLevelChangeMode,
+    selectedLevelChangeIds,
+    isLevelChanging,
     handleCopyPosition,
     handlePastePosition,
     handleToggleSelection,
@@ -500,5 +552,9 @@ export const usePositionActions = (
     handleClearPositionBoqItems,
     handleExportToExcel,
     handleDeleteAdditionalPosition,
+    handleStartLevelChange,
+    handleToggleLevelChangeSelection,
+    handleCancelLevelChange,
+    handleBulkLevelChange,
   };
 };
