@@ -92,7 +92,7 @@ const ClientPositions: React.FC = () => {
   const shouldFilterArchived = user?.role_code === 'engineer' || user?.role_code === 'moderator';
 
   // Роли с доступом к изменению уровня иерархии
-  const canChangeLevel = ['senior_group', 'administrator', 'developer', 'director'].includes(user?.role_code || '');
+  const canChangeLevel = ['administrator', 'developer', 'director', 'veduschiy_inzhener'].includes(user?.role_code || '');
 
   const {
     selectedPositionIds,
