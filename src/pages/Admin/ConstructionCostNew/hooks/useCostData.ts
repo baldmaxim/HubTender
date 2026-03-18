@@ -76,10 +76,21 @@ export const useCostData = (userRole?: string) => {
 
   const handleTenderTitleChange = (title: string) => {
     setSelectedTenderTitle(title);
-    setSelectedVersion(null);
-    setSelectedTenderId(null);
-    setData([]);
-    setGroupVolumes(new Map());
+    // Автоматически выбираем последнюю версию нового тендера
+    const versionsOfTitle = tenders
+      .filter(t => t.title === title)
+      .sort((a, b) => (b.version || 1) - (a.version || 1));
+    if (versionsOfTitle.length > 0) {
+      const latest = versionsOfTitle[0];
+      setSelectedVersion(latest.version || 1);
+      setSelectedTenderId(latest.id);
+      setGroupVolumes(new Map());
+    } else {
+      setSelectedVersion(null);
+      setSelectedTenderId(null);
+      setData([]);
+      setGroupVolumes(new Map());
+    }
   };
 
   const handleVersionChange = (version: number) => {

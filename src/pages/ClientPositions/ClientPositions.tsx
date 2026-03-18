@@ -155,10 +155,22 @@ const ClientPositions: React.FC = () => {
   // Обработка выбора наименования тендера
   const handleTenderTitleChange = (title: string) => {
     setSelectedTenderTitle(title);
-    setSelectedTender(null);
-    setSelectedTenderId(null);
-    setSelectedVersion(null);
-    setClientPositions([]);
+    // Автоматически выбираем последнюю версию нового тендера
+    const versionsOfTitle = tenders
+      .filter(t => t.title === title && (!shouldFilterArchived || !t.is_archived))
+      .sort((a, b) => (b.version || 1) - (a.version || 1));
+    if (versionsOfTitle.length > 0) {
+      const latest = versionsOfTitle[0];
+      setSelectedVersion(latest.version || 1);
+      setSelectedTender(latest);
+      setSelectedTenderId(latest.id);
+      fetchClientPositions(latest.id);
+    } else {
+      setSelectedTender(null);
+      setSelectedTenderId(null);
+      setSelectedVersion(null);
+      setClientPositions([]);
+    }
   };
 
   // Обработка выбора версии тендера

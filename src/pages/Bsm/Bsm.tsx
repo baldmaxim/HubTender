@@ -107,9 +107,21 @@ const Bsm: React.FC = () => {
   // Обработка выбора наименования тендера
   const handleTenderTitleChange = (title: string) => {
     setSelectedTenderTitle(title);
-    setSelectedTenderId(null);
-    setSelectedVersion(null);
-    setAllItems([]);
+    // Автоматически выбираем последнюю версию нового тендера
+    const versionsOfTitle = (shouldFilterArchived
+      ? tenders.filter(t => t.title === title && !t.is_archived)
+      : tenders.filter(t => t.title === title)
+    ).sort((a, b) => (b.version || 1) - (a.version || 1));
+    if (versionsOfTitle.length > 0) {
+      const latest = versionsOfTitle[0];
+      setSelectedVersion(latest.version || 1);
+      setSelectedTenderId(latest.id);
+      fetchBoqItems(latest.id);
+    } else {
+      setSelectedTenderId(null);
+      setSelectedVersion(null);
+      setAllItems([]);
+    }
   };
 
   // Обработка выбора версии тендера

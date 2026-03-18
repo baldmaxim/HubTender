@@ -166,8 +166,18 @@ const FinancialIndicators: React.FC = () => {
 
   const handleTenderTitleChange = (title: string) => {
     setSelectedTenderTitle(title);
-    setSelectedVersion(null);
-    setSelectedTenderId(null);
+    // Автоматически выбираем последнюю версию нового тендера
+    const versionsOfTitle = tenders
+      .filter(t => t.title === title)
+      .sort((a, b) => (b.version || 1) - (a.version || 1));
+    if (versionsOfTitle.length > 0) {
+      const latest = versionsOfTitle[0];
+      setSelectedVersion(latest.version || 1);
+      setSelectedTenderId(latest.id);
+    } else {
+      setSelectedVersion(null);
+      setSelectedTenderId(null);
+    }
   };
 
   const handleVersionChange = (version: number) => {

@@ -49,8 +49,18 @@ export default function Commerce() {
   // Обработка выбора наименования тендера
   const handleTenderTitleChange = (title: string) => {
     setSelectedTenderTitle(title);
-    setSelectedTenderId(undefined);
-    setSelectedVersion(null);
+    // Автоматически выбираем последнюю версию нового тендера
+    const versionsOfTitle = tenders
+      .filter(t => t.title === title)
+      .sort((a, b) => (b.version || 1) - (a.version || 1));
+    if (versionsOfTitle.length > 0) {
+      const latest = versionsOfTitle[0];
+      setSelectedVersion(latest.version || 1);
+      setSelectedTenderId(latest.id);
+    } else {
+      setSelectedTenderId(undefined);
+      setSelectedVersion(null);
+    }
   };
 
   // Обработка выбора версии тендера
