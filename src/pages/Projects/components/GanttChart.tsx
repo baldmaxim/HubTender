@@ -223,14 +223,14 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       return a.month - b.month;
     });
 
-    // Find index of last actual data
+    // Find index of last actual data (actual_amount != null means data was entered, even if 0)
     const lastActualIndex = sorted.reduce((lastIdx, c, idx) => {
-      return c.actual_amount > 0 ? idx : lastIdx;
+      return c.actual_amount != null && c.actual_amount >= 0 ? idx : lastIdx;
     }, -1);
 
     // Build actual data array
     const actualData = sorted.map((c, idx) => {
-      if (idx <= lastActualIndex && c.actual_amount > 0) {
+      if (idx <= lastActualIndex && c.actual_amount != null) {
         return c.actual_amount / 1_000_000;
       }
       return null;
@@ -244,7 +244,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       }
 
       // Include last actual point to connect the lines
-      if (idx === lastActualIndex && c.actual_amount > 0) {
+      if (idx === lastActualIndex && c.actual_amount != null) {
         return c.actual_amount / 1_000_000;
       }
       // Show forecast only after last actual
@@ -318,7 +318,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
 
     // Find the last month with actual data
     let lastActualMonth: dayjs.Dayjs | null = null;
-    const completionWithActual = projectCompletion.filter(c => c.actual_amount > 0);
+    const completionWithActual = projectCompletion.filter(c => c.actual_amount != null && c.actual_amount >= 0);
     if (completionWithActual.length > 0) {
       const sortedCompletion = [...completionWithActual].sort((a, b) => {
         if (a.year !== b.year) return b.year - a.year;
@@ -352,7 +352,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       const completion = projectCompletion.find(
         (c) => c.year === m.year && c.month === m.month
       );
-      return completion && completion.actual_amount > 0 ? completion.actual_amount / 1_000_000 : null;
+      return completion && completion.actual_amount != null ? completion.actual_amount / 1_000_000 : null;
     });
 
     // Build forecast data array (starts from last actual point, or from beginning if no actual data)
@@ -374,7 +374,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
         const completion = projectCompletion.find(
           (c) => c.year === m.year && c.month === m.month
         );
-        return completion && completion.actual_amount > 0 ? completion.actual_amount / 1_000_000 : null;
+        return completion && completion.actual_amount != null ? completion.actual_amount / 1_000_000 : null;
       }
 
       // Show forecast only after last actual
@@ -526,7 +526,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
     let latestDataDate = now.add(6, 'month').endOf('month');
     completionData.forEach((c) => {
       if (!visibleProjectIds.has(c.project_id)) return; // Skip hidden projects
-      const hasData = c.actual_amount > 0 || (c.forecast_amount && c.forecast_amount > 0);
+      const hasData = (c.actual_amount != null && c.actual_amount >= 0) || (c.forecast_amount && c.forecast_amount > 0);
       if (hasData) {
         const dataDate = dayjs(`${c.year}-${c.month}-01`);
         if (dataDate.isAfter(latestDataDate)) {
@@ -560,8 +560,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       if (!visibleProjectIds.has(c.project_id)) return; // Skip hidden projects
       const key = `${c.year}-${String(c.month).padStart(2, '0')}`;
 
-      // Collect actual amounts
-      if (c.actual_amount > 0) {
+      // Collect actual amounts (include zero values — they mean "data entered, amount is 0")
+      if (c.actual_amount != null && c.actual_amount >= 0) {
         monthlyActualTotals[key] = (monthlyActualTotals[key] || 0) + c.actual_amount;
       }
 
@@ -572,7 +572,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
     });
 
     // Find first and last month with actual data
-    const monthsWithActual = allMonths.filter((m) => monthlyActualTotals[m.key] > 0);
+    const monthsWithActual = allMonths.filter((m) => m.key in monthlyActualTotals);
     const firstMonthWithActual = monthsWithActual.length > 0
       ? monthsWithActual[0]
       : null;
@@ -582,7 +582,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
 
     // Find last month with ANY data (actual or forecast)
     const monthsWithData = allMonths.filter((m) =>
-      monthlyActualTotals[m.key] > 0 || monthlyForecastTotals[m.key] > 0
+      m.key in monthlyActualTotals || monthlyForecastTotals[m.key] > 0
     );
     const lastMonthWithData = monthsWithData.length > 0
       ? monthsWithData[monthsWithData.length - 1]
@@ -595,7 +595,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
         return null;
       }
       // If has actual, show actual + forecast (if forecast also exists in same month)
-      if (monthlyActualTotals[m.key]) {
+      if (m.key in monthlyActualTotals) {
         const actual = monthlyActualTotals[m.key];
         const forecast = monthlyForecastTotals[m.key] || 0;
         return (actual + forecast) / 1_000_000;
@@ -611,7 +611,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       }
 
       // If this month has actual data, check if we need it for connection
-      if (monthlyActualTotals[m.key]) {
+      if (m.key in monthlyActualTotals) {
         // Include last actual point to connect with forecast line after it
         if (lastMonthWithActual && m.key === lastMonthWithActual.key) {
           const actual = monthlyActualTotals[m.key];
