@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Typography, Select, Table, Space, Statistic, Row, Col, Button, Spin, Segmented } from 'antd';
-import { BarChartOutlined, ReloadOutlined } from '@ant-design/icons';
+import { BarChartOutlined, ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useComparisonData } from './hooks/useComparisonData';
 import type { ComparisonRow, CostType, ViewMode } from './types';
+import { exportComparisonToExcel } from './utils/exportComparisonToExcel';
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -242,6 +243,18 @@ const ObjectComparison: React.FC = () => {
             value={costType}
             onChange={(value) => setCostType(value as CostType)}
           />
+          <Button
+            icon={<DownloadOutlined />}
+            onClick={() => exportComparisonToExcel({
+              comparisonData,
+              costType,
+              tender1Label: t1Label,
+              tender2Label: t2Label,
+            })}
+            disabled={comparisonData.length === 0}
+          >
+            Excel
+          </Button>
         </Space>
       </Col>
     </Row>
