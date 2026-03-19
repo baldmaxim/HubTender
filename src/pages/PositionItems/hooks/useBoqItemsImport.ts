@@ -2,6 +2,8 @@ import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
+import { useAuth } from '../../../contexts/AuthContext';
+import { insertBoqItemWithAudit } from '../../../lib/supabaseWithAudit';
 
 // ===========================
 // ТИПЫ И ИНТЕРФЕЙСЫ
@@ -230,6 +232,7 @@ const parseCostCategory = (text: string): { category?: string; detail?: string; 
 // ===========================
 
 export const useBoqItemsImport = () => {
+  const { user } = useAuth();
   const [parsedData, setParsedData] = useState<ParsedBoqItem[]>([]);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -902,19 +905,14 @@ export const useBoqItemsImport = () => {
         }
 
         // Вставляем элемент
-        const { data: inserted, error } = await supabase
-          .from('boq_items')
-          .insert(insertData)
-          .select('id')
-          .single();
+        const { data: inserted } = await insertBoqItemWithAudit(user?.id, insertData);
 
-        if (error) {
-          console.error(`Ошибка вставки элемента ${i}:`, error);
-          throw new Error(`Строка ${item.rowIndex}: ${error.message}`);
+        if (!inserted?.id) {
+          throw new Error(`Row ${item.rowIndex}: insert RPC did not return BOQ item ID`);
         }
 
         // Сохраняем ID работы для привязки материалов
-        if (isWork(item.boq_item_type) && item.tempId && inserted) {
+        if (isWork(item.boq_item_type) && item.tempId && inserted?.id) {
           workIdMap.set(item.tempId, inserted.id);
         }
 

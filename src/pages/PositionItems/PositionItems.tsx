@@ -13,12 +13,15 @@ import AuditHistoryTab from './components/AuditHistoryTab';
 import { BoqItemsImportModal } from './components/BoqItemsImportModal';
 import { supabase } from '../../lib/supabase';
 import { useDeadlineCheck } from '../../hooks/useDeadlineCheck';
+import { useAuth } from '../../contexts/AuthContext';
+import { deleteBoqItemWithAudit, updateBoqItemWithAudit } from '../../lib/supabaseWithAudit';
 
 const { Text, Title } = Typography;
 
 const PositionItems: React.FC = () => {
   const { positionId } = useParams<{ positionId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [workSearchText, setWorkSearchText] = useState<string>('');
   const [materialSearchText, setMaterialSearchText] = useState<string>('');
@@ -118,12 +121,21 @@ const PositionItems: React.FC = () => {
       onOk: async () => {
         try {
           // Удаляем все элементы позиции из БД
-          const { error } = await supabase
-            .from('boq_items')
-            .delete()
-            .eq('client_position_id', positionId);
+          for (const item of items) {
+            await deleteBoqItemWithAudit(user?.id, item.id);
+          }
 
-          if (error) throw error;
+          if (positionId) {
+            const { error } = await supabase
+              .from('client_positions')
+              .update({
+                total_material: 0,
+                total_works: 0,
+              })
+              .eq('id', positionId);
+
+            if (error) throw error;
+          }
 
           // Обновляем состояние
           await fetchItems();
@@ -156,14 +168,11 @@ const PositionItems: React.FC = () => {
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
         try {
-          const itemIds = items.map(item => item.id);
-
-          const { error } = await supabase
-            .from('boq_items')
-            .update({ detail_cost_category_id: selectedCostCategoryId })
-            .in('id', itemIds);
-
-          if (error) throw error;
+          for (const item of items) {
+            await updateBoqItemWithAudit(user?.id, item.id, {
+              detail_cost_category_id: selectedCostCategoryId,
+            });
+          }
 
           // Обновляем состояние
           await fetchItems();

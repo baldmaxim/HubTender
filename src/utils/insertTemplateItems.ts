@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { executeWithAudit } from '../lib/supabaseWithAudit';
+import { insertBoqItemWithAudit, updateBoqItemWithAudit } from '../lib/supabaseWithAudit';
 
 interface InsertTemplateResult {
   worksCount: number;
@@ -174,20 +174,17 @@ export async function insertTemplateItems(
     };
   });
 
-  let newBoqItems: any[] = [];
+  const newBoqItems: any[] = [];
 
-  await executeWithAudit(userId, async () => {
-    const { data, error: insertError } = await supabase
-      .from('boq_items')
-      .insert(boqItemsToInsert)
-      .select();
+  for (const boqItem of boqItemsToInsert) {
+    const { data } = await insertBoqItemWithAudit(userId, boqItem);
 
-    if (insertError || !data) {
-      throw new Error(`Ошибка вставки элементов: ${insertError?.message}`);
+    if (!data?.id) {
+      throw new Error('Insert RPC did not return a BOQ item ID');
     }
 
-    newBoqItems = data;
-  });
+    newBoqItems.push(data);
+  }
 
   // Step 3: Restore parent_work_item_id relationships using array indices
   const updates: Array<{ id: string; parent_work_item_id: string }> = [];
@@ -211,19 +208,16 @@ export async function insertTemplateItems(
 
   // Batch update parent_work_item_id
   if (updates.length > 0) {
-    await executeWithAudit(userId, async () => {
-      for (const update of updates) {
-        const { error: updateError } = await supabase
-          .from('boq_items')
-          .update({ parent_work_item_id: update.parent_work_item_id })
-          .eq('id', update.id);
-
-        if (updateError) {
-          console.error('Error updating parent_work_item_id:', updateError);
-          // Continue with other updates even if one fails
-        }
+    for (const update of updates) {
+      try {
+        await updateBoqItemWithAudit(userId, update.id, {
+          parent_work_item_id: update.parent_work_item_id,
+        });
+      } catch (updateError) {
+        console.error('Error updating parent_work_item_id:', updateError);
+        // Continue with other updates even if one fails
       }
-    });
+    }
   }
 
   // Step 4: Recalculate position totals

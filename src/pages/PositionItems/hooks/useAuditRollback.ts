@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
-import { executeWithAudit } from '../../../lib/supabaseWithAudit';
+import { updateBoqItemWithAudit } from '../../../lib/supabaseWithAudit';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { BoqItemAudit } from '../../../types/audit';
+import type { BoqItemInsert } from '../../../lib/supabase';
 
 interface UseAuditRollbackReturn {
   rollback: (record: BoqItemAudit) => Promise<void>;
@@ -35,14 +35,12 @@ export function useAuditRollback(): UseAuditRollbackReturn {
 
     try {
       // Восстанавливаем значения из old_data
-      await executeWithAudit(user?.id, async () => {
-        const { error } = await supabase
-          .from('boq_items')
-          .update(record.old_data!)
-          .eq('id', record.boq_item_id);
-
-        if (error) throw error;
-      });
+      const { id, created_at, updated_at, ...rollbackData } = record.old_data;
+      await updateBoqItemWithAudit(
+        user?.id,
+        record.boq_item_id,
+        rollbackData as Partial<BoqItemInsert>
+      );
 
       message.success('Версия успешно восстановлена');
 
