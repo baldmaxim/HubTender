@@ -111,18 +111,32 @@ type NotesMap = Map<string, string>;
 async function fetchNotes(tenderId1: string, tenderId2: string): Promise<NotesMap> {
   const { data, error } = await supabase
     .from('comparison_notes')
-    .select('cost_category_name, detail_category_key, note')
-    .eq('tender_id_1', tenderId1)
-    .eq('tender_id_2', tenderId2);
+    .select('tender_id_1, tender_id_2, cost_category_name, detail_category_key, note')
+    .or(
+      `and(tender_id_1.eq.${tenderId1},tender_id_2.eq.${tenderId2}),and(tender_id_1.eq.${tenderId2},tender_id_2.eq.${tenderId1})`
+    );
 
   if (error) throw error;
 
   const map = new Map<string, string>();
-  for (const row of (data || [])) {
+  const exactOrderRows = (data || []).filter(
+    (row) => row.tender_id_1 === tenderId1 && row.tender_id_2 === tenderId2
+  );
+  const reversedOrderRows = (data || []).filter(
+    (row) => row.tender_id_1 === tenderId2 && row.tender_id_2 === tenderId1
+  );
+
+  for (const row of exactOrderRows) {
     // Main category: key = "main__CategoryName", detail: key = detailKey
     const key = row.detail_category_key || `main__${row.cost_category_name}`;
     if (row.note) map.set(key, row.note);
   }
+
+  for (const row of reversedOrderRows) {
+    const key = row.detail_category_key || `main__${row.cost_category_name}`;
+    if (row.note && !map.has(key)) map.set(key, row.note);
+  }
+
   return map;
 }
 
@@ -384,17 +398,29 @@ export function useComparisonData() {
     if (!selectedTender1 || !selectedTender2) return;
 
     try {
-      const row: any = {
-        tender_id_1: selectedTender1,
-        tender_id_2: selectedTender2,
-        cost_category_name: categoryName,
-        detail_category_key: detailKey,
-        note,
-      };
+      const rows: any[] = [
+        {
+          tender_id_1: selectedTender1,
+          tender_id_2: selectedTender2,
+          cost_category_name: categoryName,
+          detail_category_key: detailKey,
+          note,
+        },
+      ];
+
+      if (selectedTender1 !== selectedTender2) {
+        rows.push({
+          tender_id_1: selectedTender2,
+          tender_id_2: selectedTender1,
+          cost_category_name: categoryName,
+          detail_category_key: detailKey,
+          note,
+        });
+      }
 
       const { error } = await supabase
         .from('comparison_notes')
-        .upsert(row, {
+        .upsert(rows, {
           onConflict: 'tender_id_1,tender_id_2,cost_category_name,detail_category_key',
         });
 
