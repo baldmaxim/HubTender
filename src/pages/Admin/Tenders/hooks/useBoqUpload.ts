@@ -217,12 +217,23 @@ export const useBoqUpload = () => {
     setUploadProgress(0);
 
     try {
+      // Получаем максимальный position_number среди существующих строк тендера
+      const { data: maxData } = await supabase
+        .from('client_positions')
+        .select('position_number')
+        .eq('tender_id', tenderId)
+        .order('position_number', { ascending: false })
+        .limit(1)
+        .single();
+
+      const startNumber = maxData ? Math.floor(Number(maxData.position_number)) + 1 : 1;
+
       const positions: ClientPositionInsert[] = parsedData.map((row, index) => {
         const finalUnitCode = getFinalUnitCode(row.unit_code);
 
         return {
           tender_id: tenderId,
-          position_number: index + 1,
+          position_number: startNumber + index,
           // Только устанавливаем unit_code если есть валидный код
           ...(finalUnitCode ? { unit_code: finalUnitCode } : {}),
           volume: row.volume || undefined,
