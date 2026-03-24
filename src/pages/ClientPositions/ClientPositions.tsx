@@ -4,6 +4,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClientPositions } from './hooks/useClientPositions';
 import { usePositionActions } from './hooks/usePositionActions';
+import { usePositionDelete } from './hooks/usePositionDelete';
 import { usePositionFilters } from './hooks/usePositionFilters';
 import { useDeadlineCheck } from '../../hooks/useDeadlineCheck';
 import { TenderSelectionScreen } from './components/TenderSelectionScreen';
@@ -83,7 +84,18 @@ const ClientPositions: React.FC = () => {
     handleToggleLevelChangeSelection,
     handleCancelLevelChange,
     handleBulkLevelChange,
+    clearAllModes,
   } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, currentTheme);
+
+  const {
+    isPositionDeleteMode,
+    selectedPositionDeleteIds,
+    isBulkPositionDeleting,
+    handleStartPositionDeleteSelection,
+    handleTogglePositionDeleteSelection,
+    handleCancelPositionDeleteSelection,
+    handleBulkDeletePositions,
+  } = usePositionDelete(setLoading, fetchClientPositions, currentTheme, { clearOtherModes: clearAllModes });
 
   // Хук фильтрации позиций и получение информации о пользователе
   const { user } = useAuth();
@@ -93,6 +105,9 @@ const ClientPositions: React.FC = () => {
 
   // Роли с доступом к изменению уровня иерархии
   const canChangeLevel = ['administrator', 'developer', 'director', 'veduschiy_inzhener'].includes(user?.role_code || '');
+
+  // Роли с доступом к удалению строк заказчика
+  const canDeletePositions = ['administrator', 'developer', 'director', 'veduschiy_inzhener'].includes(user?.role_code || '');
 
   const {
     selectedPositionIds,
@@ -394,6 +409,14 @@ const ClientPositions: React.FC = () => {
           onCancelLevelChange={handleCancelLevelChange}
           onBulkLevelChange={() => handleBulkLevelChange(selectedTenderId)}
           canChangeLevel={canChangeLevel}
+          isPositionDeleteMode={isPositionDeleteMode}
+          selectedPositionDeleteIds={selectedPositionDeleteIds}
+          isBulkPositionDeleting={isBulkPositionDeleting}
+          onStartPositionDeleteSelection={handleStartPositionDeleteSelection}
+          onTogglePositionDeleteSelection={handleTogglePositionDeleteSelection}
+          onCancelPositionDeleteSelection={handleCancelPositionDeleteSelection}
+          onBulkDeletePositions={() => handleBulkDeletePositions(selectedTenderId)}
+          canDeletePositions={canDeletePositions}
           onExportToExcel={() => handleExportToExcel(selectedTender)}
           onMassImport={() => setMassImportModalOpen(true)}
           tempSelectedPositionIds={tempSelectedPositionIds}

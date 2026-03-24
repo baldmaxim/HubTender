@@ -527,6 +527,18 @@ export const usePositionActions = (
     });
   };
 
+  // Сброс всех режимов (для использования из других хуков)
+  const clearAllModes = () => {
+    setCopiedPositionId(null);
+    setCopiedNoteValue(null);
+    setCopiedNotePositionId(null);
+    setSelectedTargetIds(new Set());
+    setIsDeleteSelectionMode(false);
+    setSelectedDeleteIds(new Set());
+    setIsLevelChangeMode(false);
+    setSelectedLevelChangeIds(new Set());
+  };
+
   return {
     copiedPositionId,
     copiedNotePositionId,
@@ -556,5 +568,6 @@ export const usePositionActions = (
     handleToggleLevelChangeSelection,
     handleCancelLevelChange,
     handleBulkLevelChange,
+    clearAllModes,
   };
 };

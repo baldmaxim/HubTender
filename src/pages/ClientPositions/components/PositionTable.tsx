@@ -1,12 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Card, Table, Typography, Tag, Tooltip, Space, Button } from 'antd';
+import { Card, Table, Typography, Tag, Space, Button } from 'antd';
 import {
-  PlusOutlined,
-  CopyOutlined,
   CheckOutlined,
   DownloadOutlined,
   DeleteOutlined,
-  MoreOutlined,
   ClearOutlined,
   FileTextOutlined,
   FileAddOutlined,
@@ -18,6 +15,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { ClientPosition, Tender } from '../../../lib/supabase';
+import { PositionRowActions } from './PositionRowActions';
 
 const { Text } = Typography;
 
@@ -62,6 +60,14 @@ interface PositionTableProps {
   onCancelLevelChange?: () => void;
   onBulkLevelChange?: () => void;
   canChangeLevel?: boolean;
+  isPositionDeleteMode?: boolean;
+  selectedPositionDeleteIds?: Set<string>;
+  isBulkPositionDeleting?: boolean;
+  onStartPositionDeleteSelection?: (positionId: string, event: React.MouseEvent) => void;
+  onTogglePositionDeleteSelection?: (positionId: string, event: React.MouseEvent) => void;
+  onCancelPositionDeleteSelection?: () => void;
+  onBulkDeletePositions?: () => void;
+  canDeletePositions?: boolean;
   onExportToExcel: () => void;
   onMassImport?: () => void;
   tempSelectedPositionIds?: Set<string>;
@@ -110,6 +116,14 @@ export const PositionTable: React.FC<PositionTableProps> = ({
   onCancelLevelChange,
   onBulkLevelChange,
   canChangeLevel = false,
+  isPositionDeleteMode = false,
+  selectedPositionDeleteIds = new Set(),
+  isBulkPositionDeleting = false,
+  onStartPositionDeleteSelection,
+  onTogglePositionDeleteSelection,
+  onCancelPositionDeleteSelection,
+  onBulkDeletePositions,
+  canDeletePositions = false,
   onExportToExcel,
   onMassImport,
   isFilterActive = false,
@@ -274,10 +288,6 @@ export const PositionTable: React.FC<PositionTableProps> = ({
         const total = counts.total; // Используем реальную сумму из boq_items
         const isExpanded = expandedPositionId === record.id;
 
-        const tooltipColor = currentTheme === 'dark' ? {
-          overlayInnerStyle: { backgroundColor: '#434343', color: '#fff' }
-        } : {};
-
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%', minHeight: '48px' }}>
             {/* Пустой div для баланса слева */}
@@ -311,148 +321,38 @@ export const PositionTable: React.FC<PositionTableProps> = ({
             )}
 
             {/* СПРАВА: Кнопки действий */}
-            <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, alignSelf: 'center' }}>
-              {/* Теги выбора для вставки работ/примечания */}
-              {(() => {
-                const isTarget = selectedTargetIds.has(record.id);
-                const targetStyle = {
-                  cursor: readOnly ? 'not-allowed' : 'pointer', margin: 0,
-                  opacity: readOnly ? 0.5 : 1, pointerEvents: readOnly ? 'none' as const : 'auto' as const,
-                  backgroundColor: isTarget ? '#faad14' : undefined,
-                  borderColor: isTarget ? '#faad14' : undefined,
-                  color: isTarget ? '#fff' : undefined,
-                };
-                const handleClick = (e: React.MouseEvent) => { e.stopPropagation(); onToggleSelection(record.id, e); };
-                return (
-                  <>
-                    {isLeaf && copiedPositionId && copiedPositionId !== record.id && (
-                      <Tooltip title={isTarget ? 'Отменить выбор для вставки' : 'Выбрать для вставки'} {...tooltipColor}>
-                        <Tag color={isTarget ? 'warning' : 'success'} style={targetStyle} onClick={handleClick}>
-                          <CheckOutlined />
-                        </Tag>
-                      </Tooltip>
-                    )}
-                    {copiedNotePositionId && copiedNotePositionId !== record.id && (
-                      <Tooltip title={isTarget ? 'Отменить выбор для вставки примечания' : 'Выбрать для вставки примечания'} {...tooltipColor}>
-                        <Tag color={isTarget ? 'warning' : 'lime'} style={targetStyle} onClick={handleClick}>
-                          <FileAddOutlined />
-                        </Tag>
-                      </Tooltip>
-                    )}
-                  </>
-                );
-              })()}
-
-              {/* Тег выбора для массового удаления */}
-              {isLeaf && isDeleteSelectionMode && (
-                <Tooltip title={selectedDeleteIds.has(record.id) ? 'Отменить выбор' : 'Выбрать для удаления'} {...tooltipColor}>
-                  <Tag
-                    color={selectedDeleteIds.has(record.id) ? 'error' : 'default'}
-                    style={{
-                      cursor: 'pointer', margin: 0,
-                      backgroundColor: selectedDeleteIds.has(record.id) ? '#ff4d4f' : undefined,
-                      borderColor: selectedDeleteIds.has(record.id) ? '#ff4d4f' : undefined,
-                      color: selectedDeleteIds.has(record.id) ? '#fff' : undefined,
-                    }}
-                    onClick={(e) => { e.stopPropagation(); onToggleDeleteSelection?.(record.id, e); }}
-                  >
-                    <DeleteOutlined />
-                  </Tag>
-                </Tooltip>
-              )}
-
-              {/* Тег выбора для изменения уровня иерархии */}
-              {isLevelChangeMode && (
-                <Tooltip title={selectedLevelChangeIds.has(record.id) ? 'Отменить выбор' : 'Выбрать для понижения уровня'} {...tooltipColor}>
-                  <Tag
-                    color={selectedLevelChangeIds.has(record.id) ? 'processing' : 'default'}
-                    style={{
-                      cursor: 'pointer', margin: 0,
-                      backgroundColor: selectedLevelChangeIds.has(record.id) ? '#1890ff' : undefined,
-                      borderColor: selectedLevelChangeIds.has(record.id) ? '#1890ff' : undefined,
-                      color: selectedLevelChangeIds.has(record.id) ? '#fff' : undefined,
-                    }}
-                    onClick={(e) => { e.stopPropagation(); onToggleLevelChangeSelection?.(record.id, e); }}
-                  >
-                    <VerticalAlignBottomOutlined />
-                  </Tag>
-                </Tooltip>
-              )}
-
-              {/* Раскрывающиеся кнопки действий */}
-              {isExpanded && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {/* Строка 1: Копирование (только для листовых) */}
-                  {isLeaf && (
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {/* Скопировать работы и материалы */}
-                      {copiedPositionId !== record.id && (
-                        <Tooltip title="Скопировать работы и материалы" {...tooltipColor}>
-                          <Tag color="blue" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onCopyPosition(record.id, e); }}>
-                            <CopyOutlined />
-                          </Tag>
-                        </Tooltip>
-                      )}
-                      <Tooltip title="Скопировать примечание ГП" {...tooltipColor}>
-                        <Tag color="purple" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onCopyNote(record.id, record.manual_note, e); }}>
-                          <FileTextOutlined />
-                        </Tag>
-                      </Tooltip>
-                    </div>
-                  )}
-
-                  {/* Строка 2: Добавление/Удаление */}
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {/* Добавить ДОП работу (для НЕ-ДОП позиций) */}
-                    {!record.is_additional && (
-                      <Tooltip title="Добавить ДОП работу" {...tooltipColor}>
-                        <Tag color="success" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onOpenAdditionalModal(record.id, e); }}>
-                          <PlusOutlined />
-                        </Tag>
-                      </Tooltip>
-                    )}
-                    {record.is_additional && (
-                      <Tooltip title="Удалить ДОП работу" {...tooltipColor}>
-                        <Tag color="error" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onDeleteAdditionalPosition(record.id, record.work_name, e); }}>
-                          <DeleteOutlined />
-                        </Tag>
-                      </Tooltip>
-                    )}
-                    {isLeaf && (
-                      <Tooltip title="Удалить работы и материалы" {...tooltipColor}>
-                        <Tag color="orange" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onStartDeleteSelection(record.id, e); }}>
-                          <ClearOutlined />
-                        </Tag>
-                      </Tooltip>
-                    )}
-                    {!isLeaf && counts.works + counts.materials > 0 && (
-                      <Tooltip title="Удалить работы и материалы" {...tooltipColor}>
-                        <Tag color="orange" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onClearPositionBoqItems(record.id, record.work_name, e); }}>
-                          <ClearOutlined />
-                        </Tag>
-                      </Tooltip>
-                    )}
-                    {canChangeLevel && (
-                      <Tooltip title="Понизить уровень иерархии" {...tooltipColor}>
-                        <Tag color="geekblue" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onStartLevelChange(e); }}>
-                          <VerticalAlignBottomOutlined />
-                        </Tag>
-                      </Tooltip>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <Tooltip title="Действия" {...tooltipColor}>
-                <Tag
-                  color="default"
-                  style={{ cursor: readOnly ? 'not-allowed' : 'pointer', margin: 0, opacity: readOnly ? 0.5 : 1, pointerEvents: readOnly ? 'none' : 'auto' }}
-                  onClick={(e) => { e.stopPropagation(); setExpandedPositionId(isExpanded ? null : record.id); }}
-                >
-                  <MoreOutlined />
-                </Tag>
-              </Tooltip>
-            </div>
+            <PositionRowActions
+              record={record}
+              isLeaf={isLeaf}
+              isExpanded={isExpanded}
+              currentTheme={currentTheme}
+              readOnly={readOnly}
+              copiedPositionId={copiedPositionId}
+              copiedNotePositionId={copiedNotePositionId}
+              selectedTargetIds={selectedTargetIds}
+              isDeleteSelectionMode={isDeleteSelectionMode}
+              selectedDeleteIds={selectedDeleteIds}
+              isLevelChangeMode={isLevelChangeMode}
+              selectedLevelChangeIds={selectedLevelChangeIds}
+              isPositionDeleteMode={isPositionDeleteMode}
+              selectedPositionDeleteIds={selectedPositionDeleteIds}
+              canChangeLevel={canChangeLevel}
+              canDeletePositions={canDeletePositions}
+              counts={counts}
+              onToggleSelection={onToggleSelection}
+              onToggleDeleteSelection={onToggleDeleteSelection}
+              onToggleLevelChangeSelection={onToggleLevelChangeSelection}
+              onTogglePositionDeleteSelection={onTogglePositionDeleteSelection}
+              onCopyPosition={onCopyPosition}
+              onCopyNote={onCopyNote}
+              onOpenAdditionalModal={onOpenAdditionalModal}
+              onDeleteAdditionalPosition={onDeleteAdditionalPosition}
+              onStartDeleteSelection={onStartDeleteSelection}
+              onClearPositionBoqItems={onClearPositionBoqItems}
+              onStartLevelChange={onStartLevelChange}
+              onStartPositionDeleteSelection={onStartPositionDeleteSelection}
+              onToggleExpanded={() => setExpandedPositionId(isExpanded ? null : record.id)}
+            />
           </div>
         );
       },
@@ -485,6 +385,11 @@ export const PositionTable: React.FC<PositionTableProps> = ({
     onToggleLevelChangeSelection,
     onStartLevelChange,
     canChangeLevel,
+    isPositionDeleteMode,
+    selectedPositionDeleteIds,
+    onTogglePositionDeleteSelection,
+    onStartPositionDeleteSelection,
+    canDeletePositions,
   ]);
 
   return (
@@ -555,6 +460,16 @@ export const PositionTable: React.FC<PositionTableProps> = ({
               <Button onClick={onCancelLevelChange}>Отменить выбор</Button>
             </>
           )}
+          {isPositionDeleteMode && (
+            <>
+              {selectedPositionDeleteIds.size > 0 && (
+                <Button type="primary" danger icon={<DeleteOutlined />} onClick={onBulkDeletePositions} loading={isBulkPositionDeleting} disabled={loading}>
+                  Удалить строки заказчика ({selectedPositionDeleteIds.size})
+                </Button>
+              )}
+              <Button onClick={onCancelPositionDeleteSelection}>Отменить выбор</Button>
+            </>
+          )}
           <Button
             icon={<UploadOutlined />}
             onClick={onMassImport}
@@ -577,6 +492,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
         rowClassName={(record) => {
           if (copiedPositionId === record.id) return 'copied-row';
           if (isDeleteSelectionMode && selectedDeleteIds.has(record.id)) return 'delete-selected-row';
+          if (isPositionDeleteMode && selectedPositionDeleteIds.has(record.id)) return 'delete-selected-row';
           return '';
         }}
         onRow={(record, index) => {
@@ -600,6 +516,8 @@ export const PositionTable: React.FC<PositionTableProps> = ({
               cursor: isLeaf ? 'pointer' : 'default',
               opacity: (showAllPositions && isFilterActive && !tempSelectedPositionIds.has(record.id)) ? 0.5 : 1,
               backgroundColor: (isDeleteSelectionMode && selectedDeleteIds.has(record.id))
+                ? (currentTheme === 'dark' ? 'rgba(255, 77, 79, 0.15)' : 'rgba(255, 77, 79, 0.08)')
+                : (isPositionDeleteMode && selectedPositionDeleteIds.has(record.id))
                 ? (currentTheme === 'dark' ? 'rgba(255, 77, 79, 0.15)' : 'rgba(255, 77, 79, 0.08)')
                 : (isLevelChangeMode && selectedLevelChangeIds.has(record.id))
                 ? (currentTheme === 'dark' ? 'rgba(24, 144, 255, 0.15)' : 'rgba(24, 144, 255, 0.08)')
