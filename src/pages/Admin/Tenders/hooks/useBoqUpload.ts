@@ -218,15 +218,16 @@ export const useBoqUpload = () => {
 
     try {
       // Получаем максимальный position_number среди существующих строк тендера
-      const { data: maxData } = await supabase
+      const { data: existingPositions } = await supabase
         .from('client_positions')
         .select('position_number')
         .eq('tender_id', tenderId)
         .order('position_number', { ascending: false })
-        .limit(1)
-        .single();
+        .limit(1);
 
-      const startNumber = maxData ? Math.floor(Number(maxData.position_number)) + 1 : 1;
+      const startNumber = existingPositions && existingPositions.length > 0
+        ? Math.floor(Number(existingPositions[0].position_number)) + 1
+        : 1;
 
       const positions: ClientPositionInsert[] = parsedData.map((row, index) => {
         const finalUnitCode = getFinalUnitCode(row.unit_code);
