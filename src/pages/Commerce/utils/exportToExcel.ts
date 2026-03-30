@@ -6,7 +6,6 @@ import { message } from 'antd';
 import * as XLSX from 'xlsx-js-style';
 import type { Tender } from '../../../lib/supabase';
 import type { PositionWithCommercialCost } from '../types';
-import { smartRoundPositions, type RoundedPosition } from './smartRounding';
 
 export function exportCommerceToExcel(
   positions: PositionWithCommercialCost[],
@@ -17,17 +16,14 @@ export function exportCommerceToExcel(
     return;
   }
 
-  // Применяем умное округление к позициям
-  const roundedPositions = smartRoundPositions(positions);
-
   // Функция определения конечности позиции по hierarchy_level
   const isLeafPosition = (index: number): boolean => {
-    if (index === roundedPositions.length - 1) {
+    if (index === positions.length - 1) {
       return true;
     }
 
-    const currentLevel = roundedPositions[index].hierarchy_level || 0;
-    const nextLevel = roundedPositions[index + 1]?.hierarchy_level || 0;
+    const currentLevel = positions[index].hierarchy_level || 0;
+    const nextLevel = positions[index + 1]?.hierarchy_level || 0;
 
     return currentLevel >= nextLevel;
   };
@@ -52,7 +48,7 @@ export function exportCommerceToExcel(
   ];
 
   // Подготавливаем данные для экспорта с метаданными
-  const rowsWithMeta = roundedPositions.map((pos, index) => {
+  const rowsWithMeta = positions.map((pos, index) => {
     const isLeaf = isLeafPosition(index);
     const totalCost = pos.commercial_total || 0;
     const isZeroCost = isLeaf && totalCost === 0;
@@ -60,13 +56,11 @@ export function exportCommerceToExcel(
     const clientVolume = pos.volume || 0;
     const volumesMatch = gpVolume === clientVolume && gpVolume > 0;
 
-    // Используем округленные значения если есть, иначе оригинальные
-    const materialCostTotal = pos.rounded_material_cost_total ?? pos.material_cost_total ?? 0;
-    const workCostTotal = pos.rounded_work_cost_total ?? pos.work_cost_total ?? 0;
-    const materialUnitPrice = pos.rounded_material_unit_price ?? (gpVolume > 0 ? (pos.material_cost_total || 0) / gpVolume : 0);
-    const workUnitPrice = pos.rounded_work_unit_price ?? (gpVolume > 0 ? (pos.work_cost_total || 0) / gpVolume : 0);
+    const materialCostTotal = pos.material_cost_total ?? 0;
+    const workCostTotal = pos.work_cost_total ?? 0;
+    const materialUnitPrice = gpVolume > 0 ? materialCostTotal / gpVolume : 0;
+    const workUnitPrice = gpVolume > 0 ? workCostTotal / gpVolume : 0;
 
-    // Пересчитываем общую коммерческую стоимость на основе округленных значений
     const commercialTotal = materialCostTotal + workCostTotal;
     const commercialUnitPrice = gpVolume > 0 ? commercialTotal / gpVolume : 0;
 
@@ -95,11 +89,11 @@ export function exportCommerceToExcel(
 
   const rows = rowsWithMeta.map(r => r.data);
 
-  // Рассчитываем итоги (используем округленные значения)
-  const totalBase = roundedPositions.reduce((sum, pos) => sum + (pos.base_total || 0), 0);
-  const totalMaterials = roundedPositions.reduce((sum, pos) => sum + (pos.rounded_material_cost_total ?? pos.material_cost_total ?? 0), 0);
-  const totalWorks = roundedPositions.reduce((sum, pos) => sum + (pos.rounded_work_cost_total ?? pos.work_cost_total ?? 0), 0);
-  const totalCommercial = totalMaterials + totalWorks; // Сумма округленных материалов и работ
+  // Рассчитываем итоги
+  const totalBase = positions.reduce((sum, pos) => sum + (pos.base_total || 0), 0);
+  const totalMaterials = positions.reduce((sum, pos) => sum + (pos.material_cost_total ?? 0), 0);
+  const totalWorks = positions.reduce((sum, pos) => sum + (pos.work_cost_total ?? 0), 0);
+  const totalCommercial = totalMaterials + totalWorks;
   const avgMarkup = totalBase > 0 ? ((totalCommercial - totalBase) / totalBase) * 100 : 0;
 
   // Итоговая строка
@@ -109,8 +103,8 @@ export function exportCommerceToExcel(
     '',
     '',
     '',
-    roundedPositions.reduce((sum, pos) => sum + (pos.manual_volume || 0), 0),
-    roundedPositions.reduce((sum, pos) => sum + (pos.items_count || 0), 0),
+    positions.reduce((sum, pos) => sum + (pos.manual_volume || 0), 0),
+    positions.reduce((sum, pos) => sum + (pos.items_count || 0), 0),
     totalBase,
     totalMaterials,
     totalWorks,

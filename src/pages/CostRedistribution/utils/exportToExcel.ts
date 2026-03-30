@@ -6,7 +6,6 @@ import * as XLSX from 'xlsx-js-style';
 import type { ClientPosition } from '../hooks';
 import type { RedistributionResult } from './calculateDistribution';
 import type { ResultRow } from '../components/Results/ResultsTableColumns';
-import { smartRoundResults } from './smartRounding';
 
 interface BoqItemFull {
   id: string;
@@ -139,11 +138,10 @@ export function exportRedistributionToExcel(data: ExportData): void {
 
   // Функция для создания строки данных из ResultRow
   const createRow = (resultRow: ResultRow) => {
-    // Используем округленные значения если есть, иначе оригинальные
-    const materialUnitPrice = resultRow.rounded_material_unit_price ?? resultRow.material_unit_price;
-    const workUnitPriceAfter = resultRow.rounded_work_unit_price_after ?? resultRow.work_unit_price_after;
-    const totalMaterials = resultRow.rounded_total_materials ?? resultRow.total_materials;
-    const totalWorksAfter = resultRow.rounded_total_works ?? resultRow.total_works_after;
+    const materialUnitPrice = resultRow.material_unit_price;
+    const workUnitPriceAfter = resultRow.work_unit_price_after;
+    const totalMaterials = resultRow.total_materials;
+    const totalWorksAfter = resultRow.total_works_after;
 
     // Формируем наименование
     let fullName = '';
@@ -183,11 +181,8 @@ export function exportRedistributionToExcel(data: ExportData): void {
   const additionalResultRows = additionalPositions.map((pos, idx) => createResultRow(pos, idx, additionalPositions));
   const allResultRows = [...regularResultRows, ...additionalResultRows];
 
-  // Применяем умное округление
-  const roundedResultRows = smartRoundResults(allResultRows);
-
-  // Формируем строки данных из округленных результатов
-  const rows = roundedResultRows.map(resultRow => createRow(resultRow));
+  // Формируем строки данных
+  const rows = allResultRows.map(resultRow => createRow(resultRow));
 
   // Рассчитываем итоги
   const totals = [
