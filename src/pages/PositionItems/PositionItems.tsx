@@ -216,10 +216,16 @@ const PositionItems: React.FC = () => {
             </div>
 
               {!position.is_additional && (
-                <div style={{ marginTop: 8 }}>
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <Text type="secondary">
-                    Кол-во заказчика: <Text strong>{position.volume?.toFixed(2) || '-'}</Text> {position.unit_code}
+                    Кол-во заказчика: <Text strong>{position.volume?.toFixed(2) || '-'}</Text>
+                    {position.unit_code && <> &nbsp;Ед. изм.: <Text strong>{position.unit_code}</Text></>}
                   </Text>
+                  {position.client_note && (
+                    <Text type="secondary">
+                      Примечание заказчика: <Text strong>{position.client_note}</Text>
+                    </Text>
+                  )}
                 </div>
               )}
 
