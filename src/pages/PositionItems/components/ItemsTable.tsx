@@ -1,4 +1,4 @@
-import { Table, Button, Space, Tag, Tooltip, Popconfirm } from 'antd';
+import { Table, Button, Space, Tag, Tooltip } from 'antd';
 import { EditOutlined, DeleteOutlined, LinkOutlined, UpOutlined, DownOutlined } from '@ant-design/icons';
 import type { BoqItemFull, CurrencyType } from '../../../lib/supabase';
 
@@ -15,11 +15,14 @@ interface ItemsTableProps {
   expandedRowKeys: string[];
   onExpandedRowsChange: (keys: string[]) => void;
   onEditClick: (record: BoqItemFull) => void;
-  onDelete: (id: string) => void;
+  onStartDelete: (id: string) => void;
+  onToggleDeleteSelection: (id: string) => void;
   onMoveItem: (itemId: string, direction: 'up' | 'down') => void;
   getCurrencyRate: (currency: CurrencyType) => number;
   expandedRowRender: (record: BoqItemFull) => React.ReactNode;
   readOnly?: boolean;
+  isDeleteMode?: boolean;
+  selectedDeleteIds?: Set<string>;
 }
 
 const ItemsTable: React.FC<ItemsTableProps> = ({
@@ -28,11 +31,14 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
   expandedRowKeys,
   onExpandedRowsChange,
   onEditClick,
-  onDelete,
+  onStartDelete,
+  onToggleDeleteSelection,
   onMoveItem,
   getCurrencyRate,
   expandedRowRender,
   readOnly,
+  isDeleteMode = false,
+  selectedDeleteIds = new Set(),
 }) => {
   const getRowClassName = (record: BoqItemFull): string => {
     const itemType = record.boq_item_type;
@@ -117,7 +123,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
               type="text"
               size="small"
               icon={<UpOutlined style={{ fontSize: 12 }} />}
-              disabled={readOnly || !canMoveItemUp(record, index)}
+              disabled={readOnly || isDeleteMode || !canMoveItemUp(record, index)}
               onClick={(e) => {
                 e.stopPropagation();
                 onMoveItem(record.id, 'up');
@@ -130,7 +136,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
               type="text"
               size="small"
               icon={<DownOutlined style={{ fontSize: 12 }} />}
-              disabled={readOnly || !canMoveItemDown(record, index)}
+              disabled={readOnly || isDeleteMode || !canMoveItemDown(record, index)}
               onClick={(e) => {
                 e.stopPropagation();
                 onMoveItem(record.id, 'down');
@@ -338,7 +344,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
           const unitRate = record.unit_rate || 0;
           const rate = getCurrencyRate(record.currency_type as CurrencyType);
           const unitPriceInRub = unitRate * rate;
-          const deliveryAmount = unitPriceInRub * 0.03; // Полная точность для расчета
+          const deliveryAmount = unitPriceInRub * 0.03;
 
           const tooltipTitle = `${deliveryAmount.toFixed(2)} = ${unitPriceInRub.toFixed(2)} × 3%`;
 
@@ -376,12 +382,11 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
           if (isMaterial) {
             let deliveryPrice = 0;
             if (record.delivery_price_type === 'не в цене') {
-              deliveryPrice = price * rate * 0.03; // Полная точность для расчета
+              deliveryPrice = price * rate * 0.03;
             } else if (record.delivery_price_type === 'суммой') {
               deliveryPrice = record.delivery_amount || 0;
             }
 
-            // Для непривязанных материалов применяем коэффициент расхода к итоговой сумме
             const consCoef = !record.parent_work_item_id ? (record.consumption_coefficient || 1) : 1;
             if (consCoef !== 1) {
               tooltipTitle = `${total.toFixed(2)} = ${qty.toFixed(5)} × ${consCoef.toFixed(4)} (К расх) × (${price.toFixed(2)} * ${rate.toFixed(2)} + ${deliveryPrice.toFixed(2)})`;
@@ -411,7 +416,6 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       render: (value: string) => {
         if (!value) return '-';
 
-        // Проверка является ли значение URL
         const isUrl = value.startsWith('http://') || value.startsWith('https://');
 
         if (isUrl) {
@@ -439,6 +443,27 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       width: 100,
       align: 'center',
       render: (_: any, record: BoqItemFull) => {
+        if (isDeleteMode) {
+          const isSelected = selectedDeleteIds.has(record.id);
+          return (
+            <Tooltip title={isSelected ? 'Отменить выбор' : 'Выбрать для удаления'}>
+              <Tag
+                color={isSelected ? 'error' : 'default'}
+                style={{
+                  cursor: 'pointer',
+                  margin: 0,
+                  backgroundColor: isSelected ? '#ff4d4f' : undefined,
+                  borderColor: isSelected ? '#ff4d4f' : undefined,
+                  color: isSelected ? '#fff' : undefined,
+                }}
+                onClick={(e) => { e.stopPropagation(); onToggleDeleteSelection(record.id); }}
+              >
+                <DeleteOutlined />
+              </Tag>
+            </Tooltip>
+          );
+        }
+
         return (
           <Space>
             <Button
@@ -448,14 +473,16 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
               onClick={() => onEditClick(record)}
               disabled={readOnly || (expandedRowKeys.length > 0 && !expandedRowKeys.includes(record.id))}
             />
-            <Popconfirm
-              title="Удалить элемент?"
-              onConfirm={() => onDelete(record.id)}
-              okText="Да"
-              cancelText="Нет"
-            >
-              <Button type="text" danger size="small" icon={<DeleteOutlined />} disabled={readOnly} />
-            </Popconfirm>
+            <Tooltip title="Удалить">
+              <Button
+                type="text"
+                danger
+                size="small"
+                icon={<DeleteOutlined />}
+                disabled={readOnly}
+                onClick={(e) => { e.stopPropagation(); onStartDelete(record.id); }}
+              />
+            </Tooltip>
           </Space>
         );
       },

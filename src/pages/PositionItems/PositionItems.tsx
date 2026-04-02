@@ -31,6 +31,9 @@ const PositionItems: React.FC = () => {
   const [selectedCostCategoryId, setSelectedCostCategoryId] = useState<string | null>(null);
   const [costSearchText, setCostSearchText] = useState<string>('');
   const [activeTab, setActiveTab] = useState<string>('current');
+  const [isDeleteMode, setIsDeleteMode] = useState<boolean>(false);
+  const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
 
   const {
     position,
@@ -106,6 +109,56 @@ const PositionItems: React.FC = () => {
     if (positionId && position?.is_additional) {
       await handleSaveAdditionalWorkData(positionId, workName, unitCode, fetchPositionData);
     }
+  };
+
+  const handleStartDelete = (id: string) => {
+    setExpandedRowKeys([]);
+    setIsDeleteMode(true);
+    setSelectedDeleteIds(new Set([id]));
+  };
+
+  const handleToggleDeleteSelection = (id: string) => {
+    setSelectedDeleteIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleCancelDeleteMode = () => {
+    setIsDeleteMode(false);
+    setSelectedDeleteIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedDeleteIds.size === 0) return;
+    const count = selectedDeleteIds.size;
+    const theme = localStorage.getItem('tenderHub_theme') || 'light';
+
+    Modal.confirm({
+      title: 'Удалить элементы?',
+      content: `Вы уверены, что хотите удалить ${count} выбранных элемент${count === 1 ? '' : count < 5 ? 'а' : 'ов'}? Это действие необратимо.`,
+      okText: 'Удалить',
+      cancelText: 'Отмена',
+      okButtonProps: { danger: true },
+      rootClassName: theme === 'dark' ? 'dark-modal' : '',
+      onOk: async () => {
+        setIsBulkDeleting(true);
+        try {
+          for (const id of selectedDeleteIds) {
+            await deleteBoqItemWithAudit(user?.id, id);
+          }
+          setIsDeleteMode(false);
+          setSelectedDeleteIds(new Set());
+          await fetchItems();
+          message.success(`Удалено ${count} элемент${count === 1 ? '' : count < 5 ? 'а' : 'ов'}`);
+        } catch (error: any) {
+          message.error('Ошибка удаления: ' + error.message);
+        } finally {
+          setIsBulkDeleting(false);
+        }
+      },
+    });
   };
 
   const handleClearAllItems = async () => {
@@ -242,8 +295,8 @@ const PositionItems: React.FC = () => {
                       size="small"
                       placeholder="Наименование работы"
                     />
-                    <Text type="secondary" style={{ marginLeft: 16 }}>Примечание ГП:</Text>
-                    <Input
+                    <Text type="secondary" style={{ marginLeft: 16, paddingTop: 4 }}>Примечание ГП:</Text>
+                    <Input.TextArea
                       value={gpNote}
                       onChange={(e) => setGpNote(e.target.value)}
                       onBlur={onSaveGPData}
@@ -251,6 +304,7 @@ const PositionItems: React.FC = () => {
                       style={{ width: 300 }}
                       size="small"
                       placeholder="Примечание"
+                      autoSize={{ minRows: 1, maxRows: 2 }}
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -310,9 +364,9 @@ const PositionItems: React.FC = () => {
                     <Text type="secondary">{position.unit_code}</Text>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-                  <Text type="secondary">Примечание ГП:</Text>
-                  <Input
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, whiteSpace: 'nowrap' }}>
+                  <Text type="secondary" style={{ paddingTop: 4 }}>Примечание ГП:</Text>
+                  <Input.TextArea
                     value={gpNote}
                     onChange={(e) => setGpNote(e.target.value)}
                     onBlur={onSaveGPData}
@@ -320,6 +374,7 @@ const PositionItems: React.FC = () => {
                     style={{ width: 400 }}
                     size="small"
                     placeholder="Примечание"
+                    autoSize={{ minRows: 1, maxRows: 2 }}
                   />
                 </div>
               </>
@@ -363,49 +418,68 @@ const PositionItems: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span>Элементы позиции</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <AutoComplete
-                          value={costSearchText}
-                          onChange={(value) => setCostSearchText(value)}
-                          onSelect={(value, option: any) => {
-                            setSelectedCostCategoryId(option.id);
-                            setCostSearchText(option.label);
-                          }}
-                          options={getCostCategoryOptions()}
-                          placeholder="Выберите затрату на строительство"
-                          style={{ width: 525 }}
-                          allowClear
-                          onClear={() => {
-                            setCostSearchText('');
-                            setSelectedCostCategoryId(null);
-                          }}
-                          filterOption={false}
-                          disabled={!canEditByDeadline || deadlineLoading}
-                        />
-                        <Button
-                          type="primary"
-                          icon={<ThunderboltOutlined />}
-                          onClick={handleApplyCostToAll}
-                          disabled={!selectedCostCategoryId || items.length === 0 || !canEditByDeadline || deadlineLoading}
-                        >
-                          Распространить затрату на все строки
-                        </Button>
-                        <Button
-                          type="default"
-                          icon={<UploadOutlined />}
-                          onClick={() => setImportModalVisible(true)}
-                          disabled={!canEditByDeadline || deadlineLoading}
-                          style={{ backgroundColor: '#10b981', borderColor: '#10b981', color: 'white' }}
-                        >
-                          Импорт из Excel
-                        </Button>
-                        <Button
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={handleClearAllItems}
-                          disabled={items.length === 0 || !canEditByDeadline || deadlineLoading}
-                        >
-                          Очистить все
-                        </Button>
+                        {isDeleteMode ? (
+                          <>
+                            {selectedDeleteIds.size > 0 && (
+                              <Button
+                                type="primary"
+                                danger
+                                icon={<DeleteOutlined />}
+                                loading={isBulkDeleting}
+                                onClick={handleBulkDelete}
+                              >
+                                Удалить ({selectedDeleteIds.size})
+                              </Button>
+                            )}
+                            <Button onClick={handleCancelDeleteMode}>Отменить выбор</Button>
+                          </>
+                        ) : (
+                          <>
+                            <AutoComplete
+                              value={costSearchText}
+                              onChange={(value) => setCostSearchText(value)}
+                              onSelect={(value, option: any) => {
+                                setSelectedCostCategoryId(option.id);
+                                setCostSearchText(option.label);
+                              }}
+                              options={getCostCategoryOptions()}
+                              placeholder="Выберите затрату на строительство"
+                              style={{ width: 525 }}
+                              allowClear
+                              onClear={() => {
+                                setCostSearchText('');
+                                setSelectedCostCategoryId(null);
+                              }}
+                              filterOption={false}
+                              disabled={!canEditByDeadline || deadlineLoading}
+                            />
+                            <Button
+                              type="primary"
+                              icon={<ThunderboltOutlined />}
+                              onClick={handleApplyCostToAll}
+                              disabled={!selectedCostCategoryId || items.length === 0 || !canEditByDeadline || deadlineLoading}
+                            >
+                              Распространить затрату на все строки
+                            </Button>
+                            <Button
+                              type="default"
+                              icon={<UploadOutlined />}
+                              onClick={() => setImportModalVisible(true)}
+                              disabled={!canEditByDeadline || deadlineLoading}
+                              style={{ backgroundColor: '#10b981', borderColor: '#10b981', color: 'white' }}
+                            >
+                              Импорт из Excel
+                            </Button>
+                            <Button
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={handleClearAllItems}
+                              disabled={items.length === 0 || !canEditByDeadline || deadlineLoading}
+                            >
+                              Очистить все
+                            </Button>
+                          </>
+                        )}
                         <div style={{ fontSize: 16, fontWeight: 'bold' }}>
                           Итого: <span style={{ color: '#10b981' }}>{Math.round(totalSum).toLocaleString('ru-RU')}</span>
                         </div>
@@ -419,9 +493,12 @@ const PositionItems: React.FC = () => {
                     expandedRowKeys={expandedRowKeys}
                     onExpandedRowsChange={setExpandedRowKeys}
                     onEditClick={handleEditClick}
-                    onDelete={handleDelete}
+                    onStartDelete={handleStartDelete}
+                    onToggleDeleteSelection={handleToggleDeleteSelection}
                     onMoveItem={handleMoveItem}
                     getCurrencyRate={getCurrencyRate}
+                    isDeleteMode={isDeleteMode}
+                    selectedDeleteIds={selectedDeleteIds}
                     readOnly={!canEditByDeadline || deadlineLoading}
                     expandedRowRender={(record) => {
                       const isWork = ['раб', 'суб-раб', 'раб-комп.'].includes(record.boq_item_type);
