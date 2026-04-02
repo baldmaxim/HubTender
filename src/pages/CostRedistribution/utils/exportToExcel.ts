@@ -138,8 +138,8 @@ export function exportRedistributionToExcel(data: ExportData): void {
 
   // Функция для создания строки данных из ResultRow
   const createRow = (resultRow: ResultRow) => {
-    const materialUnitPrice = resultRow.material_unit_price;
-    const workUnitPriceAfter = resultRow.work_unit_price_after;
+    const materialUnitPrice = Math.round((resultRow.material_unit_price || 0) * 100) / 100;
+    const workUnitPriceAfter = Math.round((resultRow.work_unit_price_after || 0) * 100) / 100;
     const totalMaterials = resultRow.total_materials;
     const totalWorksAfter = resultRow.total_works_after;
 

@@ -58,11 +58,11 @@ export function exportCommerceToExcel(
 
     const materialCostTotal = pos.material_cost_total ?? 0;
     const workCostTotal = pos.work_cost_total ?? 0;
-    const materialUnitPrice = gpVolume > 0 ? materialCostTotal / gpVolume : 0;
-    const workUnitPrice = gpVolume > 0 ? workCostTotal / gpVolume : 0;
+    const materialUnitPrice = gpVolume > 0 ? Math.round(materialCostTotal / gpVolume * 100) / 100 : 0;
+    const workUnitPrice = gpVolume > 0 ? Math.round(workCostTotal / gpVolume * 100) / 100 : 0;
 
     const commercialTotal = materialCostTotal + workCostTotal;
-    const commercialUnitPrice = gpVolume > 0 ? commercialTotal / gpVolume : 0;
+    const commercialUnitPrice = gpVolume > 0 ? Math.round(commercialTotal / gpVolume * 100) / 100 : 0;
 
     return {
       data: [
@@ -77,7 +77,7 @@ export function exportCommerceToExcel(
         materialCostTotal,
         workCostTotal,
         commercialTotal,
-        gpVolume > 0 ? (pos.base_total || 0) / gpVolume : 0,
+        gpVolume > 0 ? Math.round((pos.base_total || 0) / gpVolume * 100) / 100 : 0,
         commercialUnitPrice,
         materialUnitPrice,
         workUnitPrice,
