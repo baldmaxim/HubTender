@@ -49,7 +49,9 @@ const ClientPositions: React.FC = () => {
     loading,
     setLoading,
     positionCounts,
+    setPositionCounts,
     totalSum,
+    setTotalSum,
     leafPositionIndices,
     fetchClientPositions,
   } = useClientPositions();
@@ -84,7 +86,7 @@ const ClientPositions: React.FC = () => {
     handleCancelLevelChange,
     handleBulkLevelChange,
     clearAllModes,
-  } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, currentTheme);
+  } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, currentTheme, positionCounts, setPositionCounts, setTotalSum);
 
   const {
     isPositionDeleteMode,
