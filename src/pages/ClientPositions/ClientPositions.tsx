@@ -39,7 +39,6 @@ const ClientPositions: React.FC = () => {
   const [tempSelectedPositionIds, setTempSelectedPositionIds] = useState<Set<string>>(new Set());
   const [massImportModalOpen, setMassImportModalOpen] = useState(false);
   const [showAllPositions, setShowAllPositions] = useState(false);
-
   // Hooks
   const {
     tenders,
@@ -358,12 +357,12 @@ const ClientPositions: React.FC = () => {
           onVersionChange={handleVersionChange}
           onBackToSelection={handleBackToSelection}
         />
-
         <DeadlineBar selectedTender={selectedTender} currentTheme={currentTheme} />
       </div>
 
       {/* Таблица позиций заказчика */}
       {selectedTender && (
+        <div style={{ marginTop: 16 }}>
         <PositionTable
           clientPositions={displayedPositions}
           selectedTender={selectedTender}
@@ -426,6 +425,7 @@ const ClientPositions: React.FC = () => {
           showAllPositions={showAllPositions}
           onToggleShowAll={handleToggleShowAll}
         />
+        </div>
       )}
 
       {/* Модальное окно добавления доп работы */}

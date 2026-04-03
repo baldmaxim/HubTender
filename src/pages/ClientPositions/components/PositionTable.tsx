@@ -76,7 +76,6 @@ interface PositionTableProps {
   onClearFilter?: () => void;
   showAllPositions?: boolean;
   onToggleShowAll?: () => void;
-  isHeaderCollapsed?: boolean;
 }
 
 export const PositionTable: React.FC<PositionTableProps> = ({
@@ -136,7 +135,6 @@ export const PositionTable: React.FC<PositionTableProps> = ({
   onClearFilter,
   showAllPositions = false,
   onToggleShowAll,
-  isHeaderCollapsed = false,
 }) => {
   // Состояние для отслеживания открытой позиции
   const [expandedPositionId, setExpandedPositionId] = useState<string | null>(null);
@@ -528,7 +526,8 @@ export const PositionTable: React.FC<PositionTableProps> = ({
           };
         }}
         pagination={false}
-        scroll={{ x: 1200, y: isHeaderCollapsed ? 'calc(100vh - 215px)' : 'calc(100vh - 390px)' }}
+        scroll={{ x: 1200 }}
+        sticky
         size="small"
       />
     </Card>
