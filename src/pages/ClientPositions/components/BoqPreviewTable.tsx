@@ -22,9 +22,19 @@ interface PreviewRow {
   status?: 'existing' | 'new';
 }
 
-const TYPE_COLORS: Record<string, string> = {
+const TYPE_TAG_COLORS: Record<string, string> = {
   'раб': 'orange', 'суб-раб': 'purple', 'раб-комп.': 'volcano',
   'мат': 'blue', 'суб-мат': 'green', 'мат-комп.': 'cyan',
+};
+
+// Те же цвета что в Excel-экспорте
+const TYPE_ROW_COLORS: Record<string, string> = {
+  'раб': '#FFE6CC',
+  'суб-раб': '#E6D9F2',
+  'раб-комп.': '#FFDDDD',
+  'мат': '#D9EAFF',
+  'суб-мат': '#E8F5E0',
+  'мат-комп.': '#CCF2EF',
 };
 
 export const BoqPreviewTable: React.FC<BoqPreviewTableProps> = ({
@@ -103,7 +113,7 @@ export const BoqPreviewTable: React.FC<BoqPreviewTableProps> = ({
       width: 90,
       render: (_: any, row: PreviewRow) => {
         if (row.isGroupHeader) return { children: null, props: { colSpan: 0 } };
-        return <Tag color={TYPE_COLORS[row.itemType || ''] || 'default'} style={{ fontSize: 11 }}>{row.itemType}</Tag>;
+        return <Tag color={TYPE_TAG_COLORS[row.itemType || ''] || 'default'} style={{ fontSize: 11 }}>{row.itemType}</Tag>;
       },
     },
     {
@@ -154,9 +164,11 @@ export const BoqPreviewTable: React.FC<BoqPreviewTableProps> = ({
         columns={columns}
         size="small"
         pagination={{ defaultPageSize: 50, showSizeChanger: false, simple: true }}
-        rowClassName={(row: PreviewRow) =>
-          row.isGroupHeader ? 'preview-group-header' : ''
-        }
+        onRow={(row: PreviewRow) => ({
+          style: row.isGroupHeader
+            ? { background: '#f0f0f0', fontWeight: 600 }
+            : { background: TYPE_ROW_COLORS[row.itemType || ''] || undefined },
+        })}
         scroll={{ x: 500 }}
         style={{ fontSize: 12 }}
       />
