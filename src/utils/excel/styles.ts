@@ -81,6 +81,7 @@ export const columnWidths = [
   { wch: 15 },  // Номер позиции
   { wch: 10 },  // № п/п
   { wch: 30 },  // Затрата на строительство
+  { wch: 15 },  // Привязка материала к работе
   { wch: 12 },  // Тип элемента
   { wch: 12 },  // Тип материала
   { wch: 40 },  // Наименование
@@ -102,14 +103,14 @@ export const columnWidths = [
 /**
  * Индексы колонок с числовыми значениями
  */
-export const numericColIndices = [7, 8, 9, 10, 13, 14, 15];
+export const numericColIndices = [8, 9, 10, 11, 14, 15, 16];
 
 /**
  * Индексы колонок с 4 знаками после запятой
  */
-export const fourDecimalColIndices = [7, 8, 9, 10];
+export const fourDecimalColIndices = [8, 9, 10, 11];
 
 /**
  * Индекс колонки "Наименование" для левого выравнивания
  */
-export const nameColIndex = 5;
+export const nameColIndex = 6;

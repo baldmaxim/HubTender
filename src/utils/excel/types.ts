@@ -38,6 +38,9 @@ export interface ExportRow {
   unitPrice: number | null;          // Цена за единицу
   totalAmount: number | null;        // Итоговая сумма
 
+  // Привязка
+  materialLinkedToWork: string;      // Привязка материала к работе ('да'/'нет'/'')
+
   // Примечания
   quoteLink: string;                 // Ссылка на КП
   clientNote: string;                // Примечание заказчика

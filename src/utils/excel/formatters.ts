@@ -68,6 +68,7 @@ export function createPositionRow(
     deliveryCost: null,
     unitPrice: null,
     totalAmount: totalAmount,
+    materialLinkedToWork: '',
     quoteLink: '',
     clientNote: position.client_note || '',
     gpNote: position.manual_note || '',
@@ -116,6 +117,9 @@ export function createBoqItemRow(item: BoqItemFull, position: ClientPosition): E
     deliveryCost: deliveryCost,
     unitPrice: item.unit_rate || null,
     totalAmount: item.total_amount || null,
+    materialLinkedToWork: isMaterialType(item.boq_item_type)
+      ? (item.parent_work_item_id ? 'да' : 'нет')
+      : '',
     quoteLink: item.quote_link || '',
     clientNote: '',
     gpNote: item.description || '',
