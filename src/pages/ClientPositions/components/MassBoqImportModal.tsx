@@ -22,6 +22,7 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [nomenclatureLoaded, setNomenclatureLoaded] = useState(false);
+  const [addingToNomenclature, setAddingToNomenclature] = useState(false);
 
   const {
     parsedData,
@@ -33,6 +34,7 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
     validateParsedData,
     processWorkBindings,
     insertBoqItems,
+    addMissingToNomenclature,
     reset,
     getPositionStats,
   } = useMassBoqImport();
@@ -94,6 +96,24 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
     }
   };
 
+  // Добавить отсутствующую номенклатуру и повторить валидацию
+  const handleAddMissingToNomenclature = async () => {
+    setAddingToNomenclature(true);
+    const success = await addMissingToNomenclature(tenderId);
+    setAddingToNomenclature(false);
+    if (success) {
+      const validation = validateParsedData(parsedData);
+      const bindingErrors = processWorkBindings(parsedData);
+      if (bindingErrors.length > 0) {
+        validation.errors.push(...bindingErrors);
+        validation.isValid = false;
+      }
+      if (validation.isValid) {
+        handleImport();
+      }
+    }
+  };
+
   // Закрытие
   const handleClose = (success: boolean = false) => {
     reset();
@@ -123,15 +143,33 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
 
     if (currentStep === 1) {
       const hasErrors = validationResult && !validationResult.isValid;
+      const hasMissingNomenclature = validationResult && (
+        validationResult.missingNomenclature.works.length > 0 ||
+        validationResult.missingNomenclature.materials.length > 0
+      );
+      const missingCount = hasMissingNomenclature
+        ? (validationResult!.missingNomenclature.works.length + validationResult!.missingNomenclature.materials.length)
+        : 0;
+
       return [
-        <Button key="back" onClick={() => setCurrentStep(0)} disabled={uploading}>
+        <Button key="back" onClick={() => setCurrentStep(0)} disabled={uploading || addingToNomenclature}>
           Назад
         </Button>,
+        ...(hasMissingNomenclature ? [
+          <Button
+            key="addNomenclature"
+            onClick={handleAddMissingToNomenclature}
+            loading={addingToNomenclature}
+            disabled={uploading}
+          >
+            Добавить в номенклатуру ({missingCount})
+          </Button>
+        ] : []),
         <Button
           key="import"
           type="primary"
           onClick={handleValidate}
-          disabled={hasErrors || !hasDataToImport}
+          disabled={hasErrors || !hasDataToImport || addingToNomenclature}
           loading={uploading}
         >
           {hasErrors
@@ -353,45 +391,45 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
                     />
                   )}
 
-                  {/* Отсутствующая номенклатура */}
+                  {/* Отсутствующая номенклатура — можно добавить кнопкой в футере */}
                   {validationResult.missingNomenclature.works.length > 0 && (
                     <Alert
-                      message="Работы отсутствуют в номенклатуре"
+                      message="Работы отсутствуют в номенклатуре — нажмите «Добавить в номенклатуру»"
                       description={
                         <List
                           size="small"
                           dataSource={validationResult.missingNomenclature.works}
                           renderItem={item => (
                             <List.Item>
-                              <Text type="danger">
+                              <Text>
                                 {item.name} [{item.unit}] — строки: {item.rows.join(', ')}
                               </Text>
                             </List.Item>
                           )}
                         />
                       }
-                      type="error"
+                      type="warning"
                       style={{ marginBottom: 8 }}
                     />
                   )}
 
                   {validationResult.missingNomenclature.materials.length > 0 && (
                     <Alert
-                      message="Материалы отсутствуют в номенклатуре"
+                      message="Материалы отсутствуют в номенклатуре — нажмите «Добавить в номенклатуру»"
                       description={
                         <List
                           size="small"
                           dataSource={validationResult.missingNomenclature.materials}
                           renderItem={item => (
                             <List.Item>
-                              <Text type="danger">
+                              <Text>
                                 {item.name} [{item.unit}] — строки: {item.rows.join(', ')}
                               </Text>
                             </List.Item>
                           )}
                         />
                       }
-                      type="error"
+                      type="warning"
                       style={{ marginBottom: 8 }}
                     />
                   )}

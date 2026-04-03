@@ -386,6 +386,45 @@ export const useMassBoqImport = () => {
   };
 
   // ===========================
+  // ДОБАВЛЕНИЕ В НОМЕНКЛАТУРУ
+  // ===========================
+
+  const addMissingToNomenclature = async (tenderId: string): Promise<boolean> => {
+    if (!validationResult) return false;
+    const { works, materials } = validationResult.missingNomenclature;
+    if (works.length === 0 && materials.length === 0) return true;
+
+    try {
+      setUploading(true);
+
+      if (works.length > 0) {
+        const { error } = await supabase
+          .from('work_names')
+          .insert(works.map(w => ({ name: w.name, unit: w.unit })));
+        if (error) throw new Error(`Ошибка добавления работ: ${error.message}`);
+      }
+
+      if (materials.length > 0) {
+        const { error } = await supabase
+          .from('material_names')
+          .insert(materials.map(m => ({ name: m.name, unit: m.unit })));
+        if (error) throw new Error(`Ошибка добавления материалов: ${error.message}`);
+      }
+
+      await loadNomenclature(tenderId);
+
+      const total = works.length + materials.length;
+      message.success(`Добавлено в номенклатуру: ${total} записей`);
+      return true;
+    } catch (error: any) {
+      message.error(error.message);
+      return false;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ===========================
   // ПУБЛИЧНЫЙ API
   // ===========================
 
@@ -436,6 +475,7 @@ export const useMassBoqImport = () => {
     validateParsedData,
     processWorkBindings,
     insertBoqItems,
+    addMissingToNomenclature,
     reset,
     getPositionStats,
   };
