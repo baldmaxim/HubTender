@@ -927,7 +927,7 @@ export const DEFAULT_ROLE_PAGES: Record<UserRole, string[]> = {
 // Названия страниц (соответствуют левому боковому меню)
 export const PAGE_LABELS: Record<string, string> = {
   '/dashboard': 'Дашборд',
-  '/tenders': 'Тендеры',
+  '/tenders': 'Перечень тендеров',
   '/tasks': 'Список задач',
   '/positions': 'Позиции заказчика',
   '/commerce/proposal': 'Форма КП',
@@ -982,6 +982,7 @@ export const PAGES_STRUCTURE = [
       '/admin/construction_cost',
       '/admin/markup',
       '/admin/markup_constructor',
+      '/admin/import-log',
     ],
   },
   {

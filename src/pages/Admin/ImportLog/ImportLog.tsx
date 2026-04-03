@@ -57,20 +57,7 @@ const ImportLog: React.FC = () => {
     try {
       let query = supabase
         .from('import_sessions')
-        .select(`
-          id,
-          user_id,
-          tender_id,
-          file_name,
-          items_count,
-          imported_at,
-          cancelled_at,
-          cancelled_by,
-          positions_snapshot,
-          users!import_sessions_user_id_fkey(full_name, role_code),
-          tenders!import_sessions_tender_id_fkey(title, tender_number),
-          cancelled_by_user:users!import_sessions_cancelled_by_fkey(full_name)
-        `)
+        .select('id, user_id, tender_id, file_name, items_count, imported_at, cancelled_at, cancelled_by, positions_snapshot')
         .order('imported_at', { ascending: false })
         .limit(200);
 
@@ -78,10 +65,34 @@ const ImportLog: React.FC = () => {
         query = query.eq('tender_id', tenderFilter);
       }
 
-      const { data, error } = await query;
+      const { data: sessionsData, error } = await query;
       if (error) throw error;
 
-      const rows: ImportSessionRow[] = (data || []).map((s: any) => ({
+      const rawSessions = sessionsData || [];
+
+      // Собираем уникальные user_id для загрузки имён
+      const userIds = [...new Set([
+        ...rawSessions.map(s => s.user_id),
+        ...rawSessions.map(s => s.cancelled_by),
+      ].filter(Boolean))];
+
+      // Собираем уникальные tender_id
+      const tenderIds = [...new Set(rawSessions.map(s => s.tender_id).filter(Boolean))];
+
+      // Параллельная загрузка пользователей и тендеров
+      const [usersRes, tendersRes] = await Promise.all([
+        userIds.length > 0
+          ? supabase.from('users').select('id, full_name, role_code').in('id', userIds)
+          : Promise.resolve({ data: [] }),
+        tenderIds.length > 0
+          ? supabase.from('tenders').select('id, title, tender_number').in('id', tenderIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      const usersMap = new Map((usersRes.data || []).map((u: any) => [u.id, u]));
+      const tendersMap = new Map((tendersRes.data || []).map((t: any) => [t.id, t]));
+
+      const rows: ImportSessionRow[] = rawSessions.map((s: any) => ({
         id: s.id,
         user_id: s.user_id,
         tender_id: s.tender_id,
@@ -91,11 +102,11 @@ const ImportLog: React.FC = () => {
         cancelled_at: s.cancelled_at,
         cancelled_by: s.cancelled_by,
         positions_snapshot: s.positions_snapshot,
-        user_full_name: s.users?.full_name || '—',
-        user_role: s.users?.role_code || '',
-        tender_title: s.tenders?.title || '—',
-        tender_number: s.tenders?.tender_number || '',
-        cancelled_by_name: s.cancelled_by_user?.full_name || null,
+        user_full_name: usersMap.get(s.user_id)?.full_name || '—',
+        user_role: usersMap.get(s.user_id)?.role_code || '',
+        tender_title: tendersMap.get(s.tender_id)?.title || '—',
+        tender_number: tendersMap.get(s.tender_id)?.tender_number || '',
+        cancelled_by_name: s.cancelled_by ? (usersMap.get(s.cancelled_by)?.full_name || null) : null,
       }));
 
       setSessions(rows);
