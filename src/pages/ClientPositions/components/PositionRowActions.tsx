@@ -43,10 +43,10 @@ interface PositionRowActionsProps {
   onClearPositionBoqItems: (positionId: string, positionName: string, event: React.MouseEvent) => void;
   onStartLevelChange: (event: React.MouseEvent) => void;
   onStartPositionDeleteSelection?: (positionId: string, event: React.MouseEvent) => void;
-  onToggleExpanded: () => void;
+  onToggleExpanded: (id: string) => void;
 }
 
-export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
+const PositionRowActionsInner: React.FC<PositionRowActionsProps> = ({
   record,
   isLeaf,
   isExpanded,
@@ -240,7 +240,7 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
         <Tag
           color="default"
           style={{ cursor: readOnly ? 'not-allowed' : 'pointer', margin: 0, opacity: readOnly ? 0.5 : 1, pointerEvents: readOnly ? 'none' : 'auto' }}
-          onClick={(e) => { e.stopPropagation(); onToggleExpanded(); }}
+          onClick={(e) => { e.stopPropagation(); onToggleExpanded(record.id); }}
         >
           <MoreOutlined />
         </Tag>
@@ -248,3 +248,45 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
     </div>
   );
 };
+
+const areEqual = (prev: PositionRowActionsProps, next: PositionRowActionsProps): boolean => {
+  const id = next.record.id;
+  return (
+    prev.record.id === next.record.id &&
+    prev.record.is_additional === next.record.is_additional &&
+    prev.record.work_name === next.record.work_name &&
+    prev.record.manual_note === next.record.manual_note &&
+    prev.isLeaf === next.isLeaf &&
+    prev.isExpanded === next.isExpanded &&
+    prev.currentTheme === next.currentTheme &&
+    prev.readOnly === next.readOnly &&
+    prev.copiedPositionId === next.copiedPositionId &&
+    prev.copiedNotePositionId === next.copiedNotePositionId &&
+    prev.isDeleteSelectionMode === next.isDeleteSelectionMode &&
+    prev.isLevelChangeMode === next.isLevelChangeMode &&
+    prev.isPositionDeleteMode === next.isPositionDeleteMode &&
+    prev.canChangeLevel === next.canChangeLevel &&
+    prev.canDeletePositions === next.canDeletePositions &&
+    prev.counts.works === next.counts.works &&
+    prev.counts.materials === next.counts.materials &&
+    prev.selectedTargetIds.has(id) === next.selectedTargetIds.has(id) &&
+    prev.selectedDeleteIds.has(id) === next.selectedDeleteIds.has(id) &&
+    prev.selectedLevelChangeIds.has(id) === next.selectedLevelChangeIds.has(id) &&
+    prev.selectedPositionDeleteIds.has(id) === next.selectedPositionDeleteIds.has(id) &&
+    prev.onToggleSelection === next.onToggleSelection &&
+    prev.onToggleDeleteSelection === next.onToggleDeleteSelection &&
+    prev.onToggleLevelChangeSelection === next.onToggleLevelChangeSelection &&
+    prev.onTogglePositionDeleteSelection === next.onTogglePositionDeleteSelection &&
+    prev.onCopyPosition === next.onCopyPosition &&
+    prev.onCopyNote === next.onCopyNote &&
+    prev.onOpenAdditionalModal === next.onOpenAdditionalModal &&
+    prev.onDeleteAdditionalPosition === next.onDeleteAdditionalPosition &&
+    prev.onStartDeleteSelection === next.onStartDeleteSelection &&
+    prev.onClearPositionBoqItems === next.onClearPositionBoqItems &&
+    prev.onStartLevelChange === next.onStartLevelChange &&
+    prev.onStartPositionDeleteSelection === next.onStartPositionDeleteSelection &&
+    prev.onToggleExpanded === next.onToggleExpanded
+  );
+};
+
+export const PositionRowActions = React.memo(PositionRowActionsInner, areEqual);

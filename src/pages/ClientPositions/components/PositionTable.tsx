@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { Card, Table, Typography, Tag, Space, Button } from 'antd';
 import {
   CheckOutlined,
@@ -138,6 +138,11 @@ export const PositionTable: React.FC<PositionTableProps> = ({
 }) => {
   // Состояние для отслеживания открытой позиции
   const [expandedPositionId, setExpandedPositionId] = useState<string | null>(null);
+
+  // Стабильный коллбэк — не зависит ни от каких значений
+  const handleToggleExpanded = useCallback((id: string) => {
+    setExpandedPositionId(prev => prev === id ? null : id);
+  }, []);
 
   const columns: ColumnsType<ClientPosition> = useMemo(() => [
     {
@@ -351,7 +356,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
               onClearPositionBoqItems={onClearPositionBoqItems}
               onStartLevelChange={onStartLevelChange}
               onStartPositionDeleteSelection={onStartPositionDeleteSelection}
-              onToggleExpanded={() => setExpandedPositionId(isExpanded ? null : record.id)}
+              onToggleExpanded={handleToggleExpanded}
             />
           </div>
         );

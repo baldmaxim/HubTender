@@ -169,7 +169,7 @@ const ClientPositions: React.FC = () => {
   }, [clientPositions, isFilterActive, selectedPositionIds, showAllPositions]);
 
   // Обработка выбора наименования тендера
-  const handleTenderTitleChange = (title: string) => {
+  const handleTenderTitleChange = useCallback((title: string) => {
     setSelectedTenderTitle(title);
     // Автоматически выбираем последнюю версию нового тендера
     const versionsOfTitle = tenders
@@ -187,10 +187,10 @@ const ClientPositions: React.FC = () => {
       setSelectedVersion(null);
       setClientPositions([]);
     }
-  };
+  }, [tenders, shouldFilterArchived, fetchClientPositions, setSelectedTender, setClientPositions]);
 
   // Обработка выбора версии тендера
-  const handleVersionChange = (version: number) => {
+  const handleVersionChange = useCallback((version: number) => {
     setSelectedVersion(version);
     const tender = tenders.find(t => t.title === selectedTenderTitle && t.version === version);
     if (tender) {
@@ -198,7 +198,7 @@ const ClientPositions: React.FC = () => {
       setSelectedTenderId(tender.id);
       fetchClientPositions(tender.id);
     }
-  };
+  }, [tenders, selectedTenderTitle, fetchClientPositions, setSelectedTender]);
 
   // Автоматический выбор тендера из URL параметров
   useEffect(() => {
@@ -242,25 +242,25 @@ const ClientPositions: React.FC = () => {
 
 
   // Обработчик возврата к выбору
-  const handleBackToSelection = () => {
+  const handleBackToSelection = useCallback(() => {
     setSelectedTender(null);
     setSelectedTenderId(null);
     setSelectedTenderTitle(null);
     setSelectedVersion(null);
     setClientPositions([]);
-  };
+  }, [setSelectedTender, setClientPositions]);
 
   // Обработчик клика по карточке тендера
-  const handleTenderCardClick = (tender: Tender) => {
+  const handleTenderCardClick = useCallback((tender: Tender) => {
     setSelectedTenderTitle(tender.title);
     setSelectedVersion(tender.version || 1);
     setSelectedTender(tender);
     setSelectedTenderId(tender.id);
     fetchClientPositions(tender.id);
-  };
+  }, [fetchClientPositions, setSelectedTender]);
 
   // Обработчики фильтра
-  const handleToggleFilterCheckbox = (positionId: string) => {
+  const handleToggleFilterCheckbox = useCallback((positionId: string) => {
     const clickedIndex = clientPositions.findIndex(p => p.id === positionId);
     if (clickedIndex === -1) return;
 
@@ -299,23 +299,23 @@ const ClientPositions: React.FC = () => {
       }
       return newSet;
     });
-  };
+  }, [clientPositions]);
 
-  const handleApplyFilter = async () => {
+  const handleApplyFilter = useCallback(async () => {
     const positionIds = Array.from(tempSelectedPositionIds);
     await saveFilter(positionIds);
     setShowAllPositions(false);
-  };
+  }, [tempSelectedPositionIds, saveFilter]);
 
-  const handleClearFilter = async () => {
+  const handleClearFilter = useCallback(async () => {
     await clearFilter();
     setTempSelectedPositionIds(new Set());
     setShowAllPositions(false);
-  };
+  }, [clearFilter]);
 
-  const handleToggleShowAll = () => {
+  const handleToggleShowAll = useCallback(() => {
     setShowAllPositions(prev => !prev);
-  };
+  }, []);
 
   // Синхронизация tempSelectedPositionIds с загруженным фильтром
   useEffect(() => {
