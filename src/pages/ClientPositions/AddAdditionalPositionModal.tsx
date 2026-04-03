@@ -22,7 +22,7 @@ interface AddAdditionalPositionModalProps {
   parentPositionId: string | null;
   tenderId: string;
   onCancel: () => void;
-  onSuccess: () => void;
+  onSuccess: (newPositionId: string) => void;
 }
 
 const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
@@ -116,15 +116,17 @@ const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
         item_no: null,
       };
 
-      const { error: insertError } = await supabase
+      const { data: inserted, error: insertError } = await supabase
         .from('client_positions')
-        .insert(newPosition);
+        .insert(newPosition)
+        .select('id')
+        .single();
 
       if (insertError) throw insertError;
 
       message.success('Дополнительная работа успешно добавлена');
       form.resetFields();
-      onSuccess();
+      onSuccess(inserted.id);
     } catch (error: any) {
       console.error('Ошибка добавления дополнительной работы:', error);
       message.error('Ошибка добавления: ' + error.message);

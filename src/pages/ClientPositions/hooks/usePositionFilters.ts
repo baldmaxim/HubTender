@@ -90,6 +90,21 @@ export const usePositionFilters = (
     }
   };
 
+  // Добавление одной позиции в активный фильтр (например, новая ДОП работа)
+  const addPositionToFilter = async (positionId: string) => {
+    if (!userId || !tenderId) return;
+    try {
+      await supabase.from('user_position_filters').insert({
+        user_id: userId,
+        tender_id: tenderId,
+        position_id: positionId,
+      });
+      setSelectedPositionIds(prev => new Set([...prev, positionId]));
+    } catch (error: any) {
+      message.error('Ошибка добавления позиции в фильтр: ' + error.message);
+    }
+  };
+
   // Очистка фильтра
   const clearFilter = async () => {
     if (!userId || !tenderId) return;
@@ -120,5 +135,6 @@ export const usePositionFilters = (
     loading,
     saveFilter,
     clearFilter,
+    addPositionToFilter,
   };
 };

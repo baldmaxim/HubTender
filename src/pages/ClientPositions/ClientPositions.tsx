@@ -116,6 +116,7 @@ const ClientPositions: React.FC = () => {
     loading: filterLoading,
     saveFilter,
     clearFilter,
+    addPositionToFilter,
   } = usePositionFilters(user?.id, selectedTenderId);
 
   // Проверка дедлайна для блокировки редактирования
@@ -233,11 +234,14 @@ const ClientPositions: React.FC = () => {
     setAdditionalModalOpen(true);
   }, []);
 
-  const handleAdditionalSuccess = () => {
+  const handleAdditionalSuccess = (newPositionId: string) => {
     setAdditionalModalOpen(false);
     setSelectedParentId(null);
     if (selectedTenderId) {
       fetchClientPositions(selectedTenderId);
+    }
+    if (isFilterActive) {
+      addPositionToFilter(newPositionId);
     }
   };
 
