@@ -3,6 +3,7 @@ import { Modal, Steps, Button, Space, Progress, Alert, Upload, Table, Tag, Typog
 import { FileExcelOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import { useMassBoqImport } from '../hooks/useMassBoqImport';
 import { BoqPreviewTable } from './BoqPreviewTable';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const { Dragger } = Upload;
 const { Text } = Typography;
@@ -21,6 +22,7 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
   tenderTitle,
   onClose,
 }) => {
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [nomenclatureLoaded, setNomenclatureLoaded] = useState(false);
   const [addingToNomenclature, setAddingToNomenclature] = useState(false);
@@ -105,7 +107,7 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
   // Импорт
   const handleImport = async () => {
     setCurrentStep(2);
-    const success = await insertBoqItems(parsedData, tenderId);
+    const success = await insertBoqItems(parsedData, tenderId, user?.id);
     if (success) {
       setTimeout(() => handleClose(true), 500);
     }

@@ -30,6 +30,7 @@ import {
   DeleteOutlined,
   SwapOutlined,
   BuildOutlined,
+  ImportOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -359,6 +360,14 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           key: '/admin/markup_constructor',
           icon: <PercentageOutlined />,
           label: 'Конструктор наценок',
+        },
+        {
+          type: 'divider',
+        },
+        {
+          key: '/admin/import-log',
+          icon: <ImportOutlined />,
+          label: 'Журнал импортов строк',
         },
       ],
     },

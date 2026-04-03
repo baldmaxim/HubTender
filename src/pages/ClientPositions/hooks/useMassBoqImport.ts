@@ -28,6 +28,7 @@ export const useMassBoqImport = () => {
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [fileName, setFileName] = useState<string>('');
 
   // Справочники
   const [workNamesMap, setWorkNamesMap] = useState<Map<string, string>>(new Map());
@@ -128,6 +129,7 @@ export const useMassBoqImport = () => {
   // ===========================
 
   const parseExcelFile = async (file: File): Promise<boolean> => {
+    setFileName(file.name);
     return new Promise((resolve) => {
       const reader = new FileReader();
 
@@ -217,7 +219,11 @@ export const useMassBoqImport = () => {
   // ВСТАВКА В БД
   // ===========================
 
-  const insertBoqItems = async (data: ParsedBoqItem[], tenderId: string): Promise<boolean> => {
+  const insertBoqItems = async (
+    data: ParsedBoqItem[],
+    tenderId: string,
+    userId?: string,
+  ): Promise<boolean> => {
     try {
       setUploading(true);
       setUploadProgress(0);
@@ -241,8 +247,49 @@ export const useMassBoqImport = () => {
         byPosition.get(item.matchedPositionId)!.push(item);
       });
 
+      // ===========================
+      // Создаём сессию импорта
+      // ===========================
+      let importSessionId: string | null = null;
+      if (userId) {
+        // Собираем все затронутые позиции для snapshot
+        const affectedPositionIds = new Set<string>([
+          ...Array.from(byPosition.keys()),
+          ...positionOnlyUpdates.map(u => u.positionId),
+        ]);
+
+        // Загружаем текущее состояние позиций для snapshot (только manual_volume и manual_note)
+        let positionsSnapshot: Array<{ id: string; manual_volume: number | null; manual_note: string | null }> = [];
+        if (affectedPositionIds.size > 0) {
+          const { data: snapshotData } = await supabase
+            .from('client_positions')
+            .select('id, manual_volume, manual_note')
+            .in('id', Array.from(affectedPositionIds));
+          positionsSnapshot = snapshotData || [];
+        }
+
+        // Создаём запись сессии
+        const { data: session, error: sessionError } = await supabase
+          .from('import_sessions')
+          .insert({
+            user_id: userId,
+            tender_id: tenderId,
+            file_name: fileName || null,
+            positions_snapshot: positionsSnapshot,
+          })
+          .select('id')
+          .single();
+
+        if (sessionError) {
+          console.warn('[MassBoqImport] Не удалось создать сессию импорта:', sessionError.message);
+        } else {
+          importSessionId = session.id;
+        }
+      }
+
       const totalOperations = byPosition.size + positionOnlyUpdates.length;
       let processedOperations = 0;
+      let totalInsertedItems = 0;
 
       // Загружаем курсы валют только если есть BOQ-элементы
       let rates = currencyRates;
@@ -292,6 +339,10 @@ export const useMassBoqImport = () => {
             description: item.description,
           };
 
+          if (importSessionId) {
+            insertData.import_session_id = importSessionId;
+          }
+
           if (isWork(item.boq_item_type)) {
             insertData.work_name_id = item.work_name_id;
           }
@@ -311,6 +362,8 @@ export const useMassBoqImport = () => {
           if (error) {
             throw new Error(`Позиция ${positionId}, строка ${item.rowIndex}: ${error.message}`);
           }
+
+          totalInsertedItems++;
 
           if (isWork(item.boq_item_type) && item.tempId && inserted) {
             workIdMap.set(item.tempId, inserted.id);
@@ -364,10 +417,19 @@ export const useMassBoqImport = () => {
         setUploadProgress(Math.round((processedOperations / totalOperations) * 100));
       }
 
+      // Обновляем счётчик элементов в сессии
+      if (importSessionId && totalInsertedItems > 0) {
+        await supabase
+          .from('import_sessions')
+          .update({ items_count: totalInsertedItems })
+          .eq('id', importSessionId);
+      }
+
       console.log('[MassBoqImport] Импорт завершён:', {
         boqPositions: byPosition.size,
         boqItems: data.length,
         positionOnlyUpdates: positionOnlyUpdates.length,
+        sessionId: importSessionId,
       });
 
       const msgParts: string[] = [];
@@ -458,6 +520,7 @@ export const useMassBoqImport = () => {
     setValidationResult(null);
     setUploadProgress(0);
     setExistingItemsByPosition(new Map());
+    setFileName('');
   };
 
   const getPositionStats = () => {

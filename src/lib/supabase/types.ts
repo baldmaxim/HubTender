@@ -828,6 +828,26 @@ export interface DeadlineCheckResult {
 }
 
 // =============================================
+// Типы для таблицы import_sessions (сессии импорта BOQ из Excel)
+// =============================================
+
+export interface ImportSession {
+  id: string;
+  user_id: string | null;
+  tender_id: string;
+  file_name: string | null;
+  items_count: number;
+  positions_snapshot: Array<{
+    id: string;
+    manual_volume: number | null;
+    manual_note: string | null;
+  }> | null;
+  imported_at: string;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+}
+
+// =============================================
 // Типы для таблицы user_position_filters (персональные фильтры позиций)
 // =============================================
 
@@ -868,6 +888,7 @@ export const ALL_PAGES = [
   '/projects/:projectId',
   '/settings',
   '/users',
+  '/admin/import-log',
 ] as const;
 
 // Страницы по умолчанию для каждой роли
@@ -924,6 +945,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/admin/construction_cost': 'Справочник затрат',
   '/admin/markup': 'Проценты наценок',
   '/admin/markup_constructor': 'Конструктор наценок',
+  '/admin/import-log': 'Журнал импортов строк',
   '/users': 'Пользователи',
   '/settings': 'Настройки',
   '/positions/:positionId/items': 'Работы и материалы',
