@@ -121,7 +121,7 @@ export const usePositionActions = (
   };
 
   // Экспорт в Excel
-  const handleExportToExcel = async (selectedTender: any) => {
+  const handleExportToExcel = async (selectedTender: any, filteredPositionIds?: Set<string> | null) => {
     if (!selectedTender) {
       message.error('Выберите тендер для экспорта');
       return;
@@ -132,7 +132,8 @@ export const usePositionActions = (
       await exportPositionsToExcel(
         selectedTender.id,
         selectedTender.title,
-        selectedTender.version
+        selectedTender.version,
+        filteredPositionIds
       );
       hideLoading();
       message.success('Файл успешно экспортирован');

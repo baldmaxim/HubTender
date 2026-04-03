@@ -1,51 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
 import { supabase, type Tender } from '../../../../lib/supabase';
-import type { CostType, ComparisonRow } from '../types';
+import type { CostType, ComparisonRow, TenderCosts } from '../types';
 
 const MATERIAL_TYPES = ['мат', 'суб-мат', 'мат-комп.'];
 const WORK_TYPES = ['раб', 'суб-раб', 'раб-комп.'];
 
-function makeRow(key: string, category: string, isMain?: boolean): ComparisonRow {
+function makeEmptyTenderCosts(): TenderCosts {
+  return { materials: 0, works: 0, total: 0, mat_per_unit: 0, work_per_unit: 0, total_per_unit: 0, volume: 0 };
+}
+
+function makeRow(key: string, category: string, numTenders: number, isMain?: boolean): ComparisonRow {
   return {
     key,
     category,
     is_main_category: isMain,
-    tender1_materials: 0, tender1_works: 0, tender1_total: 0,
-    tender2_materials: 0, tender2_works: 0, tender2_total: 0,
-    diff_materials: 0, diff_works: 0, diff_total: 0,
-    diff_materials_percent: 0, diff_works_percent: 0, diff_total_percent: 0,
-    tender1_mat_per_unit: 0, tender1_work_per_unit: 0, tender1_total_per_unit: 0,
-    tender2_mat_per_unit: 0, tender2_work_per_unit: 0, tender2_total_per_unit: 0,
-    diff_mat_per_unit: 0, diff_work_per_unit: 0, diff_total_per_unit: 0,
-    volume1: 0, volume2: 0,
+    tenders: Array.from({ length: numTenders }, makeEmptyTenderCosts),
   };
 }
 
 function calcPerUnit(row: ComparisonRow): void {
-  row.tender1_mat_per_unit = row.volume1 > 0 ? row.tender1_materials / row.volume1 : 0;
-  row.tender1_work_per_unit = row.volume1 > 0 ? row.tender1_works / row.volume1 : 0;
-  row.tender1_total_per_unit = row.volume1 > 0 ? row.tender1_total / row.volume1 : 0;
-  row.tender2_mat_per_unit = row.volume2 > 0 ? row.tender2_materials / row.volume2 : 0;
-  row.tender2_work_per_unit = row.volume2 > 0 ? row.tender2_works / row.volume2 : 0;
-  row.tender2_total_per_unit = row.volume2 > 0 ? row.tender2_total / row.volume2 : 0;
-  row.diff_mat_per_unit = row.tender2_mat_per_unit - row.tender1_mat_per_unit;
-  row.diff_work_per_unit = row.tender2_work_per_unit - row.tender1_work_per_unit;
-  row.diff_total_per_unit = row.tender2_total_per_unit - row.tender1_total_per_unit;
-}
-
-function calcDiffs(row: ComparisonRow): ComparisonRow {
-  row.diff_materials = row.tender2_materials - row.tender1_materials;
-  row.diff_works = row.tender2_works - row.tender1_works;
-  row.diff_total = row.tender2_total - row.tender1_total;
-  row.diff_materials_percent = row.tender1_materials > 0
-    ? (row.diff_materials / row.tender1_materials) * 100 : 0;
-  row.diff_works_percent = row.tender1_works > 0
-    ? (row.diff_works / row.tender1_works) * 100 : 0;
-  row.diff_total_percent = row.tender1_total > 0
-    ? (row.diff_total / row.tender1_total) * 100 : 0;
-  calcPerUnit(row);
-  return row;
+  for (const t of row.tenders) {
+    t.mat_per_unit = t.volume > 0 ? t.materials / t.volume : 0;
+    t.work_per_unit = t.volume > 0 ? t.works / t.volume : 0;
+    t.total_per_unit = t.volume > 0 ? t.total / t.volume : 0;
+  }
 }
 
 async function fetchVolumes(tenderId: string): Promise<{ detailMap: Map<string, number>; groupMap: Map<string, number> }> {
@@ -119,35 +98,21 @@ async function fetchNotes(tenderId1: string, tenderId2: string): Promise<NotesMa
   if (error) throw error;
 
   const map = new Map<string, string>();
-  const exactOrderRows = (data || []).filter(
-    (row) => row.tender_id_1 === tenderId1 && row.tender_id_2 === tenderId2
-  );
-  const reversedOrderRows = (data || []).filter(
-    (row) => row.tender_id_1 === tenderId2 && row.tender_id_2 === tenderId1
-  );
+  const exactOrderRows = (data || []).filter(r => r.tender_id_1 === tenderId1 && r.tender_id_2 === tenderId2);
+  const reversedOrderRows = (data || []).filter(r => r.tender_id_1 === tenderId2 && r.tender_id_2 === tenderId1);
 
   for (const row of exactOrderRows) {
-    // Main category: key = "main__CategoryName", detail: key = detailKey
     const key = row.detail_category_key || `main__${row.cost_category_name}`;
     if (row.note) map.set(key, row.note);
   }
-
   for (const row of reversedOrderRows) {
     const key = row.detail_category_key || `main__${row.cost_category_name}`;
     if (row.note && !map.has(key)) map.set(key, row.note);
   }
-
   return map;
 }
 
-interface CategoryAccum {
-  mainCategory: string;
-  detailName: string;
-  detailKey: string;
-  detailCategoryId: string | null;
-}
-
-function getItemCategory(item: any): CategoryAccum {
+function getItemCategory(item: any) {
   const mainCategory = item.detail_cost_categories?.cost_categories?.name || 'Без категории';
   const detailName = item.detail_cost_categories?.name || 'Без детализации';
   const location = item.detail_cost_categories?.location || '';
@@ -156,136 +121,102 @@ function getItemCategory(item: any): CategoryAccum {
   return { mainCategory, detailName: location ? `${detailName} (${location})` : detailName, detailKey, detailCategoryId };
 }
 
-function addItemToRow(
-  row: ComparisonRow,
-  item: any,
-  tenderNum: 1 | 2,
-  costType: CostType
-) {
+function addItemToRow(row: ComparisonRow, item: any, tenderIdx: number, costType: CostType) {
+  const t = row.tenders[tenderIdx];
+  if (!t) return;
   if (costType === 'commercial') {
     const mat = item.total_commercial_material_cost || 0;
     const work = item.total_commercial_work_cost || 0;
-    if (tenderNum === 1) {
-      row.tender1_materials += mat;
-      row.tender1_works += work;
-      row.tender1_total += mat + work;
-    } else {
-      row.tender2_materials += mat;
-      row.tender2_works += work;
-      row.tender2_total += mat + work;
-    }
+    t.materials += mat;
+    t.works += work;
+    t.total += mat + work;
   } else {
     const amount = item.total_amount || 0;
-    const isMat = MATERIAL_TYPES.includes(item.boq_item_type);
-    const isWork = WORK_TYPES.includes(item.boq_item_type);
-    if (tenderNum === 1) {
-      if (isMat) row.tender1_materials += amount;
-      if (isWork) row.tender1_works += amount;
-      row.tender1_total += amount;
-    } else {
-      if (isMat) row.tender2_materials += amount;
-      if (isWork) row.tender2_works += amount;
-      row.tender2_total += amount;
-    }
+    if (MATERIAL_TYPES.includes(item.boq_item_type)) t.materials += amount;
+    if (WORK_TYPES.includes(item.boq_item_type)) t.works += amount;
+    t.total += amount;
   }
 }
 
-interface VolumeMaps {
-  detail1: Map<string, number>;
-  group1: Map<string, number>;
-  detail2: Map<string, number>;
-  group2: Map<string, number>;
-}
-
 function buildHierarchy(
-  items1: any[],
-  items2: any[],
+  itemsAll: any[][],
   costType: CostType,
-  volumes?: VolumeMaps,
+  volumeMapsAll?: { detailMap: Map<string, number>; groupMap: Map<string, number> }[],
   notes?: NotesMap
 ): ComparisonRow[] {
-  // detail rows keyed by detailKey
+  const numTenders = itemsAll.length;
   const detailRows = new Map<string, ComparisonRow>();
-  // main category -> set of detail keys
   const mainToDetails = new Map<string, Set<string>>();
-  // detailKey -> detailCategoryId (for volume lookup)
   const detailKeyToCatId = new Map<string, string>();
 
-  const processItem = (item: any, tenderNum: 1 | 2) => {
-    const { mainCategory, detailName, detailKey, detailCategoryId } = getItemCategory(item);
+  for (let idx = 0; idx < numTenders; idx++) {
+    for (const item of itemsAll[idx]) {
+      const { mainCategory, detailName, detailKey, detailCategoryId } = getItemCategory(item);
 
-    if (!detailRows.has(detailKey)) {
-      detailRows.set(detailKey, makeRow(detailKey, detailName));
+      if (!detailRows.has(detailKey)) {
+        detailRows.set(detailKey, makeRow(detailKey, detailName, numTenders));
+      }
+      if (detailCategoryId && !detailKeyToCatId.has(detailKey)) {
+        detailKeyToCatId.set(detailKey, detailCategoryId);
+      }
+      addItemToRow(detailRows.get(detailKey)!, item, idx, costType);
+
+      if (!mainToDetails.has(mainCategory)) {
+        mainToDetails.set(mainCategory, new Set());
+      }
+      mainToDetails.get(mainCategory)!.add(detailKey);
     }
-    if (detailCategoryId && !detailKeyToCatId.has(detailKey)) {
-      detailKeyToCatId.set(detailKey, detailCategoryId);
-    }
-    addItemToRow(detailRows.get(detailKey)!, item, tenderNum, costType);
+  }
 
-    if (!mainToDetails.has(mainCategory)) {
-      mainToDetails.set(mainCategory, new Set());
-    }
-    mainToDetails.get(mainCategory)!.add(detailKey);
-  };
-
-  items1.forEach(item => processItem(item, 1));
-  items2.forEach(item => processItem(item, 2));
-
-  // Assign volumes to detail rows
-  if (volumes) {
+  if (volumeMapsAll) {
     for (const [detailKey, row] of detailRows) {
       const catId = detailKeyToCatId.get(detailKey);
       if (catId) {
-        row.volume1 = volumes.detail1.get(catId) || 0;
-        row.volume2 = volumes.detail2.get(catId) || 0;
+        for (let idx = 0; idx < numTenders; idx++) {
+          row.tenders[idx].volume = volumeMapsAll[idx]?.detailMap.get(catId) || 0;
+        }
       }
     }
   }
 
-  // Build main category rows with children
   const result: ComparisonRow[] = [];
-
-  // Sort main categories alphabetically
   const sortedCategories = [...mainToDetails.keys()].sort((a, b) => a.localeCompare(b, 'ru'));
 
   for (const mainCat of sortedCategories) {
     const detailKeys = mainToDetails.get(mainCat)!;
-    const mainRow = makeRow(`main__${mainCat}`, mainCat, true);
+    const mainRow = makeRow(`main__${mainCat}`, mainCat, numTenders, true);
     const children: ComparisonRow[] = [];
 
     for (const dk of detailKeys) {
-      const detail = calcDiffs(detailRows.get(dk)!);
-      // Skip zero-cost details
-      if (detail.tender1_total === 0 && detail.tender2_total === 0) continue;
+      const detail = detailRows.get(dk)!;
+      calcPerUnit(detail);
 
-      // Attach note and mainCategoryName
+      if (detail.tenders.every(t => t.total === 0)) continue;
+
       detail.mainCategoryName = mainCat;
       if (notes) detail.note = notes.get(dk) || null;
 
-      // Accumulate to main
-      mainRow.tender1_materials += detail.tender1_materials;
-      mainRow.tender1_works += detail.tender1_works;
-      mainRow.tender1_total += detail.tender1_total;
-      mainRow.tender2_materials += detail.tender2_materials;
-      mainRow.tender2_works += detail.tender2_works;
-      mainRow.tender2_total += detail.tender2_total;
+      for (let idx = 0; idx < numTenders; idx++) {
+        mainRow.tenders[idx].materials += detail.tenders[idx].materials;
+        mainRow.tenders[idx].works += detail.tenders[idx].works;
+        mainRow.tenders[idx].total += detail.tenders[idx].total;
+      }
 
       children.push(detail);
     }
 
     if (children.length === 0) continue;
 
-    // Sort children alphabetically
     children.sort((a, b) => a.category.localeCompare(b.category, 'ru'));
 
-    // Assign group volumes for main category
-    if (volumes) {
+    if (volumeMapsAll) {
       const groupKey = `category-${mainCat}`;
-      mainRow.volume1 = volumes.group1.get(groupKey) || 0;
-      mainRow.volume2 = volumes.group2.get(groupKey) || 0;
+      for (let idx = 0; idx < numTenders; idx++) {
+        mainRow.tenders[idx].volume = volumeMapsAll[idx]?.groupMap.get(groupKey) || 0;
+      }
     }
 
-    calcDiffs(mainRow);
+    calcPerUnit(mainRow);
     mainRow.mainCategoryName = mainCat;
     if (notes) mainRow.note = notes.get(`main__${mainCat}`) || null;
     mainRow.children = children;
@@ -297,31 +228,26 @@ function buildHierarchy(
 
 export function useComparisonData() {
   const [tenders, setTenders] = useState<Tender[]>([]);
-  const [selectedTender1, setSelectedTender1] = useState<string | null>(null);
-  const [selectedTender2, setSelectedTender2] = useState<string | null>(null);
-  const [tender1Info, setTender1Info] = useState<Tender | null>(null);
-  const [tender2Info, setTender2Info] = useState<Tender | null>(null);
+  const [selectedTenders, setSelectedTenders] = useState<(string | null)[]>([null, null]);
+  const [tenderInfos, setTenderInfos] = useState<(Tender | null)[]>([]);
   const [loading, setLoading] = useState(false);
   const [comparisonData, setComparisonData] = useState<ComparisonRow[]>([]);
   const [costType, setCostType] = useState<CostType>('base');
 
-  // Cache raw items to avoid refetch on costType change
-  const [rawItems1, setRawItems1] = useState<any[] | null>(null);
-  const [rawItems2, setRawItems2] = useState<any[] | null>(null);
-  const [volumeMaps, setVolumeMaps] = useState<VolumeMaps | null>(null);
+  const [rawItemsAll, setRawItemsAll] = useState<any[][] | null>(null);
+  const [volumeMapsAll, setVolumeMapsAll] = useState<{ detailMap: Map<string, number>; groupMap: Map<string, number> }[] | null>(null);
   const [notesMap, setNotesMap] = useState<NotesMap>(new Map());
 
   useEffect(() => {
-    fetchTenders();
+    fetchTendersData();
   }, []);
 
-  // Rebuild hierarchy when costType changes and we have cached data
   useEffect(() => {
-    if (rawItems1 && rawItems2) {
-      const data = buildHierarchy(rawItems1, rawItems2, costType, volumeMaps || undefined, notesMap);
+    if (rawItemsAll) {
+      const data = buildHierarchy(rawItemsAll, costType, volumeMapsAll || undefined, notesMap);
       setComparisonData(data);
     }
-  }, [costType, rawItems1, rawItems2, volumeMaps, notesMap]);
+  }, [costType, rawItemsAll, volumeMapsAll, notesMap]);
 
   const fetchTendersData = async () => {
     try {
@@ -336,50 +262,54 @@ export function useComparisonData() {
     }
   };
 
-  const fetchTenders = fetchTendersData;
+  const setSelectedTender = (idx: number, value: string | null) => {
+    setSelectedTenders(prev => {
+      const next = [...prev];
+      next[idx] = value;
+      return next;
+    });
+  };
+
+  const addTender = () => {
+    setSelectedTenders(prev => [...prev, null]);
+  };
+
+  const removeTender = (idx: number) => {
+    if (selectedTenders.length <= 2) return;
+    setSelectedTenders(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const loadComparisonData = async () => {
-    if (!selectedTender1 || !selectedTender2) {
-      message.warning('Выберите два тендера для сравнения');
+    const validTenders = selectedTenders.filter(Boolean) as string[];
+    if (validTenders.length < 2) {
+      message.warning('Выберите минимум два тендера для сравнения');
       return;
     }
-    if (selectedTender1 === selectedTender2) {
+    if (new Set(validTenders).size !== validTenders.length) {
       message.warning('Выберите разные тендеры для сравнения');
       return;
     }
 
     setLoading(true);
     try {
-      // Load tender info
-      const [{ data: t1 }, { data: t2 }] = await Promise.all([
-        supabase.from('tenders').select('*').eq('id', selectedTender1).single(),
-        supabase.from('tenders').select('*').eq('id', selectedTender2).single(),
-      ]);
-      setTender1Info(t1);
-      setTender2Info(t2);
-
-      // Load BOQ items, volumes and notes for both tenders in parallel
-      const [items1, items2, vol1, vol2, loadedNotes] = await Promise.all([
-        fetchBoqItems(selectedTender1),
-        fetchBoqItems(selectedTender2),
-        fetchVolumes(selectedTender1),
-        fetchVolumes(selectedTender2),
-        fetchNotes(selectedTender1, selectedTender2),
+      const [tenderInfoResults, itemsAll, volsAll] = await Promise.all([
+        Promise.all(validTenders.map(id => supabase.from('tenders').select('*').eq('id', id).single())),
+        Promise.all(validTenders.map(id => fetchBoqItems(id))),
+        Promise.all(validTenders.map(id => fetchVolumes(id))),
       ]);
 
-      const vols: VolumeMaps = {
-        detail1: vol1.detailMap, group1: vol1.groupMap,
-        detail2: vol2.detailMap, group2: vol2.groupMap,
-      };
+      setTenderInfos(tenderInfoResults.map(r => r.data));
 
-      // Cache raw items, volumes and notes
-      setRawItems1(items1);
-      setRawItems2(items2);
-      setVolumeMaps(vols);
+      let loadedNotes: NotesMap = new Map();
+      if (validTenders.length === 2) {
+        loadedNotes = await fetchNotes(validTenders[0], validTenders[1]);
+      }
+
+      setRawItemsAll(itemsAll);
+      setVolumeMapsAll(volsAll);
       setNotesMap(loadedNotes);
 
-      // Build comparison with current costType
-      const data = buildHierarchy(items1, items2, costType, vols, loadedNotes);
+      const data = buildHierarchy(itemsAll, costType, volsAll, loadedNotes);
       setComparisonData(data);
       message.success('Данные успешно загружены');
     } catch (error: any) {
@@ -389,44 +319,25 @@ export function useComparisonData() {
     }
   };
 
-  // Save note to DB (upsert)
   const saveNote = useCallback(async (
     categoryName: string,
     detailKey: string | null,
     note: string
   ) => {
-    if (!selectedTender1 || !selectedTender2) return;
+    const validTenders = selectedTenders.filter(Boolean) as string[];
+    if (validTenders.length !== 2) return;
+    const [tenderId1, tenderId2] = validTenders;
 
     try {
-      const rows: any[] = [
-        {
-          tender_id_1: selectedTender1,
-          tender_id_2: selectedTender2,
-          cost_category_name: categoryName,
-          detail_category_key: detailKey,
-          note,
-        },
-      ];
-
-      if (selectedTender1 !== selectedTender2) {
-        rows.push({
-          tender_id_1: selectedTender2,
-          tender_id_2: selectedTender1,
-          cost_category_name: categoryName,
-          detail_category_key: detailKey,
-          note,
-        });
-      }
-
       const { error } = await supabase
         .from('comparison_notes')
-        .upsert(rows, {
-          onConflict: 'tender_id_1,tender_id_2,cost_category_name,detail_category_key',
-        });
+        .upsert([
+          { tender_id_1: tenderId1, tender_id_2: tenderId2, cost_category_name: categoryName, detail_category_key: detailKey, note },
+          { tender_id_1: tenderId2, tender_id_2: tenderId1, cost_category_name: categoryName, detail_category_key: detailKey, note },
+        ], { onConflict: 'tender_id_1,tender_id_2,cost_category_name,detail_category_key' });
 
       if (error) throw error;
 
-      // Update local cache
       const mapKey = detailKey || `main__${categoryName}`;
       setNotesMap(prev => {
         const next = new Map(prev);
@@ -437,32 +348,25 @@ export function useComparisonData() {
     } catch (error: any) {
       message.error('Ошибка сохранения примечания: ' + error.message);
     }
-  }, [selectedTender1, selectedTender2]);
+  }, [selectedTenders]);
 
-  // Totals
-  const totalStats = comparisonData.reduce(
-    (acc, item) => ({
-      tender1_total: acc.tender1_total + item.tender1_total,
-      tender2_total: acc.tender2_total + item.tender2_total,
-      diff_total: acc.diff_total + item.diff_total,
-    }),
-    { tender1_total: 0, tender2_total: 0, diff_total: 0 }
+  const tenderTotals = comparisonData.reduce<number[]>(
+    (acc, row) => {
+      row.tenders.forEach((t, i) => { acc[i] = (acc[i] || 0) + t.total; });
+      return acc;
+    },
+    []
   );
-
-  const diffPercent = totalStats.tender1_total > 0
-    ? ((totalStats.diff_total / totalStats.tender1_total) * 100).toFixed(2)
-    : '0';
 
   return {
     tenders,
-    selectedTender1, setSelectedTender1,
-    selectedTender2, setSelectedTender2,
-    tender1Info, tender2Info,
+    selectedTenders, setSelectedTender, addTender, removeTender,
+    tenderInfos,
     loading,
     comparisonData,
     costType, setCostType,
     loadComparisonData,
-    totalStats, diffPercent,
+    tenderTotals,
     saveNote,
   };
 }

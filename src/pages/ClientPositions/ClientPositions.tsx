@@ -433,7 +433,10 @@ const ClientPositions: React.FC = () => {
           onCancelPositionDeleteSelection={handleCancelPositionDeleteSelection}
           onBulkDeletePositions={() => handleBulkDeletePositions(selectedTenderId)}
           canDeletePositions={canDeletePositions}
-          onExportToExcel={() => handleExportToExcel(selectedTender)}
+          onExportToExcel={() => handleExportToExcel(
+            selectedTender,
+            isFilterActive && !showAllPositions ? selectedPositionIds : null
+          )}
           onMassImport={() => setMassImportModalOpen(true)}
           tempSelectedPositionIds={tempSelectedPositionIds}
           onToggleFilterCheckbox={handleToggleFilterCheckbox}

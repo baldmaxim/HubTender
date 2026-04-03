@@ -418,11 +418,15 @@ function createWorksheet(rows: ExportRow[]) {
 
 /**
  * Главная функция экспорта позиций заказчика в Excel
+ * @param filteredPositionIds — если задан, экспортируются только позиции из набора;
+ *   ДОП работы включаются автоматически, если их родитель в фильтре.
+ *   null / undefined — экспорт всех позиций.
  */
 export async function exportPositionsToExcel(
   tenderId: string,
   tenderTitle: string,
-  tenderVersion: number
+  tenderVersion: number,
+  filteredPositionIds?: Set<string> | null
 ): Promise<void> {
   try {
     // Загрузить все позиции и все BOQ items ОДНИМ запросом каждый
@@ -431,12 +435,20 @@ export async function exportPositionsToExcel(
       loadAllBoqItemsForTender(tenderId)
     ]);
 
-    if (positions.length === 0) {
+    // Применить фильтр если задан
+    const exportPositions = filteredPositionIds && filteredPositionIds.size > 0
+      ? positions.filter(p =>
+          filteredPositionIds.has(p.id) ||
+          (p.is_additional && p.parent_position_id != null && filteredPositionIds.has(p.parent_position_id))
+        )
+      : positions;
+
+    if (exportPositions.length === 0) {
       throw new Error('Нет позиций для экспорта');
     }
 
     // Собрать все строки для экспорта (БЕЗ дополнительных запросов к БД)
-    const rows = collectExportRows(positions, boqItemsByPosition);
+    const rows = collectExportRows(exportPositions, boqItemsByPosition);
 
     // Создать рабочий лист
     const worksheet = createWorksheet(rows);
