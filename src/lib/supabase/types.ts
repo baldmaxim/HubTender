@@ -125,6 +125,15 @@ export type WorkItemType = Extract<BoqItemType, 'раб' | 'суб-раб' | 'р
 // Типы для таблицы materials_library
 // =============================================
 
+export interface LibraryFolder {
+  id: string;
+  name: string;
+  type: 'works' | 'materials';
+  sort_order: number;
+  parent_id: string | null;
+  created_at: string;
+}
+
 export interface MaterialLibraryInsert {
   material_type: MaterialType;
   item_type: ItemType;
@@ -134,6 +143,7 @@ export interface MaterialLibraryInsert {
   delivery_price_type?: DeliveryPriceType;
   delivery_amount?: number;
   material_name_id: string;
+  folder_id?: string | null;
 }
 
 export interface MaterialLibrary extends MaterialLibraryInsert {
@@ -242,6 +252,7 @@ export interface ConstructionCostVolume extends ConstructionCostVolumeInsert {
 export interface MaterialLibraryFull extends MaterialLibrary {
   material_name: string;
   unit: UnitType;
+  folder_id?: string | null;
 }
 
 // =============================================
@@ -253,6 +264,7 @@ export interface WorkLibraryInsert {
   item_type: WorkItemType;
   unit_rate: number;
   currency_type?: CurrencyType;
+  folder_id?: string | null;
 }
 
 export interface WorkLibrary extends WorkLibraryInsert {
@@ -268,6 +280,7 @@ export interface WorkLibrary extends WorkLibraryInsert {
 export interface WorkLibraryFull extends WorkLibrary {
   work_name: string;
   unit: UnitType;
+  folder_id?: string | null;
 }
 
 // =============================================
@@ -370,6 +383,7 @@ export interface Template extends TemplateInsert {
   id: string;
   created_at: string;
   updated_at: string;
+  folder_id?: string | null;
 }
 
 // =============================================

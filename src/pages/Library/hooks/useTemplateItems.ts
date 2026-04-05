@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
 import type { TemplateItem } from '../../../lib/supabase';
@@ -24,114 +24,126 @@ export interface TemplateItemWithDetails extends TemplateItem {
   manual_cost_override?: boolean;
 }
 
+const ITEMS_QUERY = `
+  *,
+  works_library:work_library_id(*, work_names(name, unit)),
+  materials_library:material_library_id(*, material_names(name, unit)),
+  detail_cost_categories:detail_cost_category_id(name, location, cost_categories(name))
+`;
+
+// O(n) — Map вместо повторных filter()
+const sortItemsByHierarchy = (items: TemplateItemWithDetails[]): TemplateItemWithDetails[] => {
+  const works: TemplateItemWithDetails[] = [];
+  const linkedMaterialsMap = new Map<string, TemplateItemWithDetails[]>();
+  const unlinkedMaterials: TemplateItemWithDetails[] = [];
+
+  for (const item of items) {
+    if (item.kind === 'work') {
+      works.push(item);
+    } else if (item.parent_work_item_id) {
+      const arr = linkedMaterialsMap.get(item.parent_work_item_id) ?? [];
+      arr.push(item);
+      linkedMaterialsMap.set(item.parent_work_item_id, arr);
+    } else {
+      unlinkedMaterials.push(item);
+    }
+  }
+
+  works.sort((a, b) => (a.position || 0) - (b.position || 0));
+
+  const result: TemplateItemWithDetails[] = [];
+  const worksWithoutMaterials: TemplateItemWithDetails[] = [];
+
+  for (const work of works) {
+    const mats = linkedMaterialsMap.get(work.id);
+    if (mats?.length) {
+      result.push(work);
+      mats.sort((a, b) => (a.position || 0) - (b.position || 0));
+      result.push(...mats);
+    } else {
+      worksWithoutMaterials.push(work);
+    }
+  }
+
+  result.push(...worksWithoutMaterials);
+  result.push(...unlinkedMaterials);
+  return result;
+};
+
+const formatItem = (item: any, parentWorkName?: string): TemplateItemWithDetails => {
+  let detailCostCategoryFull: string | undefined;
+  if (item.detail_cost_categories) {
+    const cat = item.detail_cost_categories.cost_categories?.name || '';
+    const det = item.detail_cost_categories.name || '';
+    const loc = item.detail_cost_categories.location || '';
+    detailCostCategoryFull = `${cat} / ${det} / ${loc}`;
+  }
+  return {
+    ...item,
+    work_name: item.works_library?.work_names?.name,
+    work_unit: item.works_library?.work_names?.unit,
+    work_item_type: item.works_library?.item_type,
+    work_unit_rate: item.works_library?.unit_rate,
+    work_currency_type: item.works_library?.currency_type,
+    material_name: item.materials_library?.material_names?.name,
+    material_unit: item.materials_library?.material_names?.unit,
+    material_item_type: item.materials_library?.item_type,
+    material_type: item.materials_library?.material_type,
+    material_consumption_coefficient: item.materials_library?.consumption_coefficient,
+    material_unit_rate: item.materials_library?.unit_rate,
+    material_currency_type: item.materials_library?.currency_type,
+    material_delivery_price_type: item.materials_library?.delivery_price_type,
+    material_delivery_amount: item.materials_library?.delivery_amount,
+    parent_work_name: parentWorkName,
+    detail_cost_category_name: item.detail_cost_categories?.name,
+    detail_cost_category_full: detailCostCategoryFull,
+  };
+};
+
 export const useTemplateItems = () => {
   const [loadedTemplateItems, setLoadedTemplateItems] = useState<Record<string, TemplateItemWithDetails[]>>({});
+  const [loadingTemplates, setLoadingTemplates] = useState<Set<string>>(new Set());
+  // Ref для предотвращения двойной загрузки одного шаблона
+  const fetchedRef = useRef(new Set<string>());
 
-  const sortItemsByHierarchy = (items: TemplateItemWithDetails[]): TemplateItemWithDetails[] => {
-    const works = items.filter(item => item.kind === 'work');
-    const materials = items.filter(item => item.kind === 'material');
+  // Ленивая загрузка элементов одного шаблона
+  const fetchTemplateItems = async (templateId: string) => {
+    if (fetchedRef.current.has(templateId)) return;
+    fetchedRef.current.add(templateId);
+    setLoadingTemplates(prev => new Set(prev).add(templateId));
 
-    const linkedMaterials = materials.filter(m => m.parent_work_item_id);
-    const unlinkedMaterials = materials.filter(m => !m.parent_work_item_id);
-
-    const result: TemplateItemWithDetails[] = [];
-
-    works.sort((a, b) => (a.position || 0) - (b.position || 0));
-
-    const worksWithMaterials: TemplateItemWithDetails[] = [];
-    const worksWithoutMaterials: TemplateItemWithDetails[] = [];
-
-    works.forEach(work => {
-      const workMaterials = linkedMaterials.filter(m => m.parent_work_item_id === work.id);
-      if (workMaterials.length > 0) {
-        worksWithMaterials.push(work);
-      } else {
-        worksWithoutMaterials.push(work);
-      }
-    });
-
-    worksWithMaterials.forEach(work => {
-      result.push(work);
-      const workMaterials = linkedMaterials.filter(m => m.parent_work_item_id === work.id);
-      workMaterials.sort((a, b) => (a.position || 0) - (b.position || 0));
-      result.push(...workMaterials);
-    });
-
-    result.push(...worksWithoutMaterials);
-    result.push(...unlinkedMaterials);
-
-    return result;
-  };
-
-  const fetchAllTemplateItems = async () => {
     try {
       const { data, error } = await supabase
         .from('template_items')
-        .select(`
-          *,
-          works_library:work_library_id(*, work_names(name, unit)),
-          materials_library:material_library_id(*, material_names(name, unit)),
-          detail_cost_categories:detail_cost_category_id(name, location, cost_categories(name))
-        `)
+        .select(ITEMS_QUERY)
+        .eq('template_id', templateId)
         .order('position');
 
       if (error) throw error;
 
-      const itemsByTemplate: Record<string, TemplateItemWithDetails[]> = {};
-
-      (data || []).forEach((item: any) => {
-        if (!itemsByTemplate[item.template_id]) {
-          itemsByTemplate[item.template_id] = [];
-        }
-
-        let parentWorkName = undefined;
-        if (item.parent_work_item_id) {
-          const parentWork = (data || []).find((i: any) => i.id === item.parent_work_item_id);
-          parentWorkName = parentWork?.works_library?.work_names?.name;
-        }
-
-        let detailCostCategoryFull = undefined;
-        if (item.detail_cost_categories) {
-          const categoryName = item.detail_cost_categories.cost_categories?.name || '';
-          const detailName = item.detail_cost_categories.name || '';
-          const location = item.detail_cost_categories.location || '';
-          detailCostCategoryFull = `${categoryName} / ${detailName} / ${location}`;
-        }
-
-        const formatted: TemplateItemWithDetails = {
-          ...item,
-          work_name: item.works_library?.work_names?.name,
-          work_unit: item.works_library?.work_names?.unit,
-          work_item_type: item.works_library?.item_type,
-          work_unit_rate: item.works_library?.unit_rate,
-          work_currency_type: item.works_library?.currency_type,
-          material_name: item.materials_library?.material_names?.name,
-          material_unit: item.materials_library?.material_names?.unit,
-          material_item_type: item.materials_library?.item_type,
-          material_type: item.materials_library?.material_type,
-          material_consumption_coefficient: item.materials_library?.consumption_coefficient,
-          material_unit_rate: item.materials_library?.unit_rate,
-          material_currency_type: item.materials_library?.currency_type,
-          material_delivery_price_type: item.materials_library?.delivery_price_type,
-          material_delivery_amount: item.materials_library?.delivery_amount,
-          parent_work_name: parentWorkName,
-          detail_cost_category_name: item.detail_cost_categories?.name,
-          detail_cost_category_full: detailCostCategoryFull,
-        };
-
-        itemsByTemplate[item.template_id].push(formatted);
+      const raw = data || [];
+      // Строим Map для поиска родительских имён за O(n)
+      const idToWork = new Map<string, any>(
+        raw.filter(i => i.kind === 'work').map(i => [i.id, i])
+      );
+      const formatted = raw.map(item => {
+        const parent = item.parent_work_item_id ? idToWork.get(item.parent_work_item_id) : undefined;
+        return formatItem(item, parent?.works_library?.work_names?.name);
       });
 
-      // Применяем иерархическую сортировку для каждого шаблона
-      const sortedItemsByTemplate: Record<string, TemplateItemWithDetails[]> = {};
-      Object.keys(itemsByTemplate).forEach(templateId => {
-        sortedItemsByTemplate[templateId] = sortItemsByHierarchy(itemsByTemplate[templateId]);
-      });
-
-      setLoadedTemplateItems(sortedItemsByTemplate);
+      setLoadedTemplateItems(prev => ({ ...prev, [templateId]: sortItemsByHierarchy(formatted) }));
     } catch (error: any) {
-      message.error('Ошибка загрузки элементов шаблонов: ' + error.message);
+      fetchedRef.current.delete(templateId); // позволяем повторную попытку
+      message.error('Ошибка загрузки элементов шаблона: ' + error.message);
+    } finally {
+      setLoadingTemplates(prev => { const s = new Set(prev); s.delete(templateId); return s; });
     }
+  };
+
+  // Принудительная перезагрузка (после сохранения редактирования)
+  const refetchTemplateItems = async (templateId: string) => {
+    fetchedRef.current.delete(templateId);
+    await fetchTemplateItems(templateId);
   };
 
   const handleDeleteTemplateItem = async (templateId: string, itemId: string) => {
@@ -140,19 +152,16 @@ export const useTemplateItems = () => {
       const itemToDelete = currentItems.find(item => item.id === itemId);
 
       if (itemToDelete?.kind === 'work') {
-        const linkedMaterials = currentItems.filter(
-          item => item.kind === 'material' && item.parent_work_item_id === itemId
-        );
+        const linkedIds = currentItems
+          .filter(item => item.kind === 'material' && item.parent_work_item_id === itemId)
+          .map(item => item.id);
 
-        for (const material of linkedMaterials) {
+        if (linkedIds.length > 0) {
+          // Один запрос вместо цикла
           const { error: updateError } = await supabase
             .from('template_items')
-            .update({
-              parent_work_item_id: null,
-              conversation_coeff: null,
-            })
-            .eq('id', material.id);
-
+            .update({ parent_work_item_id: null, conversation_coeff: null })
+            .in('id', linkedIds);
           if (updateError) throw updateError;
         }
       }
@@ -170,34 +179,29 @@ export const useTemplateItems = () => {
         const items = prev[templateId] || [];
         const updatedItems = items
           .filter(item => item.id !== itemId)
-          .map(item => {
-            if (item.kind === 'material' && item.parent_work_item_id === itemId) {
-              return {
-                ...item,
-                parent_work_item_id: null,
-                conversation_coeff: null,
-              };
-            }
-            return item;
-          });
-
-        return {
-          ...prev,
-          [templateId]: updatedItems,
-        };
+          .map(item =>
+            item.kind === 'material' && item.parent_work_item_id === itemId
+              ? { ...item, parent_work_item_id: null, conversation_coeff: null }
+              : item
+          );
+        return { ...prev, [templateId]: updatedItems };
       });
     } catch (error: any) {
       message.error('Ошибка удаления элемента: ' + error.message);
     }
   };
 
-  useEffect(() => {
-    fetchAllTemplateItems();
-  }, []);
+  // Оставляем для обратной совместимости (вызывается при первом открытии если нужно)
+  const fetchAllTemplateItems = async () => {
+    // Не вызывается автоматически — только по явному запросу
+  };
 
   return {
     loadedTemplateItems,
+    loadingTemplates,
     setLoadedTemplateItems,
+    fetchTemplateItems,
+    refetchTemplateItems,
     fetchAllTemplateItems,
     handleDeleteTemplateItem,
   };

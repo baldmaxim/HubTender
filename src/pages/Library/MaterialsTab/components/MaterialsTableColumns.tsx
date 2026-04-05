@@ -176,7 +176,7 @@ export const getMaterialsTableColumns = (params: GetColumnsParams): any[] => {
                 onClick={() => onEdit(record)}
               />
             </Tooltip>
-            <Tooltip title="Удалить">
+<Tooltip title="Удалить">
               <Popconfirm
                 title="Удалить?"
                 onConfirm={() => onDelete(record.id)}

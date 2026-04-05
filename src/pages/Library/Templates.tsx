@@ -1,5 +1,9 @@
-import React, { useState } from 'react';
-import { Form, message, Tabs, Typography } from 'antd';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Form, message, Tabs, Typography, Button, Input, Modal, Space, Tooltip, Popconfirm } from 'antd';
+import {
+  AppstoreOutlined, FileOutlined, FolderOutlined, PlusOutlined,
+  EditOutlined, DeleteOutlined,
+} from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import InsertTemplateIntoPositionModal from './InsertTemplateIntoPositionModal';
 import { useTemplates } from './hooks/useTemplates';
@@ -7,12 +11,14 @@ import { useTemplateItems } from './hooks/useTemplateItems';
 import { useLibraryData } from './hooks/useLibraryData';
 import { useTemplateCreation } from './hooks/useTemplateCreation';
 import { useTemplateEditing } from './hooks/useTemplateEditing';
+import { useFolders } from './hooks/useFolders';
 import { TemplatesList } from './components/TemplatesList';
 import { TemplateEditor } from './components/TemplateEditor';
 import { TemplateFilters } from './components/TemplateFilters';
 import { createTemplateColumns, getRowClassName } from './utils/templateColumns';
 import { templateRowStyles } from './utils/templateStyles';
 import type { TemplateItemWithDetails } from './hooks/useTemplateItems';
+import type { LibraryFolder } from '../../lib/supabase';
 
 const { Text } = Typography;
 
@@ -21,7 +27,22 @@ const Templates: React.FC = () => {
   const { theme: currentTheme } = useTheme();
 
   const { templates, loading, setLoading, fetchTemplates, handleDeleteTemplate } = useTemplates();
-  const { loadedTemplateItems, setLoadedTemplateItems, fetchAllTemplateItems, handleDeleteTemplateItem } = useTemplateItems();
+  const { folders, createFolder, renameFolder, deleteFolder, moveItem } = useFolders('templates');
+
+  // Folder state
+  const [activeFolder, setActiveFolder] = useState<string | null | 'none'>(null);
+  const [createFolderModalOpen, setCreateFolderModalOpen] = useState(false);
+  const [renameFolderTarget, setRenameFolderTarget] = useState<LibraryFolder | null>(null);
+  const [folderInputValue, setFolderInputValue] = useState('');
+  const [folderModalSaving, setFolderModalSaving] = useState(false);
+  const {
+    loadedTemplateItems,
+    loadingTemplates,
+    setLoadedTemplateItems,
+    fetchTemplateItems,
+    refetchTemplateItems,
+    handleDeleteTemplateItem,
+  } = useTemplateItems();
   const { works, materials, costCategories } = useLibraryData();
 
   const {
@@ -67,9 +88,18 @@ const Templates: React.FC = () => {
   const [filterCostCategory, setFilterCostCategory] = useState<string | null>(null);
   const [filterDetailCategory, setFilterDetailCategory] = useState<string | null>(null);
   const [openedTemplate, setOpenedTemplate] = useState<string | null>(null);
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
+  const [bulkMoveLoading, setBulkMoveLoading] = useState(false);
 
   const [insertModalOpen, setInsertModalOpen] = useState(false);
   const [selectedTemplateForInsert, setSelectedTemplateForInsert] = useState<string | null>(null);
+
+  // Ленивая загрузка: загружаем элементы только при открытии аккордеона
+  useEffect(() => {
+    if (openedTemplate) {
+      fetchTemplateItems(openedTemplate);
+    }
+  }, [openedTemplate]);
 
   const handleAddWork = () => {
     if (!selectedWork) {
@@ -113,7 +143,6 @@ const Templates: React.FC = () => {
         setMaterialSearchText('');
         setCostCategorySearchText('');
         fetchTemplates();
-        fetchAllTemplateItems();
       }
     } catch (error: any) {
       message.error('Ошибка создания шаблона: ' + error.message);
@@ -225,7 +254,58 @@ const Templates: React.FC = () => {
     );
   };
 
-  const filteredTemplates = templates.filter((template) => {
+  const handleCreateFolder = async () => {
+    if (!folderInputValue.trim()) return;
+    setFolderModalSaving(true);
+    try {
+      await createFolder(folderInputValue.trim());
+      setCreateFolderModalOpen(false);
+      setFolderInputValue('');
+    } catch { /* handled in hook */ } finally {
+      setFolderModalSaving(false);
+    }
+  };
+
+  const handleRenameFolder = async () => {
+    if (!renameFolderTarget || !folderInputValue.trim()) return;
+    setFolderModalSaving(true);
+    try {
+      await renameFolder(renameFolderTarget.id, folderInputValue.trim());
+      setRenameFolderTarget(null);
+      setFolderInputValue('');
+    } catch { /* handled in hook */ } finally {
+      setFolderModalSaving(false);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    await deleteFolder(folderId);
+    if (activeFolder === folderId) setActiveFolder(null);
+  };
+
+  const handleMoveTemplate = async (templateId: string, folderId: string | null) => {
+    try {
+      await moveItem('templates', templateId, folderId);
+      fetchTemplates();
+    } catch {
+      message.error('Ошибка при перемещении');
+    }
+  };
+
+  const handleBulkMoveTemplates = async (folderId: string | null) => {
+    setBulkMoveLoading(true);
+    try {
+      await Promise.all([...selectedTemplateIds].map(id => moveItem('templates', id, folderId)));
+      fetchTemplates();
+      setSelectedTemplateIds(new Set());
+    } catch {
+      message.error('Ошибка при перемещении');
+    } finally {
+      setBulkMoveLoading(false);
+    }
+  };
+
+  const filteredTemplates = useMemo(() => templates.filter((template) => {
     if (templateSearchText.length >= 2 && !template.name.toLowerCase().includes(templateSearchText.toLowerCase())) {
       return false;
     }
@@ -235,8 +315,10 @@ const Templates: React.FC = () => {
     if (filterDetailCategory && template.detail_category_name !== filterDetailCategory) {
       return false;
     }
+    if (activeFolder === 'none' && template.folder_id) return false;
+    if (activeFolder && activeFolder !== 'none' && template.folder_id !== activeFolder) return false;
     return true;
-  });
+  }), [templates, templateSearchText, filterCostCategory, filterDetailCategory, activeFolder]);
 
   return (
     <div style={{ margin: '-16px', padding: '24px' }}>
@@ -249,6 +331,79 @@ const Templates: React.FC = () => {
             label: 'Список шаблонов',
             children: (
               <div>
+                {/* Панель фильтров папок */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <Button
+                    size="small"
+                    type={activeFolder === null ? 'primary' : 'default'}
+                    icon={<AppstoreOutlined />}
+                    onClick={() => setActiveFolder(null)}
+                  >
+                    Все
+                  </Button>
+                  <Button
+                    size="small"
+                    type={activeFolder === 'none' ? 'primary' : 'default'}
+                    icon={<FileOutlined />}
+                    onClick={() => setActiveFolder('none')}
+                  >
+                    Без папки
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<PlusOutlined />}
+                    onClick={() => { setFolderInputValue(''); setCreateFolderModalOpen(true); }}
+                  >
+                    Создать папку
+                  </Button>
+                </div>
+
+                {/* Строки папок */}
+                {folders.map(folder => (
+                  <div
+                    key={folder.id}
+                    onClick={() => setActiveFolder(activeFolder === folder.id ? null : folder.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 12px',
+                      marginBottom: 4,
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      background: activeFolder === folder.id
+                        ? 'rgba(250, 173, 20, 0.22)'
+                        : 'rgba(250, 173, 20, 0.08)',
+                      border: '1px solid rgba(250, 173, 20, 0.2)',
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    <FolderOutlined style={{ color: '#faad14', fontSize: 15, flexShrink: 0 }} />
+                    <span style={{ fontWeight: 600, flex: 1 }}>{folder.name}</span>
+                    <Space size={4} onClick={e => e.stopPropagation()}>
+                      <Tooltip title="Переименовать">
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<EditOutlined />}
+                          onClick={() => { setRenameFolderTarget(folder); setFolderInputValue(folder.name); }}
+                        />
+                      </Tooltip>
+                      <Popconfirm
+                        title={`Удалить папку «${folder.name}»?`}
+                        onConfirm={() => handleDeleteFolder(folder.id)}
+                        okText="Удалить"
+                        okType="danger"
+                        cancelText="Отмена"
+                      >
+                        <Tooltip title="Удалить">
+                          <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                        </Tooltip>
+                      </Popconfirm>
+                    </Space>
+                  </div>
+                ))}
+
                 <TemplateFilters
                   templates={templates}
                   templateSearchText={templateSearchText}
@@ -274,7 +429,7 @@ const Templates: React.FC = () => {
                   currentTheme={currentTheme}
                   onEditTemplate={startEditing}
                   onCancelEditTemplate={cancelEditing}
-                  onSaveEditTemplate={(templateId) => saveEditing(templateId, setOpenedTemplate, fetchTemplates, fetchAllTemplateItems)}
+                  onSaveEditTemplate={(templateId) => saveEditing(templateId, setOpenedTemplate, fetchTemplates, refetchTemplateItems)}
                   onDeleteTemplate={handleDeleteTemplate}
                   onOpenInsertModal={(templateId) => {
                     setSelectedTemplateForInsert(templateId);
@@ -296,6 +451,14 @@ const Templates: React.FC = () => {
                   onAddMaterialToTemplate={handleAddMaterialToTemplate}
                   getColumns={getColumns}
                   getRowClassName={getRowClassName}
+                  folders={folders}
+                  onMoveTemplate={handleMoveTemplate}
+                  selectedTemplateIds={selectedTemplateIds}
+                  onSelectionChange={setSelectedTemplateIds}
+                  bulkMoveLoading={bulkMoveLoading}
+                  onBulkMove={handleBulkMoveTemplates}
+                  onClearSelection={() => setSelectedTemplateIds(new Set())}
+                  loadingTemplates={loadingTemplates}
                 />
 
                 {filteredTemplates.length === 0 && (
@@ -354,6 +517,48 @@ const Templates: React.FC = () => {
           setSelectedTemplateForInsert(null);
         }}
       />
+
+      {/* Модал создания папки */}
+      <Modal
+        title="Создать папку"
+        open={createFolderModalOpen}
+        onOk={handleCreateFolder}
+        onCancel={() => setCreateFolderModalOpen(false)}
+        okText="Создать"
+        cancelText="Отмена"
+        confirmLoading={folderModalSaving}
+        destroyOnClose
+      >
+        <Input
+          placeholder="Название папки"
+          value={folderInputValue}
+          onChange={e => setFolderInputValue(e.target.value)}
+          onPressEnter={handleCreateFolder}
+          autoFocus
+          maxLength={100}
+        />
+      </Modal>
+
+      {/* Модал переименования папки */}
+      <Modal
+        title="Переименовать папку"
+        open={!!renameFolderTarget}
+        onOk={handleRenameFolder}
+        onCancel={() => { setRenameFolderTarget(null); setFolderInputValue(''); }}
+        okText="Сохранить"
+        cancelText="Отмена"
+        confirmLoading={folderModalSaving}
+        destroyOnClose
+      >
+        <Input
+          placeholder="Новое название"
+          value={folderInputValue}
+          onChange={e => setFolderInputValue(e.target.value)}
+          onPressEnter={handleRenameFolder}
+          autoFocus
+          maxLength={100}
+        />
+      </Modal>
 
       <style>{templateRowStyles}</style>
     </div>

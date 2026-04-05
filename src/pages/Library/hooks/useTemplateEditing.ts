@@ -41,7 +41,7 @@ export const useTemplateEditing = (
     setEditingItems([]);
   };
 
-  const saveEditing = async (templateId: string, setOpenedTemplate: (id: string) => void, fetchTemplates: () => void, fetchAllTemplateItems: () => void) => {
+  const saveEditing = async (templateId: string, setOpenedTemplate: (id: string) => void, fetchTemplates: () => void, refetchTemplateItems: (id: string) => void) => {
     const values = await editingTemplateForm.validateFields();
 
     const { error: templateError } = await supabase
@@ -54,24 +54,26 @@ export const useTemplateEditing = (
 
     if (templateError) throw templateError;
 
-    for (const item of editingItems) {
-      const { error: itemError } = await supabase
+    // Batch update: один запрос через upsert вместо цикла
+    if (editingItems.length > 0) {
+      const { error: itemsError } = await supabase
         .from('template_items')
-        .update({
-          parent_work_item_id: item.parent_work_item_id,
-          conversation_coeff: item.conversation_coeff,
-          detail_cost_category_id: item.detail_cost_category_id,
-        })
-        .eq('id', item.id);
-
-      if (itemError) throw itemError;
+        .upsert(
+          editingItems.map(item => ({
+            id: item.id,
+            parent_work_item_id: item.parent_work_item_id,
+            conversation_coeff: item.conversation_coeff,
+            detail_cost_category_id: item.detail_cost_category_id,
+          }))
+        );
+      if (itemsError) throw itemsError;
     }
 
     message.success('Шаблон обновлен');
     cancelEditing();
     setOpenedTemplate(templateId);
     fetchTemplates();
-    fetchAllTemplateItems();
+    refetchTemplateItems(templateId);
   };
 
   const addWorkToTemplate = async (templateId: string, work: WorkLibraryFull) => {

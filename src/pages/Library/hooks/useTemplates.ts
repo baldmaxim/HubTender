@@ -8,6 +8,7 @@ export interface TemplateWithDetails extends Template {
   detail_category_name?: string;
   location?: string;
   cost_category_full?: string;
+  folder_id?: string | null;
 }
 
 export const useTemplates = () => {
