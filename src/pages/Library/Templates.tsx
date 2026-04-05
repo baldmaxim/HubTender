@@ -358,6 +358,17 @@ const Templates: React.FC = () => {
                   </Button>
                 </div>
 
+                <TemplateFilters
+                  templates={templates}
+                  templateSearchText={templateSearchText}
+                  setTemplateSearchText={setTemplateSearchText}
+                  filterCostCategory={filterCostCategory}
+                  setFilterCostCategory={setFilterCostCategory}
+                  filterDetailCategory={filterDetailCategory}
+                  setFilterDetailCategory={setFilterDetailCategory}
+                  currentTheme={currentTheme}
+                />
+
                 {/* Строки папок */}
                 {folders.map(folder => (
                   <div
@@ -403,17 +414,6 @@ const Templates: React.FC = () => {
                     </Space>
                   </div>
                 ))}
-
-                <TemplateFilters
-                  templates={templates}
-                  templateSearchText={templateSearchText}
-                  setTemplateSearchText={setTemplateSearchText}
-                  filterCostCategory={filterCostCategory}
-                  setFilterCostCategory={setFilterCostCategory}
-                  filterDetailCategory={filterDetailCategory}
-                  setFilterDetailCategory={setFilterDetailCategory}
-                  currentTheme={currentTheme}
-                />
 
                 <TemplatesList
                   templates={filteredTemplates}
