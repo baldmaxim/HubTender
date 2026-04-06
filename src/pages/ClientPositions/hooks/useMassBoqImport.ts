@@ -36,6 +36,10 @@ export const useMassBoqImport = () => {
   const [costCategoriesMap, setCostCategoriesMap] = useState<Map<string, string>>(new Map());
   const [clientPositionsMap, setClientPositionsMap] = useState<Map<string, ClientPosition>>(new Map());
 
+  // Единицы измерения — для маппинга
+  const [availableUnits, setAvailableUnits] = useState<{ code: string; name: string }[]>([]);
+  const [unitMappings, setUnitMappings] = useState<Record<string, string>>({});
+
   // Существующие BOQ items по позициям (для предпросмотра)
   const [existingItemsByPosition, setExistingItemsByPosition] = useState<Map<string, any[]>>(new Map());
 
@@ -48,7 +52,7 @@ export const useMassBoqImport = () => {
 
   const loadNomenclature = async (tenderId: string) => {
     try {
-      const [worksResult, materialsResult, costsResult, positionsResult] = await Promise.all([
+      const [worksResult, materialsResult, costsResult, positionsResult, unitsResult] = await Promise.all([
         supabase.from('work_names').select('id, name, unit').order('name'),
         supabase.from('material_names').select('id, name, unit').order('name'),
         supabase.from('detail_cost_categories').select(`
@@ -59,12 +63,14 @@ export const useMassBoqImport = () => {
           .select('id, position_number, work_name')
           .eq('tender_id', tenderId)
           .order('position_number'),
+        supabase.from('units').select('code, name').eq('is_active', true).order('code'),
       ]);
 
       if (worksResult.error) throw worksResult.error;
       if (materialsResult.error) throw materialsResult.error;
       if (costsResult.error) throw costsResult.error;
       if (positionsResult.error) throw positionsResult.error;
+      // units error is non-fatal
 
       const worksMap = new Map<string, string>();
       worksResult.data?.forEach((w: any) => {
@@ -109,6 +115,8 @@ export const useMassBoqImport = () => {
       setMaterialNamesMap(materialsMap);
       setCostCategoriesMap(costsMap);
       setClientPositionsMap(positionsMap);
+      setAvailableUnits((unitsResult.data || []) as { code: string; name: string }[]);
+      setUnitMappings({});
 
       console.log('[MassBoqImport] Загружено справочников:', {
         works: worksMap.size,
@@ -511,6 +519,43 @@ export const useMassBoqImport = () => {
   };
 
   // ===========================
+  // МАППИНГ ЕДИНИЦ ИЗМЕРЕНИЯ
+  // ===========================
+
+  // Единицы из Excel, отсутствующие в units таблице
+  const getUnknownUnits = (): string[] => {
+    if (!parsedData.length || !availableUnits.length) return [];
+    const dbCodes = new Set(availableUnits.map(u => u.code));
+    const unknown = new Set<string>();
+    parsedData.forEach(item => {
+      if (item.unit_code && !dbCodes.has(item.unit_code)) {
+        unknown.add(item.unit_code);
+      }
+    });
+    return Array.from(unknown).sort();
+  };
+
+  const setUnitMapping = (excelUnit: string, dbUnit: string) => {
+    setUnitMappings(prev => ({ ...prev, [excelUnit]: dbUnit }));
+  };
+
+  // Применить маппинг — обновить unit_code во всех элементах parsedData
+  const applyUnitMappings = (): boolean => {
+    const unknowns = getUnknownUnits();
+    if (unknowns.length === 0) return true;
+    const unmapped = unknowns.filter(u => !unitMappings[u]);
+    if (unmapped.length > 0) {
+      message.warning(`Не все единицы сопоставлены: ${unmapped.join(', ')}`);
+      return false;
+    }
+    setParsedData(prev => prev.map(item => ({
+      ...item,
+      unit_code: unitMappings[item.unit_code] || item.unit_code,
+    })));
+    return true;
+  };
+
+  // ===========================
   // ПУБЛИЧНЫЙ API
   // ===========================
 
@@ -521,6 +566,7 @@ export const useMassBoqImport = () => {
     setUploadProgress(0);
     setExistingItemsByPosition(new Map());
     setFileName('');
+    setUnitMappings({});
   };
 
   const getPositionStats = () => {
@@ -557,6 +603,13 @@ export const useMassBoqImport = () => {
     uploadProgress,
     clientPositionsMap,
     existingItemsByPosition,
+
+    // Единицы измерения
+    availableUnits,
+    unitMappings,
+    getUnknownUnits,
+    setUnitMapping,
+    applyUnitMappings,
 
     // Методы
     loadNomenclature,

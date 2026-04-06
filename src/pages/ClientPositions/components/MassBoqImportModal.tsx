@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Steps, Button, Space, Progress, Alert, Upload, Table, Tag, Typography, Collapse, List } from 'antd';
+import { Modal, Steps, Button, Space, Progress, Alert, Upload, Table, Tag, Typography, Collapse, List, Select } from 'antd';
 import { FileExcelOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import { useMassBoqImport } from '../hooks/useMassBoqImport';
 import { BoqPreviewTable } from './BoqPreviewTable';
@@ -35,6 +35,11 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
     uploadProgress,
     clientPositionsMap,
     existingItemsByPosition,
+    availableUnits,
+    unitMappings,
+    getUnknownUnits,
+    setUnitMapping,
+    applyUnitMappings,
     loadNomenclature,
     parseExcelFile,
     validateParsedData,
@@ -113,6 +118,11 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
     }
   };
 
+  // Применить маппинг единиц (parsedData обновится, затем пользователь нажимает Импортировать/Валидировать)
+  const handleApplyUnitMappings = () => {
+    applyUnitMappings();
+  };
+
   // Добавить отсутствующую номенклатуру и повторить валидацию
   const handleAddMissingToNomenclature = async () => {
     setAddingToNomenclature(true);
@@ -147,6 +157,9 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
     p => p.matched && p.itemsCount === 0 && (p.manualVolume !== undefined || p.manualNote !== undefined)
   ).length;
   const hasDataToImport = parsedData.length > 0 || positionOnlyCount > 0;
+  const unknownUnits = getUnknownUnits();
+  const allUnitsMapped = unknownUnits.every(u => !!unitMappings[u]);
+  const hasUnmappedUnits = unknownUnits.length > 0 && !allUnitsMapped;
 
   // Кнопки футера
   const getFooterButtons = () => {
@@ -172,12 +185,22 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
         <Button key="back" onClick={() => setCurrentStep(0)} disabled={uploading || addingToNomenclature}>
           Назад
         </Button>,
+        ...(unknownUnits.length > 0 ? [
+          <Button
+            key="applyMappings"
+            type="default"
+            onClick={handleApplyUnitMappings}
+            disabled={hasUnmappedUnits || uploading}
+          >
+            Применить маппинг единиц {allUnitsMapped ? `(${unknownUnits.length})` : `(${unknownUnits.filter(u => unitMappings[u]).length}/${unknownUnits.length})`}
+          </Button>
+        ] : []),
         ...(hasMissingNomenclature ? [
           <Button
             key="addNomenclature"
             onClick={handleAddMissingToNomenclature}
             loading={addingToNomenclature}
-            disabled={uploading}
+            disabled={uploading || hasUnmappedUnits}
           >
             Добавить в номенклатуру ({missingCount})
           </Button>
@@ -186,16 +209,18 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
           key="import"
           type="primary"
           onClick={handleValidate}
-          disabled={hasErrors || !hasDataToImport || addingToNomenclature}
+          disabled={hasErrors || !hasDataToImport || addingToNomenclature || hasUnmappedUnits}
           loading={uploading}
         >
-          {hasErrors
-            ? 'Исправьте ошибки'
-            : parsedData.length > 0 && positionOnlyCount > 0
-              ? `Импортировать ${parsedData.length} элементов + ${positionOnlyCount} поз. ГП`
-              : parsedData.length > 0
-                ? `Импортировать ${parsedData.length} элементов`
-                : `Обновить ${positionOnlyCount} позиций (данные ГП)`
+          {hasUnmappedUnits
+            ? 'Сопоставьте единицы измерения'
+            : hasErrors
+              ? 'Исправьте ошибки'
+              : parsedData.length > 0 && positionOnlyCount > 0
+                ? `Импортировать ${parsedData.length} элементов + ${positionOnlyCount} поз. ГП`
+                : parsedData.length > 0
+                  ? `Импортировать ${parsedData.length} элементов`
+                  : `Обновить ${positionOnlyCount} позиций (данные ГП)`
           }
         </Button>,
       ];
@@ -385,6 +410,65 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
                 />
               </Panel>
             </Collapse>
+
+            {/* Маппинг единиц измерения */}
+            {unknownUnits.length > 0 && (
+              <Alert
+                type="warning"
+                style={{ marginBottom: 16 }}
+                message={`Единицы измерения не найдены в справочнике (${unknownUnits.length})`}
+                description={
+                  <div style={{ marginTop: 8 }}>
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                      Сопоставьте каждую единицу из файла с единицей в базе данных, затем нажмите «Применить маппинг единиц»
+                    </Text>
+                    <Table
+                      size="small"
+                      pagination={false}
+                      dataSource={unknownUnits.map(u => ({ key: u, excelUnit: u }))}
+                      columns={[
+                        {
+                          title: 'В файле',
+                          dataIndex: 'excelUnit',
+                          width: 160,
+                          render: (u: string) => <Tag color="orange">{u}</Tag>,
+                        },
+                        {
+                          title: '→ В базе данных',
+                          key: 'mapping',
+                          render: (_: any, row: { excelUnit: string }) => (
+                            <Select
+                              showSearch
+                              style={{ width: 220 }}
+                              placeholder="Выберите единицу..."
+                              value={unitMappings[row.excelUnit] || undefined}
+                              onChange={(val: string) => setUnitMapping(row.excelUnit, val)}
+                              optionFilterProp="children"
+                              filterOption={(input, opt) =>
+                                (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                              }
+                              options={availableUnits.map(u => ({
+                                value: u.code,
+                                label: u.code === u.name ? u.code : `${u.code} — ${u.name}`,
+                              }))}
+                            />
+                          ),
+                        },
+                        {
+                          title: 'Статус',
+                          key: 'status',
+                          width: 100,
+                          render: (_: any, row: { excelUnit: string }) =>
+                            unitMappings[row.excelUnit]
+                              ? <Tag color="success">✓ Сопоставлено</Tag>
+                              : <Tag color="warning">Не задано</Tag>,
+                        },
+                      ]}
+                    />
+                  </div>
+                }
+              />
+            )}
 
             {/* Ошибки валидации */}
             {validationResult && !validationResult.isValid && (
