@@ -246,6 +246,39 @@ export interface ConstructionCostVolume extends ConstructionCostVolumeInsert {
 }
 
 // =============================================
+// Типы для таблицы tender_insurance
+// =============================================
+
+export interface TenderInsuranceInsert {
+  tender_id: string;
+  judicial_pct: number;   // % судебных квартир
+  total_pct: number;      // % от общей суммы
+  apt_price_m2: number;
+  apt_area: number;
+  parking_price_m2: number;
+  parking_area: number;
+  storage_price_m2: number;
+  storage_area: number;
+}
+
+export interface TenderInsurance extends TenderInsuranceInsert {
+  id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Вычисляет итоговую сумму страхования */
+export function calcInsuranceTotal(ins: Pick<TenderInsuranceInsert,
+  'apt_price_m2' | 'apt_area' | 'parking_price_m2' | 'parking_area' |
+  'storage_price_m2' | 'storage_area' | 'judicial_pct' | 'total_pct'>
+): number {
+  const apt = (ins.apt_price_m2 || 0) * (ins.apt_area || 0);
+  const parking = (ins.parking_price_m2 || 0) * (ins.parking_area || 0);
+  const storage = (ins.storage_price_m2 || 0) * (ins.storage_area || 0);
+  return (apt + parking + storage) * ((ins.judicial_pct || 0) / 100) * ((ins.total_pct || 0) / 100);
+}
+
+// =============================================
 // Расширенный тип для materials_library с JOIN данными
 // =============================================
 
@@ -903,6 +936,7 @@ export const ALL_PAGES = [
   '/settings',
   '/users',
   '/admin/import-log',
+  '/admin/insurance',
 ] as const;
 
 // Страницы по умолчанию для каждой роли
@@ -960,6 +994,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/admin/markup': 'Проценты наценок',
   '/admin/markup_constructor': 'Конструктор наценок',
   '/admin/import-log': 'Журнал импортов строк',
+  '/admin/insurance': 'Страхование от судимостей',
   '/users': 'Пользователи',
   '/settings': 'Настройки',
   '/positions/:positionId/items': 'Работы и материалы',

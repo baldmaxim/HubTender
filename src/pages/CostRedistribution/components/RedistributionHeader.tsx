@@ -23,6 +23,7 @@ interface RedistributionHeaderProps {
     totalWorks: number;
     total: number;
   };
+  insuranceTotal?: number;
   hasResults?: boolean;
   onExport?: () => void;
 }
@@ -36,6 +37,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
   onTacticChange,
   loading = false,
   totals,
+  insuranceTotal = 0,
   hasResults = false,
   onExport,
 }) => {
@@ -120,6 +122,20 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                   valueStyle={{ color: '#10b981', fontWeight: 600, fontSize: 18 }}
                 />
               </div>
+              {insuranceTotal > 0 && (
+                <div style={{ padding: '0 12px', textAlign: 'center', borderLeft: '2px solid #10b981' }}>
+                  <Statistic
+                    title="Страхование от судимостей"
+                    value={insuranceTotal}
+                    precision={0}
+                    formatter={(value) => `+ ${Math.round(Number(value)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}`}
+                    valueStyle={{ color: '#10b981', fontWeight: 600, fontSize: 18 }}
+                  />
+                  <div style={{ fontSize: 12, color: '#10b981' }}>
+                    Итого с учётом: {Math.round(totals.total + insuranceTotal).toLocaleString('ru-RU')}
+                  </div>
+                </div>
+              )}
               {hasResults && onExport && (
                 <Button
                   type="primary"

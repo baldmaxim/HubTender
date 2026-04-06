@@ -14,13 +14,15 @@ interface CommerceTableProps {
   selectedTenderId: string | undefined;
   onNavigateToPosition: (positionId: string) => void;
   referenceTotal: number;
+  insuranceTotal?: number;
 }
 
 export default function CommerceTable({
   positions,
   selectedTenderId,
   onNavigateToPosition,
-  referenceTotal
+  referenceTotal,
+  insuranceTotal = 0,
 }: CommerceTableProps) {
   // Определение конечной позиции (листового узла) на основе иерархии
   const isLeafPosition = (record: PositionWithCommercialCost, index: number): boolean => {
@@ -313,6 +315,25 @@ export default function CommerceTable({
               </Table.Summary.Cell>
               <Table.Summary.Cell index={10} />
             </Table.Summary.Row>
+            {insuranceTotal > 0 && (
+              <Table.Summary.Row style={{ background: 'rgba(16,185,129,0.08)' }}>
+                <Table.Summary.Cell index={0} colSpan={7}>
+                  <Text strong style={{ color: '#10b981' }}>Страхование от судимостей:</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={7} align="right">
+                  <Text strong style={{ color: '#10b981' }}>
+                    + {formatCommercialCost(insuranceTotal)}
+                  </Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={8} align="right">
+                  <Text strong style={{ color: '#10b981' }}>
+                    {formatCommercialCost(totalCommercial + insuranceTotal)}
+                  </Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={9} />
+                <Table.Summary.Cell index={10} />
+              </Table.Summary.Row>
+            )}
           </Table.Summary>
         );
       }}

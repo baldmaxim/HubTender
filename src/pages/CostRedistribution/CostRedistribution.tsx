@@ -2,8 +2,9 @@
  * Страница перераспределения стоимости работ
  */
 
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Tabs, message } from 'antd';
+import { supabase } from '../../lib/supabase';
 import { RedistributionHeader } from './components/RedistributionHeader';
 import { TabSetup } from './components/TabSetup';
 import { TabResults } from './components/TabResults';
@@ -20,6 +21,7 @@ import type { ResultRow } from './components/Results/ResultsTableColumns';
 
 const CostRedistribution: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState('setup');
+  const [insuranceTotal, setInsuranceTotal] = useState(0);
 
   // Хуки для управления данными
   const {
@@ -177,6 +179,25 @@ const CostRedistribution: React.FC = () => {
       total: totalMaterials + totalWorks,
     };
   }, [roundedResultRows]);
+
+  // Загрузка страхования от судимостей при смене тендера
+  useEffect(() => {
+    if (!selectedTenderId) { setInsuranceTotal(0); return; }
+    supabase
+      .from('tender_insurance')
+      .select('judicial_pct, total_pct, apt_price_m2, apt_area, parking_price_m2, parking_area, storage_price_m2, storage_area')
+      .eq('tender_id', selectedTenderId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) { setInsuranceTotal(0); return; }
+        const apt = (data.apt_price_m2 || 0) * (data.apt_area || 0);
+        const park = (data.parking_price_m2 || 0) * (data.parking_area || 0);
+        const stor = (data.storage_price_m2 || 0) * (data.storage_area || 0);
+        setInsuranceTotal(
+          (apt + park + stor) * ((data.judicial_pct || 0) / 100) * ((data.total_pct || 0) / 100)
+        );
+      });
+  }, [selectedTenderId]);
 
   // Загрузка сохраненных результатов при выборе тендера и тактики
   useEffect(() => {
@@ -352,6 +373,7 @@ const CostRedistribution: React.FC = () => {
         onTacticChange={handleTacticChange}
         loading={loading}
         totals={totals}
+        insuranceTotal={insuranceTotal}
         hasResults={calculationState.results.length > 0}
         onExport={handleExport}
       />

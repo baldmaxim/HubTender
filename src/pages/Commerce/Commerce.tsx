@@ -32,7 +32,8 @@ export default function Commerce() {
     loadTenders,
     loadPositions,
     handleTacticChange,
-    referenceTotal
+    referenceTotal,
+    insuranceTotal,
   } = useCommerceData();
 
   const {
@@ -151,6 +152,7 @@ export default function Commerce() {
             selectedTenderId={selectedTenderId}
             onNavigateToPosition={handleNavigateToPosition}
             referenceTotal={referenceTotal}
+            insuranceTotal={insuranceTotal}
           />
         </Spin>
       ) : (

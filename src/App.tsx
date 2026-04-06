@@ -22,6 +22,7 @@ import Templates from './pages/Library/Templates';
 import ClientPositions from './pages/ClientPositions/ClientPositions';
 import PositionItems from './pages/PositionItems/PositionItems';
 import ImportLog from './pages/Admin/ImportLog/ImportLog';
+import Insurance from './pages/Admin/Insurance/Insurance';
 import Commerce from './pages/Commerce';
 import CostRedistribution from './pages/CostRedistribution';
 import Bsm from './pages/Bsm/Bsm';
@@ -86,6 +87,7 @@ function AppContent() {
               <Route path="markup_constructor" element={<MarkupConstructor />} />
               <Route path="markup" element={<MarkupPercentages />} />
               <Route path="import-log" element={<ImportLog />} />
+              <Route path="insurance" element={<Insurance />} />
             </Route>
             <Route path="costs" element={<ConstructionCostNew />} />
             <Route path="financial-indicators" element={<FinancialIndicators />} />

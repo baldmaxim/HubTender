@@ -125,6 +125,21 @@ export const useFinancialCalculations = () => {
         );
       }
 
+      // Загружаем данные страхования от судимостей
+      const { data: insuranceData } = await supabase
+        .from('tender_insurance')
+        .select('judicial_pct, total_pct, apt_price_m2, apt_area, parking_price_m2, parking_area, storage_price_m2, storage_area')
+        .eq('tender_id', selectedTenderId)
+        .maybeSingle();
+
+      const insuranceCost = (() => {
+        if (!insuranceData) return 0;
+        const apt = (insuranceData.apt_price_m2 || 0) * (insuranceData.apt_area || 0);
+        const park = (insuranceData.parking_price_m2 || 0) * (insuranceData.parking_area || 0);
+        const stor = (insuranceData.storage_price_m2 || 0) * (insuranceData.storage_area || 0);
+        return (apt + park + stor) * ((insuranceData.judicial_pct || 0) / 100) * ((insuranceData.total_pct || 0) / 100);
+      })();
+
       // Загружаем ВСЕ BOQ элементы с батчингом (Supabase лимит 1000 строк)
       let boqItems: any[] = [];
       let from = 0;
@@ -497,7 +512,8 @@ export const useFinancialCalculations = () => {
                         overheadSubcontractCost +
                         generalCostsCost +
                         profitOwnForcesCost +
-                        profitSubcontractCost;
+                        profitSubcontractCost +
+                        insuranceCost;
 
       // Условный расчет НДС в зависимости от наличия НДС в конструкторе наценок
       let vatCost: number;
@@ -773,6 +789,21 @@ export const useFinancialCalculations = () => {
         {
           key: '16',
           row_number: 16,
+          indicator_name: 'Страхование от судимостей',
+          coefficient: '',
+          sp_cost: areaSp > 0 ? insuranceCost / areaSp : 0,
+          customer_cost: areaClient > 0 ? insuranceCost / areaClient : 0,
+          total_cost: insuranceCost,
+          tooltip: insuranceData
+            ? `Квартиры: ${insuranceData.apt_price_m2} × ${insuranceData.apt_area} м²\n` +
+              `Паркинг: ${insuranceData.parking_price_m2} × ${insuranceData.parking_area} м²\n` +
+              `Кладовки: ${insuranceData.storage_price_m2} × ${insuranceData.storage_area} м²\n` +
+              `× ${insuranceData.judicial_pct}% (судебные) × ${insuranceData.total_pct}%`
+            : 'Данные страхования не заполнены',
+        },
+        {
+          key: '17',
+          row_number: 17,
           indicator_name: 'ИТОГО',
           coefficient: '',
           sp_cost: areaSp > 0 ? grandTotal / areaSp : 0,
@@ -782,8 +813,8 @@ export const useFinancialCalculations = () => {
           is_yellow: true
         },
         {
-          key: '17',
-          row_number: 17,
+          key: '18',
+          row_number: 18,
           indicator_name: vatCoeff > 0 ? `В том числе НДС ${parseFloat(vatCoeff.toFixed(5))}%` : 'В том числе НДС',
           coefficient: vatCoeff > 0 ? `${parseFloat(vatCoeff.toFixed(5))}%` : '',
           sp_cost: areaSp > 0 ? vatCost / areaSp : 0,
@@ -804,7 +835,7 @@ export const useFinancialCalculations = () => {
       if (isVatInConstructor && vatCoeff > 0) {
         const vatMultiplier = 1 + vatCoeff / 100;
         tableData.forEach(row => {
-          if (row.row_number >= 1 && row.row_number <= 15) {
+          if (row.row_number >= 1 && row.row_number <= 16) {
             row.total_cost = (row.total_cost || 0) * vatMultiplier;
             row.sp_cost = (row.sp_cost || 0) * vatMultiplier;
             row.customer_cost = (row.customer_cost || 0) * vatMultiplier;

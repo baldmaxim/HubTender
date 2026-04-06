@@ -14,6 +14,7 @@ import {
   transferAdditionalPositions,
   copyBoqItems,
   copyCostVolumes,
+  copyInsuranceData,
 } from '../../../../../utils/versionTransfer';
 import { matchReducer, initialMatchState, type MatchPair, type VersionMatchState } from '../types';
 
@@ -293,6 +294,9 @@ export function useVersionMatching({
       if (costVolumesResult.errors.length > 0) {
         console.warn('Ошибки при копировании объёмов затрат:', costVolumesResult.errors);
       }
+
+      // 3.7. Копировать данные страхования от судимостей
+      await copyInsuranceData(sourceTender.id, newTenderId);
 
       // 4. Обработать дополнительные работы
       const { data: additionalWorks } = await supabase

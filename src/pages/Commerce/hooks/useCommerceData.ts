@@ -20,6 +20,7 @@ export function useCommerceData() {
   const [selectedTacticId, setSelectedTacticId] = useState<string | undefined>();
   const [tacticChanged, setTacticChanged] = useState(false);
   const [referenceTotal, setReferenceTotal] = useState<number>(0);
+  const [insuranceTotal, setInsuranceTotal] = useState<number>(0);
 
   // Загрузка списка тендеров и тактик
   useEffect(() => {
@@ -181,6 +182,24 @@ export function useCommerceData() {
       });
 
       setPositions(positionsWithCosts);
+
+      // Загружаем данные страхования от судимостей
+      const { data: insData } = await supabase
+        .from('tender_insurance')
+        .select('judicial_pct, total_pct, apt_price_m2, apt_area, parking_price_m2, parking_area, storage_price_m2, storage_area')
+        .eq('tender_id', tenderId)
+        .maybeSingle();
+
+      if (insData) {
+        const apt = (insData.apt_price_m2 || 0) * (insData.apt_area || 0);
+        const park = (insData.parking_price_m2 || 0) * (insData.parking_area || 0);
+        const stor = (insData.storage_price_m2 || 0) * (insData.storage_area || 0);
+        setInsuranceTotal(
+          (apt + park + stor) * ((insData.judicial_pct || 0) / 100) * ((insData.total_pct || 0) / 100)
+        );
+      } else {
+        setInsuranceTotal(0);
+      }
     } catch (error) {
       console.error('Ошибка загрузки позиций:', error);
       message.error('Не удалось загрузить позиции заказчика');
@@ -233,6 +252,7 @@ export function useCommerceData() {
     loadPositions,
     handleTacticChange,
     totals,
-    referenceTotal
+    referenceTotal,
+    insuranceTotal,
   };
 }

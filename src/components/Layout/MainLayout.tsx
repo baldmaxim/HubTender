@@ -32,6 +32,7 @@ import {
   BuildOutlined,
   ImportOutlined,
   MessageOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { NotesPopoverContent } from './NotesPopover';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
@@ -376,6 +377,14 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           key: '/admin/import-log',
           icon: <ImportOutlined />,
           label: 'Журнал импортов строк',
+        },
+        {
+          type: 'divider',
+        },
+        {
+          key: '/admin/insurance',
+          icon: <SafetyCertificateOutlined />,
+          label: 'Страхование от судимостей',
         },
       ],
     },
