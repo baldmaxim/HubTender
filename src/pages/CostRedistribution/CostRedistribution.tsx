@@ -16,8 +16,8 @@ import {
   useDistributionCalculator,
   useSaveResults,
 } from './hooks';
-import { calculateRedistribution, smartRoundResults } from './utils';
-import type { ResultRow } from './components/Results/ResultsTableColumns';
+import { smartRoundResults } from './utils';
+import { buildResultRows } from './utils/buildResultRows';
 
 const CostRedistribution: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState('setup');
@@ -69,116 +69,84 @@ const CostRedistribution: React.FC = () => {
     return map;
   }, [boqItems]);
 
+  const boqItemsByPosition = useMemo(() => {
+    const map = new Map<string, typeof boqItems>();
+
+    for (const item of boqItems) {
+      const existingItems = map.get(item.client_position_id);
+      if (existingItems) {
+        existingItems.push(item);
+      } else {
+        map.set(item.client_position_id, [item]);
+      }
+    }
+
+    return map;
+  }, [boqItems]);
+
   // Формируем Map результатов для быстрого доступа
   const resultsMap = useMemo(() => {
-    const map = new Map<string, any>();
+    const map = new Map<string, (typeof calculationState.results)[number]>();
     for (const result of calculationState.results) {
       map.set(result.boq_item_id, result);
     }
     return map;
   }, [calculationState.results]);
 
-  // Формируем ResultRow объекты для применения округления
-  const resultRows = useMemo(() => {
-    // Разделяем позиции на обычные и ДОП
-    const regularPositions = clientPositions.filter(p => !p.is_additional);
-    const additionalPositions = clientPositions.filter(p => p.is_additional);
+  const preparedResults = useMemo(() => {
+    if (activeTab !== 'results' || calculationState.results.length === 0) {
+      return null;
+    }
 
-    // Функция определения конечности позиции
-    const isLeafPosition = (index: number, positions: typeof clientPositions): boolean => {
-      if (index === positions.length - 1) return true;
-      const currentLevel = positions[index].hierarchy_level || 0;
-      const nextLevel = positions[index + 1]?.hierarchy_level || 0;
-      return currentLevel >= nextLevel;
-    };
-
-    // Функция создания ResultRow
-    const createResultRow = (position: typeof clientPositions[0], index: number, positions: typeof clientPositions): ResultRow => {
-      const positionBoqItems = Array.from(boqItemsMap.entries())
-        .filter(([_, item]) => item.client_position_id === position.id);
-
-      let totalMaterials = 0;
-      let totalWorksBefore = 0;
-      let totalWorksAfter = 0;
-      let totalRedistribution = 0;
-
-      for (const [boqItemId, boqItem] of positionBoqItems) {
-        const materialCost = boqItem.total_commercial_material_cost || 0;
-        if (materialCost > 0) {
-          totalMaterials += materialCost;
-        }
-
-        const workCost = boqItem.total_commercial_work_cost || 0;
-        if (workCost > 0) {
-          const result = resultsMap.get(boqItemId);
-          if (result) {
-            totalWorksBefore += result.original_work_cost;
-            totalWorksAfter += result.final_work_cost;
-            totalRedistribution += result.added_amount - result.deducted_amount;
-          } else {
-            totalWorksBefore += workCost;
-            totalWorksAfter += workCost;
-          }
-        }
-      }
-
-      const quantity = position.manual_volume || position.volume || 1;
-      const materialUnitPrice = totalMaterials / quantity;
-      const workUnitPriceBefore = totalWorksBefore / quantity;
-      const workUnitPriceAfter = totalWorksAfter / quantity;
-      const isLeaf = isLeafPosition(index, positions);
-
-      return {
-        key: position.id,
-        position_id: position.id,
-        position_number: position.position_number,
-        section_number: position.section_number,
-        position_name: position.position_name,
-        item_no: position.item_no,
-        work_name: position.work_name,
-        client_volume: position.volume,
-        manual_volume: position.manual_volume,
-        unit_code: position.unit_code,
-        quantity,
-        material_unit_price: materialUnitPrice,
-        work_unit_price_before: workUnitPriceBefore,
-        work_unit_price_after: workUnitPriceAfter,
-        total_materials: totalMaterials,
-        total_works_before: totalWorksBefore,
-        total_works_after: totalWorksAfter,
-        redistribution_amount: totalRedistribution,
-        manual_note: position.manual_note,
-        isLeaf,
-        is_additional: position.is_additional,
-      };
-    };
-
-    const regularRows = regularPositions.map((pos, idx) => createResultRow(pos, idx, regularPositions));
-    const additionalRows = additionalPositions.map((pos) => createResultRow(pos, 0, [pos]));
-    return [...regularRows, ...additionalRows];
-  }, [clientPositions, resultsMap, boqItemsMap]);
-
-  // Применяем умное округление
-  const roundedResultRows = useMemo(() => {
-    return smartRoundResults(resultRows);
-  }, [resultRows]);
-
-  // Рассчитываем итоги для статистики (используем округленные значения)
-  const totals = useMemo(() => {
-    const totalMaterials = roundedResultRows.reduce(
-      (sum, row) => sum + (row.rounded_total_materials ?? row.total_materials),
-      0
-    );
-    const totalWorks = roundedResultRows.reduce(
+    const baseRows = buildResultRows(clientPositions, boqItemsByPosition, resultsMap);
+    const roundedRows = smartRoundResults(baseRows);
+    const totalWorksBase = roundedRows.reduce(
       (sum, row) => sum + (row.rounded_total_works ?? row.total_works_after),
       0
     );
+
+    const rows =
+      insuranceTotal > 0 && totalWorksBase > 0
+        ? roundedRows.map((row) => {
+            const worksAfter = row.rounded_total_works ?? row.total_works_after;
+            const insuranceShare = insuranceTotal * (worksAfter / totalWorksBase);
+            const newWorks = worksAfter + insuranceShare;
+
+            return {
+              ...row,
+              rounded_total_works: newWorks,
+              rounded_work_unit_price_after: newWorks / (row.quantity || 1),
+            };
+          })
+        : roundedRows;
+
+    const totals = rows.reduce(
+      (acc, row) => {
+        acc.totalMaterials += row.rounded_total_materials ?? row.total_materials;
+        acc.totalWorks += row.rounded_total_works ?? row.total_works_after;
+        return acc;
+      },
+      {
+        totalMaterials: 0,
+        totalWorks: 0,
+        total: 0,
+      }
+    );
+
+    totals.total = totals.totalMaterials + totals.totalWorks;
+
     return {
-      totalMaterials,
-      totalWorks,
-      total: totalMaterials + totalWorks,
+      rows,
+      totals,
     };
-  }, [roundedResultRows]);
+  }, [
+    activeTab,
+    calculationState.results.length,
+    clientPositions,
+    boqItemsByPosition,
+    resultsMap,
+    insuranceTotal,
+  ]);
 
   // Загрузка страхования от судимостей при смене тендера
   useEffect(() => {
@@ -214,11 +182,11 @@ const CostRedistribution: React.FC = () => {
         console.log('🔄 Загрузка сохраненных результатов...');
         const savedData = await loadSavedResults(selectedTenderId, selectedTacticId);
 
-        if (savedData && savedData.length > 0) {
-          console.log('✅ Найдены сохраненные результаты:', savedData.length);
+        if (savedData && savedData.results.length > 0) {
+          console.log('✅ Найдены сохраненные результаты:', savedData.results.length);
 
           // Восстановить результаты
-          const results = savedData.map(item => ({
+          const results = savedData.results.map(item => ({
             boq_item_id: item.boq_item_id,
             original_work_cost: item.original_work_cost,
             deducted_amount: item.deducted_amount,
@@ -228,7 +196,7 @@ const CostRedistribution: React.FC = () => {
           setResults(results);
 
           // Восстановить rules и targets из первой записи (все имеют одинаковые правила)
-          const redistributionRules = savedData[0].redistribution_rules as any;
+          const redistributionRules = savedData.redistributionRules as any;
           if (redistributionRules) {
             if (redistributionRules.deductions) {
               setRules(redistributionRules.deductions);
@@ -270,26 +238,20 @@ const CostRedistribution: React.FC = () => {
     }
 
     try {
-      // 1. Вызвать calculate() для обновления UI state
-      const success = calculate();
-      if (!success) {
+      const calculationResult = calculate();
+      if (!calculationResult) {
         return;
       }
 
-      // 2. Рассчитать результаты напрямую для сохранения
-      const result = calculateRedistribution(boqItems, sourceRules, targetCosts, detailCategoriesMap);
+      setActiveTab('results');
 
-      // 3. Сохранить результаты
-      await saveResults(
+      void saveResults(
         selectedTenderId,
         selectedTacticId,
-        result.results,
+        calculationResult.results,
         sourceRules,
         targetCosts
       );
-
-      // 4. Переключить вкладку
-      setActiveTab('results');
     } catch (error) {
       console.error('Ошибка при переходе к результатам:', error);
       message.error('Не удалось выполнить расчет и сохранение');
@@ -353,9 +315,8 @@ const CostRedistribution: React.FC = () => {
       label: 'Таблица результатов',
       children: (
         <TabResults
-          clientPositions={clientPositions}
-          redistributionResults={calculationState.results}
-          boqItemsMap={boqItemsMap}
+          rows={preparedResults?.rows ?? []}
+          hasResults={calculationState.results.length > 0}
           loading={loading}
         />
       ),
@@ -372,7 +333,7 @@ const CostRedistribution: React.FC = () => {
         selectedTacticId={selectedTacticId}
         onTacticChange={handleTacticChange}
         loading={loading}
-        totals={totals}
+        totals={preparedResults?.totals}
         insuranceTotal={insuranceTotal}
         hasResults={calculationState.results.length > 0}
         onExport={handleExport}

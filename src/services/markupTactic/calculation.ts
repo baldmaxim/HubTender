@@ -215,6 +215,15 @@ export interface SubcontractGrowthExclusions {
   materials: Set<string>;  // Категории исключенные для суб-мат
 }
 
+type CalculableBoqItem = Pick<
+  BoqItem,
+  'id' |
+  'boq_item_type' |
+  'material_type' |
+  'detail_cost_category_id' |
+  'total_amount'
+>;
+
 /**
  * Загружает исключения роста субподряда для тендера
  */
@@ -249,7 +258,7 @@ export async function loadSubcontractGrowthExclusions(tenderId: string): Promise
  * Проверяет, исключен ли элемент из роста субподряда
  */
 function isExcludedFromGrowth(
-  item: BoqItem,
+  item: Pick<BoqItem, 'boq_item_type' | 'detail_cost_category_id'>,
   exclusions: SubcontractGrowthExclusions
 ): boolean {
   // Если нет категории, не исключаем
@@ -462,7 +471,7 @@ export function resetTypeCoefficientsCache(): void {
  * Упрощённая логика: коэффициент × база = коммерческая, затем распределение
  */
 export function calculateBoqItemCost(
-  item: BoqItem,
+  item: CalculableBoqItem,
   tactic: MarkupTactic,
   markupParameters: Map<string, number>,
   pricingDistribution: PricingDistribution | null,

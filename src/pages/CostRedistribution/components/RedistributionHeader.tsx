@@ -128,11 +128,11 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                     title="Страхование от судимостей"
                     value={insuranceTotal}
                     precision={0}
-                    formatter={(value) => `+ ${Math.round(Number(value)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}`}
+                    formatter={(value) => Math.round(Number(value)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
                     valueStyle={{ color: '#10b981', fontWeight: 600, fontSize: 18 }}
                   />
                   <div style={{ fontSize: 12, color: '#10b981' }}>
-                    Итого с учётом: {Math.round(totals.total + insuranceTotal).toLocaleString('ru-RU')}
+                    Включено в работы и итог: {Math.round(totals.total).toLocaleString('ru-RU')}
                   </div>
                 </div>
               )}

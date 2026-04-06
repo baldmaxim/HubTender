@@ -34,6 +34,13 @@ export interface RedistributionResult {
   final_work_cost: number;
 }
 
+export interface RedistributionCalculationResult {
+  results: RedistributionResult[];
+  totalDeducted: number;
+  totalAdded: number;
+  isBalanced: boolean;
+}
+
 /**
  * Шаг 1: Вычисление сумм вычета для каждого правила
  */
@@ -220,12 +227,7 @@ export function calculateRedistribution(
   sourceRules: SourceRule[],
   targetCosts: TargetCost[],
   detailCategoriesMap?: Map<string, string> // detail_cost_category_id -> cost_category_id
-): {
-  results: RedistributionResult[];
-  totalDeducted: number;
-  totalAdded: number;
-  isBalanced: boolean;
-} {
+): RedistributionCalculationResult {
   // Шаг 1: Рассчитать вычеты
   const deductions = calculateDeductions(boqItems, sourceRules, detailCategoriesMap);
 

@@ -8,6 +8,17 @@ import { supabase } from '../../../lib/supabase';
 import type { RedistributionResult, SourceRule, TargetCost } from '../utils';
 import type { CostRedistributionResultInsert, RedistributionRule } from '../../../lib/supabase';
 
+interface LoadedRedistributionResults {
+  results: Array<{
+    boq_item_id: string;
+    original_work_cost: number;
+    deducted_amount: number;
+    added_amount: number;
+    final_work_cost: number;
+  }>;
+  redistributionRules: RedistributionRule | null;
+}
+
 export function useSaveResults() {
   const [saving, setSaving] = useState(false);
 
@@ -37,6 +48,11 @@ export function useSaveResults() {
         // Получить текущего пользователя (опционально)
         const { data: { user } } = await supabase.auth.getUser();
 
+        const changedResults = results.filter((result) =>
+          Math.abs(result.deducted_amount) > 0.000001 || Math.abs(result.added_amount) > 0.000001
+        );
+        const resultsToPersist = changedResults.length > 0 ? changedResults : results.slice(0, 1);
+
         // Формируем JSONB с правилами перераспределения
         const redistribution_rules: RedistributionRule = {
           deductions: sourceRules.map(rule => ({
@@ -55,7 +71,7 @@ export function useSaveResults() {
         };
 
         // Формируем массив записей для вставки
-        const records: CostRedistributionResultInsert[] = results.map(result => ({
+        const records: CostRedistributionResultInsert[] = resultsToPersist.map(result => ({
           tender_id: tenderId,
           markup_tactic_id: tacticId,
           boq_item_id: result.boq_item_id,
@@ -93,7 +109,7 @@ export function useSaveResults() {
           }
         }
 
-        console.log('✅ Результаты успешно сохранены');
+        console.log(`✅ Результаты успешно сохранены: ${records.length}`);
         message.success('Результаты перераспределения сохранены');
         return true;
       } catch (error) {
@@ -108,13 +124,24 @@ export function useSaveResults() {
   );
 
   const loadSavedResults = useCallback(
-    async (tenderId: string, tacticId: string) => {
+    async (tenderId: string, tacticId: string): Promise<LoadedRedistributionResults | null> => {
       if (!tenderId || !tacticId) {
         return null;
       }
 
       try {
         console.log('🔄 Загрузка сохраненных результатов...');
+
+        const { data: rulesRow, error: rulesError } = await supabase
+          .from('cost_redistribution_results')
+          .select('redistribution_rules')
+          .eq('tender_id', tenderId)
+          .eq('markup_tactic_id', tacticId)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (rulesError) throw rulesError;
 
         // CRITICAL: Supabase limit 1000 rows - use batching
         let allResults: any[] = [];
@@ -125,7 +152,7 @@ export function useSaveResults() {
         while (hasMore) {
           const { data, error } = await supabase
             .from('cost_redistribution_results')
-            .select('*')
+            .select('boq_item_id, original_work_cost, deducted_amount, added_amount, final_work_cost')
             .eq('tender_id', tenderId)
             .eq('markup_tactic_id', tacticId)
             .range(from, from + batchSize - 1);
@@ -143,7 +170,10 @@ export function useSaveResults() {
 
         if (allResults.length > 0) {
           console.log('✅ Загружено сохраненных результатов:', allResults.length);
-          return allResults;
+          return {
+            results: allResults,
+            redistributionRules: rulesRow?.redistribution_rules ?? null,
+          };
         }
 
         return null;

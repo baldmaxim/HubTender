@@ -25,6 +25,7 @@ export default function Commerce() {
     selectedVersion,
     setSelectedVersion,
     positions,
+    boqItems,
     markupTactics,
     selectedTacticId,
     tacticChanged,
@@ -32,6 +33,7 @@ export default function Commerce() {
     loadTenders,
     loadPositions,
     handleTacticChange,
+    syncTenderMarkupTactic,
     referenceTotal,
     insuranceTotal,
   } = useCommerceData();
@@ -42,8 +44,10 @@ export default function Commerce() {
   } = useCommerceActions(
     selectedTenderId,
     selectedTacticId,
+    boqItems,
     setCalculating,
     setTacticChanged,
+    syncTenderMarkupTactic,
     loadTenders,
     loadPositions
   );

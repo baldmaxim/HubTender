@@ -2,12 +2,22 @@
  * Таблица коммерческих стоимостей позиций
  */
 
+import { useEffect, useMemo, useState } from 'react';
 import { Table, Typography, Tag, Empty } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { PositionWithCommercialCost } from '../types';
 import { formatCommercialCost } from '../../../utils/markupCalculator';
 
 const { Text } = Typography;
+const TABLE_SCROLL_X = 1840;
+
+function getTableScrollY(): number {
+  if (typeof window === 'undefined') {
+    return 600;
+  }
+
+  return Math.max(window.innerHeight - 360, 320);
+}
 
 interface CommerceTableProps {
   positions: PositionWithCommercialCost[];
@@ -24,44 +34,61 @@ export default function CommerceTable({
   referenceTotal,
   insuranceTotal = 0,
 }: CommerceTableProps) {
-  // Определение конечной позиции (листового узла) на основе иерархии
-  const isLeafPosition = (record: PositionWithCommercialCost, index: number): boolean => {
-    // Дополнительные работы всегда листовые
-    if (record.is_additional) {
-      return true;
+  const [tableScrollY, setTableScrollY] = useState(getTableScrollY);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
     }
 
-    // Последняя строка всегда конечная
-    if (index === positions.length - 1) {
-      return true;
+    const handleResize = () => {
+      setTableScrollY(getTableScrollY());
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const summary = useMemo(() => {
+    let totalBase = 0;
+    let totalMaterials = 0;
+    let totalWorks = 0;
+    let totalCommercial = 0;
+
+    for (const position of positions) {
+      totalBase += position.base_total || 0;
+      totalMaterials += position.material_cost_total || 0;
+      totalWorks += position.work_cost_total || 0;
+      totalCommercial += position.commercial_total || 0;
     }
 
-    const currentLevel = record.hierarchy_level || 0;
+    const totalWorksWithIns = totalWorks + insuranceTotal;
+    const totalCommercialWithIns = totalCommercial + insuranceTotal;
 
-    // Пропускаем дополнительные работы при поиске следующей позиции
-    let nextIndex = index + 1;
-    while (nextIndex < positions.length && positions[nextIndex].is_additional) {
-      nextIndex++;
-    }
+    return {
+      totalBase,
+      totalMaterials,
+      totalWorks,
+      totalWorksWithIns,
+      totalCommercial,
+      totalCommercialWithIns,
+      materialPercent: totalCommercialWithIns > 0 ? ((totalMaterials / totalCommercialWithIns) * 100).toFixed(1) : '0.0',
+      workPercent: totalCommercialWithIns > 0 ? ((totalWorksWithIns / totalCommercialWithIns) * 100).toFixed(1) : '0.0',
+      totalMarkupCoefficient: totalBase > 0 ? totalCommercialWithIns / totalBase : 1,
+      baseTotalMatches: Math.abs(totalBase - referenceTotal) < 0.01,
+    };
+  }, [insuranceTotal, positions, referenceTotal]);
 
-    // Если после пропуска доп. работ позиций не осталось — это листовой узел
-    if (nextIndex >= positions.length) {
-      return true;
-    }
-
-    const nextLevel = positions[nextIndex].hierarchy_level || 0;
-
-    // Если текущий уровень >= следующего, значит это листовой узел
-    return currentLevel >= nextLevel;
-  };
+  const insShare = (pos: PositionWithCommercialCost) =>
+    summary.totalWorks > 0 ? insuranceTotal * ((pos.work_cost_total || 0) / summary.totalWorks) : 0;
 
   const columns: ColumnsType<PositionWithCommercialCost> = [
     {
       title: 'Наименование',
       key: 'work_name',
       width: 350,
-      render: (_, record, index) => {
-        const isLeaf = isLeafPosition(record, index);
+      render: (_, record) => {
+        const isLeaf = record.is_leaf ?? true;
         const itemNoColor = isLeaf ? '#52c41a' : '#ff7875';
         const paddingLeft = record.is_additional ? 20 : 0;
 
@@ -92,7 +119,13 @@ export default function CommerceTable({
                   {record.item_no}
                 </span>
               )}
-              <span style={{ textDecoration: isLeaf ? 'underline' : 'none' }}>
+              <span
+                style={{
+                  textDecoration: isLeaf ? 'underline' : 'none',
+                  fontWeight: isLeaf ? undefined : 700,
+                  fontFamily: isLeaf ? undefined : 'Georgia, "Times New Roman", serif',
+                }}
+              >
                 {record.work_name}
               </span>
             </div>
@@ -158,7 +191,7 @@ export default function CommerceTable({
       align: 'right',
       render: (_, record) => {
         if (!record.manual_volume || record.manual_volume === 0) return '-';
-        const perUnitWork = (record.work_cost_total || 0) / record.manual_volume;
+        const perUnitWork = ((record.work_cost_total || 0) + insShare(record)) / record.manual_volume;
         return (
           <Text type="secondary" style={{ color: '#52c41a' }}>
             {formatCommercialCost(perUnitWork)}
@@ -201,8 +234,8 @@ export default function CommerceTable({
       width: 160,
       align: 'right',
       render: (_, record) => {
-        const workCost = record.work_cost_total || 0;
-        const total = record.commercial_total || 0;
+        const workCost = (record.work_cost_total || 0) + insShare(record);
+        const total = (record.commercial_total || 0) + insShare(record);
         const percentage = total > 0 ? ((workCost / total) * 100).toFixed(1) : '0.0';
 
         return (
@@ -222,7 +255,7 @@ export default function CommerceTable({
       align: 'right',
       render: (_, record) => (
         <Text strong style={{ color: '#52c41a' }}>
-          {formatCommercialCost(record.commercial_total || 0)}
+          {formatCommercialCost((record.commercial_total || 0) + insShare(record))}
         </Text>
       ),
     },
@@ -260,23 +293,11 @@ export default function CommerceTable({
         emptyText: <Empty description="Нет позиций заказчика" />
       }}
       pagination={false}
-      scroll={{ y: 'calc(100vh - 360px)' }}
+      scroll={{ x: TABLE_SCROLL_X, y: tableScrollY }}
+      virtual
       summary={() => {
-        const totalBase = positions.reduce((sum, pos) => sum + (pos.base_total || 0), 0);
-        const totalMaterials = positions.reduce((sum, pos) => sum + (pos.material_cost_total || 0), 0);
-        const totalWorks = positions.reduce((sum, pos) => sum + (pos.work_cost_total || 0), 0);
-        const totalCommercial = positions.reduce((sum, pos) => sum + (pos.commercial_total || 0), 0);
-
-        const materialPercent = totalCommercial > 0 ? ((totalMaterials / totalCommercial) * 100).toFixed(1) : '0.0';
-        const workPercent = totalCommercial > 0 ? ((totalWorks / totalCommercial) * 100).toFixed(1) : '0.0';
-
-        // Расчет итогового коэффициента наценки
-        const totalMarkupCoefficient = totalBase > 0 ? totalCommercial / totalBase : 1;
-        const markupColor = totalMarkupCoefficient > 1 ? 'green' : totalMarkupCoefficient < 1 ? 'red' : 'default';
-
-        // Проверка соответствия базовой стоимости эталонной сумме из позиций заказчика
-        const baseTotalMatches = Math.abs(totalBase - referenceTotal) < 0.01;
-        const baseColor = baseTotalMatches ? '#52c41a' : '#ff4d4f';
+        const markupColor = summary.totalMarkupCoefficient > 1 ? 'green' : summary.totalMarkupCoefficient < 1 ? 'red' : 'default';
+        const baseColor = summary.baseTotalMatches ? '#52c41a' : '#ff4d4f';
 
         return (
           <Table.Summary fixed>
@@ -285,32 +306,32 @@ export default function CommerceTable({
                 <Text strong>Итого:</Text>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={5} align="right">
-                <Text strong style={{ color: baseColor }}>{formatCommercialCost(totalBase)}</Text>
+                <Text strong style={{ color: baseColor }}>{formatCommercialCost(summary.totalBase)}</Text>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={6} align="right">
                 <div>
-                  <Text strong>{formatCommercialCost(totalMaterials)}</Text>
+                  <Text strong>{formatCommercialCost(summary.totalMaterials)}</Text>
                   <div style={{ fontSize: '10px', color: '#1890ff', fontWeight: 500 }}>
-                    ({materialPercent}%)
+                    ({summary.materialPercent}%)
                   </div>
                 </div>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={7} align="right">
                 <div>
-                  <Text strong>{formatCommercialCost(totalWorks)}</Text>
+                  <Text strong>{formatCommercialCost(summary.totalWorksWithIns)}</Text>
                   <div style={{ fontSize: '10px', color: '#52c41a', fontWeight: 500 }}>
-                    ({workPercent}%)
+                    ({summary.workPercent}%)
                   </div>
                 </div>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={8} align="right">
                 <Text strong style={{ color: '#52c41a' }}>
-                  {formatCommercialCost(totalCommercial)}
+                  {formatCommercialCost(summary.totalCommercialWithIns)}
                 </Text>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={9} align="center">
                 <Tag color={markupColor}>
-                  {totalMarkupCoefficient.toFixed(4)}
+                  {summary.totalMarkupCoefficient.toFixed(4)}
                 </Tag>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={10} />
@@ -318,16 +339,14 @@ export default function CommerceTable({
             {insuranceTotal > 0 && (
               <Table.Summary.Row style={{ background: 'rgba(16,185,129,0.08)' }}>
                 <Table.Summary.Cell index={0} colSpan={7}>
-                  <Text strong style={{ color: '#10b981' }}>Страхование от судимостей:</Text>
+                  <Text strong style={{ color: '#10b981' }}>в т.ч. Страхование от судимостей:</Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={7} align="right">
-                  <Text strong style={{ color: '#10b981' }}>
-                    + {formatCommercialCost(insuranceTotal)}
-                  </Text>
+                  <Text strong style={{ color: '#10b981' }} />
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={8} align="right">
                   <Text strong style={{ color: '#10b981' }}>
-                    {formatCommercialCost(totalCommercial + insuranceTotal)}
+                    {formatCommercialCost(insuranceTotal)}
                   </Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={9} />

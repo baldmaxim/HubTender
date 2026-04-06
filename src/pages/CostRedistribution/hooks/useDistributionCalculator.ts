@@ -4,7 +4,13 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { message } from 'antd';
-import type { SourceRule, TargetCost, BoqItemWithCosts, RedistributionResult } from '../utils';
+import type {
+  SourceRule,
+  TargetCost,
+  BoqItemWithCosts,
+  RedistributionResult,
+  RedistributionCalculationResult,
+} from '../utils';
 import { calculateRedistribution } from '../utils';
 import { validateRedistributionRules, getErrorMessages } from '../utils';
 
@@ -31,20 +37,20 @@ export function useDistributionCalculator(
   });
 
   // Выполнить расчет
-  const calculate = useCallback(() => {
+  const calculate = useCallback((): RedistributionCalculationResult | null => {
     // Валидация правил
     const validation = validateRedistributionRules(sourceRules, targetCosts);
 
     if (!validation.isValid) {
       const errorMessages = getErrorMessages(validation.errors);
       errorMessages.forEach(msg => message.error(msg));
-      return false;
+      return null;
     }
 
     // Проверка наличия данных
     if (boqItems.length === 0) {
       message.warning('Нет данных для расчета. Выберите тендер.');
-      return false;
+      return null;
     }
 
     try {
@@ -74,11 +80,11 @@ export function useDistributionCalculator(
         message.success('Расчет выполнен успешно');
       }
 
-      return true;
+      return result;
     } catch (error) {
       console.error('Ошибка расчета:', error);
       message.error('Ошибка при выполнении расчета');
-      return false;
+      return null;
     }
   }, [boqItems, sourceRules, targetCosts, detailCategoriesMap]);
 

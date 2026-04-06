@@ -10,8 +10,10 @@ import { initializeTestMarkup } from '../../../utils/initializeTestMarkup';
 export function useCommerceActions(
   selectedTenderId: string | undefined,
   selectedTacticId: string | undefined,
+  boqItems: NonNullable<Parameters<typeof applyTacticToTender>[2]> | null,
   setCalculating: (val: boolean) => void,
   setTacticChanged: (val: boolean) => void,
+  syncTenderMarkupTactic: (tenderId: string, tacticId: string) => void,
   loadTenders: () => Promise<void>,
   loadPositions: (tenderId: string) => Promise<void>
 ) {
@@ -23,7 +25,7 @@ export function useCommerceActions(
 
     setCalculating(true);
     try {
-      const result = await applyTacticToTender(selectedTenderId);
+      const result = await applyTacticToTender(selectedTenderId, selectedTacticId, boqItems || undefined);
 
       if (result.success) {
         message.success(`Пересчитано элементов: ${result.updatedCount}`);
@@ -51,8 +53,10 @@ export function useCommerceActions(
       if (tacticId) {
         message.success('Тестовые данные инициализированы');
         // Перезагружаем тендеры и позиции
-        await loadTenders();
-        await loadPositions(selectedTenderId);
+        await Promise.all([
+          loadTenders(),
+          loadPositions(selectedTenderId),
+        ]);
       }
     } catch (error) {
       console.error('Ошибка инициализации:', error);
@@ -82,14 +86,14 @@ export function useCommerceActions(
 
           if (updateError) throw updateError;
 
+          syncTenderMarkupTactic(selectedTenderId, selectedTacticId);
+
           // Пересчитываем с новой тактикой
-          const result = await applyTacticToTender(selectedTenderId);
+          const result = await applyTacticToTender(selectedTenderId, selectedTacticId, boqItems || undefined);
 
           if (result.success) {
             message.success('Тактика применена и выполнен пересчет');
             setTacticChanged(false);
-            // Перезагружаем тендеры и позиции
-            await loadTenders();
             await loadPositions(selectedTenderId);
           } else {
             message.error('Ошибка при пересчете: ' + (result.errors?.join(', ') || 'Неизвестная ошибка'));

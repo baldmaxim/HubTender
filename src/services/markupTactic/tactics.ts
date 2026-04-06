@@ -3,6 +3,7 @@
  */
 
 import { supabase } from '../../lib/supabase';
+import type { BoqItem } from '../../lib/supabase';
 import { validateMarkupSequence } from '../../utils/markupCalculator';
 import { loadMarkupParameters } from './parameters';
 import {
@@ -12,6 +13,142 @@ import {
   resetTypeCoefficientsCache,
   type TacticApplicationResult
 } from './calculation';
+
+type RecalculationBoqItem = Pick<
+  BoqItem,
+  'id' |
+  'tender_id' |
+  'client_position_id' |
+  'sort_number' |
+  'boq_item_type' |
+  'material_type' |
+  'total_amount' |
+  'detail_cost_category_id'
+>;
+
+type BulkCommercialUpdateRow = Pick<
+  BoqItem,
+  'id'
+> & Pick<
+  BoqItem,
+  'commercial_markup' |
+  'total_commercial_material_cost' |
+  'total_commercial_work_cost'
+>;
+
+const BULK_UPSERT_BATCH_SIZE = 1000;
+
+async function loadBoqItemsForTender(tenderId: string): Promise<RecalculationBoqItem[]> {
+  const allBoqItems: RecalculationBoqItem[] = [];
+  let from = 0;
+  const loadBatchSize = 1000;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('boq_items')
+      .select(`
+        id,
+        tender_id,
+        client_position_id,
+        sort_number,
+        boq_item_type,
+        material_type,
+        total_amount,
+        detail_cost_category_id
+      `)
+      .eq('tender_id', tenderId)
+      .order('sort_number')
+      .order('id')
+      .range(from, from + loadBatchSize - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      break;
+    }
+
+    allBoqItems.push(...(data as RecalculationBoqItem[]));
+
+    if (data.length < loadBatchSize) {
+      break;
+    }
+
+    from += loadBatchSize;
+  }
+
+  return allBoqItems;
+}
+
+async function fallbackBatchUpdateBoqItems(rows: BulkCommercialUpdateRow[]): Promise<{ successCount: number; errors: string[] }> {
+  let successCount = 0;
+  const errors: string[] = [];
+  const fallbackBatchSize = 50;
+
+  for (let i = 0; i < rows.length; i += fallbackBatchSize) {
+    const batch = rows.slice(i, i + fallbackBatchSize);
+    const results = await Promise.allSettled(
+      batch.map((row) =>
+        supabase
+          .from('boq_items')
+          .update({
+            commercial_markup: row.commercial_markup,
+            total_commercial_material_cost: row.total_commercial_material_cost,
+            total_commercial_work_cost: row.total_commercial_work_cost,
+          })
+          .eq('id', row.id)
+      )
+    );
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled' && !result.value.error) {
+        successCount++;
+        return;
+      }
+
+      const error = result.status === 'rejected' ? result.reason : result.value.error;
+      if (errors.length < 5) {
+        errors.push(`Элемент ${batch[index].id}: ${error?.message || 'Ошибка обновления'}`);
+      }
+    });
+  }
+
+  return { successCount, errors };
+}
+
+async function bulkUpdateBoqItems(rows: BulkCommercialUpdateRow[]): Promise<{ successCount: number; errors: string[] }> {
+  let successCount = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < rows.length; i += BULK_UPSERT_BATCH_SIZE) {
+    const batch = rows.slice(i, i + BULK_UPSERT_BATCH_SIZE);
+    const { data, error } = await supabase.rpc('bulk_update_boq_items_commercial_costs', {
+      p_rows: batch,
+    });
+
+    if (error) {
+      console.warn('bulk_update_boq_items_commercial_costs RPC is unavailable, falling back to batched updates:', error);
+      return fallbackBatchUpdateBoqItems(rows);
+    }
+
+    successCount += Number(data) || 0;
+  }
+
+  return { successCount, errors };
+}
+
+function buildBulkCommercialUpdateRow(
+  item: Pick<BoqItem, 'id'>,
+  result: { materialCost: number; workCost: number; markupCoefficient: number }
+): BulkCommercialUpdateRow {
+  return {
+    id: item.id,
+    commercial_markup: result.markupCoefficient,
+    total_commercial_material_cost: result.materialCost,
+    total_commercial_work_cost: result.workCost,
+  };
+}
 
 /**
  * Применяет тактику наценки к одному элементу BOQ
@@ -179,11 +316,22 @@ export async function applyTacticToPosition(
     }
 
     // Загружаем тактику и параметры один раз для всех элементов
-    const { data: tactic, error: tacticError } = await supabase
-      .from('markup_tactics')
-      .select('*')
-      .eq('id', tacticId)
-      .single();
+    const tenderId = boqItems[0].tender_id;
+    const [
+      { data: tactic, error: tacticError },
+      markupParameters,
+      pricingDistribution,
+      exclusions
+    ] = await Promise.all([
+      supabase
+        .from('markup_tactics')
+        .select('*')
+        .eq('id', tacticId)
+        .single(),
+      loadMarkupParameters(tenderId),
+      loadPricingDistribution(tenderId),
+      loadSubcontractGrowthExclusions(tenderId)
+    ]);
 
     if (tacticError || !tactic) {
       return {
@@ -192,20 +340,10 @@ export async function applyTacticToPosition(
       };
     }
 
-    // Получаем ID тендера из первого элемента
-    const tenderId = boqItems[0].tender_id;
-    const markupParameters = await loadMarkupParameters(tenderId);
-
-    // Загружаем настройки ценообразования один раз для всех элементов
-    const pricingDistribution = await loadPricingDistribution(tenderId);
-
-    // Загружаем исключения роста субподряда
-    const exclusions = await loadSubcontractGrowthExclusions(tenderId);
-
     // Применяем тактику к каждому элементу
     const details: TacticApplicationResult['details'] = [];
-    let successCount = 0;
     const errors: string[] = [];
+    const updateRows: BulkCommercialUpdateRow[] = [];
 
     for (const item of boqItems) {
       const result = calculateBoqItemCost(item, tactic, markupParameters, pricingDistribution, exclusions);
@@ -215,30 +353,16 @@ export async function applyTacticToPosition(
         continue;
       }
 
-      // Готовим данные для обновления
-      const updateData = {
-        commercial_markup: result.markupCoefficient,
-        total_commercial_material_cost: result.materialCost,
-        total_commercial_work_cost: result.workCost,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error: updateError } = await supabase
-        .from('boq_items')
-        .update(updateData)
-        .eq('id', item.id);
-
-      if (updateError) {
-        errors.push(`Элемент ${item.id}: ${updateError.message}`);
-      } else {
-        successCount++;
-        details?.push({
-          itemId: item.id,
-          commercialCost: result.materialCost + result.workCost,
-          markupCoefficient: result.markupCoefficient
-        });
-      }
+      updateRows.push(buildBulkCommercialUpdateRow(item, result));
+      details?.push({
+        itemId: item.id,
+        commercialCost: result.materialCost + result.workCost,
+        markupCoefficient: result.markupCoefficient
+      });
     }
+
+    const { successCount, errors: updateErrors } = await bulkUpdateBoqItems(updateRows);
+    errors.push(...updateErrors);
 
     // Обновляем итоги в client_positions
     await updatePositionTotals(positionId);
@@ -267,7 +391,8 @@ export async function applyTacticToPosition(
  */
 export async function applyTacticToTender(
   tenderId: string,
-  tacticId?: string
+  tacticId?: string,
+  boqItems?: RecalculationBoqItem[]
 ): Promise<TacticApplicationResult> {
   try {
     // Сбрасываем кэш коэффициентов перед пересчётом
@@ -292,11 +417,21 @@ export async function applyTacticToTender(
     }
 
     // Загружаем тактику и параметры один раз для всего тендера
-    const { data: tactic, error: tacticError } = await supabase
-      .from('markup_tactics')
-      .select('*')
-      .eq('id', tacticId)
-      .single();
+    const [
+      { data: tactic, error: tacticError },
+      markupParameters,
+      pricingDistribution,
+      exclusions
+    ] = await Promise.all([
+      supabase
+        .from('markup_tactics')
+        .select('*')
+        .eq('id', tacticId)
+        .single(),
+      loadMarkupParameters(tenderId),
+      loadPricingDistribution(tenderId),
+      loadSubcontractGrowthExclusions(tenderId)
+    ]);
 
     if (tacticError || !tactic) {
       return {
@@ -305,44 +440,7 @@ export async function applyTacticToTender(
       };
     }
 
-    const markupParameters = await loadMarkupParameters(tenderId);
-
-    // Загружаем настройки ценообразования
-    const pricingDistribution = await loadPricingDistribution(tenderId);
-
-    // Загружаем исключения роста субподряда
-    const exclusions = await loadSubcontractGrowthExclusions(tenderId);
-
-    // Загружаем ВСЕ элементы BOQ тендера с батчингом (Supabase лимит 1000 строк)
-    let allBoqItems: any[] = [];
-    let from = 0;
-    const loadBatchSize = 1000;
-    let hasMore = true;
-
-    while (hasMore) {
-      const { data, error } = await supabase
-        .from('boq_items')
-        .select('*')
-        .eq('tender_id', tenderId)
-        .order('sort_number')
-        .order('id')  // Вторичная сортировка для детерминированной пагинации
-        .range(from, from + loadBatchSize - 1);
-
-      if (error) {
-        return {
-          success: false,
-          errors: [`Ошибка загрузки элементов тендера: ${error.message}`]
-        };
-      }
-
-      if (data && data.length > 0) {
-        allBoqItems = [...allBoqItems, ...data];
-        from += loadBatchSize;
-        hasMore = data.length === loadBatchSize;
-      } else {
-        hasMore = false;
-      }
-    }
+    const allBoqItems = boqItems || await loadBoqItemsForTender(tenderId);
 
     if (allBoqItems.length === 0) {
       return {
@@ -352,8 +450,8 @@ export async function applyTacticToTender(
       };
     }
 
-    // Обрабатываем все элементы и готовим batch updates
-    const updates: Array<{ id: string; data: any }> = [];
+    // Обрабатываем все элементы и готовим bulk upsert
+    const updateRows: BulkCommercialUpdateRow[] = [];
     const errors: string[] = [];
 
     for (const item of allBoqItems) {
@@ -364,45 +462,11 @@ export async function applyTacticToTender(
         continue;
       }
 
-      // Готовим данные для обновления
-      const updateData = {
-        commercial_markup: result.markupCoefficient,
-        total_commercial_material_cost: result.materialCost,
-        total_commercial_work_cost: result.workCost,
-        updated_at: new Date().toISOString()
-      };
-
-      updates.push({ id: item.id, data: updateData });
+      updateRows.push(buildBulkCommercialUpdateRow(item, result));
     }
 
-    // Выполняем batch updates параллельно (порциями по 50)
-    const BATCH_SIZE = 50;
-    let successCount = 0;
-
-    for (let i = 0; i < updates.length; i += BATCH_SIZE) {
-      const batch = updates.slice(i, i + BATCH_SIZE);
-
-      // Выполняем обновления в этом батче параллельно
-      const batchPromises = batch.map(({ id, data }) =>
-        supabase.from('boq_items').update(data).eq('id', id)
-      );
-
-      const results = await Promise.allSettled(batchPromises);
-
-      results.forEach((result, idx) => {
-        if (result.status === 'fulfilled' && !result.value.error) {
-          successCount++;
-        } else {
-          const error = result.status === 'rejected' ? result.reason : result.value.error;
-          const errorMsg = error?.message || 'Ошибка обновления';
-
-          // Логируем только первые 5 ошибок
-          if (errors.length < 5) {
-            errors.push(`Элемент ${batch[idx].id}: ${errorMsg}`);
-          }
-        }
-      });
-    }
+    const { successCount, errors: updateErrors } = await bulkUpdateBoqItems(updateRows);
+    errors.push(...updateErrors);
 
     return {
       success: successCount > 0,

@@ -63,7 +63,14 @@ export const getResultsTableColumns = (): ColumnsType<ResultRow> => {
                   {record.item_no}
                 </span>
               )}
-              {record.work_name}
+              <span
+                style={{
+                  fontWeight: record.isLeaf ? undefined : 700,
+                  fontFamily: record.isLeaf ? undefined : 'Georgia, "Times New Roman", serif',
+                }}
+              >
+                {record.work_name}
+              </span>
             </div>
           </div>
         );

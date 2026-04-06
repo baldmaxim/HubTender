@@ -4,37 +4,24 @@
 
 import React from 'react';
 import { ResultsTable } from './Results/ResultsTable';
-import type { ClientPosition } from '../hooks';
-import type { RedistributionResult } from '../utils';
-
-interface BoqItemFull {
-  id: string;
-  client_position_id: string;
-  detail_cost_category_id: string | null;
-  boq_item_type: string;
-  total_commercial_work_cost: number;
-  total_commercial_material_cost: number;
-}
+import type { ResultRow } from './Results/ResultsTableColumns';
 
 interface TabResultsProps {
-  clientPositions: ClientPosition[];
-  redistributionResults: RedistributionResult[];
-  boqItemsMap: Map<string, BoqItemFull>;
+  rows: ResultRow[];
+  hasResults: boolean;
   loading?: boolean;
 }
 
 export const TabResults: React.FC<TabResultsProps> = ({
-  clientPositions,
-  redistributionResults,
-  boqItemsMap,
+  rows,
+  hasResults,
   loading,
 }) => {
   return (
     <div style={{ width: '100%' }}>
       <ResultsTable
-        clientPositions={clientPositions}
-        redistributionResults={redistributionResults}
-        boqItemsMap={boqItemsMap}
+        rows={rows}
+        hasResults={hasResults}
         loading={loading}
       />
     </div>

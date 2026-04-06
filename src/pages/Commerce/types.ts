@@ -11,6 +11,7 @@ export interface PositionWithCommercialCost extends ClientPosition {
   items_count?: number;
   material_cost_total?: number;
   work_cost_total?: number;
+  is_leaf?: boolean;
 }
 
 export interface MarkupTactic {

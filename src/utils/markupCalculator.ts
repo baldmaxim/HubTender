@@ -30,6 +30,7 @@ export interface CalculationResult {
  * Тип операции
  */
 type OperationType = 'multiply' | 'divide' | 'add' | 'subtract';
+const commercialCostFormatterCache = new Map<number, Intl.NumberFormat>();
 
 /**
  * Применяет последовательность операций наценок к базовой стоимости
@@ -358,10 +359,17 @@ export function validateMarkupSequence(sequence: MarkupStep[]): string[] {
  * @returns Отформатированная строка
  */
 export function formatCommercialCost(value: number, decimals: number = 2): string {
-  return new Intl.NumberFormat('ru-RU', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals
-  }).format(value);
+  let formatter = commercialCostFormatterCache.get(decimals);
+
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('ru-RU', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
+    commercialCostFormatterCache.set(decimals, formatter);
+  }
+
+  return formatter.format(value);
 }
 
 /**
