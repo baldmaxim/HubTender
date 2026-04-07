@@ -129,6 +129,12 @@ async function bulkUpdateBoqItems(rows: BulkCommercialUpdateRow[]): Promise<{ su
 
     if (error) {
       console.warn('bulk_update_boq_items_commercial_costs RPC is unavailable, falling back to batched updates:', error);
+      console.warn('RPC error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
       return fallbackBatchUpdateBoqItems(rows);
     }
 

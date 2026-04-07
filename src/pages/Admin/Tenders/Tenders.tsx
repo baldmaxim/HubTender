@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Table, Tabs, message } from 'antd';
 import TenderModal from './TenderModal';
 import UploadBOQModal from './UploadBOQModal';
@@ -8,7 +8,7 @@ import { useTenderActions } from './hooks/useTenderActions';
 import { getTendersTableColumns } from './components/TendersTableColumns';
 import { getTendersActionMenu } from './components/TendersActionMenu';
 import { TendersToolbar } from './components/TendersToolbar';
-import { supabase, type Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/supabase';
 import './Tenders.css';
 
 const Tenders: React.FC = () => {
@@ -23,10 +23,10 @@ const Tenders: React.FC = () => {
   const { tendersData, loading, fetchTenders } = useTendersData();
   const actions = useTenderActions(fetchTenders);
 
-  const handleOpenUploadBOQ = (record: TenderRecord) => {
+  const handleOpenUploadBOQ = useCallback((record: TenderRecord) => {
     setSelectedTenderForUpload(record);
     setUploadBOQVisible(true);
-  };
+  }, []);
 
   const handleCloseUploadBOQ = () => {
     setUploadBOQVisible(false);
@@ -57,29 +57,12 @@ const Tenders: React.FC = () => {
     message.success(`Экспорт тендера: ${record.tender}`);
   };
 
-  const handleNewVersion = async (record: TenderRecord) => {
-    try {
-      const { data: tenderData, error } = await supabase
-        .from('tenders')
-        .select('*')
-        .eq('id', record.id)
-        .single();
+  const handleNewVersion = useCallback((record: TenderRecord) => {
+    setSelectedTenderForVersion(record.raw as Tender);
+    setVersionMatchVisible(true);
+  }, []);
 
-      if (error) {
-        message.error('Ошибка загрузки данных тендера');
-        return;
-      }
-
-      if (tenderData) {
-        setSelectedTenderForVersion(tenderData);
-        setVersionMatchVisible(true);
-      }
-    } catch (error: any) {
-      message.error('Ошибка: ' + error.message);
-    }
-  };
-
-  const getActionMenu = (record: TenderRecord) => {
+  const getActionMenu = useCallback((record: TenderRecord) => {
     return getTendersActionMenu({
       record,
       onEdit: actions.handleEdit,
@@ -91,12 +74,12 @@ const Tenders: React.FC = () => {
       onExport: handleExport,
       isArchived: record.is_archived || false,
     });
-  };
+  }, [actions.handleEdit, actions.handleDelete, handleNewVersion, handleArchive, handleUnarchive]);
 
-  const columns = getTendersTableColumns({
+  const columns = useMemo(() => getTendersTableColumns({
     onOpenUploadBOQ: handleOpenUploadBOQ,
     getActionMenu,
-  });
+  }), [handleOpenUploadBOQ, getActionMenu]);
 
   const rowSelection = {
     selectedRowKeys,
@@ -105,20 +88,18 @@ const Tenders: React.FC = () => {
     },
   };
 
-  const filteredData = tendersData.filter(item =>
-    searchText === '' ||
-    item.tender.toLowerCase().includes(searchText.toLowerCase()) ||
-    item.tenderNumber.toLowerCase().includes(searchText.toLowerCase()) ||
-    item.description.toLowerCase().includes(searchText.toLowerCase())
-  );
-
-  const tabFilteredData = filteredData.filter(item => {
-    if (activeTab === 'active') {
-      return !item.is_archived;
-    } else {
-      return item.is_archived;
-    }
-  });
+  const tabFilteredData = useMemo(() => {
+    const search = searchText.toLowerCase();
+    return tendersData.filter((item) => {
+      if (activeTab === 'active' ? item.is_archived : !item.is_archived) return false;
+      if (!search) return true;
+      return (
+        item.tender.toLowerCase().includes(search) ||
+        item.tenderNumber.toLowerCase().includes(search) ||
+        item.description.toLowerCase().includes(search)
+      );
+    });
+  }, [tendersData, searchText, activeTab]);
 
   return (
     <div style={{ padding: '0' }}>

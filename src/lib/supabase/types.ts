@@ -46,6 +46,7 @@ export interface Tender extends TenderInsert {
   created_at: string;
   updated_at: string;
   created_by?: string;
+  cached_grand_total?: number;
 }
 
 // =============================================

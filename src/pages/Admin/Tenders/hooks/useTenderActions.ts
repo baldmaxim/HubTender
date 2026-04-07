@@ -10,46 +10,31 @@ export const useTenderActions = (onRefresh: () => void) => {
   const [editingTender, setEditingTender] = useState<Tender | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
 
-  const handleEdit = async (record: TenderRecord) => {
-    const { data, error } = await supabase
-      .from('tenders')
-      .select('*')
-      .eq('id', record.id)
-      .single();
-
-    if (error) {
-      message.error('Ошибка загрузки данных тендера');
-      console.error(error);
-      return;
-    }
-
-    if (data) {
-      setEditingTender(data);
-      setIsEditMode(true);
-
-      form.setFieldsValue({
-        title: data.title,
-        tender_number: data.tender_number,
-        housing_class: data.housing_class,
-        construction_scope: data.construction_scope,
-        description: data.description,
-        client_name: data.client_name,
-        submission_deadline: data.submission_deadline ? dayjs(data.submission_deadline) : null,
-        version: data.version,
-        area_client: data.area_client,
-        area_sp: data.area_sp,
-        usd_rate: data.usd_rate,
-        eur_rate: data.eur_rate,
-        cny_rate: data.cny_rate,
-        upload_folder: data.upload_folder,
-        bsm_link: data.bsm_link,
-        tz_link: data.tz_link,
-        qa_form_link: data.qa_form_link,
-        project_folder_link: data.project_folder_link
-      });
-
-      setIsModalVisible(true);
-    }
+  const handleEdit = (record: TenderRecord) => {
+    const data = record.raw;
+    setEditingTender(data);
+    setIsEditMode(true);
+    form.setFieldsValue({
+      title: data.title,
+      tender_number: data.tender_number,
+      housing_class: data.housing_class,
+      construction_scope: data.construction_scope,
+      description: data.description,
+      client_name: data.client_name,
+      submission_deadline: data.submission_deadline ? dayjs(data.submission_deadline) : null,
+      version: data.version,
+      area_client: data.area_client,
+      area_sp: data.area_sp,
+      usd_rate: data.usd_rate,
+      eur_rate: data.eur_rate,
+      cny_rate: data.cny_rate,
+      upload_folder: data.upload_folder,
+      bsm_link: data.bsm_link,
+      tz_link: data.tz_link,
+      qa_form_link: data.qa_form_link,
+      project_folder_link: data.project_folder_link,
+    });
+    setIsModalVisible(true);
   };
 
   const handleDelete = (record: TenderRecord) => {
