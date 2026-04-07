@@ -9,7 +9,8 @@ import type { PositionWithCommercialCost } from '../types';
 
 export function exportCommerceToExcel(
   positions: PositionWithCommercialCost[],
-  selectedTender: Tender | undefined
+  selectedTender: Tender | undefined,
+  insuranceTotal: number = 0
 ) {
   if (positions.length === 0) {
     message.warning('Нет данных для экспорта');
@@ -28,8 +29,13 @@ export function exportCommerceToExcel(
     return currentLevel >= nextLevel;
   };
 
+  const totalWorksBase = positions.reduce((sum, pos) => sum + (pos.work_cost_total ?? 0), 0);
+  const getInsuranceShare = (pos: PositionWithCommercialCost) =>
+    totalWorksBase > 0 ? insuranceTotal * ((pos.work_cost_total ?? 0) / totalWorksBase) : 0;
+
   // Заголовки колонок
   const headers = [
+    'Номер раздела',
     'Номер позиции',
     'Название',
     'Примечание Заказчика',
@@ -50,22 +56,25 @@ export function exportCommerceToExcel(
   // Подготавливаем данные для экспорта с метаданными
   const rowsWithMeta = positions.map((pos, index) => {
     const isLeaf = isLeafPosition(index);
-    const totalCost = pos.commercial_total || 0;
-    const isZeroCost = isLeaf && totalCost === 0;
+    const insuranceShare = getInsuranceShare(pos);
+    const itemNo = (pos.item_no || '').trim();
     const gpVolume = pos.manual_volume || 0;
     const clientVolume = pos.volume || 0;
     const volumesMatch = gpVolume === clientVolume && gpVolume > 0;
 
     const materialCostTotal = pos.material_cost_total ?? 0;
-    const workCostTotal = pos.work_cost_total ?? 0;
+    const workCostTotal = (pos.work_cost_total ?? 0) + insuranceShare;
     const materialUnitPrice = gpVolume > 0 ? Math.round(materialCostTotal / gpVolume * 100) / 100 : 0;
     const workUnitPrice = gpVolume > 0 ? Math.round(workCostTotal / gpVolume * 100) / 100 : 0;
 
     const commercialTotal = materialCostTotal + workCostTotal;
+    const totalCost = commercialTotal;
+    const isZeroCost = isLeaf && totalCost === 0;
     const commercialUnitPrice = gpVolume > 0 ? Math.round(commercialTotal / gpVolume * 100) / 100 : 0;
 
     return {
       data: [
+        pos.item_no || '',
         pos.position_number,
         pos.work_name,
         pos.client_note || '',
@@ -84,6 +93,7 @@ export function exportCommerceToExcel(
       ],
       isZeroCost,
       volumesMatch,
+      isSectionItemNo: /^\d+\.?$/.test(itemNo),
     };
   });
 
@@ -92,12 +102,13 @@ export function exportCommerceToExcel(
   // Рассчитываем итоги
   const totalBase = positions.reduce((sum, pos) => sum + (pos.base_total || 0), 0);
   const totalMaterials = positions.reduce((sum, pos) => sum + (pos.material_cost_total ?? 0), 0);
-  const totalWorks = positions.reduce((sum, pos) => sum + (pos.work_cost_total ?? 0), 0);
+  const totalWorks = positions.reduce((sum, pos) => sum + (pos.work_cost_total ?? 0), 0) + insuranceTotal;
   const totalCommercial = totalMaterials + totalWorks;
   const avgMarkup = totalBase > 0 ? ((totalCommercial - totalBase) / totalBase) * 100 : 0;
 
   // Итоговая строка
   const totals = [
+    '',
     '',
     'ИТОГО',
     '',
@@ -164,8 +175,8 @@ export function exportCommerceToExcel(
   };
 
   // Индексы числовых колонок
-  const numericColIndices = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
-  const nameColIndex = 1; // Колонка "Название"
+  const numericColIndices = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+  const nameColIndex = 2; // Колонка "Название"
 
   // Применяем стили к заголовку (строка 0)
   for (let col = 0; col < headers.length; col++) {
@@ -200,8 +211,13 @@ export function exportCommerceToExcel(
         baseStyle.fill = { fgColor: { rgb: 'FFCCCC' } };
       }
 
-      // Красный текст для колонки "Количество (ГП)" (индекс 5) если объёмы совпадают
-      if (col === 5 && rowMeta.volumesMatch) {
+      if (col === 0 && rowMeta.isSectionItemNo) {
+        baseStyle.fill = { fgColor: { rgb: 'D6E4FF' } };
+        baseStyle.font = { bold: true };
+      }
+
+      // Красный текст для колонки "Количество (ГП)" если объёмы совпадают
+      if (col === 6 && rowMeta.volumesMatch) {
         baseStyle.font = { color: { rgb: 'FF4D4F' }, bold: true };
       }
 
@@ -253,6 +269,7 @@ export function exportCommerceToExcel(
 
   // Устанавливаем ширину колонок
   ws['!cols'] = [
+    { wch: 15 }, // Номер раздела
     { wch: 15 }, // Номер позиции
     { wch: 40 }, // Название
     { wch: 30 }, // Примечание Заказчика

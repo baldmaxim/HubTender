@@ -282,6 +282,7 @@ const CostRedistribution: React.FC = () => {
         redistributionResults: calculationState.results,
         boqItemsMap,
         tenderTitle: `${selectedTender.title} (v${selectedTender.version})`,
+        insuranceTotal,
       });
     });
   };

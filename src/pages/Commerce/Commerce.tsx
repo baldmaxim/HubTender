@@ -131,7 +131,7 @@ export default function Commerce() {
   // Обработка экспорта в Excel
   const handleExportToExcel = () => {
     const selectedTender = tenders.find(t => t.id === selectedTenderId);
-    exportCommerceToExcel(positions, selectedTender);
+    exportCommerceToExcel(positions, selectedTender, insuranceTotal);
   };
 
   // Обработка навигации к позиции

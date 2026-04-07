@@ -21,13 +21,14 @@ interface ExportData {
   redistributionResults: RedistributionResult[];
   boqItemsMap: Map<string, BoqItemFull>;
   tenderTitle: string;
+  insuranceTotal?: number;
 }
 
 /**
  * Экспорт результатов перераспределения в Excel
  */
 export function exportRedistributionToExcel(data: ExportData): void {
-  const { clientPositions, redistributionResults, boqItemsMap, tenderTitle } = data;
+  const { clientPositions, redistributionResults, boqItemsMap, tenderTitle, insuranceTotal = 0 } = data;
 
   // Формируем Map результатов для быстрого доступа
   const resultsMap = new Map<string, RedistributionResult>();
@@ -37,6 +38,7 @@ export function exportRedistributionToExcel(data: ExportData): void {
 
   // Заголовок
   const header = [
+    'Номер раздела',
     'Наименование',
     'Кол-во заказчика',
     'Кол-во ГП',
@@ -136,23 +138,30 @@ export function exportRedistributionToExcel(data: ExportData): void {
     };
   };
 
+  // Создаем ResultRow объекты для округления
+  const regularResultRows = regularPositions.map((pos, idx) => createResultRow(pos, idx, regularPositions));
+  const additionalResultRows = additionalPositions.map((pos, idx) => createResultRow(pos, idx, additionalPositions));
+  const allResultRows = [...regularResultRows, ...additionalResultRows];
+  const totalWorksAfterBase = allResultRows.reduce((sum, row) => sum + (row.total_works_after || 0), 0);
+
   // Функция для создания строки данных из ResultRow
   const createRow = (resultRow: ResultRow) => {
+    const insuranceShare = totalWorksAfterBase > 0
+      ? insuranceTotal * ((resultRow.total_works_after || 0) / totalWorksAfterBase)
+      : 0;
     const materialUnitPrice = Math.round((resultRow.material_unit_price || 0) * 100) / 100;
-    const workUnitPriceAfter = Math.round((resultRow.work_unit_price_after || 0) * 100) / 100;
+    const workUnitPriceAfter = Math.round((((resultRow.total_works_after || 0) + insuranceShare) / resultRow.quantity) * 100) / 100;
     const totalMaterials = resultRow.total_materials;
-    const totalWorksAfter = resultRow.total_works_after;
+    const totalWorksAfter = (resultRow.total_works_after || 0) + insuranceShare;
 
     // Формируем наименование
     let fullName = '';
     if (resultRow.is_additional) {
       // Для ДОП строк добавляем префикс
-      const itemNoPrefix = resultRow.item_no ? `${resultRow.item_no} ` : '';
-      fullName = `  [ДОП] ${itemNoPrefix}${resultRow.work_name}`;
+      fullName = `  [ДОП] ${resultRow.work_name}`;
     } else {
       const sectionPrefix = resultRow.section_number ? `[${resultRow.section_number}] ` : '';
-      const itemNoPrefix = resultRow.item_no ? `${resultRow.item_no} ` : '';
-      fullName = `${sectionPrefix}${itemNoPrefix}${resultRow.work_name}`;
+      fullName = `${sectionPrefix}${resultRow.work_name}`;
     }
 
     // Определяем нулевую стоимость
@@ -161,6 +170,7 @@ export function exportRedistributionToExcel(data: ExportData): void {
 
     return {
       data: [
+        resultRow.item_no || '',
         fullName,
         resultRow.client_volume ?? '',
         resultRow.manual_volume ?? '',
@@ -173,27 +183,24 @@ export function exportRedistributionToExcel(data: ExportData): void {
       ],
       isLeaf: resultRow.isLeaf,
       isZeroCost,
+      isSectionItemNo: /^\d+\.?$/.test((resultRow.item_no || '').trim()),
     };
   };
-
-  // Создаем ResultRow объекты для округления
-  const regularResultRows = regularPositions.map((pos, idx) => createResultRow(pos, idx, regularPositions));
-  const additionalResultRows = additionalPositions.map((pos, idx) => createResultRow(pos, idx, additionalPositions));
-  const allResultRows = [...regularResultRows, ...additionalResultRows];
 
   // Формируем строки данных
   const rows = allResultRows.map(resultRow => createRow(resultRow));
 
   // Рассчитываем итоги
   const totals = [
+    '',
     'ИТОГО:',
     '',
     '',
     '',
     '',
     '',
-    rows.reduce((sum, row) => sum + (row.data[6] as number), 0),
     rows.reduce((sum, row) => sum + (row.data[7] as number), 0),
+    rows.reduce((sum, row) => sum + (row.data[8] as number), 0),
     '',
   ];
 
@@ -250,8 +257,8 @@ export function exportRedistributionToExcel(data: ExportData): void {
   };
 
   // Индексы числовых колонок (для числового формата)
-  const numericColIndices = [4, 5, 6, 7]; // Цена за ед мат-ал, Цена за ед раб, Итого материалы, Итого работы
-  const nameColIndex = 0; // Колонка "Наименование"
+  const numericColIndices = [5, 6, 7, 8]; // Цена за ед мат-ал, Цена за ед раб, Итого материалы, Итого работы
+  const nameColIndex = 1; // Колонка "Наименование"
 
   // Применяем стили к заголовку (строка 0)
   for (let col = 0; col < header.length; col++) {
@@ -310,6 +317,11 @@ export function exportRedistributionToExcel(data: ExportData): void {
         baseStyle.fill = { fgColor: { rgb: 'FFCCCC' } };
       }
 
+      if (col === 0 && rowData.isSectionItemNo) {
+        baseStyle.fill = { fgColor: { rgb: 'D6E4FF' } };
+        baseStyle.font = { bold: true };
+      }
+
       ws[cellAddress].s = baseStyle;
 
       // Установить числовой формат для числовых колонок
@@ -334,6 +346,7 @@ export function exportRedistributionToExcel(data: ExportData): void {
 
   // Устанавливаем ширину колонок
   ws['!cols'] = [
+    { wch: 15 }, // Номер раздела
     { wch: 40 }, // Наименование
     { wch: 15 }, // Кол-во заказчика
     { wch: 12 }, // Кол-во ГП
