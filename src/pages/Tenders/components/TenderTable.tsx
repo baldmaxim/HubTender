@@ -177,9 +177,9 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       rowKey="id"
       loading={loading}
       pagination={{
-        defaultPageSize: 50,
+        defaultPageSize: 25,
         showSizeChanger: true,
-        pageSizeOptions: ['10', '20', '50', '100'],
+        pageSizeOptions: ['10', '25', '50', '100'],
         showTotal: (total) => `Всего: ${total}`,
       }}
       scroll={{ x: 1160, y: 'calc(100vh - 300px)' }}

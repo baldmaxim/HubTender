@@ -149,7 +149,7 @@ export const TenderGrid: React.FC<TenderGridProps> = ({
           onChange={onPageChange}
           showSizeChanger
           showTotal={(total) => `Всего ${total} записей`}
-          pageSizeOptions={['20', '50', '100']}
+          pageSizeOptions={['10', '25', '50', '100']}
         />
       </div>
     </div>

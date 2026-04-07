@@ -38,6 +38,8 @@ interface ImportSessionRow {
   }> | null;
   user_full_name: string;
   user_role: string;
+  user_role_name: string;
+  user_role_color: string | null;
   tender_title: string;
   tender_number: string;
   cancelled_by_name: string | null;
@@ -51,6 +53,8 @@ const ImportLog: React.FC = () => {
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [tenderFilter, setTenderFilter] = useState<string | null>(null);
   const [tenders, setTenders] = useState<{ id: string; title: string; tender_number: string }[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
@@ -82,7 +86,18 @@ const ImportLog: React.FC = () => {
       // Параллельная загрузка пользователей и тендеров
       const [usersRes, tendersRes] = await Promise.all([
         userIds.length > 0
-          ? supabase.from('users').select('id, full_name, role_code').in('id', userIds)
+          ? supabase
+            .from('users')
+            .select(`
+              id,
+              full_name,
+              role_code,
+              roles:role_code (
+                name,
+                color
+              )
+            `)
+            .in('id', userIds)
           : Promise.resolve({ data: [] }),
         tenderIds.length > 0
           ? supabase.from('tenders').select('id, title, tender_number').in('id', tenderIds)
@@ -104,6 +119,8 @@ const ImportLog: React.FC = () => {
         positions_snapshot: s.positions_snapshot,
         user_full_name: usersMap.get(s.user_id)?.full_name || '—',
         user_role: usersMap.get(s.user_id)?.role_code || '',
+        user_role_name: usersMap.get(s.user_id)?.roles?.name || '',
+        user_role_color: usersMap.get(s.user_id)?.roles?.color || null,
         tender_title: tendersMap.get(s.tender_id)?.title || '—',
         tender_number: tendersMap.get(s.tender_id)?.tender_number || '',
         cancelled_by_name: s.cancelled_by ? (usersMap.get(s.cancelled_by)?.full_name || null) : null,
@@ -132,6 +149,10 @@ const ImportLog: React.FC = () => {
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tenderFilter]);
 
   const handleCancel = (session: ImportSessionRow) => {
     modal.confirm({
@@ -219,6 +240,10 @@ const ImportLog: React.FC = () => {
     general_director: 'gold',
   };
 
+  roleLabel.senior_group = 'Старший группы';
+  roleLabel.veduschiy_inzhener = 'Ведущий инженер';
+  roleColor.veduschiy_inzhener = 'geekblue';
+
   const columns: ColumnsType<ImportSessionRow> = [
     {
       title: 'Пользователь',
@@ -227,8 +252,8 @@ const ImportLog: React.FC = () => {
       render: (_, row) => (
         <Space direction="vertical" size={2}>
           <Text strong style={{ fontSize: 13 }}>{row.user_full_name}</Text>
-          <Tag color={roleColor[row.user_role] || 'default'} style={{ margin: 0 }}>
-            {roleLabel[row.user_role] || row.user_role}
+          <Tag color={row.user_role_color || roleColor[row.user_role] || 'default'} style={{ margin: 0 }}>
+            {row.user_role_name || roleLabel[row.user_role] || row.user_role}
           </Tag>
         </Space>
       ),
@@ -353,7 +378,19 @@ const ImportLog: React.FC = () => {
         dataSource={sessions}
         rowKey="id"
         loading={loading}
-        pagination={{ pageSize: 50, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] }}
+        pagination={{
+          current: currentPage,
+          pageSize,
+          showSizeChanger: true,
+          pageSizeOptions: ['20', '50', '100'],
+          onChange: (page, nextPageSize) => {
+            setCurrentPage(page);
+            if (nextPageSize && nextPageSize !== pageSize) {
+              setPageSize(nextPageSize);
+              setCurrentPage(1);
+            }
+          },
+        }}
         size="small"
         rowClassName={(row) => row.cancelled_at ? 'import-log-cancelled-row' : ''}
         scroll={{ x: 1200 }}

@@ -19,6 +19,8 @@ const Tenders: React.FC = () => {
   const [selectedTenderForUpload, setSelectedTenderForUpload] = useState<TenderRecord | null>(null);
   const [versionMatchVisible, setVersionMatchVisible] = useState(false);
   const [selectedTenderForVersion, setSelectedTenderForVersion] = useState<Tender | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const { tendersData, loading, fetchTenders } = useTendersData();
   const actions = useTenderActions(fetchTenders);
@@ -101,11 +103,33 @@ const Tenders: React.FC = () => {
     });
   }, [tendersData, searchText, activeTab]);
 
+  const handlePaginationChange = useCallback((page: number, nextPageSize: number) => {
+    if (nextPageSize !== pageSize) {
+      setPageSize(nextPageSize);
+      setCurrentPage(1);
+      return;
+    }
+
+    setCurrentPage(page);
+  }, [pageSize]);
+
+  const paginationConfig = useMemo(() => ({
+    current: currentPage,
+    pageSize,
+    showSizeChanger: true,
+    pageSizeOptions: ['10', '25', '50', '100'],
+    showTotal: (total: number) => `Всего: ${total} тендеров`,
+    onChange: handlePaginationChange,
+  }), [currentPage, pageSize, handlePaginationChange]);
+
   return (
     <div style={{ padding: '0' }}>
       <TendersToolbar
         searchText={searchText}
-        onSearchChange={setSearchText}
+        onSearchChange={(value) => {
+          setSearchText(value);
+          setCurrentPage(1);
+        }}
         onExportAll={handleExportAll}
         onCreateNew={actions.handleCreateNewTender}
         onRefresh={fetchTenders}
@@ -113,7 +137,10 @@ const Tenders: React.FC = () => {
 
       <Tabs
         activeKey={activeTab}
-        onChange={(key) => setActiveTab(key as 'active' | 'archive')}
+        onChange={(key) => {
+          setActiveTab(key as 'active' | 'archive');
+          setCurrentPage(1);
+        }}
         items={[
           {
             key: 'active',
@@ -124,16 +151,11 @@ const Tenders: React.FC = () => {
                 columns={columns}
                 dataSource={tabFilteredData}
                 loading={loading}
-                pagination={{
-                  pageSize: 10,
-                  showSizeChanger: true,
-                  pageSizeOptions: [10, 20, 50, 100],
-                  showTotal: (total) => `Всего: ${total} тендеров`,
-                }}
+                pagination={paginationConfig}
                 scroll={{ x: 'max-content' }}
                 size="small"
                 locale={{
-                  emptyText: 'Нет активных тендеров для отображения.'
+                  emptyText: 'Нет активных тендеров для отображения.',
                 }}
                 className="tenders-table"
                 style={{
@@ -151,16 +173,11 @@ const Tenders: React.FC = () => {
                 columns={columns}
                 dataSource={tabFilteredData}
                 loading={loading}
-                pagination={{
-                  pageSize: 10,
-                  showSizeChanger: true,
-                  pageSizeOptions: [10, 20, 50, 100],
-                  showTotal: (total) => `Всего: ${total} тендеров`,
-                }}
+                pagination={paginationConfig}
                 scroll={{ x: 'max-content' }}
                 size="small"
                 locale={{
-                  emptyText: 'Нет архивных тендеров для отображения.'
+                  emptyText: 'Нет архивных тендеров для отображения.',
                 }}
                 className="tenders-table"
                 style={{

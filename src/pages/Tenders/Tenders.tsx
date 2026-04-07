@@ -25,7 +25,7 @@ const Tenders: React.FC = () => {
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [scrollPosition, setScrollPosition] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(25);
 
   const { tenders, statuses, constructionScopes, tenderNumbers, loading, refetch } = useTenderData();
   const { handleMoveUp, handleMoveDown, handleArchive } = useTenderCRUD(tenders, refetch);
@@ -115,8 +115,13 @@ const Tenders: React.FC = () => {
   };
 
   const handlePageChange = (page: number, size: number) => {
+    if (size !== pageSize) {
+      setPageSize(size);
+      setCurrentPage(1);
+      return;
+    }
+
     setCurrentPage(page);
-    setPageSize(size);
   };
 
   return (
