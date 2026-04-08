@@ -289,218 +289,127 @@ export const useMassBoqImport = () => {
   ): Promise<boolean> => {
     try {
       setUploading(true);
-      setUploadProgress(0);
+      setUploadProgress(5);
 
-      // Собираем position-only обновления (позиции без BOQ-элементов, но с данными ГП)
-      const positionOnlyUpdates: Array<{ positionId: string; data: PositionUpdateData }> = [];
-      positionUpdates.forEach((posData) => {
-        if (posData.itemsCount > 0) return;
-        if (posData.manualVolume === undefined && posData.manualNote === undefined) return;
-        if (!posData.positionId) return;
-        positionOnlyUpdates.push({ positionId: posData.positionId, data: posData });
-      });
+      const positionUpdatesPayload = Array.from(positionUpdates.values())
+        .filter(posData =>
+          posData.positionId &&
+          (posData.manualVolume !== undefined || posData.manualNote !== undefined)
+        )
+        .map((posData) => {
+          const payload: Record<string, unknown> = {
+            position_id: posData.positionId,
+            position_number: posData.positionNumber,
+          };
 
-      // Группируем BOQ-элементы по позициям
-      const byPosition = new Map<string, ParsedBoqItem[]>();
-      data.forEach(item => {
-        if (!item.matchedPositionId) return;
-        if (!byPosition.has(item.matchedPositionId)) {
-          byPosition.set(item.matchedPositionId, []);
-        }
-        byPosition.get(item.matchedPositionId)!.push(item);
-      });
+          if (posData.manualVolume !== undefined) {
+            payload.manual_volume = posData.manualVolume;
+          }
+          if (posData.manualNote !== undefined) {
+            payload.manual_note = posData.manualNote;
+          }
 
-      // ===========================
-      // Создаём сессию импорта
-      // ===========================
-      let importSessionId: string | null = null;
-      if (userId) {
-        // Собираем все затронутые позиции для snapshot
-        const affectedPositionIds = new Set<string>([
-          ...Array.from(byPosition.keys()),
-          ...positionOnlyUpdates.map(u => u.positionId),
-        ]);
+          return payload;
+        });
 
-        // Загружаем текущее состояние позиций для snapshot (только manual_volume и manual_note)
-        let positionsSnapshot: Array<{ id: string; manual_volume: number | null; manual_note: string | null }> = [];
-        if (affectedPositionIds.size > 0) {
-          const { data: snapshotData } = await supabase
-            .from('client_positions')
-            .select('id, manual_volume, manual_note')
-            .in('id', Array.from(affectedPositionIds));
-          positionsSnapshot = snapshotData || [];
-        }
-
-        // Создаём запись сессии
-        const { data: session, error: sessionError } = await supabase
-          .from('import_sessions')
-          .insert({
-            user_id: userId,
-            tender_id: tenderId,
-            file_name: fileName || null,
-            positions_snapshot: positionsSnapshot,
-          })
-          .select('id')
-          .single();
-
-        if (sessionError) {
-          console.warn('[MassBoqImport] Не удалось создать сессию импорта:', sessionError.message);
-        } else {
-          importSessionId = session.id;
-        }
-      }
-
-      const totalOperations = byPosition.size + positionOnlyUpdates.length;
-      let processedOperations = 0;
-      let totalInsertedItems = 0;
-
-      // Загружаем курсы валют только если есть BOQ-элементы
       let rates = currencyRates;
       if (data.length > 0) {
         rates = await loadCurrencyRates(tenderId);
       }
 
-      // Обрабатываем позиции с BOQ-элементами
-      for (const [positionId, items] of byPosition) {
-        const { data: existingItems } = await supabase
-          .from('boq_items')
-          .select('sort_number')
-          .eq('client_position_id', positionId)
-          .order('sort_number', { ascending: false })
-          .limit(1);
-
-        const maxSortNumber = existingItems?.[0]?.sort_number ?? -1;
-        const workIdMap = new Map<string, string>();
-
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          const actualSortNumber = maxSortNumber + 1 + i;
-
-          const parentId = item.parent_work_item_id
-            ? workIdMap.get(item.parent_work_item_id) || null
-            : null;
-
-          const totalAmount = calculateTotalAmount(item, rates);
-
-          const insertData: any = {
-            tender_id: tenderId,
-            client_position_id: positionId,
-            sort_number: actualSortNumber,
+      const itemsPayload = data
+        .filter(item => item.matchedPositionId)
+        .map((item) => {
+          const payload: Record<string, unknown> = {
+            row_index: item.rowIndex,
+            client_position_id: item.matchedPositionId,
             boq_item_type: item.boq_item_type,
             unit_code: item.unit_code,
             quantity: item.quantity,
-            base_quantity: item.base_quantity,
-            consumption_coefficient: item.consumption_coefficient,
-            conversion_coefficient: item.conversion_coefficient,
-            currency_type: item.currency_type,
-            delivery_price_type: item.delivery_price_type,
-            delivery_amount: item.delivery_amount,
-            unit_rate: item.unit_rate,
-            total_amount: totalAmount,
-            detail_cost_category_id: item.detail_cost_category_id,
-            quote_link: item.quote_link,
-            description: item.description,
+            total_amount: calculateTotalAmount(item, rates),
           };
 
-          if (importSessionId) {
-            insertData.import_session_id = importSessionId;
+          if (item.base_quantity !== undefined) {
+            payload.base_quantity = item.base_quantity;
+          }
+          if (item.consumption_coefficient !== undefined) {
+            payload.consumption_coefficient = item.consumption_coefficient;
+          }
+          if (item.conversion_coefficient !== undefined) {
+            payload.conversion_coefficient = item.conversion_coefficient;
+          }
+          if (item.currency_type) {
+            payload.currency_type = item.currency_type;
+          }
+          if (item.delivery_price_type) {
+            payload.delivery_price_type = item.delivery_price_type;
+          }
+          if (item.delivery_amount !== undefined) {
+            payload.delivery_amount = item.delivery_amount;
+          }
+          if (item.unit_rate !== undefined) {
+            payload.unit_rate = item.unit_rate;
+          }
+          if (item.detail_cost_category_id) {
+            payload.detail_cost_category_id = item.detail_cost_category_id;
+          }
+          if (item.quote_link) {
+            payload.quote_link = item.quote_link;
+          }
+          if (item.description) {
+            payload.description = item.description;
           }
 
           if (isWork(item.boq_item_type)) {
-            insertData.work_name_id = item.work_name_id;
+            payload.work_name_id = item.work_name_id;
+            if (item.tempId) {
+              payload.temp_id = item.tempId;
+            }
           }
 
           if (isMaterial(item.boq_item_type)) {
-            insertData.material_type = item.material_type;
-            insertData.material_name_id = item.material_name_id;
-            insertData.parent_work_item_id = parentId;
+            payload.material_type = item.material_type;
+            payload.material_name_id = item.material_name_id;
+            if (item.parent_work_item_id) {
+              payload.parent_work_temp_id = item.parent_work_item_id;
+            }
           }
 
-          const { data: inserted, error } = await supabase
-            .from('boq_items')
-            .insert(insertData)
-            .select('id')
-            .single();
+          return payload;
+        });
 
-          if (error) {
-            throw new Error(`Позиция ${positionId}, строка ${item.rowIndex}: ${error.message}`);
-          }
+      setUploadProgress(15);
 
-          totalInsertedItems++;
+      const { data: rpcResult, error } = await supabase.rpc('bulk_import_client_position_boq', {
+        p_user_id: userId || null,
+        p_tender_id: tenderId,
+        p_file_name: fileName || null,
+        p_items: itemsPayload,
+        p_position_updates: positionUpdatesPayload,
+      });
 
-          if (isWork(item.boq_item_type) && item.tempId && inserted) {
-            workIdMap.set(item.tempId, inserted.id);
-          }
-        }
-
-        // Обновляем данные позиции (manual_volume, manual_note)
-        const posData = Array.from(positionUpdates.values()).find(
-          p => clientPositionsMap.get(p.positionNumber)?.id === positionId
-        );
-
-        if (posData && (posData.manualVolume !== undefined || posData.manualNote !== undefined)) {
-          const updateData: any = {};
-          if (posData.manualVolume !== undefined) {
-            updateData.manual_volume = posData.manualVolume;
-          }
-          if (posData.manualNote !== undefined) {
-            updateData.manual_note = posData.manualNote;
-          }
-
-          await supabase
-            .from('client_positions')
-            .update(updateData)
-            .eq('id', positionId);
-        }
-
-        processedOperations++;
-        setUploadProgress(Math.round((processedOperations / totalOperations) * 100));
+      if (error) {
+        throw error;
       }
 
-      // Обрабатываем position-only обновления (позиции без BOQ, только данные ГП)
-      for (const { positionId, data: posData } of positionOnlyUpdates) {
-        const updateData: any = {};
-        if (posData.manualVolume !== undefined) {
-          updateData.manual_volume = posData.manualVolume;
-        }
-        if (posData.manualNote !== undefined) {
-          updateData.manual_note = posData.manualNote;
-        }
+      const insertedItemsCount = Number((rpcResult as any)?.inserted_items_count || 0);
+      const updatedPositionsCount = Number((rpcResult as any)?.updated_positions_count || 0);
+      const importSessionId = (rpcResult as any)?.import_session_id || null;
 
-        const { error } = await supabase
-          .from('client_positions')
-          .update(updateData)
-          .eq('id', positionId);
-
-        if (error) {
-          throw new Error(`Позиция ${posData.positionNumber} (данные ГП): ${error.message}`);
-        }
-
-        processedOperations++;
-        setUploadProgress(Math.round((processedOperations / totalOperations) * 100));
-      }
-
-      // Обновляем счётчик элементов в сессии
-      if (importSessionId && totalInsertedItems > 0) {
-        await supabase
-          .from('import_sessions')
-          .update({ items_count: totalInsertedItems })
-          .eq('id', importSessionId);
-      }
+      setUploadProgress(100);
 
       console.log('[MassBoqImport] Импорт завершён:', {
-        boqPositions: byPosition.size,
-        boqItems: data.length,
-        positionOnlyUpdates: positionOnlyUpdates.length,
+        boqItems: insertedItemsCount,
+        positionUpdates: updatedPositionsCount,
         sessionId: importSessionId,
       });
 
       const msgParts: string[] = [];
-      if (data.length > 0) {
-        msgParts.push(`${data.length} элементов в ${byPosition.size} позиций`);
+      if (insertedItemsCount > 0) {
+        msgParts.push(`${insertedItemsCount} элементов`);
       }
-      if (positionOnlyUpdates.length > 0) {
-        msgParts.push(`обновлено ${positionOnlyUpdates.length} позиций (данные ГП)`);
+      if (updatedPositionsCount > 0) {
+        msgParts.push(`обновлено ${updatedPositionsCount} позиций`);
       }
       message.success(`Импортировано: ${msgParts.join(', ')}`);
       return true;
