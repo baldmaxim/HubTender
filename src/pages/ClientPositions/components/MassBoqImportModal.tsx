@@ -265,6 +265,11 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
                     <List.Item>
                       <Text>Колонка 8: <Text code>Ед. изм.</Text></Text>
                     </List.Item>
+                    <List.Item>
+                      <Text type="secondary">
+                        Если в позиции импортируются только материалы без работы, такая строка будет импортирована как независимый материал без привязки к работе.
+                      </Text>
+                    </List.Item>
                   </List>
                   <Text strong style={{ marginTop: 8, display: 'block' }}>Данные ГП для позиций (можно импортировать без работ/материалов):</Text>
                   <List size="small" style={{ marginTop: 4 }}>
