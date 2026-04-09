@@ -38,13 +38,15 @@ export const checkTenderDeadline = (
 
   // Проверка продленного дедлайна для конкретного тендера
   const extension = userExtensions.find(ext => ext.tender_id === tenderId);
+  const tenderDeadlineDate = tenderDeadline ? new Date(tenderDeadline) : null;
+  const extensionDeadlineDate = extension ? new Date(extension.extended_deadline) : null;
 
-  // Определить эффективный дедлайн (продленный или оригинальный)
-  const effectiveDeadline = extension
-    ? new Date(extension.extended_deadline)
-    : tenderDeadline
-      ? new Date(tenderDeadline)
-      : null;
+  // Персональный дедлайн работает только как точечное продление
+  // после общего дедлайна тендера и не должен блокировать раньше него.
+  const effectiveDeadline =
+    tenderDeadlineDate && extensionDeadlineDate && extensionDeadlineDate > tenderDeadlineDate
+      ? extensionDeadlineDate
+      : tenderDeadlineDate;
 
   // Если дедлайна нет - доступ разрешен
   if (!effectiveDeadline) {
@@ -63,6 +65,6 @@ export const checkTenderDeadline = (
     isExpired,
     canEdit: !isExpired,
     deadline: effectiveDeadline,
-    isExtended: !!extension
+    isExtended: !!(extensionDeadlineDate && tenderDeadlineDate && extensionDeadlineDate > tenderDeadlineDate)
   };
 };
