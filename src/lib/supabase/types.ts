@@ -106,6 +106,69 @@ export interface TenderRegistryWithRelations extends TenderRegistry {
   total_cost?: number | null; // Общая стоимость из связанного тендера (рассчитывается динамически)
 }
 
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+export interface TenderGroupInsert {
+  tender_id: string;
+  name: string;
+  color?: string;
+  sort_order?: number;
+  quality_level?: number | null;
+  quality_comment?: string | null;
+  quality_updated_by?: string | null;
+  quality_updated_at?: string | null;
+}
+
+export interface TenderGroup extends TenderGroupInsert {
+  id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenderGroupMemberInsert {
+  group_id: string;
+  user_id: string;
+}
+
+export interface TenderGroupMember extends TenderGroupMemberInsert {
+  id: string;
+  created_at: string;
+}
+
+export interface TenderIterationInsert {
+  group_id: string;
+  user_id: string;
+  iteration_number: number;
+  user_comment: string;
+  user_amount?: number | null;
+  submitted_at?: string;
+}
+
+export interface TenderIteration extends TenderIterationInsert {
+  id: string;
+  manager_id: string | null;
+  manager_comment: string | null;
+  manager_responded_at: string | null;
+  approval_status: ApprovalStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimelineUserRef {
+  id: string;
+  full_name: string;
+  role_code: string;
+}
+
+export interface TenderGroupMemberWithUser extends TenderGroupMember {
+  user?: TimelineUserRef | null;
+}
+
+export interface TenderIterationWithRelations extends TenderIteration {
+  user?: TimelineUserRef | null;
+  manager?: TimelineUserRef | null;
+}
+
 // =============================================
 // ENUM типы
 // =============================================
@@ -915,6 +978,7 @@ export interface UserPositionFilter {
 export const ALL_PAGES = [
   '/dashboard',
   '/tenders',
+  '/tender-timeline',
   '/tasks',
   '/admin/nomenclatures',
   '/admin/tenders',
@@ -948,6 +1012,7 @@ export const DEFAULT_ROLE_PAGES: Record<UserRole, string[]> = {
   'Разработчик': [], // Полный доступ (для отладки и разработки)
   'Старший группы': [
     '/dashboard',
+    '/tender-timeline',
     '/tasks',
     '/positions',
     '/positions/:positionId/items',
@@ -963,6 +1028,7 @@ export const DEFAULT_ROLE_PAGES: Record<UserRole, string[]> = {
   ],
   'Инженер': [
     '/dashboard',
+    '/tender-timeline',
     '/tasks',
     '/positions',
     '/positions/:positionId/items',
@@ -977,6 +1043,7 @@ export const DEFAULT_ROLE_PAGES: Record<UserRole, string[]> = {
 export const PAGE_LABELS: Record<string, string> = {
   '/dashboard': 'Дашборд',
   '/tenders': 'Перечень тендеров',
+  '/tender-timeline': 'Хронология расчёта тендеров',
   '/tasks': 'Список задач',
   '/positions': 'Позиции заказчика',
   '/commerce/proposal': 'Форма КП',
@@ -1007,7 +1074,11 @@ export const PAGE_LABELS: Record<string, string> = {
 export const PAGES_STRUCTURE = [
   {
     title: null, // Без группы
-    pages: ['/dashboard', '/tenders', '/tasks', '/positions'],
+    pages: ['/dashboard', '/tasks', '/positions'],
+  },
+  {
+    title: 'Данные по тендерам',
+    pages: ['/tenders', '/tender-timeline'],
   },
   {
     title: 'Коммерция',

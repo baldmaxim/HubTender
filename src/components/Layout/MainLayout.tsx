@@ -257,9 +257,21 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       label: 'Дашборд',
     },
     {
-      key: '/tenders',
+      key: 'tender-data-group',
       icon: <FileTextOutlined />,
-      label: 'Перечень тендеров',
+      label: 'Данные по тендерам',
+      children: [
+        {
+          key: '/tenders',
+          icon: <FileTextOutlined />,
+          label: 'Перечень тендеров',
+        },
+        {
+          key: '/tender-timeline',
+          icon: <ClockCircleOutlined />,
+          label: 'Хронология расчёта',
+        },
+      ],
     },
     {
       key: '/tasks',
@@ -579,7 +591,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               open={notesOpen}
               onOpenChange={setNotesOpen}
               placement="bottomRight"
-              destroyTooltipOnHide
+              destroyOnHidden
             >
               <MessageOutlined
                 style={{

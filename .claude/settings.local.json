@@ -20,7 +20,11 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nИсправить парсинг затрат со слэшами в названии детализации\n\nИзменена логика parseCostCategory: категория - первая часть,\nлокация - последняя, детализация - всё между ними \\(может содержать слэши\\).\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(npm run dev:*)",
       "Bash(curl:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "mcp__claude_ai_Supabase__list_tables",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Supabase__list_projects"
     ],
     "deny": [],
     "ask": [],

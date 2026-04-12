@@ -31,6 +31,7 @@ import FinancialIndicators from './pages/FinancialIndicators/FinancialIndicators
 import Users from './pages/Users/Users';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/Projects/ProjectDetail';
+import TenderTimeline from './pages/TenderTimeline';
 import './App.css';
 
 function AppContent() {
@@ -67,6 +68,7 @@ function AppContent() {
             <Route index element={<Dashboard />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="tenders" element={<Tenders />} />
+            <Route path="tender-timeline" element={<TenderTimeline />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="positions" element={<ClientPositions />} />
             <Route path="positions/:positionId/items" element={<PositionItems />} />
