@@ -39,7 +39,7 @@ function getQualityScore(qualityLevel: number | null | undefined): number {
     return 0;
   }
 
-  return qualityLevel * 10;
+  return Math.round((qualityLevel / 3) * 100);
 }
 
 function getGroupStatus(iterations: GroupIterationRow[]): ApprovalStatus {

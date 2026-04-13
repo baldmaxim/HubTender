@@ -89,7 +89,7 @@ function getLatestIterationStatuses(groups: GroupRow[] = []): ApprovalStatus[] {
 function getQualityLevel(groups: GroupRow[] = []): number | null {
   const qualityLevels = groups
     .map((group) => group.quality_level)
-    .filter((level): level is number => typeof level === 'number' && level >= 1 && level <= 10);
+    .filter((level): level is number => typeof level === 'number' && level >= 1 && level <= 3);
 
   if (qualityLevels.length === 0) {
     return null;
@@ -106,7 +106,7 @@ function getOverallScore(groups: GroupRow[] = []): number {
     return 0;
   }
 
-  return Math.round(qualityLevel * 10);
+  return Math.round((qualityLevel / 3) * 100);
 }
 
 function getGroupsCount(groups: GroupRow[] = []): number {

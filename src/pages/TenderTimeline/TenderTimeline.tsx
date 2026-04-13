@@ -14,6 +14,7 @@ import {
   Skeleton,
   Space,
   Table,
+  Tooltip,
   Typography,
   theme,
 } from 'antd';
@@ -53,8 +54,27 @@ type GroupQualityFormValues = {
   groups?: Record<string, { quality_level?: number | null; quality_comment?: string | null }>;
 };
 
+const QUALITY_LEVEL_DESCRIPTIONS: Record<number, string> = {
+  1: 'Расценивали ВОР.',
+  2: 'Считали ориентировочно.',
+  3: 'Считали качественно, имеются все данные от Заказчика.',
+};
+
 function getQualityLabel(level: number | null): string {
-  return level == null ? 'Нет оценки' : `${level}/10`;
+  return level == null ? 'Нет оценки' : `${level}/3`;
+}
+
+function getQualityTooltipContent(level: number | null, comment?: string | null): React.ReactNode {
+  if (level == null) {
+    return 'Нет оценки';
+  }
+
+  return (
+    <div>
+      <div>{QUALITY_LEVEL_DESCRIPTIONS[level] || `Уровень ${level}`}</div>
+      {comment ? <div style={{ marginTop: 4 }}>{comment}</div> : null}
+    </div>
+  );
 }
 
 function getExpectedAutoGroups(
@@ -529,11 +549,11 @@ const TenderTimeline: React.FC = () => {
         }
       }
 
-      message.success('Качество команд обновлено');
+      message.success('Уровень расчета обновлен');
       handleCloseQualityModal();
       await refreshAll();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'Не удалось обновить качество команд');
+      message.error(err instanceof Error ? err.message : 'Не удалось обновить уровень расчета');
     } finally {
       setQualitySaving(false);
     }
@@ -558,7 +578,7 @@ const TenderTimeline: React.FC = () => {
       ),
     },
     {
-      title: 'Уровень качества',
+      title: 'Уровень расчета',
       width: 260,
       render: (_, tender) => (
         <div>
@@ -602,7 +622,7 @@ const TenderTimeline: React.FC = () => {
             handleOpenQualityModal(tender.id);
           }}
         >
-          {canEditQuality ? 'Оценить команды' : 'Просмотр качества'}
+          {canEditQuality ? 'Оценить уровень' : 'Просмотр уровня'}
         </Button>
       ),
     },
@@ -679,8 +699,12 @@ const TenderTimeline: React.FC = () => {
 
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <Text type="secondary">Качество команды</Text>
-                        <Text strong>{group.qualityLevel != null ? `${group.qualityLevel}/10` : 'Нет оценки'}</Text>
+                        <Text type="secondary">Уровень расчета</Text>
+                        <Tooltip title={getQualityTooltipContent(group.qualityLevel, group.quality_comment)}>
+                          <Text strong style={{ cursor: 'help' }}>
+                            {group.qualityLevel != null ? `${group.qualityLevel}/3` : 'Нет оценки'}
+                          </Text>
+                        </Tooltip>
                       </div>
                       <Progress
                         percent={group.qualityScore}
@@ -863,7 +887,7 @@ const TenderTimeline: React.FC = () => {
       </div>
 
       <Modal
-        title={qualityTender ? `Качество команд · ${qualityTender.title}` : 'Качество команд'}
+        title={qualityTender ? `Уровень расчета · ${qualityTender.title}` : 'Уровень расчета'}
         open={qualityModalOpen}
         onCancel={handleCloseQualityModal}
         onOk={canEditQuality ? handleSaveGroupQuality : handleCloseQualityModal}
@@ -885,12 +909,12 @@ const TenderTimeline: React.FC = () => {
           <Alert
             type="info"
             showIcon
-            message="Шкала качества расчёта"
+            message="Шкала уровня расчета"
             description={
               <div>
-                <div>1 — расценивал ВОР.</div>
-                <div>5 — считал ориентировочно, на м2.</div>
-                <div>10 — считал по проекту, все данные были предоставлены заказчиком.</div>
+                <div>1 — расценивали ВОР.</div>
+                <div>2 — считали ориентировочно.</div>
+                <div>3 — считали качественно, имеются все данные от Заказчика.</div>
               </div>
             }
           />
@@ -910,15 +934,17 @@ const TenderTimeline: React.FC = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 16 }}>
                       <Form.Item
                         name={['groups', group.id, 'quality_level']}
-                        label="Уровень 1–10"
+                        label="Уровень 1–3"
                         style={{ marginBottom: 0 }}
                       >
                         <InputNumber
                           min={1}
-                          max={10}
+                          max={3}
+                          step={1}
+                          precision={0}
                           disabled={!canEditQuality}
                           style={{ width: '100%' }}
-                          placeholder="Например, 7"
+                          placeholder="Например, 2"
                         />
                       </Form.Item>
                       <Form.Item
@@ -929,7 +955,7 @@ const TenderTimeline: React.FC = () => {
                         <TextArea
                           rows={2}
                           disabled={!canEditQuality}
-                          placeholder="Краткое пояснение по уровню качества расчёта этой команды"
+                          placeholder="Краткое пояснение по уровню расчета этой команды"
                         />
                       </Form.Item>
                     </div>
