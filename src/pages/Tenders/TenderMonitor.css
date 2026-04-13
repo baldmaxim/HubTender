@@ -2,9 +2,9 @@
   min-height: 100%;
   padding: 20px;
   background:
-    radial-gradient(circle at top left, rgba(201, 168, 76, 0.14), transparent 30%),
-    radial-gradient(circle at top right, rgba(74, 144, 226, 0.10), transparent 28%),
-    #12141d;
+    radial-gradient(circle at top left, var(--tm-page-glow-primary), transparent 30%),
+    radial-gradient(circle at top right, var(--tm-page-glow-secondary), transparent 28%),
+    var(--tm-page-bg);
 }
 
 .tender-monitor-call-button {
@@ -23,7 +23,7 @@
   }
 
   50% {
-    box-shadow: 0 0 0 6px rgba(226, 75, 74, 0.08);
+    box-shadow: 0 0 0 6px var(--tm-call-pulse-shadow);
     opacity: 0.65;
   }
 }
@@ -32,11 +32,11 @@
   0%,
   100% {
     box-shadow: 0 0 0 0 rgba(226, 75, 74, 0);
-    border-color: rgba(255, 255, 255, 0.08);
+    border-color: var(--tm-card-border);
   }
 
   50% {
-    box-shadow: 0 0 0 8px rgba(226, 75, 74, 0.08);
-    border-color: rgba(226, 75, 74, 0.28);
+    box-shadow: 0 0 0 8px var(--tm-alert-pulse-shadow);
+    border-color: var(--tm-alert-pulse-border);
   }
 }

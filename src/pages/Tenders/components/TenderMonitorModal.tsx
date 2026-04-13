@@ -9,6 +9,7 @@ import type {
   TenderRegistryWithRelations,
   TenderStatus,
 } from '../../../lib/supabase';
+import { useTheme } from '../../../contexts/ThemeContext';
 import {
   formatArea,
   formatDate,
@@ -23,6 +24,7 @@ import {
   getTenderStatusDisplayLabel,
   shouldShowCallAction,
 } from '../utils/tenderMonitor';
+import { getTenderMonitorPalette, type TenderMonitorPalette } from '../utils/tenderMonitorTheme';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -36,6 +38,7 @@ interface EditableMonitorFieldProps {
   label: string;
   value: string | number | null | undefined;
   displayValue: React.ReactNode;
+  palette: TenderMonitorPalette;
   type?: FieldType;
   options?: Array<{ value: string; label: string }>;
   buildUpdatePayload?: (draft: string | number | null) => Record<string, unknown>;
@@ -48,6 +51,7 @@ function EditableMonitorField({
   label,
   value,
   displayValue,
+  palette,
   type = 'text',
   options,
   buildUpdatePayload,
@@ -162,15 +166,15 @@ function EditableMonitorField({
       style={{
         padding: '10px 12px',
         borderRadius: 10,
-        background: '#0f1017',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: palette.sectionBg,
+        border: `1px solid ${palette.borderSoft}`,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              color: '#8b93a7',
+              color: palette.muted,
               fontSize: 10,
               letterSpacing: '0.12em',
               textTransform: 'uppercase',
@@ -195,7 +199,7 @@ function EditableMonitorField({
           ) : (
             <div
               style={{
-                color: '#f5efe4',
+                color: palette.text,
                 fontSize: 12,
                 lineHeight: 1.35,
                 fontWeight: 600,
@@ -214,7 +218,7 @@ function EditableMonitorField({
             size="small"
             icon={<EditOutlined />}
             onClick={() => setEditing(true)}
-            style={{ color: '#c9a84c', flexShrink: 0 }}
+            style={{ color: palette.warning, flexShrink: 0 }}
           />
         ) : null}
       </div>
@@ -225,10 +229,11 @@ function EditableMonitorField({
 interface EditableChronologySectionProps {
   tenderId: string;
   items: ChronologyItem[];
+  palette: TenderMonitorPalette;
   onUpdated: () => Promise<void> | void;
 }
 
-function EditableChronologySection({ tenderId, items, onUpdated }: EditableChronologySectionProps) {
+function EditableChronologySection({ tenderId, items, palette, onUpdated }: EditableChronologySectionProps) {
   const [draftItems, setDraftItems] = useState<ChronologyItem[]>(items);
   const [saving, setSaving] = useState(false);
 
@@ -285,9 +290,9 @@ function EditableChronologySection({ tenderId, items, onUpdated }: EditableChron
             key={`${item.date || 'empty'}-${index}`}
             style={{
               padding: '10px 12px',
-              background: '#0f1017',
+              background: palette.sectionBg,
               borderRadius: 10,
-              border: `1px solid ${item.type === 'call_follow_up' ? 'rgba(226,75,74,0.24)' : 'rgba(255,255,255,0.06)'}`,
+              border: `1px solid ${item.type === 'call_follow_up' ? palette.dangerBorder : palette.borderSoft}`,
             }}
           >
             <div style={{ display: 'grid', gridTemplateColumns: '115px 128px minmax(0, 1fr) 32px', gap: 8, alignItems: 'start' }}>
@@ -323,7 +328,7 @@ function EditableChronologySection({ tenderId, items, onUpdated }: EditableChron
           </div>
         ))
       ) : (
-        <Text style={{ color: '#8b93a7', fontSize: 12 }}>Хронология пока не заполнена</Text>
+        <Text style={{ color: palette.muted, fontSize: 12 }}>Хронология пока не заполнена</Text>
       )}
 
       <Space wrap size={8}>
@@ -338,25 +343,20 @@ function EditableChronologySection({ tenderId, items, onUpdated }: EditableChron
   );
 }
 
-interface InfoCardProps {
-  label: string;
-  value: React.ReactNode;
-}
-
-function InfoCard({ label, value }: InfoCardProps) {
+function InfoCard({ label, value, palette }: { label: string; value: React.ReactNode; palette: TenderMonitorPalette }) {
   return (
     <div
       style={{
         padding: '10px 12px',
         borderRadius: 10,
-        background: '#0f1017',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: palette.sectionBg,
+        border: `1px solid ${palette.borderSoft}`,
       }}
     >
-      <div style={{ color: '#8b93a7', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>
+      <div style={{ color: palette.muted, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>
         {label}
       </div>
-      <div style={{ color: '#f5efe4', fontSize: 12, lineHeight: 1.35, fontWeight: 600 }}>{value || '—'}</div>
+      <div style={{ color: palette.text, fontSize: 12, lineHeight: 1.35, fontWeight: 600 }}>{value || '—'}</div>
     </div>
   );
 }
@@ -382,6 +382,8 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
   onQuickCall,
   onUpdate,
 }) => {
+  const { theme } = useTheme();
+  const palette = getTenderMonitorPalette(theme === 'dark');
   const [activeTab, setActiveTab] = useState<ModalTab>(initialTab);
 
   useEffect(() => {
@@ -411,6 +413,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
     value: status.id,
     label: status.name,
   }));
+
   const statusOptionsWithSent = [
     { value: '__sent__', label: 'Направлено' },
     ...statusOptions,
@@ -426,8 +429,8 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
       centered
       styles={{
         content: {
-          background: '#171a24',
-          border: '1px solid rgba(201,168,76,0.3)',
+          background: palette.cardBg,
+          border: `1px solid ${palette.warningBorder}`,
           borderRadius: 14,
           padding: 0,
           overflow: 'hidden',
@@ -440,13 +443,13 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
         },
       }}
     >
-      <div style={{ padding: '18px 18px 14px', borderRight: '3px solid #c9a84c' }}>
+      <div style={{ padding: '18px 18px 14px', borderRight: `3px solid ${palette.warning}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div
                 style={{
-                  color: '#f0c45a',
+                  color: palette.title,
                   fontSize: 18,
                   lineHeight: 1.2,
                   fontWeight: 700,
@@ -459,7 +462,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 {getTenderStatusDisplayLabel(tender)}
               </Tag>
             </div>
-            <Text style={{ color: '#8b93a7', display: 'block', marginTop: 6, fontSize: 11 }}>
+            <Text style={{ color: palette.muted, display: 'block', marginTop: 6, fontSize: 11 }}>
               {(tender.construction_scope?.name || 'Объект') + ' · ' + (tender.client_name || 'Клиент не указан')}
             </Text>
           </div>
@@ -470,11 +473,11 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 Позвонить
               </Button>
             ) : null}
-            <Button type="text" icon={<CloseOutlined />} size="small" onClick={onClose} style={{ color: '#8b93a7' }} />
+            <Button type="text" icon={<CloseOutlined />} size="small" onClick={onClose} style={{ color: palette.muted }} />
           </Space>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 14, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 14, borderBottom: `1px solid ${palette.border}`, flexWrap: 'wrap' }}>
           {[
             { key: 'info' as const, label: 'Информация' },
             { key: 'timeline' as const, label: `Хронология (${chronologyItems.length})` },
@@ -486,9 +489,9 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
               onClick={() => setActiveTab(tab.key)}
               style={{
                 border: 'none',
-                borderBottom: activeTab === tab.key ? '2px solid #f0c45a' : '2px solid transparent',
+                borderBottom: activeTab === tab.key ? `2px solid ${palette.warning}` : '2px solid transparent',
                 background: 'transparent',
-                color: activeTab === tab.key ? '#f0c45a' : '#8b93a7',
+                color: activeTab === tab.key ? palette.warning : palette.muted,
                 padding: '0 0 8px',
                 marginRight: 14,
                 cursor: 'pointer',
@@ -510,9 +513,9 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 gap: '10px 12px',
               }}
             >
-              <EditableMonitorField tenderId={tender.id} field="title" label="Наименование" value={tender.title} displayValue={tender.title} onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="client_name" label="Заказчик" value={tender.client_name} displayValue={tender.client_name || '—'} onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="construction_scope_id" label="Объем строительства" value={tender.construction_scope_id} displayValue={tender.construction_scope?.name || '—'} type="select" options={constructionScopeOptions} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="title" label="Наименование" value={tender.title} displayValue={tender.title} palette={palette} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="client_name" label="Заказчик" value={tender.client_name} displayValue={tender.client_name || '—'} palette={palette} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="construction_scope_id" label="Объем строительства" value={tender.construction_scope_id} displayValue={tender.construction_scope?.name || '—'} type="select" options={constructionScopeOptions} palette={palette} onUpdated={onUpdate} />
               <EditableMonitorField
                 tenderId={tender.id}
                 field="status_id"
@@ -521,6 +524,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 displayValue={tender.status?.name || (dashboardStatus === 'sent' ? 'Направлено' : '—')}
                 type="select"
                 options={statusOptionsWithSent}
+                palette={palette}
                 buildUpdatePayload={(draft) => {
                   if (draft === '__sent__') {
                     return {
@@ -541,17 +545,17 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 }}
                 onUpdated={onUpdate}
               />
-              <EditableMonitorField tenderId={tender.id} field="tender_number" label="Номер тендера" value={tender.tender_number} displayValue={tender.tender_number || '—'} onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="area" label="Площадь по СП" value={tender.area} displayValue={formatArea(tender.area)} type="number" onUpdated={onUpdate} />
-              <InfoCard label="Цена ₽/м²" value={formatRubPerSquare(tender.total_cost || tender.manual_total_cost, tender.area)} />
-              <EditableMonitorField tenderId={tender.id} field="manual_total_cost" label="Стоимость КП" value={tender.manual_total_cost} displayValue={formatMoneyFull(tender.manual_total_cost ?? tender.total_cost)} type="number" onUpdated={onUpdate} />
-              <InfoCard label="Направлено КП" value={lastCallDate ? `${formatDate(tender.submission_date)} · контроль ${formatDate(lastCallDate)}` : formatDate(tender.submission_date)} />
-              <EditableMonitorField tenderId={tender.id} field="submission_date" label="Дата подачи КП" value={tender.submission_date} displayValue={formatDate(tender.submission_date)} type="date" onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="commission_date" label="Ввод в эксплуатацию" value={tender.commission_date} displayValue={formatDate(tender.commission_date)} type="date" onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="construction_start_date" label="Выход на площадку" value={tender.construction_start_date} displayValue={formatDate(tender.construction_start_date)} type="date" onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="invitation_date" label="Поступило приглашение" value={tender.invitation_date} displayValue={formatDate(tender.invitation_date)} type="date" onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="object_address" label="Адрес объекта" value={tender.object_address} displayValue={tender.object_address || '—'} type="textarea" onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="object_coordinates" label="Координаты" value={tender.object_coordinates} displayValue={tender.object_coordinates || '—'} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="tender_number" label="Номер тендера" value={tender.tender_number} displayValue={tender.tender_number || '—'} palette={palette} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="area" label="Площадь по СП" value={tender.area} displayValue={formatArea(tender.area)} type="number" palette={palette} onUpdated={onUpdate} />
+              <InfoCard label="Цена ₽/м²" value={formatRubPerSquare(tender.total_cost || tender.manual_total_cost, tender.area)} palette={palette} />
+              <EditableMonitorField tenderId={tender.id} field="manual_total_cost" label="Стоимость КП" value={tender.manual_total_cost} displayValue={formatMoneyFull(tender.manual_total_cost ?? tender.total_cost)} type="number" palette={palette} onUpdated={onUpdate} />
+              <InfoCard label="Направлено КП" value={lastCallDate ? `${formatDate(tender.submission_date)} · контроль ${formatDate(lastCallDate)}` : formatDate(tender.submission_date)} palette={palette} />
+              <EditableMonitorField tenderId={tender.id} field="submission_date" label="Дата подачи КП" value={tender.submission_date} displayValue={formatDate(tender.submission_date)} type="date" palette={palette} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="commission_date" label="Ввод в эксплуатацию" value={tender.commission_date} displayValue={formatDate(tender.commission_date)} type="date" palette={palette} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="construction_start_date" label="Выход на площадку" value={tender.construction_start_date} displayValue={formatDate(tender.construction_start_date)} type="date" palette={palette} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="invitation_date" label="Поступило приглашение" value={tender.invitation_date} displayValue={formatDate(tender.invitation_date)} type="date" palette={palette} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="object_address" label="Адрес объекта" value={tender.object_address} displayValue={tender.object_address || '—'} type="textarea" palette={palette} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="object_coordinates" label="Координаты" value={tender.object_coordinates} displayValue={tender.object_coordinates || '—'} palette={palette} onUpdated={onUpdate} />
               <EditableMonitorField
                 tenderId={tender.id}
                 field="site_visit_photo_url"
@@ -559,20 +563,21 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 value={tender.site_visit_photo_url}
                 displayValue={
                   tender.site_visit_photo_url ? (
-                    <a href={tender.site_visit_photo_url} target="_blank" rel="noreferrer" style={{ color: '#4a90e2', fontSize: 12 }}>
+                    <a href={tender.site_visit_photo_url} target="_blank" rel="noreferrer" style={{ color: palette.info, fontSize: 12 }}>
                       {tender.site_visit_photo_url}
                     </a>
                   ) : (
                     '—'
                   )
                 }
+                palette={palette}
                 onUpdated={onUpdate}
               />
             </div>
           ) : null}
 
           {activeTab === 'timeline' ? (
-            <EditableChronologySection tenderId={tender.id} items={chronologyItems} onUpdated={onUpdate} />
+            <EditableChronologySection tenderId={tender.id} items={chronologyItems} palette={palette} onUpdated={onUpdate} />
           ) : null}
 
           {activeTab === 'package' ? (
@@ -587,18 +592,18 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                         gap: 12,
                         alignItems: 'center',
                         padding: '9px 10px',
-                        background: '#0f1017',
+                        background: palette.sectionBg,
                         borderRadius: 8,
-                        border: '1px solid rgba(255,255,255,0.06)',
+                        border: `1px solid ${palette.borderSoft}`,
                       }}
                     >
-                      <div style={{ minWidth: 82, color: '#49d28c', fontWeight: 700, fontSize: 11 }}>{formatDate(item.date)}</div>
-                      <div style={{ color: '#f5efe4', fontSize: 12, lineHeight: 1.35 }}>{item.text}</div>
+                      <div style={{ minWidth: 82, color: palette.successStrong, fontWeight: 700, fontSize: 11 }}>{formatDate(item.date)}</div>
+                      <div style={{ color: palette.text, fontSize: 12, lineHeight: 1.35 }}>{item.text}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <Text style={{ color: '#8b93a7', fontSize: 12 }}>Тендерный пакет не заполнен</Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>Тендерный пакет не заполнен</Text>
               )}
             </div>
           ) : null}

@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import { supabase } from '../../lib/supabase';
 import type { TenderRegistryWithRelations } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useTenderData } from './hooks/useTenderData';
 import { TenderAddForm } from './components';
 import ImportTendersModal from './ImportTendersModal';
@@ -22,6 +23,7 @@ import {
   type TenderMonitorSortField,
   type TenderMonitorTab,
 } from './utils/tenderMonitor';
+import { getTenderMonitorPalette, type TenderMonitorPalette } from './utils/tenderMonitorTheme';
 import './Tenders.css';
 import './TendersModern.css';
 import './TenderMonitor.css';
@@ -32,6 +34,7 @@ interface MetricCardProps {
   caption: string;
   accent: string;
   blinking?: boolean;
+  palette: TenderMonitorPalette;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -40,12 +43,13 @@ const MetricCard: React.FC<MetricCardProps> = ({
   caption,
   accent,
   blinking = false,
+  palette,
 }) => (
   <div
     className={blinking ? 'tender-monitor-alert-card' : undefined}
     style={{
-      background: '#202433',
-      border: '1px solid rgba(255,255,255,0.08)',
+      background: palette.cardBg,
+      border: `1px solid ${palette.border}`,
       borderRadius: 14,
       padding: '14px 18px',
       position: 'relative',
@@ -63,16 +67,18 @@ const MetricCard: React.FC<MetricCardProps> = ({
         background: accent,
       }}
     />
-    <div style={{ color: '#8b93a7', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em' }}>{title}</div>
-    <div style={{ color: '#f5efe4', fontSize: 28, fontWeight: 700, marginTop: 8 }}>{value}</div>
-    <div style={{ color: '#8b93a7', fontSize: 13, marginTop: 8 }}>{caption}</div>
+    <div style={{ color: palette.muted, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em' }}>{title}</div>
+    <div style={{ color: palette.text, fontSize: 28, fontWeight: 700, marginTop: 8 }}>{value}</div>
+    <div style={{ color: palette.muted, fontSize: 13, marginTop: 8 }}>{caption}</div>
   </div>
 );
 
 const Tenders: React.FC = () => {
   const { message } = App.useApp();
   const { user } = useAuth();
+  const { theme } = useTheme();
   const isDirector = user?.role_code === 'director' || user?.role_code === 'general_director';
+  const palette = getTenderMonitorPalette(theme === 'dark');
 
   const [activeTab, setActiveTab] = useState<TenderMonitorTab>('all');
   const [searchValue, setSearchValue] = useState('');
@@ -181,12 +187,25 @@ const Tenders: React.FC = () => {
   };
 
   return (
-    <div className="tender-monitor-page">
+    <div
+      className="tender-monitor-page"
+      style={
+        {
+          '--tm-page-bg': palette.pageBg,
+          '--tm-page-glow-primary': palette.pageGlowPrimary,
+          '--tm-page-glow-secondary': palette.pageGlowSecondary,
+          '--tm-card-border': palette.border,
+          '--tm-call-pulse-shadow': palette.callPulseShadow,
+          '--tm-alert-pulse-shadow': palette.alertPulseShadow,
+          '--tm-alert-pulse-border': palette.alertPulseBorder,
+        } as React.CSSProperties
+      }
+    >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div>
-            <div style={{ color: '#f5efe4', fontSize: 30, fontWeight: 700, marginBottom: 6 }}>Перечень тендеров</div>
-            <div style={{ color: '#8b93a7', fontSize: 14 }}>
+            <div style={{ color: palette.text, fontSize: 30, fontWeight: 700, marginBottom: 6 }}>Перечень тендеров</div>
+            <div style={{ color: palette.muted, fontSize: 14 }}>
               Реестр с контролем подачи КП, звонков и общей хронологии тендера.
             </div>
           </div>
@@ -210,21 +229,23 @@ const Tenders: React.FC = () => {
             gap: 14,
           }}
         >
-          <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent="#c9a84c" />
-          <MetricCard title="В расчете" value={counts.calc} caption="готовятся КП" accent="#4a90e2" />
-          <MetricCard title="Направлено" value={counts.sent} caption="ожидает ответа" accent="#ef9f27" />
+          <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} />
+          <MetricCard title="В расчете" value={counts.calc} caption="готовятся КП" accent={palette.info} palette={palette} />
+          <MetricCard title="Направлено" value={counts.sent} caption="ожидает ответа" accent="#ef9f27" palette={palette} />
           <MetricCard
             title="Требуют звонка"
             value={needCallCount}
             caption="более 7 дней без контроля"
-            accent="#e24b4a"
+            accent={palette.danger}
             blinking={needCallCount > 0}
+            palette={palette}
           />
           <MetricCard
             title="Сумма КП"
             value={formatMoney(totalCost)}
             caption={`${formatArea(totalArea)} в работе`}
-            accent="#3db87a"
+            accent={palette.success}
+            palette={palette}
           />
         </div>
 

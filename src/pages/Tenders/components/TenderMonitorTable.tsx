@@ -7,6 +7,7 @@ import {
   PhoneOutlined,
 } from '@ant-design/icons';
 import type { TenderRegistryWithRelations } from '../../../lib/supabase';
+import { useTheme } from '../../../contexts/ThemeContext';
 import {
   formatArea,
   formatDate,
@@ -25,6 +26,7 @@ import {
   type TenderMonitorSortField,
   type TenderMonitorTab,
 } from '../utils/tenderMonitor';
+import { getTenderMonitorPalette, type TenderMonitorPalette } from '../utils/tenderMonitorTheme';
 
 interface TenderMonitorTableProps {
   tenders: TenderRegistryWithRelations[];
@@ -120,11 +122,13 @@ function SortButton({
   label,
   direction,
   onClick,
+  palette,
 }: {
   active: boolean;
   label: string;
   direction?: TenderMonitorSortDirection;
   onClick: () => void;
+  palette: TenderMonitorPalette;
 }) {
   return (
     <button
@@ -133,9 +137,9 @@ function SortButton({
       style={{
         padding: '7px 12px',
         borderRadius: 8,
-        border: `1px solid ${active ? '#c9a84c' : 'rgba(255,255,255,0.08)'}`,
-        background: '#0f1017',
-        color: active ? '#f0c45a' : '#8b93a7',
+        border: `1px solid ${active ? palette.warning : palette.border}`,
+        background: palette.sectionBg,
+        color: active ? palette.warning : palette.muted,
         cursor: 'pointer',
         fontSize: 12,
       }}
@@ -145,7 +149,7 @@ function SortButton({
   );
 }
 
-function MapPopover({ tender }: { tender: TenderRegistryWithRelations }) {
+function MapPopover({ tender, palette }: { tender: TenderRegistryWithRelations; palette: TenderMonitorPalette }) {
   const widgetUrl = getMapWidgetUrl(tender);
   const mapPageUrl = getMapPageUrl(tender);
 
@@ -167,18 +171,18 @@ function MapPopover({ tender }: { tender: TenderRegistryWithRelations }) {
             style={{ width: '100%', height: 220, border: 'none', borderRadius: 10 }}
             loading="lazy"
           />
-          <div style={{ marginTop: 8, color: '#d8dbea', fontSize: 12, lineHeight: 1.35 }}>
+          <div style={{ marginTop: 8, color: palette.textSecondary, fontSize: 12, lineHeight: 1.35 }}>
             {tender.object_address || 'Адрес не указан'}
           </div>
           {tender.object_coordinates ? (
-            <div style={{ marginTop: 4, color: '#8b93a7', fontSize: 11 }}>{tender.object_coordinates}</div>
+            <div style={{ marginTop: 4, color: palette.muted, fontSize: 11 }}>{tender.object_coordinates}</div>
           ) : null}
           {mapPageUrl ? (
             <a
               href={mapPageUrl}
               target="_blank"
               rel="noreferrer"
-              style={{ display: 'inline-block', marginTop: 8, color: '#4a90e2', fontSize: 11 }}
+              style={{ display: 'inline-block', marginTop: 8, color: palette.info, fontSize: 11 }}
             >
               Открыть в Яндекс Картах
             </a>
@@ -186,8 +190,8 @@ function MapPopover({ tender }: { tender: TenderRegistryWithRelations }) {
         </div>
       }
       overlayInnerStyle={{
-        background: '#1b1f2d',
-        border: '1px solid rgba(255,255,255,0.08)',
+        background: palette.panelBg,
+        border: `1px solid ${palette.border}`,
         borderRadius: 12,
       }}
     >
@@ -197,7 +201,7 @@ function MapPopover({ tender }: { tender: TenderRegistryWithRelations }) {
         style={{
           border: 'none',
           background: 'transparent',
-          color: '#ff4db8',
+          color: palette.marker,
           padding: 0,
           display: 'inline-flex',
           alignItems: 'center',
@@ -211,7 +215,7 @@ function MapPopover({ tender }: { tender: TenderRegistryWithRelations }) {
   );
 }
 
-function ChronologyPopover({ tender }: { tender: TenderRegistryWithRelations }) {
+function ChronologyPopover({ tender, palette }: { tender: TenderRegistryWithRelations; palette: TenderMonitorPalette }) {
   const chronologyItems = getChronologyItems(tender);
 
   return (
@@ -229,25 +233,25 @@ function ChronologyPopover({ tender }: { tender: TenderRegistryWithRelations }) 
                 style={{
                   padding: '8px 10px',
                   borderRadius: 10,
-                  background: '#11141d',
-                  border: `1px solid ${item.type === 'call_follow_up' ? 'rgba(226,75,74,0.28)' : 'rgba(255,255,255,0.06)'}`,
+                  background: palette.fieldBg,
+                  border: `1px solid ${item.type === 'call_follow_up' ? palette.dangerBorder : palette.borderSoft}`,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                  <span style={{ color: '#f0c45a', fontSize: 11, fontWeight: 700 }}>{formatDateTime(item.date)}</span>
+                  <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDateTime(item.date)}</span>
                   {item.type === 'call_follow_up' ? <Tag color="error" style={{ marginInlineEnd: 0 }}>Звонок</Tag> : null}
                 </div>
-                <div style={{ color: '#d8dbea', fontSize: 12, lineHeight: 1.35 }}>{item.text}</div>
+                <div style={{ color: palette.textSecondary, fontSize: 12, lineHeight: 1.35 }}>{item.text}</div>
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ width: 220, color: '#8b93a7', fontSize: 13 }}>Хронология пока не заполнена</div>
+          <div style={{ width: 220, color: palette.muted, fontSize: 13 }}>Хронология пока не заполнена</div>
         )
       }
       overlayInnerStyle={{
-        background: '#1b1f2d',
-        border: '1px solid rgba(255,255,255,0.08)',
+        background: palette.panelBg,
+        border: `1px solid ${palette.border}`,
         borderRadius: 12,
       }}
     >
@@ -259,9 +263,9 @@ function ChronologyPopover({ tender }: { tender: TenderRegistryWithRelations }) 
           gap: 6,
           padding: '3px 7px',
           borderRadius: 8,
-          background: chronologyItems.length > 0 ? 'rgba(240,196,90,0.10)' : 'rgba(255,255,255,0.05)',
-          border: `1px solid ${chronologyItems.length > 0 ? 'rgba(240,196,90,0.24)' : 'rgba(255,255,255,0.08)'}`,
-          color: chronologyItems.length > 0 ? '#f0c45a' : '#8b93a7',
+          background: chronologyItems.length > 0 ? palette.warningBg : palette.disabledBg,
+          border: `1px solid ${chronologyItems.length > 0 ? palette.warningBorder : palette.border}`,
+          color: chronologyItems.length > 0 ? palette.warning : palette.muted,
           fontSize: 11,
           cursor: 'default',
         }}
@@ -274,7 +278,7 @@ function ChronologyPopover({ tender }: { tender: TenderRegistryWithRelations }) 
   );
 }
 
-function renderHeader() {
+function renderHeader(palette: TenderMonitorPalette) {
   return (
     <div
       style={{
@@ -283,7 +287,7 @@ function renderHeader() {
         columnGap: 8,
         padding: '0 14px',
         alignItems: 'stretch',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        borderBottom: `1px solid ${palette.border}`,
       }}
     >
       {GRID_COLUMNS.map((column) => (
@@ -292,7 +296,7 @@ function renderHeader() {
           style={{
             padding: '10px 0',
             textAlign: column.align || 'left',
-            color: '#8b93a7',
+            color: palette.muted,
             fontSize: 9,
             letterSpacing: '0.12em',
             textTransform: 'uppercase',
@@ -307,7 +311,15 @@ function renderHeader() {
   );
 }
 
-function SectionHeader({ title, tenders }: { title: string; tenders: TenderRegistryWithRelations[] }) {
+function SectionHeader({
+  title,
+  tenders,
+  palette,
+}: {
+  title: string;
+  tenders: TenderRegistryWithRelations[];
+  palette: TenderMonitorPalette;
+}) {
   const totalArea = tenders.reduce((sum, tender) => sum + (tender.area || 0), 0);
   const totalCost = tenders.reduce((sum, tender) => sum + (tender.total_cost || tender.manual_total_cost || 0), 0);
 
@@ -318,14 +330,14 @@ function SectionHeader({ title, tenders }: { title: string; tenders: TenderRegis
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: '11px 14px',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-        background: '#0f1017',
+        borderBottom: `1px solid ${palette.border}`,
+        background: palette.sectionBg,
         gap: 12,
         flexWrap: 'wrap',
       }}
     >
-      <div style={{ color: '#f5efe4', fontSize: 14, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{title}</div>
-      <div style={{ color: '#8b93a7', fontSize: 11 }}>
+      <div style={{ color: palette.text, fontSize: 14, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{title}</div>
+      <div style={{ color: palette.muted, fontSize: 11 }}>
         {tenders.length} тендеров · {formatArea(totalArea)} · {formatMoney(totalCost)}
       </div>
     </div>
@@ -336,10 +348,12 @@ function TenderRow({
   tender,
   onOpenTender,
   onQuickCall,
+  palette,
 }: {
   tender: TenderRegistryWithRelations;
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
+  palette: TenderMonitorPalette;
 }) {
   const dashboardStatus = getDashboardStatus(tender);
   const badgeStyle = getStatusBadgeStyle(dashboardStatus);
@@ -359,18 +373,18 @@ function TenderRow({
         columnGap: 8,
         padding: '0 14px',
         alignItems: 'center',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: `1px solid ${palette.borderSoft}`,
         cursor: 'pointer',
-        background: '#1e2130',
+        background: palette.cardBgAlt,
       }}
     >
-      <div style={{ padding: '12px 0', color: '#6f7589', fontSize: 11, textAlign: 'center' }}>{tender.sort_order}</div>
+      <div style={{ padding: '12px 0', color: palette.subtleText, fontSize: 11, textAlign: 'center' }}>{tender.sort_order}</div>
 
       <div style={{ padding: '12px 0', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <div
             style={{
-              color: '#f5efe4',
+              color: palette.text,
               fontSize: 14,
               fontWeight: 600,
               lineHeight: 1.25,
@@ -382,15 +396,15 @@ function TenderRow({
           >
             {tender.title}
           </div>
-          <MapPopover tender={tender} />
+          <MapPopover tender={tender} palette={palette} />
         </div>
-        {tender.tender_number ? <div style={{ color: '#8b93a7', fontSize: 11, marginTop: 3 }}>{tender.tender_number}</div> : null}
+        {tender.tender_number ? <div style={{ color: palette.muted, fontSize: 11, marginTop: 3 }}>{tender.tender_number}</div> : null}
       </div>
 
       <div
         style={{
           padding: '12px 0',
-          color: '#8b93a7',
+          color: palette.muted,
           fontSize: 13,
           minWidth: 0,
           overflow: 'hidden',
@@ -401,16 +415,16 @@ function TenderRow({
         {tender.client_name || '—'}
       </div>
 
-      <div style={{ padding: '12px 0', color: '#f5efe4', textAlign: 'center', fontSize: 13, fontWeight: 600 }}>{formatArea(tender.area)}</div>
-      <div style={{ padding: '12px 0', color: '#f5efe4', textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
+      <div style={{ padding: '12px 0', color: palette.text, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>{formatArea(tender.area)}</div>
+      <div style={{ padding: '12px 0', color: palette.text, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
         {formatMoney(tender.total_cost || tender.manual_total_cost)}
       </div>
-      <div style={{ padding: '12px 0', color: '#8b93a7', textAlign: 'center', fontSize: 12 }}>
+      <div style={{ padding: '12px 0', color: palette.muted, textAlign: 'center', fontSize: 12 }}>
         {formatRubPerSquare(tender.total_cost || tender.manual_total_cost, tender.area)}
       </div>
 
       <div style={{ padding: '12px 0', textAlign: 'center' }}>
-        <div style={{ color: dashboardStatus === 'calc' ? '#f0c45a' : '#d8dbea', fontSize: 12, fontWeight: 700 }}>
+        <div style={{ color: dashboardStatus === 'calc' ? palette.warning : palette.textSecondary, fontSize: 12, fontWeight: 700 }}>
           {formatDate(tender.submission_date)}
         </div>
         {dashboardStatus === 'calc' && daysToSubmission != null ? (
@@ -424,9 +438,9 @@ function TenderRow({
                   void onQuickCall(tender);
                 }}
                 style={{
-                  border: '1px solid rgba(226,75,74,0.34)',
-                  background: 'rgba(226,75,74,0.10)',
-                  color: '#e24b4a',
+                  border: `1px solid ${palette.dangerBorder}`,
+                  background: palette.dangerBg,
+                  color: palette.danger,
                   borderRadius: 6,
                   padding: '2px 7px',
                   fontSize: 11,
@@ -438,20 +452,18 @@ function TenderRow({
               </button>
             </div>
           ) : (
-            <div style={{ color: daysToSubmission < 0 && controlDate ? '#3db87a' : '#ff9f43', fontSize: 11, marginTop: 3 }}>
-              {daysToSubmission < 0 && controlDate
-                ? `${daysSinceControl ?? 0}/7д`
-                : `${daysToSubmission}д`}
+            <div style={{ color: daysToSubmission < 0 && controlDate ? palette.success : '#ff9f43', fontSize: 11, marginTop: 3 }}>
+              {daysToSubmission < 0 && controlDate ? `${daysSinceControl ?? 0}/7 дн` : `${daysToSubmission} дн`}
             </div>
           )
         ) : null}
       </div>
 
       <div style={{ padding: '12px 0', textAlign: 'center' }}>
-        <div style={{ width: 72, height: 5, background: '#0f1017', borderRadius: 999, overflow: 'hidden', marginBottom: 6 }}>
-          <div style={{ width: `${packageSummary.percent}%`, height: '100%', background: '#3db87a' }} />
+        <div style={{ width: 72, height: 5, background: palette.sectionBg, borderRadius: 999, overflow: 'hidden', marginBottom: 6 }}>
+          <div style={{ width: `${packageSummary.percent}%`, height: '100%', background: palette.success }} />
         </div>
-        <div style={{ color: '#8b93a7', fontSize: 11 }}>
+        <div style={{ color: palette.muted, fontSize: 11 }}>
           {packageSummary.standardCount}/{5}
           {packageSummary.extraCount > 0 ? ` +${packageSummary.extraCount}` : ''}
         </div>
@@ -472,7 +484,7 @@ function TenderRow({
         </div>
         {dashboardStatus === 'sent' && daysSinceControl != null ? (
           <div style={{ marginTop: 6 }}>
-            <span style={{ color: '#ff6363', fontSize: 12, marginRight: 6 }}>{daysSinceControl}д</span>
+            <span style={{ color: palette.danger, fontSize: 12, marginRight: 6 }}>{daysSinceControl}д</span>
             {canQuickCall ? (
               <button
                 type="button"
@@ -482,9 +494,9 @@ function TenderRow({
                   void onQuickCall(tender);
                 }}
                 style={{
-                  border: '1px solid rgba(226,75,74,0.34)',
-                  background: 'rgba(226,75,74,0.10)',
-                  color: '#e24b4a',
+                  border: `1px solid ${palette.dangerBorder}`,
+                  background: palette.dangerBg,
+                  color: palette.danger,
                   borderRadius: 6,
                   padding: '2px 7px',
                   fontSize: 11,
@@ -514,20 +526,20 @@ function TenderRow({
               width: 24,
               height: 24,
               borderRadius: 6,
-              border: '1px solid rgba(74,144,226,0.22)',
-              background: tender.site_visit_photo_url ? 'rgba(74,144,226,0.12)' : 'rgba(255,255,255,0.05)',
-              color: tender.site_visit_photo_url ? '#4a90e2' : '#5f6578',
+              border: `1px solid ${tender.site_visit_photo_url ? `${palette.info}55` : palette.border}`,
+              background: tender.site_visit_photo_url ? `${palette.info}1f` : palette.disabledBg,
+              color: tender.site_visit_photo_url ? palette.info : palette.disabledText,
               cursor: tender.site_visit_photo_url ? 'pointer' : 'not-allowed',
             }}
             title="Посещение площадки"
           >
             <LinkOutlined />
           </button>
-          <ChronologyPopover tender={tender} />
+          <ChronologyPopover tender={tender} palette={palette} />
         </Space>
       </div>
 
-      <div style={{ padding: '12px 0', color: '#8b93a7', textAlign: 'center', fontSize: 12 }}>
+      <div style={{ padding: '12px 0', color: palette.muted, textAlign: 'center', fontSize: 12 }}>
         {formatDate(tender.invitation_date)}
       </div>
     </div>
@@ -551,6 +563,9 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   onAddTender,
 }) => {
   void onOpenTimeline;
+
+  const { theme } = useTheme();
+  const palette = getTenderMonitorPalette(theme === 'dark');
 
   const sections =
     activeTab === 'all'
@@ -588,7 +603,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 14, borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 14, borderBottom: `1px solid ${palette.border}`, marginBottom: 16, flexWrap: 'wrap' }}>
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -597,9 +612,9 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
             style={{
               padding: '0 0 8px',
               border: 'none',
-              borderBottom: activeTab === tab.key ? '2px solid #c9a84c' : '2px solid transparent',
+              borderBottom: activeTab === tab.key ? `2px solid ${palette.warning}` : '2px solid transparent',
               background: 'transparent',
-              color: activeTab === tab.key ? '#f0c45a' : '#8b93a7',
+              color: activeTab === tab.key ? palette.warning : palette.muted,
               fontSize: 12,
               cursor: 'pointer',
             }}
@@ -613,8 +628,8 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 999,
-                background: activeTab === tab.key ? 'rgba(201,168,76,0.14)' : '#222636',
-                color: activeTab === tab.key ? '#f0c45a' : '#8b93a7',
+                background: activeTab === tab.key ? palette.warningBg : palette.tabBadgeBg,
+                color: activeTab === tab.key ? palette.warning : palette.muted,
                 fontSize: 10,
               }}
             >
@@ -626,10 +641,10 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
 
       <div
         style={{
-          border: '1px solid rgba(255,255,255,0.08)',
+          border: `1px solid ${palette.border}`,
           borderRadius: 14,
           overflow: 'hidden',
-          background: '#1e2130',
+          background: palette.cardBgAlt,
         }}
       >
         <div
@@ -638,7 +653,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
             justifyContent: 'space-between',
             gap: 12,
             padding: '10px 12px',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            borderBottom: `1px solid ${palette.border}`,
             flexWrap: 'wrap',
           }}
         >
@@ -656,18 +671,21 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
               label="По дате"
               direction={sortField === 'submission_date' ? sortDirection : undefined}
               onClick={() => onSortChange('submission_date')}
+              palette={palette}
             />
             <SortButton
               active={sortField === 'area'}
               label="По площади"
               direction={sortField === 'area' ? sortDirection : undefined}
               onClick={() => onSortChange('area')}
+              palette={palette}
             />
             <SortButton
               active={sortField === 'total_cost'}
               label="По сумме"
               direction={sortField === 'total_cost' ? sortDirection : undefined}
               onClick={() => onSortChange('total_cost')}
+              palette={palette}
             />
           </Space>
 
@@ -687,8 +705,8 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
         ) : (
           sections.map((section) => (
             <div key={section.key}>
-              <SectionHeader title={section.title} tenders={section.items} />
-              {renderHeader()}
+              <SectionHeader title={section.title} tenders={section.items} palette={palette} />
+              {renderHeader(palette)}
               {section.items.length > 0 ? (
                 section.items.map((tender) => (
                   <TenderRow
@@ -696,10 +714,11 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
                     tender={tender}
                     onOpenTender={onOpenTender}
                     onQuickCall={onQuickCall}
+                    palette={palette}
                   />
                 ))
               ) : (
-                <div style={{ padding: 36, color: '#8b93a7', textAlign: 'center' }}>Нет тендеров</div>
+                <div style={{ padding: 36, color: palette.muted, textAlign: 'center' }}>Нет тендеров</div>
               )}
             </div>
           ))
