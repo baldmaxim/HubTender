@@ -1,12 +1,13 @@
-/**
- * Хук для загрузки и управления данными перераспределения
- */
-
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
 import type { Tender } from '../../../lib/supabase';
 import type { BoqItemWithCosts } from '../utils';
+import {
+  calculateLiveCommercialAmounts,
+  loadLiveCommercialCalculationContext,
+  resetLiveCommercialCalculationCache,
+} from '../../../utils/boq/liveCommercialCalculation';
 
 export interface MarkupTactic {
   id: string;
@@ -32,6 +33,18 @@ export interface ClientPosition {
   hierarchy_level: number;
 }
 
+type RedistributionBoqItem = BoqItemWithCosts & {
+  material_type?: string | null;
+  quantity?: number | null;
+  unit_rate?: number | null;
+  currency_type?: string | null;
+  delivery_price_type?: string | null;
+  delivery_amount?: number | null;
+  consumption_coefficient?: number | null;
+  parent_work_item_id?: string | null;
+  total_amount?: number | null;
+};
+
 export function useRedistributionData() {
   const [loading, setLoading] = useState(false);
   const [tenders, setTenders] = useState<Tender[]>([]);
@@ -41,30 +54,52 @@ export function useRedistributionData() {
   const [boqItems, setBoqItems] = useState<BoqItemWithCosts[]>([]);
   const [clientPositions, setClientPositions] = useState<ClientPosition[]>([]);
 
-  // Загрузка списка тендеров и тактик при монтировании
   useEffect(() => {
-    loadTenders();
-    loadMarkupTactics();
+    void loadTenders();
+    void loadMarkupTactics();
   }, []);
 
-  // Загрузка BOQ элементов при выборе тендера
   useEffect(() => {
-    if (selectedTenderId) {
-      loadBoqItems(selectedTenderId);
-      loadClientPositions(selectedTenderId);
-
-      // Установить тактику из тендера
-      const tender = tenders.find(t => t.id === selectedTenderId);
-      if (tender?.markup_tactic_id) {
-        setSelectedTacticId(tender.markup_tactic_id);
-      } else {
-        setSelectedTacticId(undefined);
-      }
-    } else {
+    if (!selectedTenderId) {
       setBoqItems([]);
       setClientPositions([]);
+      return;
     }
-  }, [selectedTenderId, tenders]);
+
+    void loadBoqItems(selectedTenderId, selectedTacticId);
+    void loadClientPositions(selectedTenderId);
+
+    const tender = tenders.find((item) => item.id === selectedTenderId);
+    if (tender?.markup_tactic_id && !selectedTacticId) {
+      setSelectedTacticId(tender.markup_tactic_id);
+    }
+  }, [selectedTenderId, selectedTacticId, tenders]);
+
+  useEffect(() => {
+    if (!selectedTenderId) {
+      return;
+    }
+
+    const channel = supabase
+      .channel(`redistribution_tender_${selectedTenderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'tenders',
+          filter: `id=eq.${selectedTenderId}`,
+        },
+        () => {
+          void loadBoqItems(selectedTenderId, selectedTacticId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedTenderId, selectedTacticId]);
 
   const loadTenders = async () => {
     try {
@@ -73,7 +108,10 @@ export function useRedistributionData() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
+
       setTenders(data || []);
     } catch (error) {
       console.error('Ошибка загрузки тендеров:', error);
@@ -89,7 +127,10 @@ export function useRedistributionData() {
         .order('is_global', { ascending: false })
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
+
       setMarkupTactics(data || []);
     } catch (error) {
       console.error('Ошибка загрузки тактик наценок:', error);
@@ -97,40 +138,69 @@ export function useRedistributionData() {
     }
   };
 
-  const loadBoqItems = async (tenderId: string) => {
+  const loadBoqItems = async (tenderId: string, tacticId?: string) => {
     setLoading(true);
-    try {
-      console.log('🔄 Загрузка BOQ элементов для тендера:', tenderId);
 
-      // CRITICAL: Supabase limit 1000 rows - use batching
-      let allBoqItems: any[] = [];
+    try {
+      const calculationContext = await loadLiveCommercialCalculationContext(tenderId, tacticId);
+      const allBoqItems: RedistributionBoqItem[] = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;
 
+      resetLiveCommercialCalculationCache();
+
       while (hasMore) {
         const { data, error } = await supabase
           .from('boq_items')
-          .select('id, client_position_id, detail_cost_category_id, boq_item_type, total_commercial_work_cost, total_commercial_material_cost')
+          .select(`
+            id,
+            client_position_id,
+            detail_cost_category_id,
+            boq_item_type,
+            material_type,
+            quantity,
+            unit_rate,
+            currency_type,
+            delivery_price_type,
+            delivery_amount,
+            consumption_coefficient,
+            parent_work_item_id,
+            total_amount,
+            total_commercial_work_cost,
+            total_commercial_material_cost
+          `)
           .eq('tender_id', tenderId)
           .range(from, from + batchSize - 1);
 
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allBoqItems = [...allBoqItems, ...data];
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
+        if (error) {
+          throw error;
         }
+
+        if (!data || data.length === 0) {
+          hasMore = false;
+          continue;
+        }
+
+        const liveItems = data.map((item) => {
+          const { materialCost, workCost } = calculateLiveCommercialAmounts(
+            item as any,
+            calculationContext
+          );
+
+          return {
+            ...item,
+            total_commercial_material_cost: materialCost,
+            total_commercial_work_cost: workCost,
+          } as RedistributionBoqItem;
+        });
+
+        allBoqItems.push(...liveItems);
+        from += batchSize;
+        hasMore = data.length === batchSize;
       }
 
-      console.log(`📝 Загружено BOQ элементов: ${allBoqItems.length}`);
-
-      // Загружаем ВСЕ элементы (не только с категорией затрат)
-      // Это нужно для корректного отображения итоговых стоимостей работ и материалов
-      setBoqItems(allBoqItems as any);
+      setBoqItems(allBoqItems);
     } catch (error) {
       console.error('Ошибка загрузки BOQ элементов:', error);
       message.error('Не удалось загрузить элементы BOQ');
@@ -141,8 +211,7 @@ export function useRedistributionData() {
 
   const loadClientPositions = async (tenderId: string) => {
     try {
-      // CRITICAL: Supabase limit 1000 rows - use batching
-      let allPositions: any[] = [];
+      const allPositions: ClientPosition[] = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;
@@ -155,15 +224,18 @@ export function useRedistributionData() {
           .order('position_number', { ascending: true })
           .range(from, from + batchSize - 1);
 
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allPositions = [...allPositions, ...data];
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
+        if (error) {
+          throw error;
         }
+
+        if (!data || data.length === 0) {
+          hasMore = false;
+          continue;
+        }
+
+        allPositions.push(...(data as ClientPosition[]));
+        from += batchSize;
+        hasMore = data.length === batchSize;
       }
 
       setClientPositions(allPositions);

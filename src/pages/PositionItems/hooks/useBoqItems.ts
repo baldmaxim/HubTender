@@ -8,6 +8,7 @@ import {
   type MaterialLibraryFull,
   type CurrencyType,
 } from '../../../lib/supabase';
+import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 
 interface Template {
   id: string;
@@ -140,6 +141,29 @@ export const useBoqItems = (positionId: string | undefined) => {
   const fetchItems = async () => {
     setLoading(true);
     try {
+      let rates = currencyRates;
+
+      const { data: positionRatesData, error: positionRatesError } = await supabase
+        .from('client_positions')
+        .select('tenders(usd_rate, eur_rate, cny_rate)')
+        .eq('id', positionId)
+        .single();
+
+      if (positionRatesError) throw positionRatesError;
+
+      const tenderRates = Array.isArray(positionRatesData?.tenders)
+        ? positionRatesData.tenders[0]
+        : positionRatesData?.tenders;
+
+      if (tenderRates) {
+        rates = {
+          usd: tenderRates.usd_rate || 0,
+          eur: tenderRates.eur_rate || 0,
+          cny: tenderRates.cny_rate || 0,
+        };
+        setCurrencyRates(rates);
+      }
+
       const { data, error } = await supabase
         .from('boq_items')
         .select(`
@@ -223,6 +247,21 @@ export const useBoqItems = (positionId: string | undefined) => {
             : (item.material_name_id
               ? materialRates[item.material_name_id]
               : workRates[item.work_name_id]),
+          total_amount: calculateBoqItemTotalAmount(
+            {
+              ...item,
+              unit_rate: (item.unit_rate !== null && item.unit_rate !== undefined)
+                ? item.unit_rate
+                : (item.material_name_id
+                  ? materialRates[item.material_name_id]
+                  : workRates[item.work_name_id]),
+            },
+            {
+              usd_rate: rates.usd,
+              eur_rate: rates.eur,
+              cny_rate: rates.cny,
+            }
+          ),
         };
       });
 

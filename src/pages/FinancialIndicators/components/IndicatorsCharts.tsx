@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Typography, Table, Button, Spin } from 'antd';
 import { supabase } from '../../../lib/supabase';
+import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
+import {
+  calculateLiveCommercialAmounts,
+  loadLiveCommercialCalculationContext,
+  resetLiveCommercialCalculationCache,
+} from '../../../utils/boq/liveCommercialCalculation';
 
 const { Text, Title } = Typography;
 import { Bar, Doughnut } from 'react-chartjs-2';
@@ -31,6 +37,12 @@ interface DrillDownLevel {
   rowNumber?: number;
 }
 
+type TenderRates = {
+  usd_rate: number | null;
+  eur_rate: number | null;
+  cny_rate: number | null;
+};
+
 export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   data,
   spTotal,
@@ -55,6 +67,22 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
     visPerM2: 0,
     facadePerM2: 0,
   });
+
+  const loadTenderRates = async (): Promise<TenderRates> => {
+    const { data, error } = await supabase
+      .from('tenders')
+      .select('usd_rate, eur_rate, cny_rate')
+      .eq('id', selectedTenderId)
+      .single();
+
+    if (error) throw error;
+
+    return {
+      usd_rate: data?.usd_rate || 0,
+      eur_rate: data?.eur_rate || 0,
+      cny_rate: data?.cny_rate || 0,
+    };
+  };
 
   // Рассчитываем общую площадь для отображения (unused, but kept for reference)
   // const totalArea = spTotal + customerTotal;
@@ -394,6 +422,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
 
     setLoadingBreakdown(true);
     try {
+      const tenderRates = await loadTenderRates();
       // Проверяем, доступна ли детализация
       if (!hasDetailedBreakdown(rowNumber)) {
         // Для показателей без привязки к BOQ показываем пустой массив
@@ -425,6 +454,13 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         .select(`
           boq_item_type,
           total_amount,
+          quantity,
+          unit_rate,
+          currency_type,
+          delivery_price_type,
+          delivery_amount,
+          consumption_coefficient,
+          parent_work_item_id,
           detail_cost_category:detail_cost_categories(
             id,
             name,
@@ -452,7 +488,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         const categoryObj = Array.isArray(costCategory) ? costCategory[0] : costCategory;
 
         const vatMultiplier = (isVatInConstructor && vatCoefficient > 0) ? (1 + vatCoefficient / 100) : 1;
-        const amount = (item.total_amount || 0) * vatMultiplier;
+        const amount = calculateBoqItemTotalAmount(item, tenderRates) * vatMultiplier;
         const isWork = item.boq_item_type === 'раб' || item.boq_item_type === 'суб-раб' || item.boq_item_type === 'раб-комп.';
 
         // Для строки 4 (запас на сдачу) группируем по виду затрат
@@ -534,6 +570,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
     if (!selectedTenderId) return;
 
     try {
+      const calculationContext = await loadLiveCommercialCalculationContext(selectedTenderId);
       // 1. Загружаем detail_cost_categories с именами категорий
       const { data: categories, error: catError } = await supabase
         .from('detail_cost_categories')
@@ -599,10 +636,12 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       const batchSize = 1000;
       let hasMore = true;
 
+      resetLiveCommercialCalculationCache();
+
       while (hasMore) {
         const { data, error } = await supabase
           .from('boq_items')
-          .select('detail_cost_category_id, total_amount, total_commercial_material_cost, total_commercial_work_cost, client_positions!inner(tender_id)')
+          .select('detail_cost_category_id, total_amount, quantity, unit_rate, currency_type, delivery_price_type, delivery_amount, consumption_coefficient, parent_work_item_id, total_commercial_material_cost, total_commercial_work_cost, client_positions!inner(tender_id)')
           .eq('client_positions.tender_id', selectedTenderId)
           .range(from, from + batchSize - 1);
 
@@ -613,10 +652,10 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
             const categoryName = detailToCategoryName.get(item.detail_cost_category_id) || '';
             if (!targetCategories.has(categoryName)) return;
 
-            const commercialCost = (item.total_commercial_material_cost || 0) + (item.total_commercial_work_cost || 0);
-            commercialCostByCategory.set(categoryName, (commercialCostByCategory.get(categoryName) || 0) + commercialCost);
+            const { commercialTotal, baseAmount } = calculateLiveCommercialAmounts(item, calculationContext);
+            commercialCostByCategory.set(categoryName, (commercialCostByCategory.get(categoryName) || 0) + commercialTotal);
 
-            const baseCost = item.total_amount || 0;
+            const baseCost = baseAmount;
             baseCostByCategory.set(categoryName, (baseCostByCategory.get(categoryName) || 0) + baseCost);
           });
           from += batchSize;
@@ -860,8 +899,19 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
     setSelectedIndicator(null);
     setBreakdownData([]);
     setDrillDownPath([{ type: 'root' }]);
-    fetchReferenceInfo();
   }, [selectedTenderId]);
+
+  useEffect(() => {
+    if (!selectedTenderId) {
+      return;
+    }
+
+    void fetchReferenceInfo();
+
+    if (selectedIndicator && hasDetailedBreakdown(selectedIndicator)) {
+      void fetchCategoryBreakdown(selectedIndicator);
+    }
+  }, [selectedTenderId, selectedIndicator, data, isVatInConstructor, vatCoefficient]);
 
   // Автоматическая очистка блока детализации при выходе из режима просмотра конечного уровня
   useEffect(() => {

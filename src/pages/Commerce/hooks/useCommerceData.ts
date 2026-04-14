@@ -7,6 +7,14 @@ import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
 import type { Tender, BoqItem } from '../../../lib/supabase';
 import type { PositionWithCommercialCost, MarkupTactic } from '../types';
+import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
+import {
+  calculateBoqItemCost,
+  loadMarkupParameters,
+  loadPricingDistribution,
+  loadSubcontractGrowthExclusions,
+  resetTypeCoefficientsCache,
+} from '../../../services/markupTacticService';
 
 type CommerceBoqItem = Pick<
   BoqItem,
@@ -16,11 +24,29 @@ type CommerceBoqItem = Pick<
   'sort_number' |
   'boq_item_type' |
   'material_type' |
+  'quantity' |
+  'unit_rate' |
+  'currency_type' |
+  'delivery_price_type' |
+  'delivery_amount' |
+  'consumption_coefficient' |
+  'parent_work_item_id' |
   'total_amount' |
   'detail_cost_category_id' |
   'total_commercial_material_cost' |
   'total_commercial_work_cost'
 >;
+
+type TenderRates = Pick<Tender, 'usd_rate' | 'eur_rate' | 'cny_rate'>;
+type CalculationTactic = Parameters<typeof calculateBoqItemCost>[1];
+
+type CommerceCalculationContext = {
+  tenderRates: TenderRates;
+  tactic: CalculationTactic | null;
+  markupParameters: Map<string, number>;
+  pricingDistribution: Awaited<ReturnType<typeof loadPricingDistribution>>;
+  exclusions: Awaited<ReturnType<typeof loadSubcontractGrowthExclusions>>;
+};
 
 type AggregatedPositionLoadResult = {
   positions: PositionWithCommercialCost[];
@@ -137,15 +163,30 @@ function applyLeafFlags(positions: PositionWithCommercialCost[]): PositionWithCo
 
 function buildPositionsFromBoqItems(
   clientPositions: PositionWithCommercialCost[],
-  boqItems: CommerceBoqItem[]
+  boqItems: CommerceBoqItem[],
+  context: CommerceCalculationContext
 ): AggregatedPositionLoadResult {
   const totalsByPosition = new Map<string, PositionAccumulator>();
   let referenceTotal = 0;
 
+  resetTypeCoefficientsCache();
+
   for (const item of boqItems) {
-    const itemBase = item.total_amount || 0;
-    const itemMaterial = item.total_commercial_material_cost || 0;
-    const itemWork = item.total_commercial_work_cost || 0;
+    const itemBase = calculateBoqItemTotalAmount(item, context.tenderRates);
+    const liveCommercialCosts = context.tactic
+      ? calculateBoqItemCost(
+          {
+            ...item,
+            total_amount: itemBase,
+          },
+          context.tactic,
+          context.markupParameters,
+          context.pricingDistribution,
+          context.exclusions
+        )
+      : null;
+    const itemMaterial = liveCommercialCosts?.materialCost ?? item.total_commercial_material_cost ?? 0;
+    const itemWork = liveCommercialCosts?.workCost ?? item.total_commercial_work_cost ?? 0;
 
     referenceTotal += itemBase;
 
@@ -211,6 +252,13 @@ async function loadBoqItemsFallback(tenderId: string): Promise<CommerceBoqItem[]
         sort_number,
         boq_item_type,
         material_type,
+        quantity,
+        unit_rate,
+        currency_type,
+        delivery_price_type,
+        delivery_amount,
+        consumption_coefficient,
+        parent_work_item_id,
         total_amount,
         detail_cost_category_id,
         total_commercial_material_cost,
@@ -221,6 +269,80 @@ async function loadBoqItemsFallback(tenderId: string): Promise<CommerceBoqItem[]
       .order('id')
       .range(from, to)
   ) as Promise<CommerceBoqItem[]>;
+}
+
+async function loadTenderRates(tenderId: string): Promise<TenderRates> {
+  const { data, error } = await supabase
+    .from('tenders')
+    .select('usd_rate, eur_rate, cny_rate')
+    .eq('id', tenderId)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    usd_rate: data?.usd_rate || 0,
+    eur_rate: data?.eur_rate || 0,
+    cny_rate: data?.cny_rate || 0,
+  };
+}
+
+async function loadMarkupTacticById(tacticId: string | null | undefined): Promise<CalculationTactic | null> {
+  if (!tacticId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('markup_tactics')
+    .select('*')
+    .eq('id', tacticId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('Не удалось загрузить тактику наценок для коммерческого расчета:', error);
+    return null;
+  }
+
+  if (!data?.sequences) {
+    return null;
+  }
+
+  return data as CalculationTactic;
+}
+
+async function loadCommerceCalculationContext(tenderId: string): Promise<CommerceCalculationContext> {
+  const { data, error } = await supabase
+    .from('tenders')
+    .select('usd_rate, eur_rate, cny_rate, markup_tactic_id')
+    .eq('id', tenderId)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const tenderRates: TenderRates = {
+    usd_rate: data?.usd_rate || 0,
+    eur_rate: data?.eur_rate || 0,
+    cny_rate: data?.cny_rate || 0,
+  };
+
+  const [tactic, markupParameters, pricingDistribution, exclusions] = await Promise.all([
+    loadMarkupTacticById(data?.markup_tactic_id),
+    loadMarkupParameters(tenderId),
+    loadPricingDistribution(tenderId),
+    loadSubcontractGrowthExclusions(tenderId),
+  ]);
+
+  return {
+    tenderRates,
+    tactic,
+    markupParameters,
+    pricingDistribution,
+    exclusions,
+  };
 }
 
 async function loadPositionsViaRpc(tenderId: string): Promise<AggregatedPositionLoadResult> {
@@ -360,17 +482,13 @@ export function useCommerceData() {
     try {
       const [positionsResult, nextInsuranceTotal] = await Promise.all([
         (async (): Promise<AggregatedPositionLoadResult> => {
-          try {
-            return await loadPositionsViaRpc(tenderId);
-          } catch (rpcError) {
-            console.warn('RPC get_positions_with_costs is unavailable, falling back to client aggregation:', rpcError);
-            const [clientPositions, allBoqItems] = await Promise.all([
-              loadClientPositionsFallback(tenderId),
-              loadBoqItemsFallback(tenderId),
-            ]);
+          const [clientPositions, allBoqItems, calculationContext] = await Promise.all([
+            loadClientPositionsFallback(tenderId),
+            loadBoqItemsFallback(tenderId),
+            loadCommerceCalculationContext(tenderId),
+          ]);
 
-            return buildPositionsFromBoqItems(clientPositions, allBoqItems);
-          }
+          return buildPositionsFromBoqItems(clientPositions, allBoqItems, calculationContext);
         })(),
         loadInsuranceTotal(tenderId),
       ]);

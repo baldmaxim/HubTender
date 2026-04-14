@@ -7,6 +7,7 @@ import {
   createPositionRow,
   createBoqItemRow,
 } from './formatters';
+import { calculateBoqItemTotalAmount } from '../boq/calculateBoqAmount';
 import {
   getCellStyle,
   headerStyle,
@@ -112,6 +113,28 @@ async function loadAllBoqItemsForTender(tenderId: string): Promise<Map<string, B
   return itemsByPosition;
 }
 
+async function loadTenderRates(tenderId: string): Promise<{
+  usd_rate: number | null;
+  eur_rate: number | null;
+  cny_rate: number | null;
+}> {
+  const { data, error } = await supabase
+    .from('tenders')
+    .select('usd_rate, eur_rate, cny_rate')
+    .eq('id', tenderId)
+    .single();
+
+  if (error) {
+    throw new Error(`Ошибка загрузки курсов валют: ${error.message}`);
+  }
+
+  return {
+    usd_rate: data?.usd_rate || 0,
+    eur_rate: data?.eur_rate || 0,
+    cny_rate: data?.cny_rate || 0,
+  };
+}
+
 /**
  * Сортирует элементы по иерархии (как на UI)
  * НОВАЯ ЛОГИКА: всегда сортируем по sort_number, группируя материалы сразу после их родительских работ
@@ -209,7 +232,8 @@ function computeLeafPositions(positions: ClientPosition[]): Set<string> {
  */
 function collectExportRows(
   positions: ClientPosition[],
-  boqItemsByPosition: Map<string, BoqItemFull[]>
+  boqItemsByPosition: Map<string, BoqItemFull[]>,
+  tenderRates: { usd_rate: number | null; eur_rate: number | null; cny_rate: number | null }
 ): ExportRow[] {
   const rows: ExportRow[] = [];
 
@@ -234,7 +258,7 @@ function collectExportRows(
     // - Если нет BOQ items И это ЛИСТОВАЯ позиция → null (красная подсветка в Excel)
     // - Если нет BOQ items И это РАЗДЕЛ → агрегированные поля position
     const finalTotal = hasBOQItems
-      ? boqItems.reduce((sum, item) => sum + (item.total_amount || 0), 0)
+      ? boqItems.reduce((sum, item) => sum + calculateBoqItemTotalAmount(item, tenderRates), 0)
       : isLeaf
         ? null  // Листовая позиция без BOQ items → null для красной подсветки
         : (position.total_material || 0) + (position.total_works || 0);  // Раздел → агрегированная сумма
@@ -249,7 +273,7 @@ function collectExportRows(
 
       // Выводить в порядке иерархии
       sortedItems.forEach(item => {
-        rows.push(createBoqItemRow(item, position));
+        rows.push(createBoqItemRow(item, position, tenderRates));
       });
     }
 
@@ -262,7 +286,7 @@ function collectExportRows(
       // Рассчитать реальную сумму из BOQ items для ДОП работы
       const dopBoqItems = boqItemsByPosition.get(dopWork.id) || [];
       const dopActualTotal = dopBoqItems.length > 0
-        ? dopBoqItems.reduce((sum, item) => sum + (item.total_amount || 0), 0)
+        ? dopBoqItems.reduce((sum, item) => sum + calculateBoqItemTotalAmount(item, tenderRates), 0)
         : null;
 
       // Добавить строку ДОП работы с реальной суммой
@@ -273,7 +297,7 @@ function collectExportRows(
 
       // Выводить в порядке иерархии
       sortedDopItems.forEach(item => {
-        rows.push(createBoqItemRow(item, dopWork));
+        rows.push(createBoqItemRow(item, dopWork, tenderRates));
       });
     }
   });
@@ -430,9 +454,10 @@ export async function exportPositionsToExcel(
 ): Promise<void> {
   try {
     // Загрузить все позиции и все BOQ items ОДНИМ запросом каждый
-    const [positions, boqItemsByPosition] = await Promise.all([
+    const [positions, boqItemsByPosition, tenderRates] = await Promise.all([
       loadClientPositions(tenderId),
-      loadAllBoqItemsForTender(tenderId)
+      loadAllBoqItemsForTender(tenderId),
+      loadTenderRates(tenderId),
     ]);
 
     // Применить фильтр если задан
@@ -448,7 +473,7 @@ export async function exportPositionsToExcel(
     }
 
     // Собрать все строки для экспорта (БЕЗ дополнительных запросов к БД)
-    const rows = collectExportRows(exportPositions, boqItemsByPosition);
+    const rows = collectExportRows(exportPositions, boqItemsByPosition, tenderRates);
 
     // Создать рабочий лист
     const worksheet = createWorksheet(rows);

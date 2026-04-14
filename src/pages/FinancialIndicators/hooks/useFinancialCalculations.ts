@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
+import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 
 export interface IndicatorRow {
   key: string;
@@ -195,7 +196,7 @@ export const useFinancialCalculations = () => {
       let totalCommercialWork = 0;
 
       boqItems?.forEach(item => {
-        const baseCost = item.total_amount || 0;
+        const baseCost = calculateBoqItemTotalAmount(item, tender);
         // Добавляем коммерческие стоимости
         totalCommercialMaterial += item.total_commercial_material_cost || 0;
         totalCommercialWork += item.total_commercial_work_cost || 0;

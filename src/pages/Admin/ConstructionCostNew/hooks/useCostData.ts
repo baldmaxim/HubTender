@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { supabase, type Tender } from '../../../../lib/supabase';
+import {
+  calculateLiveCommercialAmounts,
+  loadLiveCommercialCalculationContext,
+  resetLiveCommercialCalculationCache,
+} from '../../../../utils/boq/liveCommercialCalculation';
 
 export interface CostRow {
   key: string;
@@ -166,6 +171,9 @@ export const useCostData = (userRole?: string) => {
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;
+      const calculationContext = await loadLiveCommercialCalculationContext(selectedTenderId);
+
+      resetLiveCommercialCalculationCache();
 
       while (hasMore) {
         const { data, error } = await supabase
@@ -174,7 +182,16 @@ export const useCostData = (userRole?: string) => {
             detail_cost_category_id,
             boq_item_type,
             material_type,
-            ${costType === 'base' ? 'total_amount' : 'total_amount, total_commercial_material_cost, total_commercial_work_cost'},
+            quantity,
+            unit_rate,
+            currency_type,
+            delivery_price_type,
+            delivery_amount,
+            consumption_coefficient,
+            parent_work_item_id,
+            total_amount,
+            total_commercial_material_cost,
+            total_commercial_work_cost,
             client_positions!inner(tender_id)
           `)
           .eq('client_positions.tender_id', selectedTenderId)
@@ -208,9 +225,10 @@ export const useCostData = (userRole?: string) => {
         }
 
         const costs = costMap.get(catId)!;
+        const liveAmounts = calculateLiveCommercialAmounts(item as any, calculationContext);
 
         if (costType === 'base') {
-          const amount = item.total_amount || 0;
+          const amount = liveAmounts.baseAmount;
           switch (item.boq_item_type) {
             case 'мат':
               costs.materials += amount;
@@ -232,8 +250,8 @@ export const useCostData = (userRole?: string) => {
               break;
           }
         } else {
-          const materialCost = item.total_commercial_material_cost || 0;
-          const workCost = item.total_commercial_work_cost || 0;
+          const materialCost = liveAmounts.materialCost;
+          const workCost = liveAmounts.workCost;
 
           // Просто распределяем по типам элементов
           // total_commercial_material_cost и total_commercial_work_cost уже содержат правильные суммы
@@ -772,6 +790,30 @@ export const useCostData = (userRole?: string) => {
       setGroupVolumes(new Map());
       fetchConstructionCosts();
     }
+  }, [selectedTenderId, costType]);
+
+  useEffect(() => {
+    if (!selectedTenderId) return;
+
+    const channel = supabase
+      .channel(`construction_costs_${selectedTenderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'tenders',
+          filter: `id=eq.${selectedTenderId}`,
+        },
+        () => {
+          void fetchConstructionCosts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [selectedTenderId, costType]);
 
   return {

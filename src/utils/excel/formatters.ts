@@ -1,4 +1,8 @@
 import type { BoqItemFull, ExportRow, BoqItemType, ClientPosition } from './types';
+import {
+  calculateBoqItemTotalAmount,
+  calculateDeliveryUnitCost,
+} from '../boq/calculateBoqAmount';
 
 /**
  * Проверяет является ли тип элемента работой
@@ -33,7 +37,6 @@ export function formatCostCategory(item: BoqItemFull): string {
 export function formatNumber(value: number | null, decimalPlaces: number = 2): string | number {
   if (value === null || value === undefined) return '';
 
-  // Форматировать с нужным количеством знаков после запятой, заменить точку на запятую
   return value.toFixed(decimalPlaces).replace('.', ',');
 }
 
@@ -45,8 +48,6 @@ export function createPositionRow(
   isLeaf: boolean,
   actualTotalAmount: number | null = null
 ): ExportRow {
-  // Для листовых позиций: использовать только actualTotalAmount (null если нет BOQ items)
-  // Для нелистовых позиций: использовать агрегированные поля position
   const totalAmount = isLeaf
     ? actualTotalAmount
     : (position.total_material || 0) + (position.total_works || 0);
@@ -67,13 +68,13 @@ export function createPositionRow(
     deliveryType: '',
     deliveryCost: null,
     unitPrice: null,
-    totalAmount: totalAmount,
+    totalAmount,
     materialLinkedToWork: '',
     quoteLink: '',
     clientNote: position.client_note || '',
     gpNote: position.manual_note || '',
     isPosition: true,
-    isLeaf: isLeaf,
+    isLeaf,
     boqItemType: null,
   };
 }
@@ -81,7 +82,11 @@ export function createPositionRow(
 /**
  * Создает строку экспорта из BOQ item
  */
-export function createBoqItemRow(item: BoqItemFull, position: ClientPosition): ExportRow {
+export function createBoqItemRow(
+  item: BoqItemFull,
+  position: ClientPosition,
+  currencyRates: { usd_rate?: number | null; eur_rate?: number | null; cny_rate?: number | null }
+): ExportRow {
   const name = isWorkType(item.boq_item_type)
     ? item.work_names?.name || ''
     : item.material_names?.name || '';
@@ -90,15 +95,9 @@ export function createBoqItemRow(item: BoqItemFull, position: ClientPosition): E
     ? item.work_names?.unit || ''
     : item.material_names?.unit || '';
 
-  // Рассчитать стоимость доставки в зависимости от типа
-  let deliveryCost: number | null = null;
-  if (item.delivery_price_type === 'не в цене' && item.unit_rate) {
-    // 3% от цены материала за единицу
-    deliveryCost = item.unit_rate * 0.03;
-  } else if (item.delivery_price_type === 'суммой' && item.delivery_amount) {
-    deliveryCost = item.delivery_amount;
-  }
-  // Если тип "в цене" или не указан - оставляем null
+  const deliveryCost = item.delivery_price_type
+    ? calculateDeliveryUnitCost(item, currencyRates) || null
+    : null;
 
   return {
     itemNo: '',
@@ -106,7 +105,7 @@ export function createBoqItemRow(item: BoqItemFull, position: ClientPosition): E
     costCategory: formatCostCategory(item),
     elementType: item.boq_item_type || '',
     materialType: item.material_type || '',
-    name: name,
+    name,
     unit: item.unit_code || unit || '',
     clientVolume: null,
     conversionCoeff: item.conversion_coefficient || null,
@@ -114,9 +113,9 @@ export function createBoqItemRow(item: BoqItemFull, position: ClientPosition): E
     gpVolume: item.quantity || null,
     currency: item.currency_type || '',
     deliveryType: item.delivery_price_type || '',
-    deliveryCost: deliveryCost,
+    deliveryCost,
     unitPrice: item.unit_rate || null,
-    totalAmount: item.total_amount || null,
+    totalAmount: calculateBoqItemTotalAmount(item, currencyRates) || null,
     materialLinkedToWork: isMaterialType(item.boq_item_type)
       ? (item.parent_work_item_id ? 'да' : 'нет')
       : '',
