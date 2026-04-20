@@ -12,9 +12,6 @@
   "dependencies": {
     "@ant-design/charts": "^2.6.7",
     "@ant-design/icons": "^6.1.0",
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.80.0",
     "antd": "^5.28.0",
     "chart.js": "^4.5.1",

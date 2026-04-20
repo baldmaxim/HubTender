@@ -3,7 +3,7 @@ const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config({ path: '.env.local' });
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('❌ Не найдены переменные окружения');
@@ -23,7 +23,7 @@ async function resetPassword() {
       console.error('❌ Ошибка доступа к auth.users:', authError.message);
       console.log('\n⚠️  Для сброса пароля нужен SERVICE_ROLE_KEY');
       console.log('   Добавьте в .env.local:');
-      console.log('   VITE_SUPABASE_SERVICE_ROLE_KEY=your_service_role_key\n');
+      console.log('   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key\n');
 
       console.log('📋 Альтернативный способ - через Supabase Dashboard:');
       console.log('   1. Откройте https://supabase.com/dashboard');

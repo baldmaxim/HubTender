@@ -292,13 +292,16 @@ export function useComparisonData() {
 
     setLoading(true);
     try {
-      const [tenderInfoResults, itemsAll, volsAll] = await Promise.all([
-        Promise.all(validTenders.map(id => supabase.from('tenders').select('*').eq('id', id).single())),
+      const [tendersResult, itemsAll, volsAll] = await Promise.all([
+        supabase.from('tenders').select('*').in('id', validTenders),
         Promise.all(validTenders.map(id => fetchBoqItems(id))),
         Promise.all(validTenders.map(id => fetchVolumes(id))),
       ]);
 
-      setTenderInfos(tenderInfoResults.map(r => r.data));
+      if (tendersResult.error) throw tendersResult.error;
+
+      const tendersById = new Map((tendersResult.data ?? []).map(t => [t.id, t]));
+      setTenderInfos(validTenders.map(id => tendersById.get(id) ?? null));
 
       let loadedNotes: NotesMap = new Map();
       if (validTenders.length === 2) {

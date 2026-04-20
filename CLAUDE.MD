@@ -32,6 +32,13 @@ supabase migration new <name>   # Create new migration file
 ### Database Single Source of Truth
 `supabase/schemas/prod.sql` is the canonical schema. ALWAYS verify it before any database work. NEVER trust TypeScript types over prod.sql definitions. Business tables are defined in `supabase/migrations/`.
 
+### Secrets Must Not Use VITE_ Prefix
+Vite inlines every `VITE_*` variable into the client bundle. NEVER prefix a secret with `VITE_`:
+- ✅ `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (anon key is public by design)
+- ❌ `VITE_SUPABASE_SERVICE_ROLE_KEY`, `VITE_DATABASE_URL`, any JWT signing key, DB password
+- Server-side variables (dev scripts in `scripts/`, Go backend) use plain names: `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, etc.
+- Template in `.env.example`.
+
 ### File Size Limit
 **STRICT**: All files MUST be ≤ 600 lines. Split into `components/`, `hooks/`, `utils/`, and `types.ts` as needed.
 

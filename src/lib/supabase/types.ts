@@ -53,10 +53,10 @@ export interface Tender extends TenderInsert {
 // Типы для таблицы tender_registry (реестр тендеров)
 // =============================================
 
-// Новые типы для элементов списков
 export interface ChronologyItem {
-  date: string | null; // ISO date string или null
+  date: string | null;
   text: string;
+  type?: 'default' | 'call_follow_up' | null;
 }
 
 export interface TenderPackageItem {
@@ -67,30 +67,29 @@ export interface TenderPackageItem {
 
 export type DashboardStatus = 'calc' | 'sent' | 'waiting_pd' | 'archive';
 
-export interface ChronologyItem {
-  type?: 'default' | 'call_follow_up' | null;
-}
-
 export interface TenderRegistryInsert {
   title: string;
   client_name: string;
-  tender_number?: string | null; // НОВОЕ: связь с tenders через текст
-  object_address?: string | null; // НОВОЕ: адрес объекта
+  tender_number?: string | null;
+  object_address?: string | null;
+  object_coordinates?: string | null;
   construction_scope_id?: string | null;
   area?: number | null;
   submission_date?: string | null;
   construction_start_date?: string | null;
+  commission_date?: string | null;
   site_visit_photo_url?: string | null;
   site_visit_date?: string | null;
-  has_tender_package?: string | null; // DEPRECATED
-  tender_package_items?: TenderPackageItem[] | null; // НОВОЕ
+  has_tender_package?: string | null; // DEPRECATED — удалить после Фазы 1 baseline
+  tender_package_items?: TenderPackageItem[] | null;
   invitation_date?: string | null;
   status_id?: string | null;
-  chronology?: string | null; // DEPRECATED
-  chronology_items?: ChronologyItem[] | null; // НОВОЕ
+  dashboard_status?: DashboardStatus | null;
+  chronology?: string | null; // DEPRECATED — удалить после Фазы 1 baseline
+  chronology_items?: ChronologyItem[] | null;
   sort_order?: number | null;
-  is_archived?: boolean; // НОВОЕ: флаг архивации
-  manual_total_cost?: number | null; // НОВОЕ: ручной ввод общей стоимости
+  is_archived?: boolean;
+  manual_total_cost?: number | null;
 }
 
 export interface TenderRegistry extends TenderRegistryInsert {
@@ -99,30 +98,13 @@ export interface TenderRegistry extends TenderRegistryInsert {
   updated_at: string;
   created_by?: string | null;
   sort_order: number;
-  tender_number?: string | null;
-  object_address?: string | null;
-  chronology_items?: ChronologyItem[] | null;
-  tender_package_items?: TenderPackageItem[] | null;
-  is_archived: boolean; // НОВОЕ: флаг архивации (NOT NULL)
-  manual_total_cost?: number | null; // НОВОЕ: ручной ввод общей стоимости
+  is_archived: boolean;
 }
 
 export interface TenderRegistryWithRelations extends TenderRegistry {
   status?: TenderStatus | null;
   construction_scope?: ConstructionScope | null;
-  total_cost?: number | null; // Общая стоимость из связанного тендера (рассчитывается динамически)
-}
-
-export interface TenderRegistryInsert {
-  object_coordinates?: string | null;
-  commission_date?: string | null;
-  dashboard_status?: DashboardStatus | null;
-}
-
-export interface TenderRegistry {
-  object_coordinates?: string | null;
-  commission_date?: string | null;
-  dashboard_status?: DashboardStatus | null;
+  total_cost?: number | null;
 }
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';

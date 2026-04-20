@@ -20,7 +20,7 @@ envContent.split(/\r?\n/).forEach(line => {
 
 const supabase = createClient(
   envVars.VITE_SUPABASE_URL,
-  envVars.VITE_SUPABASE_SERVICE_ROLE_KEY
+  envVars.SUPABASE_SERVICE_ROLE_KEY
 );
 
 async function verifyCalculation() {

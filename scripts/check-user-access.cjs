@@ -21,7 +21,7 @@ envContent.split(/\r?\n/).forEach(line => {
 // Клиент с service role (обходит RLS)
 const serviceClient = createClient(
   envVars.VITE_SUPABASE_URL,
-  envVars.VITE_SUPABASE_SERVICE_ROLE_KEY
+  envVars.SUPABASE_SERVICE_ROLE_KEY
 );
 
 // Клиент с anon key (проверяет RLS)

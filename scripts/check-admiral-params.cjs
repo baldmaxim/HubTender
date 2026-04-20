@@ -3,7 +3,7 @@ require('dotenv').config({ path: '.env.local' });
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
-  process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 const TACTIC_ID = '9cc46d62-03ce-43ca-b33d-bb903cef3338'; // Admiral

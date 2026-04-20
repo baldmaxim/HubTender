@@ -21,17 +21,17 @@ envContent.split(/\r?\n/).forEach(line => {
   }
 });
 
-if (!envVars.VITE_SUPABASE_URL || !envVars.VITE_SUPABASE_SERVICE_ROLE_KEY) {
+if (!envVars.VITE_SUPABASE_URL || !envVars.SUPABASE_SERVICE_ROLE_KEY) {
   console.error('Missing environment variables');
   console.error('Parsed keys:', Object.keys(envVars));
   console.error('URL:', envVars.VITE_SUPABASE_URL);
-  console.error('KEY:', envVars.VITE_SUPABASE_SERVICE_ROLE_KEY ? 'exists' : 'missing');
+  console.error('KEY:', envVars.SUPABASE_SERVICE_ROLE_KEY ? 'exists' : 'missing');
   process.exit(1);
 }
 
 const supabase = createClient(
   envVars.VITE_SUPABASE_URL,
-  envVars.VITE_SUPABASE_SERVICE_ROLE_KEY
+  envVars.SUPABASE_SERVICE_ROLE_KEY
 );
 
 async function checkMaterialCalculation() {
