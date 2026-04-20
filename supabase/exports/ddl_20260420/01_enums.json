@@ -1,0 +1,18 @@
+{
+  "extracted_at": "2026-04-20",
+  "project_ref": "wkywhjljrhewfpedbjzx",
+  "source": "pg_type + pg_enum, public schema",
+  "enums": [
+    {"name": "access_status_type", "labels": ["pending", "approved", "blocked"]},
+    {"name": "boq_item_type", "labels": ["мат", "суб-мат", "мат-комп.", "раб", "суб-раб", "раб-комп."]},
+    {"name": "construction_scope_type", "labels": ["генподряд", "коробка", "монолит"]},
+    {"name": "currency_type", "labels": ["RUB", "USD", "EUR", "CNY"]},
+    {"name": "delivery_price_type", "labels": ["в цене", "не в цене", "суммой"]},
+    {"name": "housing_class_type", "labels": ["комфорт", "бизнес", "премиум", "делюкс"]},
+    {"name": "material_type", "labels": ["основн.", "вспомогат."]},
+    {"name": "task_status", "labels": ["running", "paused", "completed"]},
+    {"name": "user_role_type", "labels": ["Руководитель", "Администратор", "Разработчик", "Старший группы", "Инженер"]},
+    {"name": "work_mode", "labels": ["office", "remote"]},
+    {"name": "work_status", "labels": ["working", "not_working"]}
+  ]
+}

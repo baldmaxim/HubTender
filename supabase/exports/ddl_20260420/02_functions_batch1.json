@@ -1,0 +1,16 @@
+{
+  "extracted_at": "2026-04-20",
+  "project_ref": "wkywhjljrhewfpedbjzx",
+  "batch": "1/4",
+  "functions": [
+    {"name": "add_subcontract_growth_exclusion", "has_search_path": false, "security_definer": true, "ddl": "CREATE OR REPLACE FUNCTION public.add_subcontract_growth_exclusion(p_tender_id uuid, p_detail_cost_category_id uuid, p_exclusion_type text DEFAULT 'works'::text)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nDECLARE\n  v_id uuid;\nBEGIN\n  IF p_exclusion_type NOT IN ('works', 'materials') THEN\n    RAISE EXCEPTION 'Invalid exclusion_type: must be ''works'' or ''materials''';\n  END IF;\n  INSERT INTO public.subcontract_growth_exclusions (tender_id, detail_cost_category_id, exclusion_type)\n  VALUES (p_tender_id, p_detail_cost_category_id, p_exclusion_type)\n  ON CONFLICT (tender_id, detail_cost_category_id, exclusion_type)\n  DO UPDATE SET updated_at = now()\n  RETURNING id INTO v_id;\n  RETURN v_id;\nEND;\n$function$"},
+    {"name": "auto_archive_tender_registry", "has_search_path": false, "security_definer": false, "ddl": "CREATE OR REPLACE FUNCTION public.auto_archive_tender_registry()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE status_name TEXT;\nBEGIN\n  SELECT name INTO status_name FROM tender_statuses WHERE id = NEW.status_id;\n  IF status_name IN ('Проиграли', 'Выиграли') THEN NEW.is_archived = TRUE;\n  ELSIF status_name IN ('В работе', 'Ожидаем тендерный пакет') THEN NEW.is_archived = FALSE;\n  END IF;\n  RETURN NEW;\nEND;\n$function$"},
+    {"name": "auto_create_tender_registry", "has_search_path": false, "security_definer": false, "ddl": "CREATE OR REPLACE FUNCTION public.auto_create_tender_registry()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  default_status_id UUID;\n  next_sort_order INTEGER;\nBEGIN\n  SELECT id INTO default_status_id FROM tender_statuses WHERE name = 'В работе' LIMIT 1;\n  IF default_status_id IS NULL THEN SELECT id INTO default_status_id FROM tender_statuses LIMIT 1; END IF;\n  SELECT COALESCE(MAX(sort_order), 0) + 1 INTO next_sort_order FROM tender_registry;\n  INSERT INTO tender_registry (title, client_name, tender_number, area, construction_scope_id, status_id, created_by, is_archived, sort_order)\n  VALUES (NEW.title, NEW.client_name, NEW.tender_number, NEW.area_sp,\n    (SELECT id FROM construction_scopes WHERE name::text = NEW.construction_scope::text LIMIT 1),\n    default_status_id, NEW.created_by, FALSE, next_sort_order);\n  RETURN NEW;\nEND;\n$function$"},
+    {"name": "check_user_page_access", "has_search_path": false, "security_definer": true, "note": "Needs SET search_path = public, pg_temp"},
+    {"name": "clear_audit_user", "has_search_path": false, "security_definer": true, "note": "Needs SET search_path = public, pg_temp"},
+    {"name": "current_user_role", "has_search_path": true, "security_definer": true},
+    {"name": "current_user_status", "has_search_path": true, "security_definer": true},
+    {"name": "delete_boq_item_with_audit", "has_search_path": false, "security_definer": true, "note": "Needs SET search_path = public, pg_temp"}
+  ],
+  "raw_ddl_note": "Full DDL for all 38 functions is in the MCP tool results. This file summarizes key metadata. For baseline migration, use pg_get_functiondef output directly via execute_sql."
+}
