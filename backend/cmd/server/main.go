@@ -70,13 +70,22 @@ func main() {
 
 	userRepo := repository.NewUserRepo(pool)
 	refRepo := repository.NewReferenceRepo(pool)
+	tenderRepo := repository.NewTenderRepo(pool)
+	positionRepo := repository.NewPositionRepo(pool)
+	boqRepo := repository.NewBoqRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
+	tenderSvc := services.NewTenderService(tenderRepo, inMemCache)
+	positionSvc := services.NewPositionService(positionRepo, inMemCache)
+	boqSvc := services.NewBoqService(boqRepo, inMemCache)
 
 	healthH := handlers.NewHealthHandler()
 	meH := handlers.NewMeHandler(userSvc)
 	refH := handlers.NewReferenceHandler(refSvc)
+	tenderH := handlers.NewTenderHandler(tenderSvc)
+	positionH := handlers.NewPositionHandler(positionSvc)
+	boqH := handlers.NewBoqHandler(boqSvc)
 
 	// -------------------------------------------------------------------------
 	// 6. Router
@@ -108,6 +117,12 @@ func main() {
 		r.Get("/api/v1/references/work-names", refH.GetWorkNames)
 		r.Get("/api/v1/references/cost-categories", refH.GetCostCategories)
 		r.Get("/api/v1/references/detail-cost-categories", refH.GetDetailCostCategories)
+
+		// Phase 3 — tenders, positions, BOQ items (read-only).
+		r.Get("/api/v1/tenders", tenderH.GetTenders)
+		r.Get("/api/v1/tenders/{id}/overview", tenderH.GetTenderOverview)
+		r.Get("/api/v1/tenders/{id}/positions", positionH.GetPositions)
+		r.Get("/api/v1/tenders/{id}/positions/{posId}/items", boqH.GetBoqItems)
 	})
 
 	// -------------------------------------------------------------------------
