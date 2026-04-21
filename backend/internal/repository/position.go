@@ -9,6 +9,36 @@ import (
 )
 
 // ---------------------------------------------------------------------------
+// Write input types
+// ---------------------------------------------------------------------------
+
+// CreatePositionInput holds validated fields for inserting a client_position.
+type CreatePositionInput struct {
+	TenderID         string
+	PositionNumber   int
+	WorkName         string
+	UnitCode         *string
+	Volume           *float64
+	ParentPositionID *string
+	HierarchyLevel   *int
+	IsAdditional     *bool
+	ItemNo           *string
+	CreatedBy        string
+}
+
+// UpdatePositionInput holds validated patch fields for a client_position.
+type UpdatePositionInput struct {
+	PositionNumber   *int
+	WorkName         *string
+	UnitCode         *string
+	Volume           *float64
+	ParentPositionID *string
+	HierarchyLevel   *int
+	IsAdditional     *bool
+	ItemNo           *string
+}
+
+// ---------------------------------------------------------------------------
 // Row types
 // ---------------------------------------------------------------------------
 
@@ -114,4 +144,117 @@ func (r *PositionRepo) ListPositions(ctx context.Context, p PositionListParams) 
 		return nil, fmt.Errorf("positionRepo.ListPositions: rows: %w", err)
 	}
 	return result, nil
+}
+
+// positionScanCols is the common SELECT column list for PositionRow scans.
+const positionScanCols = `
+	id::text, tender_id::text, position_number, work_name,
+	unit_code, volume, hierarchy_level,
+	parent_position_id::text, is_additional, item_no,
+	total_material, total_works,
+	COALESCE(created_at, NOW()), COALESCE(updated_at, NOW())
+`
+
+func scanPositionRow(row interface{ Scan(...any) error }) (*PositionRow, error) {
+	var p PositionRow
+	if err := row.Scan(
+		&p.ID, &p.TenderID, &p.PositionNumber, &p.WorkName,
+		&p.UnitCode, &p.Volume, &p.HierarchyLevel,
+		&p.ParentPositionID, &p.IsAdditional, &p.ItemNo,
+		&p.TotalMaterial, &p.TotalWorks,
+		&p.CreatedAt, &p.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// GetPositionByID fetches a single PositionRow by primary key.
+func (r *PositionRepo) GetPositionByID(ctx context.Context, id string) (*PositionRow, error) {
+	q := "SELECT " + positionScanCols + " FROM public.client_positions WHERE id = $1"
+	row := r.pool.QueryRow(ctx, q, id)
+	p, err := scanPositionRow(row)
+	if err != nil {
+		return nil, fmt.Errorf("positionRepo.GetPositionByID: scan: %w", err)
+	}
+	return p, nil
+}
+
+// CreatePosition inserts a new client_position and returns the created row.
+func (r *PositionRepo) CreatePosition(ctx context.Context, in CreatePositionInput) (*PositionRow, error) {
+	q := `
+		INSERT INTO public.client_positions
+		    (tender_id, position_number, work_name, unit_code, volume,
+		     parent_position_id, hierarchy_level, is_additional, item_no, created_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		RETURNING ` + positionScanCols
+	row := r.pool.QueryRow(ctx, q,
+		in.TenderID, in.PositionNumber, in.WorkName,
+		in.UnitCode, in.Volume,
+		in.ParentPositionID, in.HierarchyLevel, in.IsAdditional, in.ItemNo,
+		in.CreatedBy,
+	)
+	p, err := scanPositionRow(row)
+	if err != nil {
+		return nil, fmt.Errorf("positionRepo.CreatePosition: scan: %w", err)
+	}
+	return p, nil
+}
+
+// UpdatePosition applies non-nil fields from in to the position with the
+// given id and returns the updated row.
+func (r *PositionRepo) UpdatePosition(ctx context.Context, id string, in UpdatePositionInput) (*PositionRow, error) {
+	args := []any{}
+	argN := 1
+	setClauses := ""
+
+	set := func(col string, val any) {
+		if setClauses != "" {
+			setClauses += ", "
+		}
+		setClauses += fmt.Sprintf("%s = $%d", col, argN)
+		args = append(args, val)
+		argN++
+	}
+
+	if in.PositionNumber != nil {
+		set("position_number", *in.PositionNumber)
+	}
+	if in.WorkName != nil {
+		set("work_name", *in.WorkName)
+	}
+	if in.UnitCode != nil {
+		set("unit_code", *in.UnitCode)
+	}
+	if in.Volume != nil {
+		set("volume", *in.Volume)
+	}
+	if in.ParentPositionID != nil {
+		set("parent_position_id", *in.ParentPositionID)
+	}
+	if in.HierarchyLevel != nil {
+		set("hierarchy_level", *in.HierarchyLevel)
+	}
+	if in.IsAdditional != nil {
+		set("is_additional", *in.IsAdditional)
+	}
+	if in.ItemNo != nil {
+		set("item_no", *in.ItemNo)
+	}
+
+	if setClauses == "" {
+		return r.GetPositionByID(ctx, id)
+	}
+
+	setClauses += fmt.Sprintf(", updated_at = NOW()")
+	args = append(args, id)
+
+	q := fmt.Sprintf("UPDATE public.client_positions SET %s WHERE id = $%d RETURNING "+positionScanCols,
+		setClauses, argN)
+	row := r.pool.QueryRow(ctx, q, args...)
+	p, err := scanPositionRow(row)
+	if err != nil {
+		return nil, fmt.Errorf("positionRepo.UpdatePosition: scan: %w", err)
+	}
+	return p, nil
 }

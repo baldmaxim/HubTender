@@ -18,6 +18,9 @@ const tenderOverviewCacheTTL = 60 * time.Second
 type tenderRepoer interface {
 	ListTenders(ctx context.Context, p repository.TenderListParams) ([]repository.TenderRow, error)
 	GetTenderOverview(ctx context.Context, tenderID string) (*repository.TenderOverviewRow, error)
+	GetTenderByID(ctx context.Context, id string) (*repository.TenderRow, error)
+	CreateTender(ctx context.Context, in repository.CreateTenderInput) (*repository.TenderRow, error)
+	UpdateTender(ctx context.Context, id string, in repository.UpdateTenderInput) (*repository.TenderRow, error)
 }
 
 // TenderService provides cached access to tender data.
@@ -90,4 +93,40 @@ func (s *TenderService) GetTenderOverview(
 
 	s.cache.Set(cacheKey, ov, tenderOverviewCacheTTL)
 	return ov, nil
+}
+
+// GetTenderByID fetches a single tender row by ID (no cache — used for ETag checks).
+func (s *TenderService) GetTenderByID(ctx context.Context, id string) (*repository.TenderRow, error) {
+	t, err := s.repo.GetTenderByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("tenderService.GetTenderByID: %w", err)
+	}
+	return t, nil
+}
+
+// CreateTender inserts a new tender and invalidates any stale overview cache.
+func (s *TenderService) CreateTender(
+	ctx context.Context,
+	in repository.CreateTenderInput,
+) (*repository.TenderRow, error) {
+	t, err := s.repo.CreateTender(ctx, in)
+	if err != nil {
+		return nil, fmt.Errorf("tenderService.CreateTender: %w", err)
+	}
+	s.cache.Delete("tender:overview:" + t.ID)
+	return t, nil
+}
+
+// UpdateTender patches a tender and invalidates the overview cache.
+func (s *TenderService) UpdateTender(
+	ctx context.Context,
+	id string,
+	in repository.UpdateTenderInput,
+) (*repository.TenderRow, error) {
+	t, err := s.repo.UpdateTender(ctx, id, in)
+	if err != nil {
+		return nil, fmt.Errorf("tenderService.UpdateTender: %w", err)
+	}
+	s.cache.Delete("tender:overview:" + id)
+	return t, nil
 }

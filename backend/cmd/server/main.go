@@ -84,8 +84,11 @@ func main() {
 	meH := handlers.NewMeHandler(userSvc)
 	refH := handlers.NewReferenceHandler(refSvc)
 	tenderH := handlers.NewTenderHandler(tenderSvc)
+	tenderWH := handlers.NewTenderWriteHandler(tenderSvc)
 	positionH := handlers.NewPositionHandler(positionSvc)
+	positionWH := handlers.NewPositionWriteHandler(positionSvc)
 	boqH := handlers.NewBoqHandler(boqSvc)
+	boqWH := handlers.NewBoqWriteHandler(boqSvc)
 
 	// -------------------------------------------------------------------------
 	// 6. Router
@@ -118,11 +121,23 @@ func main() {
 		r.Get("/api/v1/references/cost-categories", refH.GetCostCategories)
 		r.Get("/api/v1/references/detail-cost-categories", refH.GetDetailCostCategories)
 
-		// Phase 3 — tenders, positions, BOQ items (read-only).
+		// Phase 3 — tenders, positions, BOQ items.
+		// Slice 1: reads.
 		r.Get("/api/v1/tenders", tenderH.GetTenders)
 		r.Get("/api/v1/tenders/{id}/overview", tenderH.GetTenderOverview)
 		r.Get("/api/v1/tenders/{id}/positions", positionH.GetPositions)
 		r.Get("/api/v1/tenders/{id}/positions/{posId}/items", boqH.GetBoqItems)
+
+		// Slice 2: writes with optimistic concurrency.
+		r.Post("/api/v1/tenders", tenderWH.CreateTender)
+		r.Patch("/api/v1/tenders/{id}", tenderWH.UpdateTender)
+
+		r.Post("/api/v1/positions", positionWH.CreatePosition)
+		r.Patch("/api/v1/positions/{id}", positionWH.UpdatePosition)
+
+		r.Post("/api/v1/tenders/{id}/positions/{posId}/items", boqWH.CreateBoqItem)
+		r.Patch("/api/v1/items/{id}", boqWH.UpdateBoqItem)
+		r.Delete("/api/v1/items/{id}", boqWH.DeleteBoqItem)
 	})
 
 	// -------------------------------------------------------------------------
@@ -190,11 +205,11 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 					w.Header().Set("Access-Control-Allow-Credentials", "true")
 					w.Header().Set(
 						"Access-Control-Allow-Headers",
-						"Authorization, Content-Type, X-Request-ID",
+						"Authorization, Content-Type, X-Request-ID, If-Match, If-None-Match",
 					)
 					w.Header().Set(
 						"Access-Control-Allow-Methods",
-						"GET, OPTIONS",
+						"GET, POST, PATCH, DELETE, OPTIONS",
 					)
 				}
 			}
