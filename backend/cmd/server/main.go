@@ -110,6 +110,7 @@ func main() {
 	importBoqRepo := repository.NewImportRepo(pool)
 	timelineRepo := repository.NewTimelineRepo(pool)
 	subcontractRepo := repository.NewSubcontractRepo(pool)
+	transferRepo := repository.NewTransferRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -121,6 +122,7 @@ func main() {
 	importBoqSvc := services.NewImportBoqService(importBoqRepo, inMemCache)
 	timelineSvc := services.NewTimelineService(timelineRepo)
 	subcontractSvc := services.NewSubcontractService(subcontractRepo, inMemCache)
+	transferSvc := services.NewTransferService(transferRepo, inMemCache)
 
 	healthH := handlers.NewHealthHandler(pool)
 	meH := handlers.NewMeHandler(userSvc)
@@ -137,6 +139,7 @@ func main() {
 	timelineH := handlers.NewTimelineHandler(timelineSvc)
 	userRegH := handlers.NewUserRegisterHandler(userSvc)
 	subcontractH := handlers.NewSubcontractHandler(subcontractSvc)
+	transferH := handlers.NewTenderTransferHandler(transferSvc)
 	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
@@ -201,6 +204,9 @@ func main() {
 
 		// Phase 4c-lite: bulk BOQ import (replaces public.bulk_import_client_position_boq RPC).
 		r.Post("/api/v1/imports/boq", importBoqH.BulkImport)
+
+		// Phase 5: version transfer (replaces public.execute_version_transfer RPC).
+		r.Post("/api/v1/tenders/{id}/versions/transfer", transferH.Transfer)
 	})
 
 	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because
