@@ -3,6 +3,7 @@ import { Form, Input, Button, Card, message, Typography } from 'antd';
 import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { registerUser as apiRegisterUser } from '../../lib/api/users';
 import { HeaderIcon } from '../../components/Icons/HeaderIcon';
 
 const { Title, Text } = Typography;
@@ -55,25 +56,25 @@ const Register: React.FC = () => {
         .eq('code', 'engineer')
         .single();
 
-      // 3. Создаем запись в public.users со статусом pending
-      // Используем функцию register_user для обхода RLS
-      // Роль по умолчанию 'engineer' (Инженер), будет изменена администратором при одобрении
-      const { error: userInsertError } = await supabase.rpc('register_user', {
-        p_user_id: authData.user.id,
-        p_full_name: values.full_name,
-        p_email: values.email,
-        p_role_code: 'engineer',
-        p_allowed_pages: engineerRole?.allowed_pages || [],
-        // Пароль хранится только в auth.users в зашифрованном виде
-      });
-
-      if (userInsertError) {
+      // 3. Создаем запись в public.users со статусом pending через helper,
+      // который при VITE_API_USERS_ENABLED=true идёт на Go BFF (user_id и
+      // email в этом случае приходят из JWT — клиент не подменит их).
+      try {
+        await apiRegisterUser({
+          user_id: authData.user.id,
+          full_name: values.full_name,
+          email: values.email,
+          role_code: 'engineer',
+          allowed_pages: engineerRole?.allowed_pages || [],
+        });
+      } catch (userInsertError) {
+        const err = userInsertError as { message?: string };
         console.error('Ошибка создания записи пользователя:', userInsertError);
 
         // Выходим из созданной сессии (auth.users останется, но пользователь не сможет войти без public.users)
         await supabase.auth.signOut();
 
-        message.error(`Ошибка при создании профиля: ${userInsertError.message}`);
+        message.error(`Ошибка при создании профиля: ${err.message ?? 'unknown'}`);
         return;
       }
 

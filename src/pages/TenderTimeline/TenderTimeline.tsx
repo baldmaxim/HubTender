@@ -21,6 +21,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { CloseOutlined } from '@ant-design/icons';
 import { supabase } from '../../lib/supabase';
+import { setTenderGroupQuality } from '../../lib/api/timeline';
 import { useAuth } from '../../contexts/AuthContext';
 import UserTimeline from './components/UserTimeline';
 import { useTenderAssignableUsers } from './hooks/useTenderAssignableUsers';
@@ -538,15 +539,7 @@ const TenderTimeline: React.FC = () => {
         const qualityLevel = typeof rawLevel === 'number' ? rawLevel : null;
         const qualityComment = typeof draft.quality_comment === 'string' ? draft.quality_comment : null;
 
-        const { error } = await supabase.rpc('set_tender_group_quality', {
-          p_group_id: group.id,
-          p_quality_level: qualityLevel,
-          p_quality_comment: qualityComment,
-        });
-
-        if (error) {
-          throw error;
-        }
+        await setTenderGroupQuality(group.id, qualityLevel, qualityComment);
       }
 
       message.success('Уровень расчета обновлен');

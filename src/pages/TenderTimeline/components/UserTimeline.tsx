@@ -16,6 +16,7 @@ import {
   theme,
 } from 'antd';
 import { supabase } from '../../../lib/supabase';
+import { respondTenderIteration } from '../../../lib/api/timeline';
 import type { ApprovalStatus, TenderIterationWithRelations } from '../../../lib/supabase/types';
 import { useTenderIterations } from '../hooks/useTenderIterations';
 import type { TimelineGroupItem } from '../hooks/useTenderGroups';
@@ -177,15 +178,11 @@ const UserTimeline: React.FC<UserTimelineProps> = ({
 
     setSavingResponse(true);
     try {
-      const { error: rpcError } = await supabase.rpc('respond_tender_iteration', {
-        p_iteration_id: respondingIteration.id,
-        p_manager_comment: values.manager_comment.trim(),
-        p_approval_status: values.approval_status,
-      });
-
-      if (rpcError) {
-        throw rpcError;
-      }
+      await respondTenderIteration(
+        respondingIteration.id,
+        values.manager_comment.trim(),
+        values.approval_status as 'pending' | 'approved' | 'rejected',
+      );
 
       message.success('Решение сохранено');
       setResponseModalOpen(false);
