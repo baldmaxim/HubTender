@@ -122,7 +122,7 @@ func main() {
 	timelineSvc := services.NewTimelineService(timelineRepo)
 	subcontractSvc := services.NewSubcontractService(subcontractRepo, inMemCache)
 
-	healthH := handlers.NewHealthHandler()
+	healthH := handlers.NewHealthHandler(pool)
 	meH := handlers.NewMeHandler(userSvc)
 	refH := handlers.NewReferenceHandler(refSvc)
 	tenderH := handlers.NewTenderHandler(tenderSvc)
@@ -153,6 +153,7 @@ func main() {
 
 	// Public routes.
 	r.Get("/health", healthH.ServeHTTP)
+	r.Get("/health/db", healthH.CheckDB)
 
 	// Authenticated API routes.
 	authMW := middleware.JWTAuth(kf, cfg.SupabaseJWTIssuer)
