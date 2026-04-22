@@ -57,3 +57,13 @@ func (s *UserService) GetMe(ctx context.Context, userID string) (*user.User, err
 func (s *UserService) InvalidateUser(userID string) {
 	s.cache.Delete("user:" + userID)
 }
+
+// Register ports public.register_user. The userID comes from the verified
+// JWT, not the request body, so clients cannot register under another user.
+func (s *UserService) Register(ctx context.Context, in repository.RegisterUserInput) error {
+	if err := s.repo.RegisterUser(ctx, in); err != nil {
+		return fmt.Errorf("userService.Register: %w", err)
+	}
+	s.cache.Delete("user:" + in.UserID)
+	return nil
+}

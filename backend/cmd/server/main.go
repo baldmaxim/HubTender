@@ -76,6 +76,7 @@ func main() {
 	boqRepo := repository.NewBoqRepo(pool)
 	bulkBoqRepo := repository.NewBulkBoqRepo(pool)
 	timelineRepo := repository.NewTimelineRepo(pool)
+	subcontractRepo := repository.NewSubcontractRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -85,6 +86,7 @@ func main() {
 	boqSvc := services.NewBoqService(boqRepo, inMemCache)
 	bulkBoqSvc := services.NewBulkBoqService(bulkBoqRepo, inMemCache)
 	timelineSvc := services.NewTimelineService(timelineRepo)
+	subcontractSvc := services.NewSubcontractService(subcontractRepo, inMemCache)
 
 	healthH := handlers.NewHealthHandler()
 	meH := handlers.NewMeHandler(userSvc)
@@ -98,6 +100,8 @@ func main() {
 	boqWH := handlers.NewBoqWriteHandler(boqSvc)
 	bulkBoqH := handlers.NewBulkBoqHandler(bulkBoqSvc)
 	timelineH := handlers.NewTimelineHandler(timelineSvc)
+	userRegH := handlers.NewUserRegisterHandler(userSvc)
+	subcontractH := handlers.NewSubcontractHandler(subcontractSvc)
 
 	// -------------------------------------------------------------------------
 	// 6. Router
@@ -153,6 +157,10 @@ func main() {
 		r.Patch("/api/v1/items/bulk-commercial", bulkBoqH.BulkUpdateCommercial)
 		r.Post("/api/v1/timeline/groups/{id}/quality", timelineH.SetGroupQuality)
 		r.Post("/api/v1/timeline/iterations/{id}/respond", timelineH.RespondIteration)
+
+		// Slice 3b: remaining simple RPCs.
+		r.Post("/api/v1/users/register", userRegH.Register)
+		r.Post("/api/v1/tenders/{id}/subcontract-exclusions/toggle", subcontractH.ToggleExclusion)
 	})
 
 	// -------------------------------------------------------------------------
