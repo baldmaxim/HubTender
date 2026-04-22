@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 TenderHUB by SU_10 is a construction tender management portal for Bill of Quantities (BOQ) and bidding workflows.
 
 - **Language Convention**: Russian UI, English code, Russian commit messages
-- **Stack**: React 18 + Ant Design + Supabase + Vite + TypeScript
+- **Stack**: React 18 + Ant Design + Vite + TypeScript frontend. Go BFF (chi + pgx/v5 + coder/websocket) layered in front of Supabase (Postgres 17 + Auth + JWKS). Supabase Realtime is being replaced by the Go BFF WebSocket hub.
 - **Branding**: Design system documented in BRANDING.md
+- **Migration state**: pre-prod Supabase project `ocauafggjrqvopxjihas`; old live prod `wkywhjljrhewfpedbjzx` is read-only until final cutover. See `C:\Users\Usrr\.claude\plans\keen-toasting-iverson.md` for the full roadmap.
 
 ## Development Commands
 
@@ -18,13 +19,27 @@ npm run dev          # Start dev server (http://localhost:3000, auto-opens)
 npm run build        # TypeScript check + Vite production build
 npm run lint         # ESLint with zero-warning enforcement (max-warnings: 0)
 npm run preview      # Preview production build
+npm run gen:types    # Regenerate src/lib/supabase/database.types.ts from pre-prod
+npm run gen:schema   # Dump pre-prod schema into supabase/schemas/prod.sql
 
-# Database
-supabase db push                # Apply migrations
-supabase db reset               # Reset local database (destructive)
-supabase migration new <name>   # Create new migration file
+# Database (MCP-first — see plan for Supabase MCP usage; CLI is a fallback):
+supabase db push                # Apply migrations via CLI
+supabase migration new <name>   # Scaffold a new migration file
+# Preferred: mcp__claude_ai_Supabase__apply_migration(ocauafggjrqvopxjihas, ...)
 
-# Environment: create .env.local with VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY
+# Go BFF (Docker build, Go not needed locally):
+docker build -t hubtender-api:local ./backend
+docker run --rm --env-file .env -p 8080:8080 hubtender-api:local
+curl http://localhost:8080/health     # liveness
+curl http://localhost:8080/health/db  # readiness + DB ping
+
+# Verification scripts:
+node scripts/smoke/go-bff.mjs                 # exercises every Go read endpoint
+node scripts/dual-run/positions-with-costs.mjs <tender-id>  # diffs RPC vs Go
+
+# Environment: copy .env.example → .env and fill credentials.
+# Supabase free-tier: use Session Pooler (port 5432, aws-0-<region>.pooler.supabase.com)
+# because the direct db.<ref>.supabase.co hostname is IPv6-only.
 ```
 
 ## Critical Rules
@@ -71,34 +86,55 @@ All authenticated routes are wrapped in `<ProtectedRoute>` inside `<MainLayout>`
 
 ### State Management
 - No Redux/Zustand — only React contexts (Theme, Auth) and local state
-- Server state via direct Supabase calls (no React Query)
+- Server state via Go BFF helpers (preferred) or direct Supabase calls (legacy)
 - Forms use Ant Design Form components
 
 ## Key Data Patterns
 
-### Supabase Client
+### Supabase Client (legacy read path)
 ```typescript
-import { supabase } from '../lib/supabase';  // barrel export from src/lib/supabase/index.ts
+import { supabase } from '../lib/supabase';
 import type { Tender } from '../lib/supabase/types';
 ```
 
-### Audit Logging (BOQ Items)
-Uses RPC-based wrappers in `src/lib/supabaseWithAudit.ts`:
-- `insertBoqItemWithAudit(userId, data)`
-- `updateBoqItemWithAudit(userId, itemId, data)`
-- `deleteBoqItemWithAudit(userId, itemId)`
+### Go BFF API layer
+All new read/write code goes through `src/lib/api/` helpers that transparently
+route to the Go BFF when the matching feature flag is on, and fall back to
+Supabase direct otherwise. Never add a new `supabase.from()` call in a new
+component — add the helper instead.
 
-The old `executeWithAudit()` is **deprecated** — do not use it.
+Domain helpers (each exports plain async functions):
+- `src/lib/api/client.ts` — low-level `apiFetch<T>(path, opts)` with Supabase JWT
+- `src/lib/api/featureFlags.ts` — `isGoEnabled(domain)` and `isRealtimeEnabled()`
+- `src/lib/api/tenders.ts` — `fetchTenders`, `fetchTendersByIds`
+- `src/lib/api/positions.ts` — `fetchPositionsWithCosts`
+- `src/lib/api/boq.ts` — `bulkUpdateCommercial`
+- `src/lib/api/users.ts` — `registerUser`
+- `src/lib/api/timeline.ts` — `setTenderGroupQuality`, `respondTenderIteration`
+- `src/lib/api/hooks/useApiReferences.ts` — 6 read-only reference hooks
 
-### Real-time Subscriptions
-Used for notifications in MainLayout. Pattern:
-```typescript
-const channel = supabase
-  .channel('channel-name')
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'table_name' }, callback)
-  .subscribe();
-// Cleanup: supabase.removeChannel(channel);
-```
+Per-domain env flags (default off = Supabase direct): `VITE_API_REFERENCES_ENABLED`,
+`VITE_API_TENDERS_ENABLED`, `VITE_API_POSITIONS_ENABLED`, `VITE_API_BOQ_ENABLED`,
+`VITE_API_USERS_ENABLED`, `VITE_API_TIMELINE_ENABLED`, `VITE_API_REALTIME_ENABLED`,
+plus global `VITE_API_MODE=supabase|go|hybrid`.
+
+### Realtime (WebSocket hub)
+The Go BFF runs a Postgres `LISTEN/NOTIFY` → WebSocket broker (debounced 200 ms).
+Frontend hook: `src/lib/realtime/useRealtimeTopic(topic, handler)` returns `true`
+when the native hub is active, `false` when falling back to `supabase.channel()`.
+Topics: `notifications:<user_id>`, `tender:<tender_id>`, `tenders`.
+
+Existing `supabase.channel()` call sites are feature-flag guarded (when
+`VITE_API_REALTIME_ENABLED=true`, the Supabase subscription is skipped).
+
+### Audit Logging (BOQ Items) — legacy
+Legacy RPC wrappers live in `src/lib/supabaseWithAudit.ts`:
+- `insertBoqItemWithAudit`, `updateBoqItemWithAudit`, `deleteBoqItemWithAudit`.
+The old `executeWithAudit()` is deprecated — do not use it.
+
+In the Go BFF, audit rows are written in the same `pgx.Tx` as the mutation
+(see `backend/internal/repository/boq_mutate.go`). Phase 5 will migrate
+frontend write paths onto the Go endpoints (`POST/PATCH/DELETE /api/v1/items/*`).
 
 ### Database Conventions
 - UUID primary keys with `uuid_generate_v4()`
@@ -156,8 +192,19 @@ src/pages/PageName/
 Shared code:
 - `src/components/` — reusable components (Auth, Icons, Layout)
 - `src/contexts/` — React contexts (AuthContext, ThemeContext)
-- `src/lib/supabase/` — Supabase client, types, barrel exports
-- `src/lib/supabaseWithAudit.ts` — audited CRUD wrappers
+- `src/lib/api/` — **Go BFF helpers (new code path)**, domain-per-file
+- `src/lib/realtime/` — WebSocket client + `useRealtimeTopic` React hook
+- `src/lib/supabase/` — Supabase client, types, barrel exports (legacy/fallback)
+- `src/lib/supabaseWithAudit.ts` — audited CRUD wrappers (deprecated)
+
+Backend code (Go BFF):
+- `backend/cmd/server/main.go` — entry point with DI wiring
+- `backend/internal/{handlers,services,repository}/` — standard 3-layer
+- `backend/internal/realtime/` — pg LISTEN → broker → WS hub
+- `backend/internal/middleware/auth.go` — `JWTAuth` + exported `VerifyToken`
+- `backend/pkg/apierr/` — RFC 7807 ProblemDetail helpers
+- `backend/Dockerfile` — multi-stage, distroless runtime
+- `docker-compose.yml` — `api + redis + caddy` (Redis reserved for Phase 4b)
 
 ## Key Domain Concepts
 
@@ -192,9 +239,21 @@ Tenders → Client Positions → BOQ Items (materials & works per position)
 ### Creating a New Database Table
 1. `supabase migration new table_name`
 2. Write SQL with UUID PK, timestamps, created_by FK, RLS policies
-3. `supabase db push`
-4. Add TypeScript types to `src/lib/supabase/types.ts`
-5. Update `supabase/schemas/prod.sql`
+3. Apply via MCP `apply_migration(ocauafggjrqvopxjihas, ...)` (preferred) or `supabase db push`
+4. `npm run gen:types` — regenerates `src/lib/supabase/database.types.ts`
+5. `npm run gen:schema` — refreshes `supabase/schemas/prod.sql`
+
+### Adding a Go BFF Endpoint
+1. Create repo method in `backend/internal/repository/<domain>.go` (row struct + query).
+2. Thin service in `backend/internal/services/<domain>.go` (cache invalidation belongs here).
+3. Handler in `backend/internal/handlers/<domain>.go` — envelope `{data: ...}`, ETag,
+   RFC 7807 errors via `pkg/apierr`.
+4. Wire repo/service/handler in `backend/cmd/server/main.go` and register route
+   inside `r.Group(authMW)` (unless intentionally public like `/health`).
+5. Add matching helper in `src/lib/api/<domain>.ts` with Go/Supabase branch:
+   `if (isGoEnabled('<domain>')) { return apiFetch(...) } else { return supabase... }`.
+6. Add an entry in `scripts/smoke/go-bff.mjs` to cover the new endpoint.
+7. Rebuild image: `docker build -t hubtender-api:local ./backend`.
 
 ## Tech Stack
 
