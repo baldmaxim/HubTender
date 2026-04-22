@@ -4,6 +4,7 @@
 
 import { supabase } from '../../lib/supabase';
 import type { BoqItem } from '../../lib/supabase';
+import { bulkUpdateCommercial } from '../../lib/api/boq';
 import { validateMarkupSequence } from '../../utils/markupCalculator';
 import { loadMarkupParameters } from './parameters';
 import {
@@ -123,22 +124,13 @@ async function bulkUpdateBoqItems(rows: BulkCommercialUpdateRow[]): Promise<{ su
 
   for (let i = 0; i < rows.length; i += BULK_UPSERT_BATCH_SIZE) {
     const batch = rows.slice(i, i + BULK_UPSERT_BATCH_SIZE);
-    const { data, error } = await supabase.rpc('bulk_update_boq_items_commercial_costs', {
-      p_rows: batch,
-    });
-
-    if (error) {
-      console.warn('bulk_update_boq_items_commercial_costs RPC is unavailable, falling back to batched updates:', error);
-      console.warn('RPC error details:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      });
+    try {
+      // Routes to Go BFF when VITE_API_BOQ_ENABLED=true; otherwise uses the Supabase RPC.
+      successCount += await bulkUpdateCommercial(batch);
+    } catch (err) {
+      console.warn('bulk commercial update failed, falling back to per-row updates:', err);
       return fallbackBatchUpdateBoqItems(rows);
     }
-
-    successCount += Number(data) || 0;
   }
 
   return { successCount, errors };
