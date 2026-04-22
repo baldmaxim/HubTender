@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
@@ -12,6 +14,7 @@ import (
 // boqServicer is the interface BoqHandler depends on.
 type boqServicer interface {
 	ListBoqItems(ctx context.Context, tenderID, positionID string) ([]repository.BoqItemRow, error)
+	GetBoqItemByID(ctx context.Context, id string) (*repository.BoqItemRow, error)
 }
 
 // BoqHandler serves the /api/v1/tenders/:id/positions/:posId/items endpoint.
@@ -46,4 +49,28 @@ func (h *BoqHandler) GetBoqItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+// GetBoqItem handles GET /api/v1/items/{id}.
+// Returns a single BOQ item. Sets the ETag header so callers can use it as
+// If-Match on subsequent PATCH/DELETE.
+func (h *BoqHandler) GetBoqItem(w http.ResponseWriter, r *http.Request) {
+	itemID := chi.URLParam(r, "id")
+	if itemID == "" {
+		apierr.BadRequest("missing item id").Render(w)
+		return
+	}
+
+	item, err := h.svc.GetBoqItemByID(r.Context(), itemID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			apierr.NotFound("BOQ item not found").Render(w)
+			return
+		}
+		apierr.InternalError("failed to load BOQ item").Render(w)
+		return
+	}
+
+	setResourceETag(w, item.ID, item.UpdatedAt)
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: item})
 }

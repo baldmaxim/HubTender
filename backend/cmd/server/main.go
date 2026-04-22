@@ -191,6 +191,7 @@ func main() {
 		r.Post("/api/v1/tenders/{id}/positions/{posId}/items", boqWH.CreateBoqItem)
 		r.Patch("/api/v1/items/{id}", boqWH.UpdateBoqItem)
 		r.Delete("/api/v1/items/{id}", boqWH.DeleteBoqItem)
+		r.Get("/api/v1/items/{id}", boqH.GetBoqItem)
 
 		// Slice 3a: ported RPCs.
 		r.Get("/api/v1/tenders/{id}/positions/with-costs", positionCostsH.GetPositionsWithCosts)
