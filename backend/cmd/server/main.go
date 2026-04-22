@@ -107,6 +107,7 @@ func main() {
 	positionCostsRepo := repository.NewPositionCostsRepo(pool)
 	boqRepo := repository.NewBoqRepo(pool)
 	bulkBoqRepo := repository.NewBulkBoqRepo(pool)
+	importBoqRepo := repository.NewImportRepo(pool)
 	timelineRepo := repository.NewTimelineRepo(pool)
 	subcontractRepo := repository.NewSubcontractRepo(pool)
 
@@ -117,6 +118,7 @@ func main() {
 	positionCostsSvc := services.NewPositionCostsService(positionCostsRepo, inMemCache)
 	boqSvc := services.NewBoqService(boqRepo, inMemCache)
 	bulkBoqSvc := services.NewBulkBoqService(bulkBoqRepo, inMemCache)
+	importBoqSvc := services.NewImportBoqService(importBoqRepo, inMemCache)
 	timelineSvc := services.NewTimelineService(timelineRepo)
 	subcontractSvc := services.NewSubcontractService(subcontractRepo, inMemCache)
 
@@ -131,6 +133,7 @@ func main() {
 	boqH := handlers.NewBoqHandler(boqSvc)
 	boqWH := handlers.NewBoqWriteHandler(boqSvc)
 	bulkBoqH := handlers.NewBulkBoqHandler(bulkBoqSvc)
+	importBoqH := handlers.NewImportBoqHandler(importBoqSvc)
 	timelineH := handlers.NewTimelineHandler(timelineSvc)
 	userRegH := handlers.NewUserRegisterHandler(userSvc)
 	subcontractH := handlers.NewSubcontractHandler(subcontractSvc)
@@ -194,6 +197,9 @@ func main() {
 		// Slice 3b: remaining simple RPCs.
 		r.Post("/api/v1/users/register", userRegH.Register)
 		r.Post("/api/v1/tenders/{id}/subcontract-exclusions/toggle", subcontractH.ToggleExclusion)
+
+		// Phase 4c-lite: bulk BOQ import (replaces public.bulk_import_client_position_boq RPC).
+		r.Post("/api/v1/imports/boq", importBoqH.BulkImport)
 	})
 
 	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because
