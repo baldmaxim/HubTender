@@ -72,13 +72,19 @@ func main() {
 	refRepo := repository.NewReferenceRepo(pool)
 	tenderRepo := repository.NewTenderRepo(pool)
 	positionRepo := repository.NewPositionRepo(pool)
+	positionCostsRepo := repository.NewPositionCostsRepo(pool)
 	boqRepo := repository.NewBoqRepo(pool)
+	bulkBoqRepo := repository.NewBulkBoqRepo(pool)
+	timelineRepo := repository.NewTimelineRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
 	tenderSvc := services.NewTenderService(tenderRepo, inMemCache)
 	positionSvc := services.NewPositionService(positionRepo, inMemCache)
+	positionCostsSvc := services.NewPositionCostsService(positionCostsRepo, inMemCache)
 	boqSvc := services.NewBoqService(boqRepo, inMemCache)
+	bulkBoqSvc := services.NewBulkBoqService(bulkBoqRepo, inMemCache)
+	timelineSvc := services.NewTimelineService(timelineRepo)
 
 	healthH := handlers.NewHealthHandler()
 	meH := handlers.NewMeHandler(userSvc)
@@ -87,8 +93,11 @@ func main() {
 	tenderWH := handlers.NewTenderWriteHandler(tenderSvc)
 	positionH := handlers.NewPositionHandler(positionSvc)
 	positionWH := handlers.NewPositionWriteHandler(positionSvc)
+	positionCostsH := handlers.NewPositionCostsHandler(positionCostsSvc)
 	boqH := handlers.NewBoqHandler(boqSvc)
 	boqWH := handlers.NewBoqWriteHandler(boqSvc)
+	bulkBoqH := handlers.NewBulkBoqHandler(bulkBoqSvc)
+	timelineH := handlers.NewTimelineHandler(timelineSvc)
 
 	// -------------------------------------------------------------------------
 	// 6. Router
@@ -138,6 +147,12 @@ func main() {
 		r.Post("/api/v1/tenders/{id}/positions/{posId}/items", boqWH.CreateBoqItem)
 		r.Patch("/api/v1/items/{id}", boqWH.UpdateBoqItem)
 		r.Delete("/api/v1/items/{id}", boqWH.DeleteBoqItem)
+
+		// Slice 3a: ported RPCs.
+		r.Get("/api/v1/tenders/{id}/positions/with-costs", positionCostsH.GetPositionsWithCosts)
+		r.Patch("/api/v1/items/bulk-commercial", bulkBoqH.BulkUpdateCommercial)
+		r.Post("/api/v1/timeline/groups/{id}/quality", timelineH.SetGroupQuality)
+		r.Post("/api/v1/timeline/iterations/{id}/respond", timelineH.RespondIteration)
 	})
 
 	// -------------------------------------------------------------------------
