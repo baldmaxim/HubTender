@@ -15,11 +15,14 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/su10/hubtender/backend/internal/cache"
 	"github.com/su10/hubtender/backend/internal/config"
 	infradb "github.com/su10/hubtender/backend/internal/infrastructure/db"
 	"github.com/su10/hubtender/backend/internal/handlers"
 	"github.com/su10/hubtender/backend/internal/middleware"
+	"github.com/su10/hubtender/backend/internal/realtime"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/internal/services"
 )
@@ -45,10 +48,16 @@ func main() {
 	log.Logger = logger
 
 	// -------------------------------------------------------------------------
-	// 3. Database pool
+	// 3. Root context — cancelled on shutdown signal so background goroutines
+	//    (listener, broker) can exit cleanly.
 	// -------------------------------------------------------------------------
-	ctx := context.Background()
-	pool, err := infradb.NewPool(ctx, cfg.DatabaseURL, infradb.DefaultPoolConfig())
+	rootCtx, rootCancel := context.WithCancel(context.Background())
+	defer rootCancel()
+
+	// -------------------------------------------------------------------------
+	// 4. Database pool
+	// -------------------------------------------------------------------------
+	pool, err := infradb.NewPool(rootCtx, cfg.DatabaseURL, infradb.DefaultPoolConfig())
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to connect to database")
 	}
@@ -56,7 +65,30 @@ func main() {
 	log.Info().Msg("database pool connected")
 
 	// -------------------------------------------------------------------------
-	// 4. JWKS keyfunc (auto-refreshes every 1 h)
+	// 5. Dedicated listener connection for pg_notify LISTEN.
+	//    A dedicated *pgx.Conn is used instead of the pool because LISTEN holds
+	//    the connection for its entire lifetime. Borrowing from the pool would
+	//    permanently remove one slot, starving concurrent request handlers.
+	// -------------------------------------------------------------------------
+	listenerConn, err := pgx.Connect(rootCtx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to open dedicated listener connection")
+	}
+	// listenerConn is closed after srv.Shutdown in the graceful-shutdown block.
+	log.Info().Msg("listener connection opened")
+
+	// -------------------------------------------------------------------------
+	// 6. Realtime hub, broker, listener
+	// -------------------------------------------------------------------------
+	hub := realtime.NewHub(logger)
+	broker := realtime.NewBroker(hub, 200*time.Millisecond, logger)
+	listener := realtime.NewListener(listenerConn, cfg.DatabaseURL, broker, logger)
+
+	// Run listener in the background; it exits when rootCtx is cancelled.
+	go listener.Run(rootCtx)
+
+	// -------------------------------------------------------------------------
+	// 7. JWKS keyfunc (auto-refreshes every 1 h)
 	// -------------------------------------------------------------------------
 	kf, err := keyfunc.NewDefault([]string{cfg.SupabaseJWKSURL})
 	if err != nil {
@@ -64,7 +96,7 @@ func main() {
 	}
 
 	// -------------------------------------------------------------------------
-	// 5. Repositories, cache, services, handlers
+	// 8. Repositories, cache, services, handlers
 	// -------------------------------------------------------------------------
 	inMemCache := cache.New()
 
@@ -102,9 +134,10 @@ func main() {
 	timelineH := handlers.NewTimelineHandler(timelineSvc)
 	userRegH := handlers.NewUserRegisterHandler(userSvc)
 	subcontractH := handlers.NewSubcontractHandler(subcontractSvc)
+	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
-	// 6. Router
+	// 9. Router
 	// -------------------------------------------------------------------------
 	r := chi.NewRouter()
 
@@ -163,8 +196,13 @@ func main() {
 		r.Post("/api/v1/tenders/{id}/subcontract-exclusions/toggle", subcontractH.ToggleExclusion)
 	})
 
+	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because
+	// the WS handler performs its own JWT verification via the ?token= query
+	// parameter (the browser WebSocket API cannot set the Authorization header).
+	r.Get("/api/v1/ws", wsH.Serve)
+
 	// -------------------------------------------------------------------------
-	// 7. HTTP server with graceful shutdown
+	// 10. HTTP server with graceful shutdown
 	// -------------------------------------------------------------------------
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
@@ -194,6 +232,10 @@ func main() {
 		log.Fatal().Err(err).Msg("server error")
 	}
 
+	// Cancel the root context first so the listener goroutine exits its LISTEN
+	// loop before we close the dedicated connection.
+	rootCancel()
+
 	// Graceful shutdown — allow up to 15 s for in-flight requests to complete.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
@@ -204,6 +246,11 @@ func main() {
 	} else {
 		log.Info().Msg("server shutdown complete")
 	}
+
+	// Close the dedicated listener connection after the HTTP server has drained.
+	// By this point the listener goroutine has already exited (rootCtx cancelled).
+	_ = listenerConn.Close(context.Background())
+	log.Info().Msg("listener connection closed")
 }
 
 // ---------------------------------------------------------------------------

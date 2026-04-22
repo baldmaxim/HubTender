@@ -40,6 +40,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { LogoIcon } from '../Icons';
 import { supabase, type Notification } from '../../lib/supabase';
+import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { hasPageAccess } from '../../lib/supabase/types';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -77,33 +78,31 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     token: { colorBgContainer },
   } = theme.useToken();
 
-  // Загрузка уведомлений при монтировании компонента и подписка на изменения
+  // Native WS hub (Go BFF) when VITE_API_REALTIME_ENABLED=true; returns true in that case.
+  const wsActive = useRealtimeTopic(
+    user?.id ? `notifications:${user.id}` : null,
+    () => fetchNotifications(),
+  );
+
+  // Load initial data + Supabase Realtime fallback when WS is disabled.
   useEffect(() => {
     fetchNotifications();
 
-    // Подписываемся на real-time обновления таблицы notifications
+    if (wsActive) return;
+
     const channel = supabase
       .channel('notifications-channel')
       .on(
         'postgres_changes',
-        {
-          event: '*', // Слушаем все события (INSERT, UPDATE, DELETE)
-          schema: 'public',
-          table: 'notifications',
-        },
-        (payload) => {
-          console.log('Получено изменение в уведомлениях:', payload);
-          // Перезагружаем уведомления при любом изменении
-          fetchNotifications();
-        }
+        { event: '*', schema: 'public', table: 'notifications' },
+        () => fetchNotifications()
       )
       .subscribe();
 
-    // Очистка подписки при размонтировании
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [wsActive]);
 
   // Функция для загрузки уведомлений из базы данных
   const fetchNotifications = async () => {

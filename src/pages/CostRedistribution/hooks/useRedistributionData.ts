@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import type { Tender } from '../../../lib/supabase';
 import type { BoqItemWithCosts } from '../utils';
 import {
@@ -75,8 +76,20 @@ export function useRedistributionData() {
     }
   }, [selectedTenderId, selectedTacticId, tenders]);
 
+  // Native WS hub (Go BFF) path.
+  const wsActive = useRealtimeTopic(
+    selectedTenderId ? `tender:${selectedTenderId}` : null,
+    () => {
+      if (selectedTenderId) {
+        void loadBoqItems(selectedTenderId, selectedTacticId);
+      }
+    },
+    !!selectedTenderId,
+  );
+
+  // Supabase Realtime fallback.
   useEffect(() => {
-    if (!selectedTenderId) {
+    if (!selectedTenderId || wsActive) {
       return;
     }
 
@@ -99,7 +112,7 @@ export function useRedistributionData() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedTenderId, selectedTacticId]);
+  }, [selectedTenderId, selectedTacticId, wsActive]);
 
   const loadTenders = async () => {
     try {

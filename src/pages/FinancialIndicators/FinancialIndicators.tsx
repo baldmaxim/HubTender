@@ -4,6 +4,7 @@ import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutl
 import { useTheme } from '../../contexts/ThemeContext';
 import { getVersionColorByTitle } from '../../utils/versionColor';
 import { supabase } from '../../lib/supabase';
+import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import dayjs from 'dayjs';
 import {
   Chart as ChartJS,
@@ -86,9 +87,20 @@ const FinancialIndicators: React.FC = () => {
     }
   }, [selectedTenderId, fetchFinancialIndicators, loadVolumeTitle]);
 
-  // Автоматическое обновление данных при изменении тендера (например, конструктора наценок)
+  // Native WS hub when VITE_API_REALTIME_ENABLED=true.
+  const wsActive = useRealtimeTopic(
+    selectedTenderId ? `tender:${selectedTenderId}` : null,
+    () => {
+      if (selectedTenderId) {
+        fetchFinancialIndicators(selectedTenderId);
+        loadVolumeTitle(selectedTenderId);
+      }
+    },
+  );
+
+  // Supabase Realtime fallback when WS is disabled.
   useEffect(() => {
-    if (!selectedTenderId) return;
+    if (!selectedTenderId || wsActive) return;
 
     const channel = supabase
       .channel(`tender_changes_${selectedTenderId}`)
@@ -100,8 +112,7 @@ const FinancialIndicators: React.FC = () => {
           table: 'tenders',
           filter: `id=eq.${selectedTenderId}`,
         },
-        (payload) => {
-          console.log('Tender updated, refreshing financial indicators:', payload);
+        () => {
           fetchFinancialIndicators(selectedTenderId);
           loadVolumeTitle(selectedTenderId);
         }
@@ -111,7 +122,7 @@ const FinancialIndicators: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedTenderId, fetchFinancialIndicators, loadVolumeTitle]);
+  }, [selectedTenderId, wsActive, fetchFinancialIndicators, loadVolumeTitle]);
 
   const handleUpdateVolumeTitle = async () => {
     if (!selectedTenderId) return;

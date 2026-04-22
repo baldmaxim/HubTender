@@ -7,6 +7,7 @@ import {
   type CurrencyType,
   type DeliveryPriceType,
 } from '../../../lib/supabase';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 
 type PositionCountMap = Record<string, { works: number; materials: number; total: number }>;
 
@@ -274,8 +275,20 @@ export const useClientPositions = () => {
     }
   }, []);
 
+  // Native WS hub (Go BFF) path.
+  const wsActive = useRealtimeTopic(
+    selectedTender?.id ? `tender:${selectedTender.id}` : null,
+    () => {
+      if (selectedTender?.id) {
+        void fetchTenders();
+        void fetchClientPositions(selectedTender.id);
+      }
+    },
+  );
+
+  // Supabase Realtime fallback.
   useEffect(() => {
-    if (!selectedTender?.id) {
+    if (!selectedTender?.id || wsActive) {
       return;
     }
 
@@ -299,7 +312,7 @@ export const useClientPositions = () => {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [fetchClientPositions, fetchTenders, selectedTender?.id]);
+  }, [fetchClientPositions, fetchTenders, selectedTender?.id, wsActive]);
 
   return {
     tenders,

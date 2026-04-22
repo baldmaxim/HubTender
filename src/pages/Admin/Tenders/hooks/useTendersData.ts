@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
 import { supabase, type Tender, type HousingClassType, type ConstructionScopeType } from '../../../../lib/supabase';
+import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
 import dayjs from 'dayjs';
 
 export interface TenderRecord {
@@ -102,10 +103,23 @@ export const useTendersData = () => {
     }
   }, []);
 
+  // Native WS hub (Go BFF) path. Unlike Supabase Realtime we don't get the full
+  // row payload — we just refetch the list on any tenders event. The broker's
+  // 200ms debounce collapses bulk mutations.
+  const wsActive = useRealtimeTopic('tenders', (ev) => {
+    if (ev.op === 'DELETE') {
+      setTendersData((prev) => prev.filter((t) => t.id !== ev.id));
+    } else {
+      void fetchTenders();
+    }
+  });
+
   useEffect(() => {
     fetchTenders();
 
-    // Подписка на tenders (не boq_items).
+    if (wsActive) return;
+
+    // Supabase Realtime fallback.
     // Триггер в БД обновляет cached_grand_total при изменении boq_items /
     // tender_markup_percentage / subcontract_growth_exclusions, что вызывает
     // UPDATE-событие в tenders — мы обновляем только затронутую запись.
@@ -140,7 +154,7 @@ export const useTendersData = () => {
     return () => {
       supabase.removeChannel(subscription);
     };
-  }, [fetchTenders]);
+  }, [fetchTenders, wsActive]);
 
   return {
     tendersData,

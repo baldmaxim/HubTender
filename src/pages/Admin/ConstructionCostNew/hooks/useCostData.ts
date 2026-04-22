@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { supabase, type Tender } from '../../../../lib/supabase';
+import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
 import {
   calculateLiveCommercialAmounts,
   loadLiveCommercialCalculationContext,
@@ -792,8 +793,17 @@ export const useCostData = (userRole?: string) => {
     }
   }, [selectedTenderId, costType]);
 
+  // Native WS hub (Go BFF) path.
+  const wsActive = useRealtimeTopic(
+    selectedTenderId ? `tender:${selectedTenderId}` : null,
+    () => {
+      void fetchConstructionCosts();
+    },
+  );
+
+  // Supabase Realtime fallback.
   useEffect(() => {
-    if (!selectedTenderId) return;
+    if (!selectedTenderId || wsActive) return;
 
     const channel = supabase
       .channel(`construction_costs_${selectedTenderId}`)
@@ -814,7 +824,7 @@ export const useCostData = (userRole?: string) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedTenderId, costType]);
+  }, [selectedTenderId, costType, wsActive]);
 
   return {
     tenders,

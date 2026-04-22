@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -37,6 +38,42 @@ type supabaseClaims struct {
 	Role string `json:"role"`
 }
 
+// VerifyToken parses and validates a raw JWT string against the provided
+// keyfunc and issuer. It returns the extracted AuthUser on success, or a
+// non-nil error if the token is missing, malformed, expired, or has an
+// invalid issuer/sub claim.
+//
+// This function is public so that the WS handler can call it directly with a
+// query-parameter token (browser WebSocket API cannot set headers).
+func VerifyToken(kf keyfunc.Keyfunc, expectedIssuer, raw string) (*AuthUser, error) {
+	claims := &supabaseClaims{}
+	token, err := jwt.ParseWithClaims(
+		raw,
+		claims,
+		kf.Keyfunc,
+		jwt.WithExpirationRequired(),
+		jwt.WithIssuedAt(),
+		jwt.WithIssuer(expectedIssuer),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if !token.Valid {
+		return nil, fmt.Errorf("token is not valid")
+	}
+
+	// sub claim is the Supabase user UUID.
+	sub, err := claims.GetSubject()
+	if err != nil || sub == "" {
+		return nil, fmt.Errorf("token missing sub claim")
+	}
+
+	return &AuthUser{
+		ID:    sub,
+		Email: claims.Email,
+	}, nil
+}
+
 // JWTAuth returns a chi middleware that validates a Bearer JWT using the
 // provided keyfunc.Keyfunc (backed by JWKS auto-refresh) and verifies the
 // issuer claim. On success it stores an AuthUser in the request context.
@@ -49,30 +86,10 @@ func JWTAuth(kf keyfunc.Keyfunc, expectedIssuer string) func(http.Handler) http.
 				return
 			}
 
-			claims := &supabaseClaims{}
-			token, err := jwt.ParseWithClaims(
-				tokenStr,
-				claims,
-				kf.Keyfunc,
-				jwt.WithExpirationRequired(),
-				jwt.WithIssuedAt(),
-				jwt.WithIssuer(expectedIssuer),
-			)
-			if err != nil || !token.Valid {
+			authUser, err := VerifyToken(kf, expectedIssuer, tokenStr)
+			if err != nil {
 				apierr.Unauthorized("invalid or expired token").Render(w)
 				return
-			}
-
-			// sub claim is the Supabase user UUID.
-			sub, err := claims.GetSubject()
-			if err != nil || sub == "" {
-				apierr.Unauthorized("token missing sub claim").Render(w)
-				return
-			}
-
-			authUser := &AuthUser{
-				ID:    sub,
-				Email: claims.Email,
 			}
 
 			ctx := context.WithValue(r.Context(), CtxUser, authUser)
