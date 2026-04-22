@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -390,7 +391,7 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 		// Issue the UPDATE with only the columns that should change.
 		// Both columns are always in the SET clause when both keys are present;
 		// individual branches handle each combination.
-		var tag pgx.CommandTag
+		var tag pgconn.CommandTag
 		switch {
 		case setManualVolume && setManualNote:
 			const q = `
