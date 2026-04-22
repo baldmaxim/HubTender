@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
 import type { Tender, BoqItem } from '../../../lib/supabase';
+import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 import type { PositionWithCommercialCost, MarkupTactic } from '../types';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 import {
@@ -62,37 +63,6 @@ type PositionAccumulator = {
   itemsCount: number;
 };
 
-type RpcPositionWithCostsRow = {
-  id: string;
-  tender_id: string;
-  position_number: number;
-  unit_code: string | null;
-  volume: number | null;
-  client_note: string | null;
-  item_no: string | null;
-  work_name: string;
-  manual_volume: number | null;
-  manual_note: string | null;
-  hierarchy_level: number | null;
-  is_additional: boolean | null;
-  parent_position_id: string | null;
-  total_material: number | null;
-  total_works: number | null;
-  material_cost_per_unit: number | null;
-  work_cost_per_unit: number | null;
-  total_commercial_material: number | null;
-  total_commercial_work: number | null;
-  total_commercial_material_per_unit: number | null;
-  total_commercial_work_per_unit: number | null;
-  created_at: string;
-  updated_at: string;
-  base_total: number | null;
-  commercial_total: number | null;
-  material_cost_total: number | null;
-  work_cost_total: number | null;
-  markup_percentage: number | null;
-  items_count: number | null;
-};
 
 async function fetchAllPages<T>(
   loader: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
@@ -346,15 +316,9 @@ async function loadCommerceCalculationContext(tenderId: string): Promise<Commerc
 }
 
 async function loadPositionsViaRpc(tenderId: string): Promise<AggregatedPositionLoadResult> {
-  const data = await fetchAllPages<RpcPositionWithCostsRow>(
-    async (from, to) =>
-      supabase
-        .rpc('get_positions_with_costs', {
-          p_tender_id: tenderId,
-        })
-        .range(from, to),
-    1000
-  );
+  // fetchPositionsWithCosts transparently routes to Go BFF when
+  // VITE_API_POSITIONS_ENABLED=true, or paginated Supabase RPC otherwise.
+  const data = await fetchPositionsWithCosts(tenderId);
 
   const positions = applyLeafFlags(
     data.map((row) => ({
