@@ -12,21 +12,37 @@ import (
 // Row types
 // ---------------------------------------------------------------------------
 
-// TenderRow mirrors the columns returned by ListTenders.
+// TenderRow mirrors the full public.tenders row — returned by ListTenders.
+// Must stay aligned with Database['public']['Tables']['tenders']['Row'] on the frontend.
 type TenderRow struct {
-	ID                string    `json:"id"`
-	TenderNumber      string    `json:"tender_number"`
-	Title             string    `json:"title"`
-	ClientName        string    `json:"client_name"`
-	HousingClass      *string   `json:"housing_class"`
-	ConstructionScope *string   `json:"construction_scope"`
-	IsArchived        bool      `json:"is_archived"`
-	CachedGrandTotal  float64   `json:"cached_grand_total"`
-	USDRate           *float64  `json:"usd_rate"`
-	EURRate           *float64  `json:"eur_rate"`
-	CNYRate           *float64  `json:"cny_rate"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	ID                              string     `json:"id"`
+	TenderNumber                    string     `json:"tender_number"`
+	Title                           string     `json:"title"`
+	ClientName                      string     `json:"client_name"`
+	Description                     *string    `json:"description"`
+	HousingClass                    *string    `json:"housing_class"`
+	ConstructionScope               *string    `json:"construction_scope"`
+	IsArchived                      bool       `json:"is_archived"`
+	CachedGrandTotal                float64    `json:"cached_grand_total"`
+	USDRate                         *float64   `json:"usd_rate"`
+	EURRate                         *float64   `json:"eur_rate"`
+	CNYRate                         *float64   `json:"cny_rate"`
+	AreaClient                      *float64   `json:"area_client"`
+	AreaSP                          *float64   `json:"area_sp"`
+	SubmissionDeadline              *string    `json:"submission_deadline"`
+	Version                         *int64     `json:"version"`
+	VolumeTitle                     *string    `json:"volume_title"`
+	MarkupTacticID                  *string    `json:"markup_tactic_id"`
+	UploadFolder                    *string    `json:"upload_folder"`
+	BsmLink                         *string    `json:"bsm_link"`
+	TzLink                          *string    `json:"tz_link"`
+	QaFormLink                      *string    `json:"qa_form_link"`
+	ProjectFolderLink               *string    `json:"project_folder_link"`
+	ApplySubcontractMaterialsGrowth *bool      `json:"apply_subcontract_materials_growth"`
+	ApplySubcontractWorksGrowth     *bool      `json:"apply_subcontract_works_growth"`
+	CreatedBy                       *string    `json:"created_by"`
+	CreatedAt                       time.Time  `json:"created_at"`
+	UpdatedAt                       time.Time  `json:"updated_at"`
 }
 
 // TenderOverviewRow is the aggregate returned by GetTenderOverview.
@@ -122,9 +138,17 @@ func (r *TenderRepo) ListTenders(ctx context.Context, p TenderListParams) ([]Ten
 
 	q := fmt.Sprintf(`
 		SELECT id::text, tender_number, title, client_name,
+		       description,
 		       housing_class::text, construction_scope::text,
 		       is_archived, cached_grand_total,
 		       usd_rate, eur_rate, cny_rate,
+		       area_client, area_sp,
+		       submission_deadline::text,
+		       version, volume_title,
+		       markup_tactic_id::text,
+		       upload_folder, bsm_link, tz_link, qa_form_link, project_folder_link,
+		       apply_subcontract_materials_growth, apply_subcontract_works_growth,
+		       created_by::text,
 		       COALESCE(created_at, NOW()), COALESCE(updated_at, NOW())
 		FROM public.tenders
 		%s
@@ -143,9 +167,17 @@ func (r *TenderRepo) ListTenders(ctx context.Context, p TenderListParams) ([]Ten
 		var row TenderRow
 		if err := rows.Scan(
 			&row.ID, &row.TenderNumber, &row.Title, &row.ClientName,
+			&row.Description,
 			&row.HousingClass, &row.ConstructionScope,
 			&row.IsArchived, &row.CachedGrandTotal,
 			&row.USDRate, &row.EURRate, &row.CNYRate,
+			&row.AreaClient, &row.AreaSP,
+			&row.SubmissionDeadline,
+			&row.Version, &row.VolumeTitle,
+			&row.MarkupTacticID,
+			&row.UploadFolder, &row.BsmLink, &row.TzLink, &row.QaFormLink, &row.ProjectFolderLink,
+			&row.ApplySubcontractMaterialsGrowth, &row.ApplySubcontractWorksGrowth,
+			&row.CreatedBy,
 			&row.CreatedAt, &row.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("tenderRepo.ListTenders: scan: %w", err)

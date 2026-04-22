@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
 import { supabase, type Tender, type HousingClassType, type ConstructionScopeType } from '../../../../lib/supabase';
 import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
+import { fetchTenders as apiFetchTenders } from '../../../../lib/api/tenders';
 import dayjs from 'dayjs';
 
 export interface TenderRecord {
@@ -82,19 +83,11 @@ export const useTendersData = () => {
   const fetchTenders = useCallback(async () => {
     setLoading(true);
     try {
-      // Один запрос — cached_grand_total уже посчитан триггером на сервере
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Ошибка загрузки тендеров:', error);
-        message.error('Ошибка загрузки тендеров');
-        return;
-      }
-
-      setTendersData((data ?? []).map((t: Tender) => formatTender(t)));
+      // cached_grand_total уже посчитан триггером — тянем список одним запросом.
+      // Через apiFetchTenders: при VITE_API_TENDERS_ENABLED=true идёт в Go BFF,
+      // иначе — supabase direct (нулевая регрессия).
+      const data = await apiFetchTenders();
+      setTendersData(data.map((t: Tender) => formatTender(t)));
     } catch (err) {
       console.error('Неожиданная ошибка:', err);
       message.error('Произошла неожиданная ошибка');

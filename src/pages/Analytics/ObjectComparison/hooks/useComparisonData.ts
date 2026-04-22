@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
 import { supabase, type Tender } from '../../../../lib/supabase';
+import { fetchTenders as apiFetchTenders, fetchTendersByIds as apiFetchTendersByIds } from '../../../../lib/api/tenders';
 import type { CostType, ComparisonRow, TenderCosts } from '../types';
 
 const MATERIAL_TYPES = ['мат', 'суб-мат', 'мат-комп.'];
@@ -251,12 +252,8 @@ export function useComparisonData() {
 
   const fetchTendersData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setTenders(data || []);
+      const data = await apiFetchTenders();
+      setTenders(data);
     } catch (error: any) {
       message.error('Ошибка загрузки тендеров: ' + error.message);
     }
@@ -293,14 +290,12 @@ export function useComparisonData() {
     setLoading(true);
     try {
       const [tendersResult, itemsAll, volsAll] = await Promise.all([
-        supabase.from('tenders').select('*').in('id', validTenders),
+        apiFetchTendersByIds(validTenders),
         Promise.all(validTenders.map(id => fetchBoqItems(id))),
         Promise.all(validTenders.map(id => fetchVolumes(id))),
       ]);
 
-      if (tendersResult.error) throw tendersResult.error;
-
-      const tendersById = new Map((tendersResult.data ?? []).map(t => [t.id, t]));
+      const tendersById = new Map(tendersResult.map(t => [t.id, t]));
       setTenderInfos(validTenders.map(id => tendersById.get(id) ?? null));
 
       let loadedNotes: NotesMap = new Map();
