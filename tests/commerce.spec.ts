@@ -4,7 +4,7 @@ test.describe('Страница Коммерция - Расчет коммерч
 
   test('Выбор тендера и тактики наценок', async ({ page }) => {
     // Переходим на страницу Commerce
-    await page.goto('http://localhost:3001/commerce');
+    await page.goto('http://localhost:5185/commerce');
 
     // Ждем загрузки страницы
     await page.waitForSelector('[data-testid="commerce-page"], h3:has-text("Коммерция")', {
@@ -49,7 +49,7 @@ test.describe('Страница Коммерция - Расчет коммерч
   });
 
   test('Изменение тактики наценок', async ({ page }) => {
-    await page.goto('http://localhost:3001/commerce');
+    await page.goto('http://localhost:5185/commerce');
 
     // Ждем загрузки
     await page.waitForSelector('h3:has-text("Коммерция")');
@@ -100,7 +100,7 @@ test.describe('Страница Коммерция - Расчет коммерч
   });
 
   test('Пересчет коммерческих стоимостей', async ({ page }) => {
-    await page.goto('http://localhost:3001/commerce');
+    await page.goto('http://localhost:5185/commerce');
 
     // Ждем загрузки
     await page.waitForSelector('h3:has-text("Коммерция")');
@@ -153,7 +153,7 @@ test.describe('Страница Коммерция - Расчет коммерч
   });
 
   test('Проверка отладочных функций (dev mode)', async ({ page }) => {
-    await page.goto('http://localhost:3001/commerce');
+    await page.goto('http://localhost:5185/commerce');
 
     // Ждем загрузки
     await page.waitForSelector('h3:has-text("Коммерция")');
@@ -199,7 +199,7 @@ test.describe('Страница Коммерция - Расчет коммерч
   });
 
   test('Экспорт в Excel', async ({ page }) => {
-    await page.goto('http://localhost:3001/commerce');
+    await page.goto('http://localhost:5185/commerce');
 
     // Ждем загрузки
     await page.waitForSelector('h3:has-text("Коммерция")');
@@ -254,7 +254,7 @@ test.describe('Страница Коммерция - Расчет коммерч
 
 // Вспомогательный тест для проверки консоли
 test('Проверка расчетов через консоль', async ({ page }) => {
-  await page.goto('http://localhost:3001/commerce');
+  await page.goto('http://localhost:5185/commerce');
 
   // Ждем загрузки
   await page.waitForSelector('h3:has-text("Коммерция")');

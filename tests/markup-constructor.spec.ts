@@ -7,13 +7,13 @@ import { test, expect } from '@playwright/test';
 test.describe('Markup Constructor Page', () => {
   test.beforeEach(async ({ page }) => {
     // Переходим на страницу Конструктора наценок
-    await page.goto('http://localhost:3000/admin/markup_constructor');
+    await page.goto('http://localhost:5185/admin/markup_constructor');
     await page.waitForLoadState('networkidle');
   });
 
   test('должна загружаться без ошибок', async ({ page }) => {
     // Проверяем что страница загрузилась
-    await expect(page).toHaveURL('http://localhost:3000/admin/markup_constructor');
+    await expect(page).toHaveURL('http://localhost:5185/admin/markup_constructor');
 
     // Проверяем наличие заголовка
     const title = page.locator('h4, h3, h2').filter({ hasText: /Конструктор|наценок|Markup/i }).first();
@@ -136,7 +136,7 @@ test.describe('Markup Constructor Page', () => {
     const initialUrl = page.url();
 
     // Переходим на другую страницу
-    await page.goto('http://localhost:3000/dashboard');
+    await page.goto('http://localhost:5185/dashboard');
     await page.waitForLoadState('networkidle');
 
     // Возвращаемся обратно

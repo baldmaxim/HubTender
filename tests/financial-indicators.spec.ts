@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Финансовые показатели - проверка расчётов', () => {
   test.beforeEach(async ({ page }) => {
     // Переход на страницу финансовых показателей
-    await page.goto('http://localhost:3000/financial-indicators');
+    await page.goto('http://localhost:5185/financial-indicators');
 
     // Ожидание загрузки страницы
     await page.waitForSelector('text=Финансовые показатели', { timeout: 10000 });

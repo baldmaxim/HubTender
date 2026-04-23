@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Проверка коэффициентов наценок', () => {
   test('Проверка расчёта коэффициентов по Базовой схеме', async ({ page }) => {
     // Переходим на страницу Commerce
-    await page.goto('http://localhost:3001/commerce');
+    await page.goto('http://localhost:5185/commerce');
 
     // Ждем загрузки страницы
     await page.waitForSelector('h3:has-text("Коммерция")', { timeout: 10000 });
@@ -125,7 +125,7 @@ test.describe('Проверка коэффициентов наценок', () =
   });
 
   test('Проверка применения наценок к позициям', async ({ page }) => {
-    await page.goto('http://localhost:3001/commerce');
+    await page.goto('http://localhost:5185/commerce');
     await page.waitForSelector('h3:has-text("Коммерция")');
 
     // Выбираем тендер

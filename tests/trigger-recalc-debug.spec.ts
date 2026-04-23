@@ -7,7 +7,7 @@ test('Триггер пересчёта с логами', async ({ page }) => {
   });
 
   // Переходим на страницу коммерции
-  await page.goto('http://localhost:3001/commerce');
+  await page.goto('http://localhost:5185/commerce');
   await page.waitForSelector('h3:has-text("Коммерция")', { timeout: 10000 });
 
   // Выбираем ЖК Адмирал

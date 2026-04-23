@@ -40,7 +40,7 @@ func Load() (*Config, error) {
 	v.AutomaticEnv()
 
 	// Set defaults.
-	v.SetDefault("PORT", "8080")
+	v.SetDefault("PORT", "3005")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault(
 		"SUPABASE_JWKS_URL",
@@ -50,7 +50,7 @@ func Load() (*Config, error) {
 		"SUPABASE_JWT_ISSUER",
 		"https://ocauafggjrqvopxjihas.supabase.co/auth/v1",
 	)
-	v.SetDefault("CORS_ORIGINS", "http://localhost:3000")
+	v.SetDefault("CORS_ORIGINS", "http://localhost:5185")
 
 	// DATABASE_URL is required — fail fast if absent.
 	dbURL := v.GetString("DATABASE_URL")

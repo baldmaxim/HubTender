@@ -16,7 +16,7 @@ test.describe('Tenders Page Debug', () => {
     });
 
     // Переходим на страницу тендеров
-    await page.goto('http://localhost:3001/admin/tenders');
+    await page.goto('http://localhost:5185/admin/tenders');
 
     // Ждём 5 секунд
     await page.waitForTimeout(5000);
@@ -49,7 +49,7 @@ test.describe('Tenders Page Debug', () => {
       requests.push(request.url());
     });
 
-    await page.goto('http://localhost:3001/admin/tenders');
+    await page.goto('http://localhost:5185/admin/tenders');
     await page.waitForTimeout(5000);
 
     console.log('Network requests:', requests.filter(r => r.includes('supabase')));

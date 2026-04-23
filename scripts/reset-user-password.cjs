@@ -34,7 +34,7 @@ async function resetPassword() {
 
     if (authData.users.length === 0) {
       console.log('⚠️  Нет пользователей в auth.users!');
-      console.log('   Создайте нового через форму регистрации: http://localhost:3000/register\n');
+      console.log('   Создайте нового через форму регистрации: http://localhost:5185/register\n');
       return;
     }
 

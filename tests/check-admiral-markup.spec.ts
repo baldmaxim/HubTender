@@ -84,7 +84,7 @@ test('Проверка наценок для тендера ЖК Адмирал'
   });
 
   // Переходим на страницу Commerce
-  await page.goto('http://localhost:3001/commerce');
+  await page.goto('http://localhost:5185/commerce');
 
   // Ждем загрузки страницы
   await page.waitForSelector('h3:has-text("Коммерция")', { timeout: 10000 });

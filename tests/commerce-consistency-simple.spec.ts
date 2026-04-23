@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Commerce Consistency Indicator - Simple Tests', () => {
   test('должен отображать индикатор после выбора тендера через карточку', async ({ page }) => {
     // Переходим на страницу Commerce
-    await page.goto('http://localhost:3000/commerce');
+    await page.goto('http://localhost:5185/commerce');
     await page.waitForLoadState('networkidle');
 
     // Ждём появления карточек тендеров
@@ -41,7 +41,7 @@ test.describe('Commerce Consistency Indicator - Simple Tests', () => {
 
   test('должен показывать tooltip с детальной информацией', async ({ page }) => {
     // Переходим на страницу и выбираем тендер
-    await page.goto('http://localhost:3000/commerce');
+    await page.goto('http://localhost:5185/commerce');
     await page.waitForLoadState('networkidle');
 
     const tenderCard = page.locator('.ant-card-hoverable').first();
@@ -76,7 +76,7 @@ test.describe('Commerce Consistency Indicator - Simple Tests', () => {
 
   test('должен обновляться после нажатия кнопки Обновить', async ({ page }) => {
     // Переходим на страницу и выбираем тендер
-    await page.goto('http://localhost:3000/commerce');
+    await page.goto('http://localhost:5185/commerce');
     await page.waitForLoadState('networkidle');
 
     const tenderCard = page.locator('.ant-card-hoverable').first();
@@ -133,7 +133,7 @@ test.describe('Commerce Consistency Indicator - Simple Tests', () => {
     });
 
     // Переходим на страницу и выбираем тендер
-    await page.goto('http://localhost:3000/commerce');
+    await page.goto('http://localhost:5185/commerce');
     await page.waitForLoadState('networkidle');
 
     const tenderCard = page.locator('.ant-card-hoverable').first();

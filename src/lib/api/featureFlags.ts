@@ -29,7 +29,7 @@ export function isGoEnabled(domain: ApiDomain): boolean {
 }
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+  import.meta.env.VITE_API_URL ?? 'http://localhost:3005';
 
 // Realtime: true → use native WS hub (Go BFF). Falsy → supabase.channel() direct.
 export function isRealtimeEnabled(): boolean {

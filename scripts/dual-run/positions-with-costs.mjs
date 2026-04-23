@@ -14,7 +14,7 @@
 //   SUPABASE_SERVICE_ROLE_KEY   — service role key (reads only, used for the RPC call)
 //   DUAL_RUN_EMAIL              — test user email with access to the tender(s)
 //   DUAL_RUN_PASSWORD           — that user's password
-//   VITE_API_URL                — Go BFF base URL, e.g. http://localhost:8080
+//   VITE_API_URL                — Go BFF base URL, e.g. http://localhost:3005
 //
 // Tolerance: 0.01 RUB on all numeric fields.
 import { createClient } from '@supabase/supabase-js';
@@ -43,7 +43,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const EMAIL = process.env.DUAL_RUN_EMAIL;
 const PASSWORD = process.env.DUAL_RUN_PASSWORD;
-const API_URL = process.env.VITE_API_URL ?? 'http://localhost:8080';
+const API_URL = process.env.VITE_API_URL ?? 'http://localhost:3005';
 const TOLERANCE = 0.01;
 
 if (!SUPABASE_URL || !SERVICE_ROLE || !EMAIL || !PASSWORD) {

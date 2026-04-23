@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Уведомления и работа портала', () => {
   test.beforeEach(async ({ page }) => {
     // Переходим на главную страницу
-    await page.goto('http://localhost:3000');
+    await page.goto('http://localhost:5185');
   });
 
   test('Проверка загрузки главной страницы', async ({ page }) => {
@@ -47,7 +47,7 @@ test.describe('Уведомления и работа портала', () => {
 
   test('Проверка выбора тендера через dropdown', async ({ page }) => {
     // Переходим на страницу финансовых показателей
-    await page.goto('http://localhost:3000/financial-indicators');
+    await page.goto('http://localhost:5185/financial-indicators');
 
     // Ждем загрузки страницы выбора тендера (заголовок или селектор)
     await page.waitForTimeout(2000);
@@ -81,7 +81,7 @@ test.describe('Уведомления и работа портала', () => {
 
   test('Проверка быстрого выбора тендера через карточки', async ({ page }) => {
     // Переходим на страницу финансовых показателей
-    await page.goto('http://localhost:3000/financial-indicators');
+    await page.goto('http://localhost:5185/financial-indicators');
 
     // Ждем загрузки текста "Или выберите из списка"
     await page.waitForTimeout(2000);
@@ -123,7 +123,7 @@ test.describe('Уведомления и работа портала', () => {
 
   test('Проверка отображения ошибок в уведомлениях при проблемах с Supabase', async ({ page }) => {
     // Переходим на страницу, которая делает запросы к Supabase
-    await page.goto('http://localhost:3000/financial-indicators');
+    await page.goto('http://localhost:5185/financial-indicators');
 
     // Ждем некоторое время для выполнения запросов
     await page.waitForTimeout(3000);

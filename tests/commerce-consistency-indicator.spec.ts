@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Commerce Consistency Indicator', () => {
   test.beforeEach(async ({ page }) => {
     // Переходим на страницу Commerce
-    await page.goto('http://localhost:3000/commerce');
+    await page.goto('http://localhost:5185/commerce');
     await page.waitForLoadState('networkidle');
   });
 

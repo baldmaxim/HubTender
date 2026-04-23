@@ -17,7 +17,7 @@ Add to `.env`:
 SUPABASE_URL=https://ocauafggjrqvopxjihas.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<service-role>
 VITE_SUPABASE_PUBLISHABLE_KEY=<anon>
-VITE_API_URL=http://localhost:8080
+VITE_API_URL=http://localhost:3005
 DUAL_RUN_EMAIL=<test-user-email>
 DUAL_RUN_PASSWORD=<test-user-password>
 ```

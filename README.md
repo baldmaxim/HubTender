@@ -1,155 +1,123 @@
 # HUBTender
 
-A modern React application built with Vite and TypeScript.
+Портал управления тендерами в строительстве (BOQ + биржа работ).
+Фронт — React + Vite + Ant Design. Бэк — Go BFF (chi + pgx) перед Supabase
+(Postgres 17 + Auth + Realtime). Подробнее о конвенциях, ENV и рабочем
+процессе — в [CLAUDE.md](CLAUDE.md).
 
-## Features
-
-- ⚡️ Fast development with Vite
-- ⚛️ React 18
-- 🎨 TypeScript support
-- 📝 ESLint configuration
-- 🎯 Modern folder structure
-
-## Project Structure
+## Что где лежит
 
 ```
 HUBTender/
-├── public/                 # Static files
-├── src/                    # Source code
-│   ├── assets/            # Images, fonts, etc
-│   │   ├── icons/         # Icon files
-│   │   └── images/        # Image files
-│   ├── components/        # Reusable components
-│   ├── hooks/            # Custom React hooks
-│   ├── pages/            # Page components
-│   ├── services/         # API services
-│   ├── styles/           # Global styles
-│   ├── types/            # TypeScript type definitions
-│   ├── utils/            # Utility functions
-│   ├── App.tsx           # Main App component
-│   ├── App.css           # App styles
-│   ├── index.css         # Global styles
-│   ├── main.tsx          # Application entry point
-│   └── vite-env.d.ts     # Vite types
-├── .eslintrc.cjs         # ESLint configuration
-├── .gitignore            # Git ignore file
-├── index.html            # HTML template
-├── package.json          # Project dependencies
-├── tsconfig.json         # TypeScript configuration
-├── tsconfig.node.json    # TypeScript config for Vite
-├── vite.config.ts        # Vite configuration
-└── README.md             # Project documentation
+│
+├── src/                     ─┐
+├── public/                   │
+├── index.html                ├─ FRONTEND  React 18 + Vite + TS + Ant Design
+├── vite.config.ts            │             (entry: index.html → src/main.tsx)
+├── tsconfig*.json            │
+├── vercel.json               │
+├── .eslintrc.cjs            ─┘
+│
+├── backend/                 ─┐ BACKEND   Go BFF (chi + pgx + WebSocket hub)
+│   ├── cmd/server/           │           entry: backend/cmd/server/main.go
+│   ├── internal/             │           layers: handlers / services / repository
+│   │   ├── handlers/         │                    + realtime / calc / middleware
+│   │   ├── services/         │
+│   │   ├── repository/       │
+│   │   ├── realtime/         │
+│   │   ├── calc/             │
+│   │   └── middleware/       │
+│   ├── pkg/apierr/           │
+│   ├── go.mod                │
+│   └── Dockerfile           ─┘
+│
+├── supabase/                ─┐ DATABASE  Postgres 17 @ Supabase
+│   ├── migrations/           │           SQL-миграции
+│   ├── schemas/prod.sql      │           каноничный снимок схемы
+│   ├── exports/              │           DDL-дампы
+│   └── ai_context/          ─┘
+│
+├── tests/                   ─┐ QA        Playwright E2E
+├── playwright.config.ts     ─┘           (webServer на порту 3001)
+│
+├── scripts/                 ─┐ DEV/OPS   Node.js утилиты
+│   ├── smoke/                │           smoke-тесты Go BFF
+│   └── dual-run/            ─┘           RPC-vs-Go diff harness
+│
+├── docs/                    ─┐ DOCS      архитектура и домен
+│   └── archive/             ─┘           устаревшие заметки
+│
+├── docker-compose.yml       ─┐ INFRA     api + redis + caddy
+├── Caddyfile                ─┘           reverse proxy
+│
+├── CLAUDE.md                   правила проекта и AI-агента
+├── BRANDING.md                 дизайн-система
+├── .env.example                шаблон переменных окружения
+└── package.json                зависимости и npm-скрипты фронта
 ```
 
-## Getting Started
+## Быстрый старт
 
-### Prerequisites
+Первым делом — `cp .env.example .env` и заполнить креды Supabase.
 
-- Node.js (v18 or higher recommended)
-- npm or yarn
+### Frontend (React + Vite)
 
-### Installation
-
-1. Clone the repository:
-```bash
-git clone [repository-url]
-cd HUBTender
-```
-
-2. Install dependencies:
 ```bash
 npm install
-# or
-yarn install
+npm run dev        # http://localhost:5185 (auto-open)
+npm run build      # TS-check + Vite production build
+npm run lint       # ESLint (max-warnings: 0)
 ```
 
-### Development
+### Backend (Go BFF)
 
-Run the development server:
+Go локально не нужен — собирается в Docker:
 
 ```bash
-npm run dev
-# or
-yarn dev
+docker build -t hubtender-api:local ./backend
+docker run --rm --env-file .env -p 3005:3005 hubtender-api:local
+curl http://localhost:3005/health      # liveness
+curl http://localhost:3005/health/db   # readiness + DB ping
 ```
 
-The application will be available at `http://localhost:3000`
-
-### Build
-
-Build for production:
+Полный стек локально (`api + redis + caddy`):
 
 ```bash
-npm run build
-# or
-yarn build
+docker compose up --build
 ```
 
-### Preview
+### База данных
 
-Preview the production build:
+Работа через Supabase MCP — см. [CLAUDE.md](CLAUDE.md#critical-rules).
+`supabase/schemas/prod.sql` — единый источник истины по схеме.
 
 ```bash
-npm run preview
-# or
-yarn preview
+npm run gen:types     # регенерит src/lib/supabase/database.types.ts
+npm run gen:schema    # обновляет supabase/schemas/prod.sql
 ```
 
-### Linting
-
-Run ESLint to check code quality:
+### E2E-тесты
 
 ```bash
-npm run lint
-# or
-yarn lint
+npm test               # Playwright (поднимает dev-сервер на 3001)
 ```
 
-## Technologies
+### Smoke-тесты Go BFF
 
-- **React** - UI library
-- **Vite** - Build tool and development server
-- **TypeScript** - Type-safe JavaScript
-- **ESLint** - Code linting
-- **CSS** - Styling
+```bash
+node scripts/smoke/go-bff.mjs                                      # все Go read-эндпоинты
+node scripts/dual-run/positions-with-costs.mjs <tender-id>         # diff RPC vs Go
+```
 
-## Development Guidelines
+## Конвенции
 
-### Components
+- **Язык**: русский UI, английский код, русские commit-сообщения в императиве
+- **Ветки**: `feature/`, `fix/`, `refactor/`
+- **Размер файла**: ≤ 600 строк (строго)
+- **Секреты**: `VITE_*` инлайнится в клиент — не класть туда приватные ключи
+- Полный свод правил: [CLAUDE.md](CLAUDE.md)
 
-- Place reusable components in `src/components/`
-- Use TypeScript for all component files
-- Follow React best practices and hooks
+## Стек
 
-### Styling
-
-- Global styles go in `src/index.css`
-- Component-specific styles can use CSS modules or styled-components
-- Keep styles modular and maintainable
-
-### Types
-
-- Define TypeScript types in `src/types/`
-- Use interfaces for object shapes
-- Leverage TypeScript's type inference when possible
-
-### Services
-
-- API calls and external services go in `src/services/`
-- Keep business logic separate from UI components
-
-## Contributing
-
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License.
-
-## Contact
-
-Project Link: [https://github.com/yourusername/HUBTender](https://github.com/yourusername/HUBTender)
+React 18 · Vite · TypeScript · Ant Design · Go 1.23 · chi · pgx/v5 ·
+coder/websocket · Supabase (Postgres 17) · Playwright · Docker · Caddy

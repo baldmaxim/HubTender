@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Financial Indicators - Category Breakdown', () => {
   test('should display breakdown table when clicking on pie chart segment', async ({ page }) => {
     // Переходим на страницу финансовых показателей
-    await page.goto('http://localhost:3000/financial-indicators');
+    await page.goto('http://localhost:5185/financial-indicators');
 
     // Ждем загрузки страницы
     await page.waitForLoadState('networkidle');
@@ -121,7 +121,7 @@ test.describe('Financial Indicators - Category Breakdown', () => {
     });
 
     // Переходим на страницу
-    await page.goto('http://localhost:3000/financial-indicators');
+    await page.goto('http://localhost:5185/financial-indicators');
     await page.waitForLoadState('networkidle');
 
     // Выбираем тендер

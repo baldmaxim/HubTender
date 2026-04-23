@@ -8,7 +8,7 @@
 // Required env (via .env or shell):
 //   VITE_SUPABASE_URL            (or SUPABASE_URL)
 //   VITE_SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY)
-//   VITE_API_URL                 — Go BFF base URL (default http://localhost:8080)
+//   VITE_API_URL                 — Go BFF base URL (default http://localhost:3005)
 //   DUAL_RUN_EMAIL               — test user email (re-used from dual-run setup)
 //   DUAL_RUN_PASSWORD            — that user's password
 import { createClient } from '@supabase/supabase-js';
@@ -33,7 +33,7 @@ loadDotenv();
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
 const ANON_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY;
-const API_URL = process.env.VITE_API_URL ?? 'http://localhost:8080';
+const API_URL = process.env.VITE_API_URL ?? 'http://localhost:3005';
 const EMAIL = process.env.DUAL_RUN_EMAIL;
 const PASSWORD = process.env.DUAL_RUN_PASSWORD;
 

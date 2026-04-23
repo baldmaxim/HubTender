@@ -5,19 +5,19 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "3005:3005"
     environment:
-      PORT: "8080"
+      PORT: "3005"
       DATABASE_URL: ${DATABASE_URL}
       SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:-https://ocauafggjrqvopxjihas.supabase.co/auth/v1/.well-known/jwks.json}
       SUPABASE_JWT_ISSUER: ${SUPABASE_JWT_ISSUER:-https://ocauafggjrqvopxjihas.supabase.co/auth/v1}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5185}
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3005/health"]
       interval: 10s
       timeout: 5s
       retries: 3

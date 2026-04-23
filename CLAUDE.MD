@@ -15,7 +15,7 @@ TenderHUB by SU_10 is a construction tender management portal for Bill of Quanti
 
 ```bash
 npm install          # Install dependencies
-npm run dev          # Start dev server (http://localhost:3000, auto-opens)
+npm run dev          # Start dev server (http://localhost:5185, auto-opens)
 npm run build        # TypeScript check + Vite production build
 npm run lint         # ESLint with zero-warning enforcement (max-warnings: 0)
 npm run preview      # Preview production build
@@ -29,9 +29,13 @@ supabase migration new <name>   # Scaffold a new migration file
 
 # Go BFF (Docker build, Go not needed locally):
 docker build -t hubtender-api:local ./backend
-docker run --rm --env-file .env -p 8080:8080 hubtender-api:local
-curl http://localhost:8080/health     # liveness
-curl http://localhost:8080/health/db  # readiness + DB ping
+docker run --rm --env-file .env -p 3005:3005 hubtender-api:local
+curl http://localhost:3005/health     # liveness
+curl http://localhost:3005/health/db  # readiness + DB ping
+docker compose up --build             # Full local stack: api + redis + caddy
+
+# Backend unit tests (only backend/internal/calc/ is covered today):
+(cd backend && go test ./...)
 
 # Verification scripts:
 node scripts/smoke/go-bff.mjs                 # exercises every Go read endpoint
@@ -113,16 +117,22 @@ Domain helpers (each exports plain async functions):
 - `src/lib/api/timeline.ts` — `setTenderGroupQuality`, `respondTenderIteration`
 - `src/lib/api/hooks/useApiReferences.ts` — 6 read-only reference hooks
 
-Per-domain env flags (default off = Supabase direct): `VITE_API_REFERENCES_ENABLED`,
-`VITE_API_TENDERS_ENABLED`, `VITE_API_POSITIONS_ENABLED`, `VITE_API_BOQ_ENABLED`,
-`VITE_API_USERS_ENABLED`, `VITE_API_TIMELINE_ENABLED`, `VITE_API_REALTIME_ENABLED`,
-plus global `VITE_API_MODE=supabase|go|hybrid`.
+Per-domain env flags default off (Supabase direct). `.env.example` is the
+canonical list — currently 13 toggles, one per domain (references, tenders,
+positions, boq, markup, commerce, costs, fi, timeline, projects, notifications,
+users, realtime). Global override: `VITE_API_MODE=supabase|go|hybrid`.
 
 ### Realtime (WebSocket hub)
-The Go BFF runs a Postgres `LISTEN/NOTIFY` → WebSocket broker (debounced 200 ms).
-Frontend hook: `src/lib/realtime/useRealtimeTopic(topic, handler)` returns `true`
-when the native hub is active, `false` when falling back to `supabase.channel()`.
-Topics: `notifications:<user_id>`, `tender:<tender_id>`, `tenders`.
+The Go BFF runs a Postgres `LISTEN/NOTIFY` → WebSocket broker (debounced 200 ms
+per topic). Frontend hook: `src/lib/realtime/useRealtimeTopic(topic, handler)`
+returns `true` when the native hub is active, `false` when falling back to
+`supabase.channel()`. Topics: `notifications:<user_id>`, `tender:<tender_id>`,
+`tenders`. Changes on `boq_items`, `client_positions`, `cost_redistribution_results`,
+and `construction_cost_volumes` all fan out to the matching `tender:<id>`;
+`tenders` broadcasts alongside the per-tender topic on tender-level changes.
+Publishes are non-blocking — slow clients are dropped when their send buffer
+fills (logged). The pg listener auto-reconnects with exponential backoff
+(500 ms → 30 s).
 
 Existing `supabase.channel()` call sites are feature-flag guarded (when
 `VITE_API_REALTIME_ENABLED=true`, the Supabase subscription is skipped).
@@ -193,17 +203,35 @@ Shared code:
 - `src/components/` — reusable components (Auth, Icons, Layout)
 - `src/contexts/` — React contexts (AuthContext, ThemeContext)
 - `src/lib/api/` — **Go BFF helpers (new code path)**, domain-per-file
-- `src/lib/realtime/` — WebSocket client + `useRealtimeTopic` React hook
+- `src/lib/realtime/` — low-level `ws.ts` client + `useRealtimeTopic` React hook
 - `src/lib/supabase/` — Supabase client, types, barrel exports (legacy/fallback)
 - `src/lib/supabaseWithAudit.ts` — audited CRUD wrappers (deprecated)
+- `src/services/` — cross-page services (cost import, markup tactics). Phase 5
+  pricing logic still lives here on the TS side until `backend/internal/calc/`
+  is wired to handlers.
+- `src/utils/` — shared helpers organized into `boq/`, `excel/`, `matching/`,
+  `versionTransfer/` submodules
+- `scripts/` — Node dev utilities. `smoke/` and `dual-run/` are the supported
+  verification harnesses; the remaining `check-*.cjs` / `fix-*.cjs` files are
+  ad-hoc DBA tools, not part of the standard workflow.
 
 Backend code (Go BFF):
 - `backend/cmd/server/main.go` — entry point with DI wiring
 - `backend/internal/{handlers,services,repository}/` — standard 3-layer
 - `backend/internal/realtime/` — pg LISTEN → broker → WS hub
 - `backend/internal/middleware/auth.go` — `JWTAuth` + exported `VerifyToken`
+- `backend/internal/calc/` — Phase 5 port of the TS pricing kernel
+  (markupCalculator, smartRounding, calculateBoqAmount, calculateGrandTotal,
+  applyPricingDistribution, calculateRedistribution). Each kernel has unit
+  tests. **Not yet wired to handlers** — the write paths still call the
+  TypeScript implementations in `src/services/` and `src/utils/boq/`.
+- `backend/internal/config/` — env / CORS / log-level loader
+- `backend/internal/cache/` — in-memory cache abstraction
+- `backend/internal/access/` — access-control registry
+- `backend/internal/domain/` — pure domain models (currently `user/`)
+- `backend/internal/infrastructure/db/` — pgx pool management
 - `backend/pkg/apierr/` — RFC 7807 ProblemDetail helpers
-- `backend/Dockerfile` — multi-stage, distroless runtime
+- `backend/Dockerfile` — multi-stage, distroless-static runtime (CGO off, Go 1.23)
 - `docker-compose.yml` — `api + redis + caddy` (Redis reserved for Phase 4b)
 
 ## Key Domain Concepts
@@ -254,6 +282,27 @@ Tenders → Client Positions → BOQ Items (materials & works per position)
    `if (isGoEnabled('<domain>')) { return apiFetch(...) } else { return supabase... }`.
 6. Add an entry in `scripts/smoke/go-bff.mjs` to cover the new endpoint.
 7. Rebuild image: `docker build -t hubtender-api:local ./backend`.
+
+## Testing
+
+Current verification surface is thin — know what exists and what doesn't:
+
+- **Frontend unit tests**: none. No Vitest/Jest setup, no `*.test.ts` under `src/`.
+- **Playwright E2E**: scaffolding exists in `tests/` + `playwright.config.ts`
+  (the config's `webServer` listens on port **5185**, same as the dev server).
+  However `@playwright/test` is **not** in `devDependencies` and there is no
+  `test` script in `package.json`, so `npm test` currently fails. README.md's
+  `npm test` instruction is aspirational; wire the script + dep before relying
+  on it.
+- **Go backend**: `go test ./...` in `backend/` passes. Only `backend/internal/calc/`
+  has meaningful coverage — repository/handler packages are untested.
+- **End-to-end verification today** runs through the Node scripts:
+  `node scripts/smoke/go-bff.mjs` hits every Go read endpoint;
+  `node scripts/dual-run/positions-with-costs.mjs <tender-id>` diffs the
+  Supabase RPC result against the Go implementation.
+- **No CI**: there are no `.github/workflows/`, no pre-commit hooks, no
+  lint-staged. Validation is manual — run `npm run lint`, `npm run build`,
+  `go test ./...`, and the smoke harness before shipping non-trivial changes.
 
 ## Tech Stack
 
