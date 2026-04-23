@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Form, Input, Button, Card, message, Typography, Spin, Result } from 'antd';
 import { UserOutlined, LockOutlined, LoginOutlined, LoadingOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router-dom';
@@ -18,37 +18,21 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Очистка таймаута при размонтировании
-  useEffect(() => {
-    return () => {
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // Автоматический редирект если пользователь уже авторизован
   useEffect(() => {
-    if (user) {
-      // Отменяем таймаут загрузки
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-        loadingTimeoutRef.current = null;
-      }
-      setLoading(false);
+    if (!user) return;
 
-      // Если статус pending или blocked - останавливаем загрузку и показываем сообщение
-      if (user.access_status === 'pending' || user.access_status === 'blocked') {
-        return;
-      }
+    setLoading(false);
 
-      // Если статус approved и доступ включен - редиректим
-      if (user.access_status === 'approved' && user.access_enabled) {
-        const targetPath = user.allowed_pages.length === 0 ? '/dashboard' : user.allowed_pages[0];
-        navigate(targetPath, { replace: true });
-      }
+    // pending/blocked — показываем соответствующий экран ниже
+    if (user.access_status === 'pending' || user.access_status === 'blocked') {
+      return;
+    }
+
+    if (user.access_status === 'approved' && user.access_enabled) {
+      const targetPath = user.allowed_pages.length === 0 ? '/dashboard' : user.allowed_pages[0];
+      navigate(targetPath, { replace: true });
     }
   }, [user, navigate]);
 
@@ -56,7 +40,6 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      // Аутентификация через Supabase Auth
       const { error: authError } = await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,
@@ -74,13 +57,8 @@ const Login: React.FC = () => {
         return;
       }
 
-      // Успешный вход - AuthContext получит событие SIGNED_IN и загрузит user
-      // useEffect сделает редирект когда user появится
-      // Таймаут на случай если что-то пойдёт не так
-      loadingTimeoutRef.current = setTimeout(() => {
-        setLoading(false);
-        message.error('Превышено время ожидания. Попробуйте обновить страницу');
-      }, 15000);
+      // Успех: AuthContext получит SIGNED_IN и установит user,
+      // useEffect выше сделает редирект и сбросит loading.
     } catch (error) {
       console.error('Ошибка при входе:', error);
       message.error('Произошла ошибка при входе');

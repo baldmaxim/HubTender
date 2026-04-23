@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import type { AuthUser } from '../lib/supabase/types';
+import type { AuthUser, UserRole } from '../lib/supabase/types';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -16,74 +16,53 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+// Загрузка профиля + роли одним запросом через embed
+const loadUserData = async (authUserId: string): Promise<AuthUser | null> => {
+  try {
+    console.log('[AuthContext] Загрузка пользователя:', authUserId);
+
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        id, email, full_name, role_code, access_status, allowed_pages, access_enabled,
+        roles:role_code ( name, color )
+      `)
+      .eq('id', authUserId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[AuthContext] Ошибка загрузки пользователя:', error.message);
+      return null;
+    }
+
+    if (!data) {
+      console.error('[AuthContext] Пользователь не найден в таблице users, ID:', authUserId);
+      return null;
+    }
+
+    const role = Array.isArray(data.roles) ? data.roles[0] : data.roles;
+
+    return {
+      id: data.id,
+      email: data.email,
+      full_name: data.full_name,
+      role: (role?.name as UserRole) || 'Инженер',
+      role_code: data.role_code,
+      role_color: role?.color,
+      access_status: data.access_status,
+      allowed_pages: data.allowed_pages || [],
+      access_enabled: data.access_enabled,
+    };
+  } catch (err) {
+    console.error('[AuthContext] Исключение при загрузке пользователя:', err);
+    return null;
+  }
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const userRef = useRef<AuthUser | null>(null);
-  const initCompletedRef = useRef(false);
 
-  // Синхронизируем ref с state
-  useEffect(() => {
-    userRef.current = user;
-  }, [user]);
-
-  // Загрузка данных пользователя из public.users
-  const loadUserData = useCallback(async (authUserId: string): Promise<AuthUser | null> => {
-    try {
-      console.log('[AuthContext] Загрузка пользователя:', authUserId);
-
-      // Загружаем данные пользователя без .single()
-      const { data: userDataArray, error: userError } = await supabase
-        .from('users')
-        .select('id, email, full_name, role_code, access_status, allowed_pages, access_enabled')
-        .eq('id', authUserId);
-
-      console.log('[AuthContext] Результат запроса:', { userDataArray, userError });
-
-      if (userError) {
-        console.error('[AuthContext] Ошибка загрузки пользователя:', userError?.message);
-        return null;
-      }
-
-      // Проверяем что вернулась ровно одна запись
-      if (!userDataArray || userDataArray.length === 0) {
-        console.error('[AuthContext] Пользователь не найден в таблице users, ID:', authUserId);
-        return null;
-      }
-
-      if (userDataArray.length > 1) {
-        console.error('[AuthContext] Найдено несколько записей пользователя в таблице users');
-        return null;
-      }
-
-      const userData = userDataArray[0];
-
-      // Загружаем данные роли
-      const { data: roleDataArray } = await supabase
-        .from('roles')
-        .select('name, color')
-        .eq('code', userData.role_code);
-
-      const roleData = roleDataArray?.[0];
-
-      return {
-        id: userData.id,
-        email: userData.email,
-        full_name: userData.full_name,
-        role: roleData?.name as any || 'Инженер',
-        role_code: userData.role_code,
-        role_color: roleData?.color,
-        access_status: userData.access_status,
-        allowed_pages: userData.allowed_pages || [],
-        access_enabled: userData.access_enabled,
-      };
-    } catch (err) {
-      console.error('[AuthContext] Исключение при загрузке пользователя:', err);
-      return null;
-    }
-  }, []);
-
-  // Обновление данных пользователя
   const refreshUser = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
@@ -92,9 +71,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } else {
       setUser(null);
     }
-  }, [loadUserData]);
+  }, []);
 
-  // Выход из системы
   const signOut = useCallback(async () => {
     try {
       await supabase.auth.signOut();
@@ -104,77 +82,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
-  // Инициализация при монтировании
   useEffect(() => {
     let mounted = true;
 
-    // Подписываемся на изменения auth состояния
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // ВАЖНО: callback НЕ async. Supabase-запросы выносим в setTimeout,
+    // чтобы не получить deadlock на внутреннем auth-lock GoTrueClient.
+    // См. https://supabase.com/docs/reference/javascript/auth-onauthstatechange
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
-      // Игнорируем INITIAL_SESSION - обработаем в initAuth
-      if (event === 'INITIAL_SESSION') {
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        setUser(null);
+        setLoading(false);
         return;
       }
 
-      if (event === 'SIGNED_IN' && session?.user) {
-        // Обрабатываем только если initAuth завершился И user ещё не установлен
-        if (initCompletedRef.current && !userRef.current) {
-          const userData = await loadUserData(session.user.id);
-          if (mounted && userData) {
-            // Устанавливаем user для всех статусов - Login покажет соответствующий экран
-            setUser(userData);
-            setLoading(false);
-          }
-        }
-      } else if (event === 'SIGNED_OUT') {
-        if (mounted) {
-          setUser(null);
-          setLoading(false);
-        }
-      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-        const userData = await loadUserData(session.user.id);
-        if (mounted && userData) {
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        const authUserId = session.user.id;
+        setTimeout(async () => {
+          if (!mounted) return;
+          const userData = await loadUserData(authUserId);
+          if (!mounted) return;
           setUser(userData);
-        }
+          setLoading(false);
+        }, 0);
       }
     });
-
-    const initAuth = async () => {
-      try {
-        // Таймаут для getSession - если зависнет, продолжаем без сессии
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise<{ data: { session: null }, error: null }>((resolve) => {
-          setTimeout(() => resolve({ data: { session: null }, error: null }), 5000);
-        });
-
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
-
-        if (session?.user && mounted) {
-          const userData = await loadUserData(session.user.id);
-
-          if (mounted && userData) {
-            // Устанавливаем user для всех статусов - Login покажет соответствующий экран
-            setUser(userData);
-          }
-        }
-      } catch (error) {
-        console.error('[AuthContext] Ошибка инициализации:', error);
-      } finally {
-        initCompletedRef.current = true;
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    initAuth();
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [loadUserData]);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, signOut, refreshUser }}>
@@ -183,6 +122,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
@@ -191,7 +131,7 @@ export const useAuth = () => {
   return context;
 };
 
-// HOC для компонентов, требующих навигации после signOut
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuthWithNavigation = () => {
   const auth = useAuth();
   const navigate = useNavigate();
