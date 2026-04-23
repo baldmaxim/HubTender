@@ -139,7 +139,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
     }
 
     return rows;
-  }, [project.id, project.contract_date, project.construction_end_date, completionData]);
+  }, [project.contract_date, project.construction_end_date, completionData]);
 
   const displayRows = useMemo(() => {
     return monthRows.map((row) => ({

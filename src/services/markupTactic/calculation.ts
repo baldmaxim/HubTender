@@ -318,7 +318,7 @@ function filterSequenceForExclusions(
   // ВАЖНО: Пересчитываем baseIndex для оставшихся шагов
   // Если шаг ссылался на удаленный шаг, он должен ссылаться на базовую стоимость (-1)
   // Если шаг ссылался на сохраненный шаг, нужно скорректировать индекс
-  return filtered.map((step, newIndex) => {
+  return filtered.map((step) => {
     let newBaseIndex = step.baseIndex;
 
     if (newBaseIndex >= 0) {

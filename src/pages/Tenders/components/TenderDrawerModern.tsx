@@ -772,6 +772,8 @@ export const TenderDrawerModern: React.FC<TenderDrawerModernProps> = ({
       setIsEditingPhoto(false);
       setPhotoUrl(tender.site_visit_photo_url || '');
     }
+    // tender object intentionally excluded; only tender.id should trigger this reset
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tender?.id]);
 
   if (!tender) return null;

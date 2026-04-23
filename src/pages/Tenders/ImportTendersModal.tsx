@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Modal, Upload, Button, message, Table, Alert } from 'antd';
-import { UploadOutlined, InboxOutlined } from '@ant-design/icons';
+import { Modal, Upload, message, Table, Alert } from 'antd';
+import { InboxOutlined } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
 import { supabase, type ConstructionScope, type TenderStatus } from '../../lib/supabase';
 import dayjs from 'dayjs';

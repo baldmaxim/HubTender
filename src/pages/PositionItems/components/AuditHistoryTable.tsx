@@ -92,6 +92,8 @@ const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ positionId, filte
           ) : null,
       },
     ],
+    // handleRollback is a stable prop function; intentionally excluded to avoid column re-creation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [rolling]
   );
 

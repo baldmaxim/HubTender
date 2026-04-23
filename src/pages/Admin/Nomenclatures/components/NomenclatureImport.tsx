@@ -33,6 +33,8 @@ export const NomenclatureImport: React.FC<NomenclatureImportProps> = ({ open, mo
       fetchExistingUnits();
       fetchExistingRecords(mode);
     }
+    // fetchExistingRecords and fetchExistingUnits are stable functions; intentionally excluded to avoid loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode]);
 
   const handleClose = () => {

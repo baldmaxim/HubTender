@@ -1,7 +1,7 @@
 import React from 'react';
 import { Spin, Empty, Pagination } from 'antd';
 import { TenderGridRow } from './TenderGridRow';
-import type { TenderRegistryWithRelations, TenderRegistry } from '../../../lib/supabase';
+import type { TenderRegistryWithRelations } from '../../../lib/supabase';
 import { useTheme } from '../../../contexts/ThemeContext';
 
 interface TenderGridProps {

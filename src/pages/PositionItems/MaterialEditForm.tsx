@@ -166,6 +166,8 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
 
     const newQuantity = calculateQuantity();
     setFormData((prev: any) => ({ ...prev, quantity: newQuantity }));
+    // calculateQuantity and isManualQuantity are defined in this component; excluded to avoid refetch loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     formData.parent_work_item_id,
     formData.conversion_coefficient,

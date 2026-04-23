@@ -44,6 +44,7 @@ export const useCostData = () => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<CostRow[]>([]);
   const [costType, setCostType] = useState<'base' | 'commercial'>('base');
+  const [, setGroupVolumes] = useState<Map<string, number>>(new Map());
 
   // Архивные тендеры отображаются в фильтре для всех пользователей
   const shouldFilterArchived = false;
@@ -784,6 +785,8 @@ export const useCostData = () => {
       setGroupVolumes(new Map());
       fetchConstructionCosts();
     }
+    // fetchConstructionCosts is defined outside this effect; intentionally excluded to avoid refetch loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId, costType]);
 
   // Native WS hub (Go BFF) path.
@@ -817,6 +820,8 @@ export const useCostData = () => {
     return () => {
       supabase.removeChannel(channel);
     };
+    // fetchConstructionCosts is defined outside this effect; intentionally excluded to avoid refetch loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId, costType, wsActive]);
 
   return {

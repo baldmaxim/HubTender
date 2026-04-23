@@ -284,6 +284,8 @@ const ClientPositions: React.FC = () => {
         fetchClientPositions(tender.id);
       }
     }
+    // fetchClientPositions and setSelectedTender are stable; intentionally excluded to avoid refetch loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, tenders, selectedTender]);
 
   // Обработчики модального окна

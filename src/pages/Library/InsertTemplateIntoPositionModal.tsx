@@ -65,6 +65,8 @@ const InsertTemplateIntoPositionModal: React.FC<InsertTemplateIntoPositionModalP
       resetTenderSelection();
       resetPositionSelection();
     }
+    // form is a stable Ant Design Form.useForm() instance; intentionally excluded to avoid loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const resetTenderSelection = () => {

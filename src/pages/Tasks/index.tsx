@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Tabs, Select, Space, message } from 'antd';
+import { Tabs, Select, message } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { canManageUsers } from '../../lib/supabase/types';

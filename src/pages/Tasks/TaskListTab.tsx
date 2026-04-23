@@ -22,6 +22,8 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
   useEffect(() => {
     fetchTasks();
     fetchUserSettings();
+    // fetchTasks and fetchUserSettings are defined in this component; excluded to avoid refetch loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   const fetchTasks = async () => {

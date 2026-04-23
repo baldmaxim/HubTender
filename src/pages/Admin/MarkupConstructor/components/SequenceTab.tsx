@@ -40,6 +40,7 @@ export const SequenceTab: React.FC<SequenceTabProps> = ({ tabKey }) => {
   const { markupSequences, addStep, updateStep, deleteStep, moveStepUp, moveStepDown } = sequences;
   const { markupParameters } = parameters;
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const sequence = markupSequences[tabKey] || [];
 
   // State for adding new step
@@ -103,7 +104,7 @@ export const SequenceTab: React.FC<SequenceTabProps> = ({ tabKey }) => {
     });
 
     return results;
-  }, [sequence, baseCost, form, markupParameters]);
+  }, [sequence, baseCost, form]);
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -295,7 +296,7 @@ export const SequenceTab: React.FC<SequenceTabProps> = ({ tabKey }) => {
 
             {sequence.map((step, index) => {
               const intermediateResult = calculateIntermediateResults[index];
-              const formula = getStepFormula(step, index);
+              const formula = getStepFormula(step);
 
               return (
                 <Card

@@ -47,13 +47,13 @@ const Tenders: React.FC = () => {
     message.success(`Тендер скопирован: ${record.tender}`);
   };
 
-  const handleArchive = (record: TenderRecord) => {
+  const handleArchive = useCallback((record: TenderRecord) => {
     actions.handleArchive(record);
-  };
+  }, [actions]);
 
-  const handleUnarchive = (record: TenderRecord) => {
+  const handleUnarchive = useCallback((record: TenderRecord) => {
     actions.handleUnarchive(record);
-  };
+  }, [actions]);
 
   const handleExport = (record: TenderRecord) => {
     message.success(`Экспорт тендера: ${record.tender}`);

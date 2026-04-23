@@ -353,7 +353,7 @@ const Users: React.FC = () => {
   };
 
   // Обработка изменения роли
-  const handleRoleChange = async (newRoleCode: string) => {
+  const handleRoleChange = async () => {
     // Роль изменена, права доступа будут обновлены при сохранении
     // Уведомления убраны по запросу пользователя
   };

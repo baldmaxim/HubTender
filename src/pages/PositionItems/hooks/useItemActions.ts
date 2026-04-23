@@ -392,7 +392,7 @@ export const useItemActions = ({
     try {
       const currentIndex = items.findIndex(i => i.id === itemId);
       const item = items[currentIndex];
-      const bounds = getItemGroupBounds(item, items, currentIndex);
+      const bounds = getItemGroupBounds(item, items);
 
       // Проверка возможности перемещения
       if (direction === 'up' && currentIndex <= bounds.start) {

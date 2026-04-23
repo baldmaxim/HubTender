@@ -128,7 +128,6 @@ const TenderTimeline: React.FC = () => {
       colorPrimary,
       colorPrimaryBg,
       colorText,
-      colorTextSecondary,
     },
   } = theme.useToken();
   const { message } = App.useApp();
@@ -461,6 +460,8 @@ const TenderTimeline: React.FC = () => {
     };
 
     void syncGroups();
+    // message is a stable antd module import; intentionally excluded
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     autoExpectedGroups,
     canManageTimeline,

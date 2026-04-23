@@ -3,7 +3,6 @@ import { supabase } from '../../lib/supabase';
 import type { ClientPosition, BoqItemFull, ExportRow } from './types';
 import {
   isWorkType,
-  isMaterialType,
   createPositionRow,
   createBoqItemRow,
 } from './formatters';
@@ -245,7 +244,7 @@ function collectExportRows(
   const additionalPositions = positions.filter(p => p.is_additional);
 
   // Обработать обычные позиции
-  normalPositions.forEach((position, index) => {
+  normalPositions.forEach((position) => {
     // Проверить является ли позиция листовой (по ID, не по индексу!)
     const isLeaf = leafIds.has(position.id);
 

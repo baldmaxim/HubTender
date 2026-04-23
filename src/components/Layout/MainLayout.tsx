@@ -242,6 +242,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calcOpen, calcValue]);
 
   const menuItems: MenuProps['items'] = [

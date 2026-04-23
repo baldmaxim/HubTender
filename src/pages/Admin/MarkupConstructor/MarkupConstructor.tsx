@@ -612,6 +612,8 @@ const MarkupConstructor: React.FC = () => {
     fetchTenders();
     fetchTactics();
     fetchMarkupParameters(); // Загружаем параметры наценок
+    // initial fetch on mount; stable module-level functions excluded intentionally
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Загрузка и сохранение тактик наценок из localStorage и Supabase

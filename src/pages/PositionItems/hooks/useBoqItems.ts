@@ -472,6 +472,8 @@ export const useBoqItems = (positionId: string | undefined) => {
       fetchMaterialNames();
       fetchUnits();
     }
+    // fetch functions are stable; intentionally excluded to avoid refetch loop on positionId change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positionId]);
 
   return {

@@ -911,6 +911,8 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
     if (selectedIndicator && hasDetailedBreakdown(selectedIndicator)) {
       void fetchCategoryBreakdown(selectedIndicator);
     }
+    // fetchCategoryBreakdown and fetchReferenceInfo are stable hook-returned functions; excluded to avoid loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId, selectedIndicator, data, isVatInConstructor, vatCoefficient]);
 
   // Автоматическая очистка блока детализации при выходе из режима просмотра конечного уровня

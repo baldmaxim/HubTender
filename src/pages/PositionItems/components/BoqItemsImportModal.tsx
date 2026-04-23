@@ -40,6 +40,8 @@ export const BoqItemsImportModal: React.FC<BoqItemsImportModalProps> = ({
     if (open) {
       loadNomenclature().then(setNomenclatureLoaded);
     }
+    // loadNomenclature is a stable hook-returned function; intentionally excluded to avoid loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {

@@ -157,6 +157,8 @@ const ObjectComparison: React.FC = () => {
     }
 
     return result;
+    // loadedInfos is intentionally excluded; adding it would cause excessive recomputation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenderInfos, viewMode, handleNoteBlur, loadedCount]);
 
   const scrollX = isMultiTender

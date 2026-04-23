@@ -384,6 +384,8 @@ export const PositionTable: React.FC<PositionTableProps> = ({
         );
       },
     },
+  // selectedTender is intentionally excluded; adding it would cause excessive column recomputation
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [
     positionCounts,
     leafPositionIndices,

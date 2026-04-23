@@ -132,6 +132,8 @@ const ImportLog: React.FC = () => {
     } finally {
       setLoading(false);
     }
+    // message is a stable antd module import
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenderFilter]);
 
   const fetchTenders = async () => {

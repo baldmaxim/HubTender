@@ -64,6 +64,8 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
         }
       });
     }
+    // loadNomenclature is a stable hook-returned function; intentionally excluded to avoid loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tenderId, nomenclatureLoaded]);
 
   // Сброс при закрытии
@@ -73,6 +75,8 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
       setCurrentStep(0);
       reset();
     }
+    // reset is a stable hook-returned function; intentionally excluded to avoid loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Загрузка существующих BOQ items при переходе на шаг 1
@@ -83,6 +87,8 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
         .filter(Boolean) as string[];
       loadExistingItems(ids);
     }
+    // clientPositionsMap and loadExistingItems are stable; intentionally excluded to avoid loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, positionUpdates]);
 
   // Обработка загрузки файла

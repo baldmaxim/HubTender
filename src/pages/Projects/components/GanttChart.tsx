@@ -1028,7 +1028,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
 
         {/* Project rows */}
         {visibleProjects.map((project, index) => {
-          const isHidden = hiddenProjects.has(project.id);
           return (
             <div
               key={project.id}

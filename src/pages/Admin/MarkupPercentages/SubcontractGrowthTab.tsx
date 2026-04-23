@@ -119,6 +119,8 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
 
   useEffect(() => {
     fetchExclusions();
+    // fetchExclusions is defined in this component; intentionally excluded to avoid refetch loop on tenderId
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenderId]);
 
   // Обработка изменения чекбокса для одной категории

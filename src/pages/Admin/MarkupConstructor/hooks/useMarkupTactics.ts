@@ -113,7 +113,7 @@ export const useMarkupTactics = () => {
       }
 
       message.success('Схема наценок скопирована');
-      await fetchTactics(tenderId);
+      await fetchTactics();
 
       if (onSuccess) {
         onSuccess(newTactic.id);
@@ -126,7 +126,7 @@ export const useMarkupTactics = () => {
     }
   }, [fetchTactics]);
 
-  const deleteTactic = useCallback(async (tacticId: string, tenderId: string | null) => {
+  const deleteTactic = useCallback(async (tacticId: string) => {
     try {
       const { error } = await supabase
         .from('markup_tactics')
@@ -136,7 +136,7 @@ export const useMarkupTactics = () => {
       if (error) throw error;
 
       message.success('Схема наценок удалена');
-      await fetchTactics(tenderId);
+      await fetchTactics();
 
       // Сбрасываем выбранную тактику, если удалена текущая
       if (currentTacticId === tacticId) {

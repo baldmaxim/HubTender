@@ -40,7 +40,7 @@ const ConstructionCostNew: React.FC = () => {
     handleVersionChange,
     fetchConstructionCosts,
     handleVolumeChange,
-  } = useCostData(user?.role_code);
+  } = useCostData();
 
   // Проверка роли для фильтрации архивных тендеров в карточках
   const shouldFilterArchived = user?.role_code === 'engineer' || user?.role_code === 'moderator';

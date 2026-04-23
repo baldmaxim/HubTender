@@ -19,6 +19,8 @@ export const usePositionFilters = (
       setSelectedPositionIds(new Set());
       setIsFilterActive(false);
     }
+    // fetchFilter is defined in this hook; intentionally excluded to avoid refetch loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, tenderId]);
 
   // Загрузка фильтра из БД

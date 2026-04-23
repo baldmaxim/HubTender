@@ -99,6 +99,8 @@ const Templates: React.FC = () => {
     if (openedTemplate) {
       fetchTemplateItems(openedTemplate);
     }
+    // fetchTemplateItems is a stable function; intentionally excluded to avoid refetch loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openedTemplate]);
 
   const handleAddWork = () => {

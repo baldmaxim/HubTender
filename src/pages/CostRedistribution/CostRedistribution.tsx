@@ -91,6 +91,8 @@ const CostRedistribution: React.FC = () => {
       map.set(result.boq_item_id, result);
     }
     return map;
+    // calculationState is a stable hook return; using .results sub-property is intentional
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calculationState.results]);
 
   const preparedResults = useMemo(() => {
