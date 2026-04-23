@@ -166,3 +166,4 @@ backend;*
 # Архивные исторические дампы не игнорируем
 !docs/archive/temp_*.txt
 
+backups/
