@@ -29,8 +29,6 @@
     ],
     "deny": [],
     "ask": [],
-    "additionalDirectories": [
-      "c:\\Users\\nekrasov.l.m\\WebstormProjects\\HUBTender"
-    ]
+    "additionalDirectories": []
   }
 }

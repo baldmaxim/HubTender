@@ -1,4 +1,4 @@
-cla# Logs
+# Logs
 logs
 *.log
 npm-debug.log*
@@ -158,3 +158,11 @@ vite.config.ts.timestamp-*
 mcp-supabase.js
 .git-credentials
 src/pages/Admin/MarkupConstructor/backup/
+
+# Временные дампы и артефакты редактора
+temp_*.txt
+*.bak
+backend;*
+# Архивные исторические дампы не игнорируем
+!docs/archive/temp_*.txt
+
