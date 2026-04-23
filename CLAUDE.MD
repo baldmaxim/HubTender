@@ -1,316 +1,275 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Этот файл — инструкция для Claude Code (claude.ai/code) при работе с кодом в этом репозитории.
 
-## Project Overview
+## Обзор проекта
 
-TenderHUB by SU_10 is a construction tender management portal for Bill of Quantities (BOQ) and bidding workflows.
+TenderHUB by SU_10 — портал управления тендерами в строительстве для BOQ (Bill of Quantities, ведомости объёмов работ) и биржевых процессов.
 
-- **Language Convention**: Russian UI, English code, Russian commit messages
-- **Stack**: React 18 + Ant Design + Vite + TypeScript frontend. Go BFF (chi + pgx/v5 + coder/websocket) layered in front of Supabase (Postgres 17 + Auth + JWKS). Supabase Realtime is being replaced by the Go BFF WebSocket hub.
-- **Branding**: Design system documented in BRANDING.md
-- **Migration state**: pre-prod Supabase project `ocauafggjrqvopxjihas`; old live prod `wkywhjljrhewfpedbjzx` is read-only until final cutover. See `C:\Users\Usrr\.claude\plans\keen-toasting-iverson.md` for the full roadmap.
+- **Языковые конвенции**: русский UI, английский код, русские сообщения коммитов
+- **Стек**: React 18 + Ant Design + Vite + TypeScript на фронте. Go BFF (chi + pgx/v5 + coder/websocket) перед Supabase (Postgres 17 + Auth + JWKS). Supabase Realtime постепенно вытесняется WebSocket-хабом Go BFF.
+- **Брендинг**: дизайн-система описана в BRANDING.md
+- **Состояние миграции**: pre-prod Supabase-проект `ocauafggjrqvopxjihas`; старый live-prod `wkywhjljrhewfpedbjzx` в режиме read-only до финального cutover. Полный план — в `C:\Users\Usrr\.claude\plans\keen-toasting-iverson.md`.
 
-## Development Commands
+## Команды разработки
 
 ```bash
-npm install          # Install dependencies
-npm run dev          # Start dev server (http://localhost:5185, auto-opens)
-npm run build        # TypeScript check + Vite production build
-npm run lint         # ESLint with zero-warning enforcement (max-warnings: 0)
-npm run preview      # Preview production build
-npm run gen:types    # Regenerate src/lib/supabase/database.types.ts from pre-prod
-npm run gen:schema   # Dump pre-prod schema into supabase/schemas/prod.sql
+npm install          # установить зависимости
+npm run dev          # dev-сервер (http://localhost:5185, автоматически откроется)
+npm run build        # TypeScript-проверка + production-сборка Vite
+npm run lint         # ESLint в режиме zero-warning (max-warnings: 0)
+npm run preview      # превью production-сборки
+npm run gen:types    # перегенерировать src/lib/supabase/database.types.ts из pre-prod
+npm run gen:schema   # обновить supabase/schemas/prod.sql
 
-# Database (MCP-first — see plan for Supabase MCP usage; CLI is a fallback):
-supabase db push                # Apply migrations via CLI
-supabase migration new <name>   # Scaffold a new migration file
-# Preferred: mcp__claude_ai_Supabase__apply_migration(ocauafggjrqvopxjihas, ...)
+# База данных (MCP-first — см. план по использованию Supabase MCP; CLI — запасной вариант):
+supabase db push                # применить миграции через CLI
+supabase migration new <name>   # создать шаблон новой миграции
+# Предпочтительно: mcp__claude_ai_Supabase__apply_migration(ocauafggjrqvopxjihas, ...)
 
-# Go BFF (Docker build, Go not needed locally):
+# Go BFF (сборка в Docker, Go локально не нужен):
 docker build -t hubtender-api:local ./backend
 docker run --rm --env-file .env -p 3005:3005 hubtender-api:local
 curl http://localhost:3005/health     # liveness
-curl http://localhost:3005/health/db  # readiness + DB ping
-docker compose up --build             # Full local stack: api + redis + caddy
+curl http://localhost:3005/health/db  # readiness + пинг БД
+docker compose up --build             # полный локальный стек: api + redis + caddy
 
-# Backend unit tests (only backend/internal/calc/ is covered today):
+# Юнит-тесты бэка (сейчас покрыт только backend/internal/calc/):
 (cd backend && go test ./...)
 
-# Verification scripts:
-node scripts/smoke/go-bff.mjs                 # exercises every Go read endpoint
-node scripts/dual-run/positions-with-costs.mjs <tender-id>  # diffs RPC vs Go
+# Скрипты верификации:
+node scripts/smoke/go-bff.mjs                 # прогон всех Go read-эндпоинтов
+node scripts/dual-run/positions-with-costs.mjs <tender-id>  # diff RPC vs Go
 
-# Environment: copy .env.example → .env and fill credentials.
-# Supabase free-tier: use Session Pooler (port 5432, aws-0-<region>.pooler.supabase.com)
-# because the direct db.<ref>.supabase.co hostname is IPv6-only.
+# Переменные окружения: скопировать .env.example → .env и заполнить креды.
+# Supabase free-tier: использовать Session Pooler (порт 5432, aws-0-<region>.pooler.supabase.com),
+# потому что прямой хост db.<ref>.supabase.co отдаёт только IPv6.
 ```
 
-## Critical Rules
+## Критические правила
 
-### Database Single Source of Truth
-`supabase/schemas/prod.sql` is the canonical schema. ALWAYS verify it before any database work. NEVER trust TypeScript types over prod.sql definitions. Business tables are defined in `supabase/migrations/`.
+### База как единственный источник истины
+`supabase/schemas/prod.sql` — каноничная схема. ВСЕГДА сверяйся с ней перед любой работой с БД. НИКОГДА не доверяй TypeScript-типам больше, чем определениям из prod.sql. Бизнес-таблицы — в `supabase/migrations/`.
 
-### Secrets Must Not Use VITE_ Prefix
-Vite inlines every `VITE_*` variable into the client bundle. NEVER prefix a secret with `VITE_`:
-- ✅ `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (anon key is public by design)
-- ❌ `VITE_SUPABASE_SERVICE_ROLE_KEY`, `VITE_DATABASE_URL`, any JWT signing key, DB password
-- Server-side variables (dev scripts in `scripts/`, Go backend) use plain names: `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, etc.
-- Template in `.env.example`.
+### Секреты не должны начинаться с VITE_
+Vite инлайнит каждую `VITE_*`-переменную в клиентский бандл. НИКОГДА не добавляй префикс `VITE_` к секрету:
+- ✅ `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (anon-ключ публичен по дизайну)
+- ❌ `VITE_SUPABASE_SERVICE_ROLE_KEY`, `VITE_DATABASE_URL`, любой JWT-ключ подписи, пароль БД
+- Серверные переменные (dev-скрипты в `scripts/`, Go-бэкенд) используют обычные имена: `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL` и т.д.
+- Шаблон — в `.env.example`.
 
-### File Size Limit
-**STRICT**: All files MUST be ≤ 600 lines. Split into `components/`, `hooks/`, `utils/`, and `types.ts` as needed.
+### Лимит на размер файла
+**СТРОГО**: все файлы должны быть ≤ 600 строк. Разбивай на `components/`, `hooks/`, `utils/`, `types.ts` по необходимости.
 
-### Git Conventions
-- **Commits**: Russian, imperative mood (e.g., "Добавить валидацию форм", "Исправить ошибку в расчетах")
-- **Branches**: `feature/`, `fix/`, `refactor/` prefixes
+### Git-конвенции
+- **Коммиты**: русский, повелительное наклонение (например, «Добавить валидацию форм», «Исправить ошибку в расчётах»)
+- **Ветки**: префиксы `feature/`, `fix/`, `refactor/`
 
-## Architecture
+## Архитектура
 
-### Provider Hierarchy (App.tsx)
+### Иерархия провайдеров (App.tsx)
 ```
 ThemeProvider → AuthProvider → ConfigProvider (Ant Design) → AntApp → Routes
 ```
 
-### Routing Structure
-All authenticated routes are wrapped in `<ProtectedRoute>` inside `<MainLayout>`. Routes are defined in `src/App.tsx`. Public routes: `/login`, `/register`, `/forgot-password`, `/reset-password`. The sidebar menu in MainLayout is filtered by `hasPageAccess()` based on user's `allowed_pages`.
+### Структура роутинга
+Все аутентифицированные маршруты обёрнуты в `<ProtectedRoute>` внутри `<MainLayout>`. Маршруты определены в `src/App.tsx`. Публичные маршруты: `/login`, `/register`, `/forgot-password`, `/reset-password`. Боковое меню в MainLayout фильтруется через `hasPageAccess()` по полю `allowed_pages` пользователя.
 
-### Authentication & Access Control
-- **AuthContext** (`src/contexts/AuthContext.tsx`): Provides `useAuth()` hook with `user`, `loading`, `signOut`, `refreshUser`
-- **Auth flow**: Supabase Auth (email/password) → loads user from `public.users` → loads role from `public.roles`
-- **Role system**: `roles` table has `code`, `name`, `color`. Users reference `role_code`. Roles: `administrator`, `developer`, `director`, `senior_group`, `engineer`, `general_director`
-- **Page access**: `users.allowed_pages` (JSONB array, empty = full access). Check via `hasPageAccess(user, path)` from `src/lib/supabase/types.ts`
-- **Access control helpers**: `canManageUsers()`, `isAdmin()`, `isLeader()`, `hasPageAccess()` — all in `src/lib/supabase/types.ts`
+### Аутентификация и контроль доступа
+- **AuthContext** (`src/contexts/AuthContext.tsx`): хук `useAuth()` даёт `user`, `loading`, `signOut`, `refreshUser`
+- **Поток авторизации**: Supabase Auth (email/пароль) → загрузка пользователя из `public.users` → загрузка роли из `public.roles`
+- **Система ролей**: таблица `roles` содержит `code`, `name`, `color`. Пользователь ссылается на `role_code`. Роли: `administrator`, `developer`, `director`, `senior_group`, `engineer`, `general_director`
+- **Доступ к страницам**: `users.allowed_pages` (JSONB-массив; пустой = полный доступ). Проверка через `hasPageAccess(user, path)` из `src/lib/supabase/types.ts`
+- **Хелперы контроля доступа**: `canManageUsers()`, `isAdmin()`, `isLeader()`, `hasPageAccess()` — все в `src/lib/supabase/types.ts`
 
-### Theme System
-- **ThemeContext** (`src/contexts/ThemeContext.tsx`): `useTheme()` provides `theme` ('light'|'dark') and `toggleTheme()`
-- **Storage**: localStorage key `tenderHub_theme`, defaults to dark
-- **Colors**: Primary `#10b981` (emerald), configured in App.tsx ConfigProvider
-- **Ant Design**: Uses `theme.darkAlgorithm` / `theme.defaultAlgorithm`
+### Система тем
+- **ThemeContext** (`src/contexts/ThemeContext.tsx`): `useTheme()` отдаёт `theme` (`'light'`|`'dark'`) и `toggleTheme()`
+- **Хранение**: ключ localStorage `tenderHub_theme`, по умолчанию dark
+- **Цвета**: основной `#10b981` (emerald), настраивается в App.tsx через ConfigProvider
+- **Ant Design**: используется `theme.darkAlgorithm` / `theme.defaultAlgorithm`
 
-### State Management
-- No Redux/Zustand — only React contexts (Theme, Auth) and local state
-- Server state via Go BFF helpers (preferred) or direct Supabase calls (legacy)
-- Forms use Ant Design Form components
+### Управление состоянием
+- Ни Redux, ни Zustand — только React-контексты (Theme, Auth) и локальный state
+- Серверное состояние — через хелперы Go BFF (предпочтительно) или прямые вызовы Supabase (легаси)
+- Формы — на компонентах Ant Design Form
 
-## Key Data Patterns
+## Ключевые паттерны работы с данными
 
-### Supabase Client (legacy read path)
+### Клиент Supabase (легаси-путь чтения)
 ```typescript
 import { supabase } from '../lib/supabase';
 import type { Tender } from '../lib/supabase/types';
 ```
 
-### Go BFF API layer
-All new read/write code goes through `src/lib/api/` helpers that transparently
-route to the Go BFF when the matching feature flag is on, and fall back to
-Supabase direct otherwise. Never add a new `supabase.from()` call in a new
-component — add the helper instead.
+### Слой API через Go BFF
+Весь новый код чтения/записи идёт через хелперы в `src/lib/api/`, которые прозрачно маршрутизируют к Go BFF при включённом feature-флаге и откатываются на Supabase иначе. Никогда не добавляй новый `supabase.from()` в новом компоненте — добавляй хелпер.
 
-Domain helpers (each exports plain async functions):
-- `src/lib/api/client.ts` — low-level `apiFetch<T>(path, opts)` with Supabase JWT
-- `src/lib/api/featureFlags.ts` — `isGoEnabled(domain)` and `isRealtimeEnabled()`
+Доменные хелперы (каждый экспортирует обычные async-функции):
+- `src/lib/api/client.ts` — низкоуровневый `apiFetch<T>(path, opts)` с Supabase JWT
+- `src/lib/api/featureFlags.ts` — `isGoEnabled(domain)` и `isRealtimeEnabled()`
 - `src/lib/api/tenders.ts` — `fetchTenders`, `fetchTendersByIds`
 - `src/lib/api/positions.ts` — `fetchPositionsWithCosts`
 - `src/lib/api/boq.ts` — `bulkUpdateCommercial`
 - `src/lib/api/users.ts` — `registerUser`
 - `src/lib/api/timeline.ts` — `setTenderGroupQuality`, `respondTenderIteration`
-- `src/lib/api/hooks/useApiReferences.ts` — 6 read-only reference hooks
+- `src/lib/api/hooks/useApiReferences.ts` — 6 read-only хуков для справочников
 
-Per-domain env flags default off (Supabase direct). `.env.example` is the
-canonical list — currently 13 toggles, one per domain (references, tenders,
-positions, boq, markup, commerce, costs, fi, timeline, projects, notifications,
-users, realtime). Global override: `VITE_API_MODE=supabase|go|hybrid`.
+По-доменные env-флаги по умолчанию выключены (идём прямо в Supabase). `.env.example` — каноничный список: сейчас 13 тумблеров, по одному на домен (references, tenders, positions, boq, markup, commerce, costs, fi, timeline, projects, notifications, users, realtime). Глобальный оверрайд: `VITE_API_MODE=supabase|go|hybrid`.
 
-### Realtime (WebSocket hub)
-The Go BFF runs a Postgres `LISTEN/NOTIFY` → WebSocket broker (debounced 200 ms
-per topic). Frontend hook: `src/lib/realtime/useRealtimeTopic(topic, handler)`
-returns `true` when the native hub is active, `false` when falling back to
-`supabase.channel()`. Topics: `notifications:<user_id>`, `tender:<tender_id>`,
-`tenders`. Changes on `boq_items`, `client_positions`, `cost_redistribution_results`,
-and `construction_cost_volumes` all fan out to the matching `tender:<id>`;
-`tenders` broadcasts alongside the per-tender topic on tender-level changes.
-Publishes are non-blocking — slow clients are dropped when their send buffer
-fills (logged). The pg listener auto-reconnects with exponential backoff
-(500 ms → 30 s).
+### Realtime (WebSocket-хаб)
+Go BFF гоняет Postgres `LISTEN/NOTIFY` → WebSocket-брокер (дебаунс 200 мс на топик). Фронтовый хук: `src/lib/realtime/useRealtimeTopic(topic, handler)` возвращает `true`, когда активен нативный хаб, и `false`, когда идёт откат на `supabase.channel()`. Топики: `notifications:<user_id>`, `tender:<tender_id>`, `tenders`. Изменения в `boq_items`, `client_positions`, `cost_redistribution_results` и `construction_cost_volumes` веером расходятся в соответствующий `tender:<id>`; `tenders` рассылается наряду с per-tender-топиком при тендер-левел изменениях. Публикации неблокирующие — медленные клиенты дропаются, когда у них заполняется send-буфер (с логом). Слушатель pg авто-переподключается с экспоненциальным backoff (500 мс → 30 с).
 
-Existing `supabase.channel()` call sites are feature-flag guarded (when
-`VITE_API_REALTIME_ENABLED=true`, the Supabase subscription is skipped).
+Существующие call-site'ы `supabase.channel()` огорожены feature-флагом: при `VITE_API_REALTIME_ENABLED=true` Supabase-подписка пропускается.
 
-### Audit Logging (BOQ Items) — legacy
-Legacy RPC wrappers live in `src/lib/supabaseWithAudit.ts`:
+### Audit-лог (BOQ Items) — легаси
+Легаси-обёртки RPC живут в `src/lib/supabaseWithAudit.ts`:
 - `insertBoqItemWithAudit`, `updateBoqItemWithAudit`, `deleteBoqItemWithAudit`.
-The old `executeWithAudit()` is deprecated — do not use it.
+Старый `executeWithAudit()` — deprecated, не использовать.
 
-In the Go BFF, audit rows are written in the same `pgx.Tx` as the mutation
-(see `backend/internal/repository/boq_mutate.go`). Phase 5 will migrate
-frontend write paths onto the Go endpoints (`POST/PATCH/DELETE /api/v1/items/*`).
+В Go BFF audit-строки пишутся в той же `pgx.Tx`, что и мутация (см. `backend/internal/repository/boq_mutate.go`). Phase 5 переведёт фронтовые пути записи на Go-эндпоинты (`POST/PATCH/DELETE /api/v1/items/*`).
 
-### Database Conventions
-- UUID primary keys with `uuid_generate_v4()`
-- `created_at`/`updated_at` timestamps with automatic triggers
-- `created_by` FK to `auth.users.id`
-- RLS policies on all tables
+### Конвенции БД
+- UUID-первичные ключи через `uuid_generate_v4()`
+- Timestamps `created_at`/`updated_at` с автоматическими триггерами
+- `created_by` — FK на `auth.users.id`
+- RLS-политики на всех таблицах
 
-## Core Database Tables
+## Ключевые таблицы БД
 
-- `users` — accounts with `role_code`, `access_status`, `allowed_pages`, `access_enabled`
-- `roles` — role definitions with `code`, `name`, `color`, `allowed_pages`
-- `tenders` — main tender records with currency rates, housing_class, construction_scope
-- `tender_registry` — tender listing with chronology, statuses, archival
-- `material_names`, `work_names` — name libraries with units
-- `materials_library`, `works_library` — full material/work definitions with rates
-- `client_positions` — BOQ positions per tender
-- `boq_items` — detailed BOQ items (materials & works) per position
-- `templates`, `template_items` — reusable BOQ templates
-- `cost_categories`, `detail_cost_categories` — cost structure hierarchy
-- `construction_cost_volumes` — volumes per tender per detail category
-- `markup_tactics` — pricing strategies with sequences (JSONB)
-- `markup_parameters`, `tender_markup_percentages` — markup config per tender
-- `tender_pricing_distribution` — how costs distribute to material/work columns
-- `tasks` (`user_tasks`) — task management linked to users and tenders
-- `notifications` — system notifications with real-time subscriptions
-- `audit_log` — change tracking
-- **ENUMs**: `unit_type`, `material_type`, `boq_item_type`, `currency_type`, `housing_class_type`, `construction_scope_type`, `access_status_type`
+- `users` — учётки с `role_code`, `access_status`, `allowed_pages`, `access_enabled`
+- `roles` — определения ролей с `code`, `name`, `color`, `allowed_pages`
+- `tenders` — основные записи тендеров с курсами валют, `housing_class`, `construction_scope`
+- `tender_registry` — листинг тендеров с хронологией, статусами, архивацией
+- `material_names`, `work_names` — библиотеки названий с единицами измерения
+- `materials_library`, `works_library` — полные определения материалов/работ с расценками
+- `client_positions` — BOQ-позиции по тендеру
+- `boq_items` — детальные BOQ-элементы (материалы и работы) по позициям
+- `templates`, `template_items` — переиспользуемые BOQ-шаблоны
+- `cost_categories`, `detail_cost_categories` — иерархия структуры затрат
+- `construction_cost_volumes` — объёмы по тендеру по детальной категории
+- `markup_tactics` — стратегии ценообразования с последовательностями (JSONB)
+- `markup_parameters`, `tender_markup_percentages` — конфиг наценок по тендеру
+- `tender_pricing_distribution` — как затраты распределяются по столбцам материалов/работ
+- `tasks` (`user_tasks`) — управление задачами, связанными с пользователями и тендерами
+- `notifications` — системные уведомления с real-time подписками
+- `audit_log` — журнал изменений
+- **ENUM'ы**: `unit_type`, `material_type`, `boq_item_type`, `currency_type`, `housing_class_type`, `construction_scope_type`, `access_status_type`
 
-## Type System
+## Система типов
 
-Types are centralized in `src/lib/supabase/`:
-- `types.ts` — all entity types, enums, role constants, page access helpers, mapping functions
-- `types/tasks.ts` — task-related types
-- `index.ts` — barrel re-export of client + all types
+Типы централизованы в `src/lib/supabase/`:
+- `types.ts` — все типы сущностей, enum'ы, константы ролей, хелперы доступа к страницам, функции-мапперы
+- `types/tasks.ts` — типы, связанные с задачами
+- `index.ts` — бочковый реэкспорт клиента и всех типов
 
-Naming convention: `FooInsert` (for creation), `Foo` (full entity), `FooFull` (with JOIN data).
+Конвенция именования: `FooInsert` (для создания), `Foo` (полная сущность), `FooFull` (с данными JOIN).
 
-Key mapped types:
+Ключевые маппед-типы:
 - `BoqItemType` = `'мат' | 'суб-мат' | 'мат-комп.' | 'раб' | 'суб-раб' | 'раб-комп.'`
-- `TabKey` ↔ `BoqItemType` mappings via `TAB_TO_BOQ_TYPE` and `BOQ_TYPE_TO_TAB`
-- `MarkupStep` — complex formula structure for pricing calculations (up to 5 chained operations)
+- `TabKey` ↔ `BoqItemType` — маппинги через `TAB_TO_BOQ_TYPE` и `BOQ_TYPE_TO_TAB`
+- `MarkupStep` — сложная структура формул для расчётов цен (до 5 связанных операций)
 
-## File Organization
+## Организация файлов
 
-Pages follow this structure:
+Страницы следуют этой структуре:
 ```
 src/pages/PageName/
-├── PageName.tsx           # Main component
-├── components/            # Page-specific components with index.ts barrel
-├── hooks/                 # Custom hooks (usePageLogic, useDataFetching, etc.)
-├── utils/                 # Helper functions
-└── types.ts               # Page-specific types
+├── PageName.tsx           # главный компонент
+├── components/            # компоненты, специфичные для страницы, с index.ts-бочкой
+├── hooks/                 # кастомные хуки (usePageLogic, useDataFetching и т.п.)
+├── utils/                 # хелперы
+└── types.ts               # типы, специфичные для страницы
 ```
 
-Shared code:
-- `src/components/` — reusable components (Auth, Icons, Layout)
-- `src/contexts/` — React contexts (AuthContext, ThemeContext)
-- `src/lib/api/` — **Go BFF helpers (new code path)**, domain-per-file
-- `src/lib/realtime/` — low-level `ws.ts` client + `useRealtimeTopic` React hook
-- `src/lib/supabase/` — Supabase client, types, barrel exports (legacy/fallback)
-- `src/lib/supabaseWithAudit.ts` — audited CRUD wrappers (deprecated)
-- `src/services/` — cross-page services (cost import, markup tactics). Phase 5
-  pricing logic still lives here on the TS side until `backend/internal/calc/`
-  is wired to handlers.
-- `src/utils/` — shared helpers organized into `boq/`, `excel/`, `matching/`,
-  `versionTransfer/` submodules
-- `scripts/` — Node dev utilities. `smoke/` and `dual-run/` are the supported
-  verification harnesses; the remaining `check-*.cjs` / `fix-*.cjs` files are
-  ad-hoc DBA tools, not part of the standard workflow.
+Общий код:
+- `src/components/` — переиспользуемые компоненты (Auth, Icons, Layout)
+- `src/contexts/` — React-контексты (AuthContext, ThemeContext)
+- `src/lib/api/` — **хелперы Go BFF (новый путь)**, один файл на домен
+- `src/lib/realtime/` — низкоуровневый `ws.ts`-клиент + React-хук `useRealtimeTopic`
+- `src/lib/supabase/` — Supabase-клиент, типы, бочковые реэкспорты (легаси/фолбэк)
+- `src/lib/supabaseWithAudit.ts` — audited CRUD-обёртки (deprecated)
+- `src/services/` — кросс-страничные сервисы (cost import, markup tactics). Логика расчётов Phase 5 всё ещё живёт здесь на TS-стороне, пока `backend/internal/calc/` не подключён к хендлерам.
+- `src/utils/` — общие хелперы, разбитые по подмодулям `boq/`, `excel/`, `matching/`, `versionTransfer/`
+- `scripts/` — Node dev-утилиты. `smoke/` и `dual-run/` — поддерживаемые harness'ы верификации; остальные `check-*.cjs` / `fix-*.cjs` — ad-hoc DBA-инструменты, не часть стандартного workflow.
 
-Backend code (Go BFF):
-- `backend/cmd/server/main.go` — entry point with DI wiring
-- `backend/internal/{handlers,services,repository}/` — standard 3-layer
-- `backend/internal/realtime/` — pg LISTEN → broker → WS hub
-- `backend/internal/middleware/auth.go` — `JWTAuth` + exported `VerifyToken`
-- `backend/internal/calc/` — Phase 5 port of the TS pricing kernel
-  (markupCalculator, smartRounding, calculateBoqAmount, calculateGrandTotal,
-  applyPricingDistribution, calculateRedistribution). Each kernel has unit
-  tests. **Not yet wired to handlers** — the write paths still call the
-  TypeScript implementations in `src/services/` and `src/utils/boq/`.
-- `backend/internal/config/` — env / CORS / log-level loader
-- `backend/internal/cache/` — in-memory cache abstraction
-- `backend/internal/access/` — access-control registry
-- `backend/internal/domain/` — pure domain models (currently `user/`)
-- `backend/internal/infrastructure/db/` — pgx pool management
-- `backend/pkg/apierr/` — RFC 7807 ProblemDetail helpers
+Код бэкенда (Go BFF):
+- `backend/cmd/server/main.go` — точка входа c DI-проводкой
+- `backend/internal/{handlers,services,repository}/` — стандартная трёхслойка
+- `backend/internal/realtime/` — pg LISTEN → брокер → WS-хаб
+- `backend/internal/middleware/auth.go` — `JWTAuth` + экспортированный `VerifyToken`
+- `backend/internal/calc/` — Phase 5 порт TS-ядра ценообразования (markupCalculator, smartRounding, calculateBoqAmount, calculateGrandTotal, applyPricingDistribution, calculateRedistribution). Каждое ядро покрыто юнит-тестами. **Пока не подключено к хендлерам** — пути записи по-прежнему зовут TypeScript-реализации в `src/services/` и `src/utils/boq/`.
+- `backend/internal/config/` — загрузчик env / CORS / log-level
+- `backend/internal/cache/` — абстракция in-memory кэша
+- `backend/internal/access/` — реестр контроля доступа
+- `backend/internal/domain/` — чистые доменные модели (сейчас только `user/`)
+- `backend/internal/infrastructure/db/` — управление pgx-пулом
+- `backend/pkg/apierr/` — RFC 7807 ProblemDetail-хелперы
 - `backend/Dockerfile` — multi-stage, distroless-static runtime (CGO off, Go 1.23)
-- `docker-compose.yml` — `api + redis + caddy` (Redis reserved for Phase 4b)
+- `docker-compose.yml` — `api + redis + caddy` (Redis зарезервирован под Phase 4b)
 
-## Key Domain Concepts
+## Ключевые доменные концепции
 
-### BOQ Hierarchy
-Tenders → Client Positions → BOQ Items (materials & works per position)
+### Иерархия BOQ
+Tenders → Client Positions → BOQ Items (материалы и работы по позициям)
 
-### Item Types
-- Materials: `мат` (basic), `суб-мат` (subcontract), `мат-комп.` (component)
-- Works: `раб` (basic), `суб-раб` (subcontract), `раб-комп.` (component)
-- `material_type`: `основн.` (primary) or `вспомогат.` (auxiliary)
+### Типы элементов
+- Материалы: `мат` (базовый), `суб-мат` (субподряд), `мат-комп.` (компонент)
+- Работы: `раб` (базовая), `суб-раб` (субподряд), `раб-комп.` (компонент)
+- `material_type`: `основн.` (основной) или `вспомогат.` (вспомогательный)
 
-### Cost Calculation Flow
-1. Detail cost categories define cost structure per location
-2. Markup tactics define formula sequences per item type
-3. Markup percentages are set per tender per parameter
-4. Pricing distribution controls which column (material/work) receives costs
-5. Cost redistribution moves amounts between categories
+### Поток расчёта затрат
+1. Детальные категории затрат задают структуру стоимости по локациям
+2. Markup-тактики задают последовательности формул на тип элемента
+3. Проценты наценок настраиваются по тендеру на каждый параметр
+4. Pricing distribution управляет, в какой столбец (материалы/работы) падают затраты
+5. Cost redistribution перебрасывает суммы между категориями
 
-### Excel Import/Export
-- `xlsx` for reading, `xlsx-js-style` for writing with formatting
-- Used in: Tenders (BOQ import), Nomenclatures (bulk import), Library (export)
+### Импорт/экспорт Excel
+- `xlsx` для чтения, `xlsx-js-style` для записи с форматированием
+- Используется в: тендерах (импорт BOQ), номенклатурах (bulk-импорт), библиотеке (экспорт)
 
-## Common Workflows
+## Типовые процессы
 
-### Adding a New Page
-1. Create `src/pages/PageName/PageName.tsx`
-2. Add route in `src/App.tsx` under the ProtectedRoute layout
-3. Add menu item in `MainLayout.tsx` menuItems array
-4. Add page path to `ALL_PAGES` and `PAGE_LABELS` in `src/lib/supabase/types.ts`
-5. Add types to `src/lib/supabase/types.ts` if using new tables
+### Добавление новой страницы
+1. Создать `src/pages/PageName/PageName.tsx`
+2. Добавить маршрут в `src/App.tsx` под ProtectedRoute-лейаут
+3. Добавить пункт меню в массив menuItems `MainLayout.tsx`
+4. Добавить путь страницы в `ALL_PAGES` и `PAGE_LABELS` в `src/lib/supabase/types.ts`
+5. Добавить типы в `src/lib/supabase/types.ts`, если используются новые таблицы
 
-### Creating a New Database Table
+### Создание новой таблицы БД
 1. `supabase migration new table_name`
-2. Write SQL with UUID PK, timestamps, created_by FK, RLS policies
-3. Apply via MCP `apply_migration(ocauafggjrqvopxjihas, ...)` (preferred) or `supabase db push`
-4. `npm run gen:types` — regenerates `src/lib/supabase/database.types.ts`
-5. `npm run gen:schema` — refreshes `supabase/schemas/prod.sql`
+2. Написать SQL с UUID PK, timestamps, FK `created_by`, RLS-политиками
+3. Применить через MCP `apply_migration(ocauafggjrqvopxjihas, ...)` (предпочтительно) или `supabase db push`
+4. `npm run gen:types` — перегенерирует `src/lib/supabase/database.types.ts`
+5. `npm run gen:schema` — освежает `supabase/schemas/prod.sql`
 
-### Adding a Go BFF Endpoint
-1. Create repo method in `backend/internal/repository/<domain>.go` (row struct + query).
-2. Thin service in `backend/internal/services/<domain>.go` (cache invalidation belongs here).
-3. Handler in `backend/internal/handlers/<domain>.go` — envelope `{data: ...}`, ETag,
-   RFC 7807 errors via `pkg/apierr`.
-4. Wire repo/service/handler in `backend/cmd/server/main.go` and register route
-   inside `r.Group(authMW)` (unless intentionally public like `/health`).
-5. Add matching helper in `src/lib/api/<domain>.ts` with Go/Supabase branch:
-   `if (isGoEnabled('<domain>')) { return apiFetch(...) } else { return supabase... }`.
-6. Add an entry in `scripts/smoke/go-bff.mjs` to cover the new endpoint.
-7. Rebuild image: `docker build -t hubtender-api:local ./backend`.
+### Добавление эндпоинта Go BFF
+1. Создать repo-метод в `backend/internal/repository/<domain>.go` (row-структура + запрос).
+2. Тонкий сервис в `backend/internal/services/<domain>.go` (инвалидация кэша — здесь).
+3. Хендлер в `backend/internal/handlers/<domain>.go` — конверт `{data: ...}`, ETag, RFC 7807-ошибки через `pkg/apierr`.
+4. Прописать repo/service/handler в `backend/cmd/server/main.go` и зарегистрировать маршрут внутри `r.Group(authMW)` (если не публичный как `/health`).
+5. Добавить парный хелпер в `src/lib/api/<domain>.ts` с веткой Go/Supabase: `if (isGoEnabled('<domain>')) { return apiFetch(...) } else { return supabase... }`.
+6. Добавить запись в `scripts/smoke/go-bff.mjs`, чтобы покрыть новый эндпоинт.
+7. Пересобрать образ: `docker build -t hubtender-api:local ./backend`.
 
-## Testing
+## Тестирование
 
-Current verification surface is thin — know what exists and what doesn't:
+Текущая поверхность верификации тонкая — знай, что есть, а чего нет:
 
-- **Frontend unit tests**: none. No Vitest/Jest setup, no `*.test.ts` under `src/`.
-- **Playwright E2E**: scaffolding exists in `tests/` + `playwright.config.ts`
-  (the config's `webServer` listens on port **5185**, same as the dev server).
-  However `@playwright/test` is **not** in `devDependencies` and there is no
-  `test` script in `package.json`, so `npm test` currently fails. README.md's
-  `npm test` instruction is aspirational; wire the script + dep before relying
-  on it.
-- **Go backend**: `go test ./...` in `backend/` passes. Only `backend/internal/calc/`
-  has meaningful coverage — repository/handler packages are untested.
-- **End-to-end verification today** runs through the Node scripts:
-  `node scripts/smoke/go-bff.mjs` hits every Go read endpoint;
-  `node scripts/dual-run/positions-with-costs.mjs <tender-id>` diffs the
-  Supabase RPC result against the Go implementation.
-- **No CI**: there are no `.github/workflows/`, no pre-commit hooks, no
-  lint-staged. Validation is manual — run `npm run lint`, `npm run build`,
-  `go test ./...`, and the smoke harness before shipping non-trivial changes.
+- **Юнит-тесты фронта**: нет. Vitest/Jest не настроены, в `src/` нет `*.test.ts`.
+- **Playwright E2E**: есть каркас в `tests/` + `playwright.config.ts` (конфиг `webServer` слушает порт **5185** — тот же, что и dev-сервер). Но `@playwright/test` **не** в `devDependencies`, и в `package.json` нет скрипта `test`, так что `npm test` сейчас падает. Инструкция `npm test` в README.md — аспирационная; до того как полагаться на неё, надо прописать скрипт + зависимость.
+- **Go-бэкенд**: `go test ./...` в `backend/` проходит. Осмысленное покрытие только у `backend/internal/calc/` — пакеты repository/handler не протестированы.
+- **End-to-end верификация сегодня** идёт через Node-скрипты: `node scripts/smoke/go-bff.mjs` бьёт по каждому Go read-эндпоинту; `node scripts/dual-run/positions-with-costs.mjs <tender-id>` сравнивает результат Supabase RPC и Go-реализации.
+- **CI нет**: ни `.github/workflows/`, ни pre-commit-хуков, ни lint-staged. Валидация — ручная: `npm run lint`, `npm run build`, `go test ./...` и smoke-harness перед выкаткой нетривиальных изменений.
 
-## Tech Stack
+## Технологический стек
 
-Core dependencies are in `package.json`. Notable libraries:
+Основные зависимости — в `package.json`. Заметные библиотеки:
 - **UI**: `antd` + `@ant-design/icons` + `@ant-design/charts`
-- **Charts**: `chart.js` + `react-chartjs-2` + `chartjs-plugin-datalabels`
-- **Excel**: `xlsx` (read) + `xlsx-js-style` (write with styling)
+- **Графики**: `chart.js` + `react-chartjs-2` + `chartjs-plugin-datalabels`
+- **Excel**: `xlsx` (чтение) + `xlsx-js-style` (запись со стилями)
 - **Drag & Drop**: `@dnd-kit/core` + `@dnd-kit/sortable`
-- **Dates**: `dayjs`
-- **Routing**: `react-router-dom` v7
-- **TypeScript**: strict mode disabled, target ES2020
+- **Даты**: `dayjs`
+- **Роутинг**: `react-router-dom` v7
+- **TypeScript**: strict-режим выключен, target ES2020
