@@ -17,7 +17,6 @@ import { SaveOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { supabase } from '../../../../lib/supabase';
-import { useTheme } from '../../../../contexts/ThemeContext';
 import type { ProjectFull, ProjectCompletion } from '../../../../lib/supabase/types';
 
 const { Text } = Typography;
@@ -77,7 +76,6 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
   completionData,
   onSave,
 }) => {
-  const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [modifiedRows, setModifiedRows] = useState<Record<string, Partial<MonthRow>>>({});
 

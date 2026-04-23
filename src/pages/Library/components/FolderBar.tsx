@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Space, Tag, Modal, Input, Tooltip, Popconfirm, Typography } from 'antd';
+import { Button, Tag, Modal, Input, Tooltip, Popconfirm, Typography } from 'antd';
 import { FolderOutlined, PlusOutlined, EditOutlined, DeleteOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import type { LibraryFolder } from '../../../lib/supabase';
 

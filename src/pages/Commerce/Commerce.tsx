@@ -7,10 +7,8 @@ import { useEffect, useRef } from 'react';
 import { useCommerceData, useCommerceActions } from './hooks';
 import { TenderSelector, CommerceTable, CommerceHeader } from './components';
 import { exportCommerceToExcel } from './utils/exportToExcel';
-import { useAuth } from '../../contexts/AuthContext';
 
 export default function Commerce() {
-  const { user } = useAuth();
   // Архивные тендеры отображаются в фильтре для всех пользователей
   const shouldFilterArchived = false;
   const lastAutoRefreshAtRef = useRef(0);

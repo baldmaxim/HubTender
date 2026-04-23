@@ -326,8 +326,7 @@ export const useItemActions = ({
 
   const getItemGroupBounds = (
     item: BoqItemFull,
-    items: BoqItemFull[],
-    currentIndex: number
+    items: BoqItemFull[]
   ): { start: number; end: number } => {
     // Привязанный материал - границы блока работы
     if (item.parent_work_item_id) {

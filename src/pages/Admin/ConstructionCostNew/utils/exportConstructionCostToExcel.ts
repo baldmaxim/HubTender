@@ -666,7 +666,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[]): void {
       }
 
       // Выравнивание
-      let alignment: any = { vertical: 'center' };
+      const alignment: any = { vertical: 'center' };
       if (rowType === 'header' || rowType === 'subheader') {
         alignment.horizontal = 'center';
       } else if (C === 1) {
@@ -684,7 +684,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[]): void {
       }
 
       // Жирный шрифт и цвет
-      let font: any = {};
+      const font: any = {};
       if (rowType === 'header' || rowType === 'subheader') {
         font.bold = true;
       } else if (rowType === 'category' || rowType === 'location') {

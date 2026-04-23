@@ -70,7 +70,7 @@ export function exportRedistributionToExcel(data: ExportData): void {
   const createResultRow = (position: ClientPosition, index: number, positions: ClientPosition[]): ResultRow => {
     // Получить все BOQ элементы для этой позиции
     const positionBoqItems = Array.from(boqItemsMap.entries()).filter(
-      ([_, item]) => item.client_position_id === position.id
+      ([, item]) => item.client_position_id === position.id
     );
 
     // Суммируем материалы и работы

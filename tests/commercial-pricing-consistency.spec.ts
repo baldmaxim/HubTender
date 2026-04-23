@@ -18,7 +18,7 @@ interface CommercialPricing {
 }
 
 test.describe('Проверка консистентности коммерческих цен', () => {
-  let selectedTenderId: string | null = null;
+  const selectedTenderId: string | null = null;
   let selectedTenderTitle: string | null = null;
 
   test.beforeAll(() => {
@@ -127,7 +127,7 @@ test.describe('Проверка консистентности коммерче�
       console.log(`[COSTS] Строк в таблице (прямые затраты): ${rowCount}`);
 
       // Ищем итоговые значения в таблице
-      let totalDirectCosts = 0;
+      const totalDirectCosts = 0;
       for (let i = 0; i < Math.min(rowCount, 5); i++) {
         const rowText = await rows.nth(i).innerText();
         if (rowText) {

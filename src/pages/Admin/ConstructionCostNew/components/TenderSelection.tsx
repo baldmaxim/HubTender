@@ -31,7 +31,6 @@ const TenderSelection: React.FC<TenderSelectionProps> = ({
   onTenderTitleChange,
   onVersionChange,
   onTenderSelect,
-  shouldFilterArchived = false,
 }) => {
   return (
     <div style={{ margin: '-16px', padding: '24px' }}>

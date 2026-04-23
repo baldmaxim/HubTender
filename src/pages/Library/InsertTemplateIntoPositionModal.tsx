@@ -9,7 +9,6 @@ import {
 } from 'antd';
 import { supabase } from '../../lib/supabase';
 import { insertTemplateItems } from '../../utils/insertTemplateItems';
-import { useAuth } from '../../contexts/AuthContext';
 
 interface Tender {
   id: string;
@@ -41,7 +40,6 @@ const InsertTemplateIntoPositionModal: React.FC<InsertTemplateIntoPositionModalP
   onCancel,
   onSuccess,
 }) => {
-  const { user } = useAuth();
   // Архивные тендеры отображаются в фильтре для всех пользователей
   const shouldFilterArchived = false;
 

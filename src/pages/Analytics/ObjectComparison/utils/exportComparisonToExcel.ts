@@ -177,7 +177,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
       else if (rowType === 'category') fill = yellowCategoryFill;
       else if (rowType === 'total') fill = totalFill;
 
-      let alignment: any = { vertical: 'center' };
+      const alignment: any = { vertical: 'center' };
       if (rowType === 'header' || rowType === 'subheader') {
         alignment.horizontal = 'center';
         alignment.wrapText = true;
@@ -188,7 +188,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
       let numFmt;
       if (C >= 1 && rowType !== 'header' && rowType !== 'subheader') numFmt = '#,##0';
 
-      let font: any = {};
+      const font: any = {};
       if (rowType === 'header' || rowType === 'subheader' || rowType === 'category' || rowType === 'total') {
         font.bold = true;
       }

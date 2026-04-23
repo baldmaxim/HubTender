@@ -5,7 +5,6 @@ import { supabase } from '../../lib/supabase';
 import type { UnitType, BoqItemType } from '../../lib/supabase';
 import * as XLSX from 'xlsx-js-style';
 import { getVersionColorByTitle } from '../../utils/versionColor';
-import { useAuth } from '../../contexts/AuthContext';
 
 const { Title, Text } = Typography;
 
@@ -42,7 +41,6 @@ interface BoqItemData {
 }
 
 const Bsm: React.FC = () => {
-  const { user } = useAuth();
   const [searchText, setSearchText] = useState('');
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
@@ -387,7 +385,7 @@ const Bsm: React.FC = () => {
         if (matchingItems.length > 0) {
           const itemIds = matchingItems.map(item => item.id);
 
-          const { error: updateError, count } = await supabase
+          const { error: updateError } = await supabase
             .from('boq_items')
             .update({ quote_link: sourceItem.quote_link })
             .in('id', itemIds)

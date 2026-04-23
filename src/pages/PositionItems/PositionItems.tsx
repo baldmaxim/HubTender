@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Card, Button, Typography, Tag, Input, InputNumber, Select, Modal, message, AutoComplete, Tabs } from 'antd';
 import { DeleteOutlined, ThunderboltOutlined, UploadOutlined } from '@ant-design/icons';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import WorkEditForm from './WorkEditForm';
 import MaterialEditForm from './MaterialEditForm';
 import { useBoqItems } from './hooks/useBoqItems';
@@ -20,7 +20,6 @@ const { Text, Title } = Typography;
 
 const PositionItems: React.FC = () => {
   const { positionId } = useParams<{ positionId: string }>();
-  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [workSearchText, setWorkSearchText] = useState<string>('');
@@ -68,7 +67,6 @@ const PositionItems: React.FC = () => {
     handleAddWork,
     handleAddMaterial,
     handleAddTemplate,
-    handleDelete,
     handleFormSave,
     handleSaveGPData,
     handleSaveAdditionalWorkData,

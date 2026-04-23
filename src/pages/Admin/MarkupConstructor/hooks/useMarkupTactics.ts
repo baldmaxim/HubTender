@@ -12,7 +12,7 @@ export const useMarkupTactics = () => {
   const [editingName, setEditingName] = useState('');
   const [tacticSearchText, setTacticSearchText] = useState('');
 
-  const fetchTactics = useCallback(async (tenderId: string | null = null) => {
+  const fetchTactics = useCallback(async () => {
     setLoadingTactics(true);
     try {
       // Загружаем все тактики (глобальные и пользовательские)

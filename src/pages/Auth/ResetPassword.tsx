@@ -60,7 +60,7 @@ export default function ResetPassword() {
     initResetPassword();
 
     // Подписка на событие USER_UPDATED для отслеживания успешной смены пароля
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'USER_UPDATED') {
         console.log('✅ USER_UPDATED event received - password changed');
         setPasswordUpdated(true);

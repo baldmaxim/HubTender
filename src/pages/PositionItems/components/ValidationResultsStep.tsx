@@ -7,7 +7,7 @@ import {
   CloseCircleOutlined,
 } from '@ant-design/icons';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 const { Panel } = Collapse;
 
 interface ValidationError {

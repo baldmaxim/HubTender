@@ -34,8 +34,10 @@ export function useAuditRollback(): UseAuditRollbackReturn {
     setRolling(true);
 
     try {
-      // Восстанавливаем значения из old_data
-      const { id, created_at, updated_at, ...rollbackData } = record.old_data;
+      // Восстанавливаем значения из old_data (исключаем служебные поля)
+      const rollbackData = Object.fromEntries(
+        Object.entries(record.old_data).filter(([k]) => !['id', 'created_at', 'updated_at'].includes(k))
+      );
       await updateBoqItemWithAudit(
         user?.id,
         record.boq_item_id,

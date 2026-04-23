@@ -28,7 +28,7 @@ async function loadAllPositions(tenderId: string): Promise<ClientPosition[]> {
   const all: ClientPosition[] = [];
   let from = 0;
 
-  while (true) {
+  for (;;) {
     const { data, error } = await supabase
       .from('client_positions')
       .select('*')
@@ -60,7 +60,7 @@ async function loadAllBoqItems(tenderId: string): Promise<RawBoqItem[]> {
   const all: RawBoqItem[] = [];
   let from = 0;
 
-  while (true) {
+  for (;;) {
     const { data, error } = await supabase
       .from('boq_items')
       .select(`

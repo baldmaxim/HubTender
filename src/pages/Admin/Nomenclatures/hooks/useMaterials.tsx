@@ -97,7 +97,7 @@ export const useMaterials = () => {
         }
 
         // UPDATE без ручного updated_at (триггер установит автоматически)
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('material_names')
           .update({
             name: values.name,

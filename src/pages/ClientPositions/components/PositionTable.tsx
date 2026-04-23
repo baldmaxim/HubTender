@@ -184,7 +184,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
       key: 'section_name',
       width: 400,
       fixed: 'left',
-      render: (_, record, index) => {
+      render: (_, record) => {
         const isLeaf = leafPositionIndices.has(record.id);
         const sectionColor = isLeaf ? '#52c41a' : '#ff7875';
         const isAdditional = record.is_additional;
@@ -267,7 +267,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
       title: <div style={{ textAlign: 'center' }}>Данные ГП</div>,
       key: 'gp_data',
       width: 300,
-      render: (_, record, index) => {
+      render: (_, record) => {
         const isLeaf = leafPositionIndices.has(record.id);
 
         return (
@@ -309,7 +309,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
       key: 'total',
       width: 110,
       align: 'center',
-      render: (_, record, index) => {
+      render: (_, record) => {
         const isLeaf = leafPositionIndices.has(record.id);
         const counts = positionCounts[record.id] || { works: 0, materials: 0, total: 0 };
         const total = counts.total; // Используем реальную сумму из boq_items

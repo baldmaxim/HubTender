@@ -90,12 +90,6 @@ interface MaterialNameRecord {
   unit: string;
 }
 
-interface DetailCostCategoryRecord {
-  id: string;
-  name: string;
-  location: string;
-  cost_category_name: string;
-}
 
 const PAGE_SIZE = 1000;
 
@@ -131,7 +125,7 @@ const fetchAllPages = async <T>(
   const items: T[] = [];
   let from = 0;
 
-  while (true) {
+  for (;;) {
     const to = from + PAGE_SIZE - 1;
     const { data, error } = await queryFactory(from, to);
 

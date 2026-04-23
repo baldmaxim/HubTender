@@ -1,12 +1,10 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { Drawer, Tabs, Input, DatePicker, Select, Tag, message, Button } from 'antd';
-import { EditOutlined, CalendarOutlined, DownloadOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Input, DatePicker, Select, Tag, message, Button } from 'antd';
+import { EditOutlined, CalendarOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import type { FormInstance } from 'antd';
 import type { TenderRegistryWithRelations, TenderStatus, ConstructionScope } from '../../../lib/supabase';
 import { supabase } from '../../../lib/supabase';
-import { getStatusBadge, getFileTypeColor } from '../utils/design';
-import { ProgressBar } from './ProgressBar';
+import { getStatusBadge } from '../utils/design';
 import { useTheme } from '../../../contexts/ThemeContext';
 
 interface TenderDrawerModernProps {
@@ -756,9 +754,7 @@ const EditableSelectField: React.FC<EditableSelectFieldProps> = ({ label, value,
 export const TenderDrawerModern: React.FC<TenderDrawerModernProps> = ({
   open,
   tender,
-  statuses,
   constructionScopes,
-  onClose,
   onUpdate,
   readOnly = false,
 }) => {

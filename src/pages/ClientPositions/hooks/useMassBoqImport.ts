@@ -26,7 +26,7 @@ const fetchAllPages = async <T>(
   const items: T[] = [];
   let from = 0;
 
-  while (true) {
+  for (;;) {
     const to = from + PAGE_SIZE - 1;
     const { data, error } = await queryFactory(from, to);
 

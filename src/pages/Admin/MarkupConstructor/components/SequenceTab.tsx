@@ -77,7 +77,6 @@ export const SequenceTab: React.FC<SequenceTabProps> = ({ tabKey }) => {
   // Calculate intermediate results for each step
   const calculateIntermediateResults = useMemo(() => {
     const results: number[] = [];
-    let currentValue = baseCost;
 
     sequence.forEach((step) => {
       let baseValue: number;
@@ -220,7 +219,7 @@ export const SequenceTab: React.FC<SequenceTabProps> = ({ tabKey }) => {
     setEditingStepName('');
   };
 
-  const getStepFormula = (step: MarkupStep, index: number) => {
+  const getStepFormula = (step: MarkupStep) => {
     // Get base name
     let baseName: string;
     if (step.baseIndex === -1) {

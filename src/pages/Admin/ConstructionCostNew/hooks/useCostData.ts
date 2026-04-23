@@ -36,7 +36,7 @@ export interface TenderOption {
   clientName: string;
 }
 
-export const useCostData = (userRole?: string) => {
+export const useCostData = () => {
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
   const [selectedTenderTitle, setSelectedTenderTitle] = useState<string | null>(null);
@@ -44,7 +44,6 @@ export const useCostData = (userRole?: string) => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<CostRow[]>([]);
   const [costType, setCostType] = useState<'base' | 'commercial'>('base');
-  const [groupVolumes, setGroupVolumes] = useState<Map<string, number>>(new Map());
 
   // Архивные тендеры отображаются в фильтре для всех пользователей
   const shouldFilterArchived = false;
@@ -90,12 +89,10 @@ export const useCostData = (userRole?: string) => {
       const latest = versionsOfTitle[0];
       setSelectedVersion(latest.version || 1);
       setSelectedTenderId(latest.id);
-      setGroupVolumes(new Map());
     } else {
       setSelectedVersion(null);
       setSelectedTenderId(null);
       setData([]);
-      setGroupVolumes(new Map());
     }
   };
 
@@ -104,7 +101,6 @@ export const useCostData = (userRole?: string) => {
     const tender = tenders.find(t => t.title === selectedTenderTitle && t.version === version);
     if (tender) {
       setSelectedTenderId(tender.id);
-      setGroupVolumes(new Map());
     }
   };
 
@@ -163,9 +159,6 @@ export const useCostData = (userRole?: string) => {
       });
 
       console.log('Loaded group volumes from DB:', Array.from(groupVolumesMap.entries()));
-
-      // Сохраняем объемы групп в state
-      setGroupVolumes(groupVolumesMap);
 
       // Загружаем ВСЕ BOQ элементы с батчингом (Supabase лимит 1000 строк)
       let boqItems: any[] = [];
@@ -716,7 +709,7 @@ export const useCostData = (userRole?: string) => {
         console.log('Saving group volume:', { key: record.key, value, tenderId: selectedTenderId });
 
         // Проверяем существование записи
-        const { data: existing, error: checkError } = await supabase
+        const { data: existing } = await supabase
           .from('construction_cost_volumes')
           .select('id')
           .eq('tender_id', selectedTenderId!)

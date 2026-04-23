@@ -32,7 +32,6 @@ export const TenderSelectionScreen: React.FC<TenderSelectionScreenProps> = ({
   onTenderTitleChange,
   onVersionChange,
   onTenderCardClick,
-  shouldFilterArchived = false,
 }) => {
   return (
     <Card bordered={false} style={{ height: '100%' }}>

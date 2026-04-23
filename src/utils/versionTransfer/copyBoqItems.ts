@@ -42,7 +42,7 @@ export async function copyBoqItems(
     const oldItems: any[] = [];
     let from = 0;
 
-    while (true) {
+    for (;;) {
       const to = from + PAGE_SIZE - 1;
       const { data, error } = await supabase
         .from('boq_items')

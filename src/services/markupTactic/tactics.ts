@@ -44,7 +44,7 @@ async function loadBoqItemsForTender(tenderId: string): Promise<RecalculationBoq
   let from = 0;
   const loadBatchSize = 1000;
 
-  while (true) {
+  for (;;) {
     const { data, error } = await supabase
       .from('boq_items')
       .select(`

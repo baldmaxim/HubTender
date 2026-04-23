@@ -23,7 +23,7 @@ import {
   Table
 } from 'antd';
 import { SaveOutlined, ReloadOutlined, PlusOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, EditOutlined, CloseOutlined, ArrowLeftOutlined, CheckOutlined, CopyOutlined } from '@ant-design/icons';
-import { supabase, Tender, TenderMarkupPercentageInsert, MarkupParameter, MarkupTactic, PricingDistribution, PricingDistributionInsert, DistributionTarget } from '../../../lib/supabase';
+import { supabase, Tender, MarkupParameter, MarkupTactic, PricingDistribution, PricingDistributionInsert, DistributionTarget } from '../../../lib/supabase';
 import { formatNumberWithSpaces, parseNumberWithSpaces, parseNumberInput, formatNumberInput } from '../../../utils/numberFormat';
 import dayjs from 'dayjs';
 import './MarkupConstructor.css';
@@ -83,13 +83,12 @@ const MarkupConstructor: React.FC = () => {
   const [form] = Form.useForm();
   const { token } = theme.useToken();
   const { modal } = App.useApp();
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [, setLoading] = useState(false);
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [tactics, setTactics] = useState<MarkupTactic[]>([]); // Список доступных тактик
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
   const [selectedTacticId, setSelectedTacticId] = useState<string | null>(null); // Выбранная тактика в селекте
-  const [currentMarkupId, setCurrentMarkupId] = useState<string | null>(null);
+  const [, setCurrentMarkupId] = useState<string | null>(null);
   const [currentTacticId, setCurrentTacticId] = useState<string | null>(null); // ID сохраненной тактики в БД
   const [currentTacticName, setCurrentTacticName] = useState<string>(''); // Название текущей тактики
   const [activeTab, setActiveTab] = useState<TabKey>('works');
@@ -934,71 +933,6 @@ const MarkupConstructor: React.FC = () => {
     }
   };
 
-  // Сохранение данных
-  const handleSave = async () => {
-    if (!selectedTenderId) {
-      message.warning('Выберите тендер');
-      return;
-    }
-
-    try {
-      await form.validateFields();
-      const values = form.getFieldsValue();
-      setSaving(true);
-
-      // Если данные уже существуют - удаляем старые записи
-      if (currentMarkupId) {
-        const { error: deleteError } = await supabase
-          .from('tender_markup_percentage')
-          .delete()
-          .eq('tender_id', selectedTenderId);
-
-        if (deleteError) throw deleteError;
-      }
-
-      // Создаем массив записей для вставки (по одной для каждого параметра)
-      const markupRecords: TenderMarkupPercentageInsert[] = markupParameters.map((param) => ({
-        tender_id: selectedTenderId,
-        markup_parameter_id: param.id,
-        value: values[param.key] || 0,
-      }));
-
-      // Вставляем все записи одним запросом
-      const { error: insertError } = await supabase
-        .from('tender_markup_percentage')
-        .insert(markupRecords);
-
-      if (insertError) throw insertError;
-
-      // Обновляем порядок расчета в тендере, если он был изменен
-      if (selectedTacticId) {
-        const { error: updateTenderError } = await supabase
-          .from('tenders')
-          .update({ markup_tactic_id: selectedTacticId })
-          .eq('id', selectedTenderId);
-
-        if (updateTenderError) throw updateTenderError;
-      }
-
-      setCurrentMarkupId(selectedTenderId);
-      message.success('Данные успешно обновлены');
-    } catch (error) {
-      console.error('Ошибка сохранения:', error);
-      message.error('Не удалось сохранить данные');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Сброс формы
-  const handleReset = () => {
-    if (selectedTenderId) {
-      fetchMarkupData(selectedTenderId);
-    } else {
-      form.resetFields();
-    }
-  };
-
   // Возврат к списку схем
   const handleBackToList = () => {
     setIsTacticSelected(false);
@@ -1069,7 +1003,7 @@ const MarkupConstructor: React.FC = () => {
         : 0;
 
       // Добавляем параметр в БД
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('markup_parameters')
         .insert({
           key: parameterKey,
@@ -1795,7 +1729,7 @@ const MarkupConstructor: React.FC = () => {
   };
 
   // Получить все доступные наценки (без фильтрации)
-  const getAvailableMarkups = (tabKey: TabKey) => {
+  const getAvailableMarkups = () => {
     return markupParameters;
   };
 
@@ -2071,7 +2005,7 @@ const MarkupConstructor: React.FC = () => {
   // Рендер вкладки с порядком наценок
   const renderMarkupSequenceTab = (tabKey: TabKey) => {
     const sequence = markupSequences[tabKey];
-    const availableMarkups = getAvailableMarkups(tabKey);
+    const availableMarkups = getAvailableMarkups();
     const insertPosition = insertPositions[tabKey];
     const act1 = action1[tabKey];
     const op1Type = operand1Type[tabKey];
@@ -2346,7 +2280,6 @@ const MarkupConstructor: React.FC = () => {
 
                 // Вторая операция
                 if (step.action2 && step.operand2Type) {
-                  let op2Name: string;
                   let op2ValueNum: number;
                   if (step.operand2Type === 'markup' && step.operand2Key) {
                     op2ValueNum = form.getFieldValue(step.operand2Key) || 0;

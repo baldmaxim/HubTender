@@ -42,7 +42,6 @@ export function VersionMatchModal({ open, onClose, tender }: VersionMatchModalPr
   // Хук парсинга Excel
   const {
     parsedData,
-    parseResult,
     parsing,
     error: parseError,
     parseFile,

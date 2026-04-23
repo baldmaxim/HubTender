@@ -6,7 +6,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
 import type { Tender, BoqItem } from '../../../lib/supabase';
-import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 import type { PositionWithCommercialCost, MarkupTactic } from '../types';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 import {
@@ -71,7 +70,7 @@ async function fetchAllPages<T>(
   const allRows: T[] = [];
   let from = 0;
 
-  while (true) {
+  for (;;) {
     const { data, error } = await loader(from, from + batchSize - 1);
 
     if (error) {
@@ -241,24 +240,6 @@ async function loadBoqItemsFallback(tenderId: string): Promise<CommerceBoqItem[]
   ) as Promise<CommerceBoqItem[]>;
 }
 
-async function loadTenderRates(tenderId: string): Promise<TenderRates> {
-  const { data, error } = await supabase
-    .from('tenders')
-    .select('usd_rate, eur_rate, cny_rate')
-    .eq('id', tenderId)
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return {
-    usd_rate: data?.usd_rate || 0,
-    eur_rate: data?.eur_rate || 0,
-    cny_rate: data?.cny_rate || 0,
-  };
-}
-
 async function loadMarkupTacticById(tacticId: string | null | undefined): Promise<CalculationTactic | null> {
   if (!tacticId) {
     return null;
@@ -312,32 +293,6 @@ async function loadCommerceCalculationContext(tenderId: string): Promise<Commerc
     markupParameters,
     pricingDistribution,
     exclusions,
-  };
-}
-
-async function loadPositionsViaRpc(tenderId: string): Promise<AggregatedPositionLoadResult> {
-  // fetchPositionsWithCosts transparently routes to Go BFF when
-  // VITE_API_POSITIONS_ENABLED=true, or paginated Supabase RPC otherwise.
-  const data = await fetchPositionsWithCosts(tenderId);
-
-  const positions = applyLeafFlags(
-    data.map((row) => ({
-      ...row,
-      base_total: row.base_total || 0,
-      commercial_total: row.commercial_total || 0,
-      material_cost_total: row.material_cost_total || 0,
-      work_cost_total: row.work_cost_total || 0,
-      markup_percentage: row.markup_percentage || 1,
-      items_count: row.items_count || 0,
-    }))
-  );
-
-  const referenceTotal = positions.reduce((sum, position) => sum + (position.base_total || 0), 0);
-
-  return {
-    positions,
-    referenceTotal,
-    boqItems: null,
   };
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClientPositions } from './hooks/useClientPositions';
@@ -72,7 +72,6 @@ function filterPositionsBySearch(
 }
 
 const ClientPositions: React.FC = () => {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { theme: currentTheme } = useTheme();
 
@@ -306,7 +305,7 @@ const ClientPositions: React.FC = () => {
   };
 
   // Обработчик клика по строке
-  const handleRowClick = useCallback((record: any, index: number) => {
+  const handleRowClick = useCallback((record: any) => {
     const isLeaf = leafPositionIndices.has(record.id);
     if (isLeaf && selectedTender) {
       // Открываем в новой вкладке

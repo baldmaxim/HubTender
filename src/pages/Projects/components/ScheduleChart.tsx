@@ -64,7 +64,7 @@ export const ScheduleChart: React.FC<ScheduleChartProps> = ({
     const currentMonth = dayjs().startOf('month');
 
     // Find date range
-    let minDate = currentMonth.subtract(3, 'month');
+    const minDate = currentMonth.subtract(3, 'month');
     let maxDate = currentMonth.add(12, 'month');
 
     filteredProjects.forEach((project) => {

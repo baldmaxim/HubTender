@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Tabs, Typography, Button, Space, Input } from 'antd';
+import { Card, Tabs, Button, Space, Input } from 'antd';
 import {
   AppstoreOutlined,
   BarChartOutlined,
@@ -15,7 +15,6 @@ import { ProjectModal } from './components/ProjectModal';
 
 import type { ProjectFull } from '../../lib/supabase/types';
 
-const { Title } = Typography;
 
 const Projects: React.FC = () => {
   const { theme } = useTheme();

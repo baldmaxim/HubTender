@@ -52,7 +52,7 @@ export function useVersionMatching({
     const items: any[] = [];
     let from = 0;
 
-    while (true) {
+    for (;;) {
       const to = from + PAGE_SIZE - 1;
       const query = filters(
         supabase

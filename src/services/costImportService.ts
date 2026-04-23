@@ -156,7 +156,7 @@ async function importLocations(locations: Set<string>): Promise<Map<string, stri
 
     try {
       // Проверяем существование локации
-      let { data: existingLocation } = await supabase
+      const { data: existingLocation } = await supabase
         .from('locations')
         .select('id')
         .eq('location', location)
@@ -202,7 +202,7 @@ async function importCategories(
   for (const [key, category] of categories) {
     try {
       // Проверяем существование категории
-      let { data: existingCategory } = await supabase
+      const { data: existingCategory } = await supabase
         .from('cost_categories')
         .select('id')
         .eq('name', category.name)

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { Typography, Empty, Tooltip, Progress, Button, Modal, message } from 'antd';
-import { LineChartOutlined, DownloadOutlined, EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons';
+import { DownloadOutlined, EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
@@ -593,9 +593,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
 
     // Find first and last month with actual data
     const monthsWithActual = allMonths.filter((m) => monthlyActualTotals[m.key] > 0);
-    const firstMonthWithActual = monthsWithActual.length > 0
-      ? monthsWithActual[0]
-      : null;
     const lastMonthWithActual = monthsWithActual.length > 0
       ? monthsWithActual[monthsWithActual.length - 1]
       : null;
@@ -765,12 +762,12 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
         }
       });
 
-      visibleProjects.forEach((project, projectIdx) => {
+      visibleProjects.forEach((project) => {
         const row: any[] = [project.name];
         let projectTotal = 0;
 
         // Add data for each month
-        months.forEach((month, monthIdx) => {
+        months.forEach((month) => {
           const completion = getCompletionForMonth(project.id, month.year, month.month);
           let value: number | string = '';
 

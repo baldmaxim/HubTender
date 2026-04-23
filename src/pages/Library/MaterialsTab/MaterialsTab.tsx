@@ -4,7 +4,6 @@ import {
   FolderOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
   AppstoreOutlined, FileOutlined,
 } from '@ant-design/icons';
-import { MaterialLibraryFull } from '../../../lib/supabase';
 import type { LibraryFolder } from '../../../lib/supabase';
 import { useMaterialsData } from './hooks/useMaterialsData';
 import { useMaterialsActions } from './hooks/useMaterialsActions';
@@ -45,15 +44,6 @@ const MaterialsTab = forwardRef<any, MaterialsTabProps>((props, ref) => {
   useImperativeHandle(ref, () => ({
     handleAdd: actions.handleAdd,
   }));
-
-  const handleMove = async (id: string, folderId: string | null) => {
-    try {
-      await moveItem('materials_library', id, folderId);
-      fetchMaterials();
-    } catch {
-      message.error('Ошибка при перемещении');
-    }
-  };
 
   const handleBulkMove = async (folderId: string | null) => {
     setBulkLoading(true);

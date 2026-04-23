@@ -17,6 +17,7 @@ interface MarkupConstructorContextType {
 
 const MarkupConstructorContext = createContext<MarkupConstructorContextType | null>(null);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useMarkupConstructorContext = () => {
   const context = useContext(MarkupConstructorContext);
   if (!context) {

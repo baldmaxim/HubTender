@@ -88,7 +88,7 @@ test.describe('Multi-tab positions test', () => {
 
     // Find all rows in the table (tbody rows or Ant Design virtual rows)
     const tableRows = mainPage.locator('table tbody tr');
-    let rowCount = await tableRows.count();
+    const rowCount = await tableRows.count();
     console.log(`🔍 Найдено ${rowCount} строк в tbody`);
 
     let selectedRowId: string | null = null;

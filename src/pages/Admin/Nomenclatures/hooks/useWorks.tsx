@@ -97,7 +97,7 @@ export const useWorks = () => {
         }
 
         // UPDATE без ручного updated_at (триггер установит автоматически)
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('work_names')
           .update({
             name: values.name,

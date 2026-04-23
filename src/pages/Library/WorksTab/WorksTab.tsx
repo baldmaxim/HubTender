@@ -4,7 +4,6 @@ import {
   FolderOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
   AppstoreOutlined, FileOutlined,
 } from '@ant-design/icons';
-import { WorkLibraryFull } from '../../../lib/supabase';
 import type { LibraryFolder } from '../../../lib/supabase';
 import { useWorksData } from './hooks/useWorksData';
 import { useWorksActions } from './hooks/useWorksActions';
@@ -45,15 +44,6 @@ const WorksTab = forwardRef<any, WorksTabProps>((props, ref) => {
   useImperativeHandle(ref, () => ({
     handleAdd: actions.handleAdd,
   }));
-
-  const handleMove = async (id: string, folderId: string | null) => {
-    try {
-      await moveItem('works_library', id, folderId);
-      fetchWorks();
-    } catch {
-      message.error('Ошибка при перемещении');
-    }
-  };
 
   const handleBulkMove = async (folderId: string | null) => {
     setBulkLoading(true);

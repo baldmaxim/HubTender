@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Table, Typography, Tooltip, Button, Space, InputNumber, message } from 'antd';
+import { Table, Typography, Tooltip, Button, InputNumber, message } from 'antd';
 import { DownloadOutlined, EditOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { IndicatorRow } from '../hooks/useFinancialData';
