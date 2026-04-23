@@ -88,7 +88,7 @@ docker compose up --build
 
 ### База данных
 
-Работа через Supabase MCP — см. [CLAUDE.md](CLAUDE.md#critical-rules).
+Работа через Supabase MCP — см. [CLAUDE.md](CLAUDE.md#критические-правила).
 `supabase/schemas/prod.sql` — единый источник истины по схеме.
 
 ```bash
