@@ -7,18 +7,22 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/su10/hubtender/backend/internal/cache"
 )
 
-// HealthHandler handles both GET /health (liveness) and GET /health/db
-// (readiness + DB reachability). No authentication required.
+// HealthHandler handles GET /health (liveness), /health/db (readiness +
+// DB reachability), and /health/cache (in-memory cache stats).
+// No authentication required.
 type HealthHandler struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	cache *cache.InMem
 }
 
 // NewHealthHandler creates a HealthHandler. The pool is optional — when nil,
-// only the liveness endpoint works.
-func NewHealthHandler(pool *pgxpool.Pool) *HealthHandler {
-	return &HealthHandler{pool: pool}
+// only the liveness endpoint works. The cache is optional — when nil,
+// /health/cache returns zeroes.
+func NewHealthHandler(pool *pgxpool.Pool, c *cache.InMem) *HealthHandler {
+	return &HealthHandler{pool: pool, cache: c}
 }
 
 // ServeHTTP responds with {"status":"ok"} and HTTP 200 — process liveness.
@@ -26,6 +30,20 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// CacheStats returns the in-memory cache hit/miss counters and entry count.
+// Useful for eyeballing cache efficiency in prod without Prometheus.
+func (h *HealthHandler) CacheStats(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if h.cache == nil {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(cache.Stats{})
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(h.cache.Stats())
 }
 
 // CheckDB probes the database with a 2-second timeout SELECT 1.

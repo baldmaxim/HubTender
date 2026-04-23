@@ -12,13 +12,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
 
 // tenderServicer is the interface TenderHandler depends on.
 type tenderServicer interface {
-	ListTenders(ctx context.Context, p repository.TenderListParams) ([]repository.TenderRow, error)
+	ListTenders(ctx context.Context, userID string, p repository.TenderListParams) ([]repository.TenderRow, error)
 	GetTenderOverview(ctx context.Context, tenderID string) (*repository.TenderOverviewRow, error)
 }
 
@@ -69,7 +70,12 @@ func (h *TenderHandler) GetTenders(w http.ResponseWriter, r *http.Request) {
 		p.CursorID = &id
 	}
 
-	rows, err := h.svc.ListTenders(r.Context(), p)
+	var userID string
+	if u := middleware.UserFromContext(r.Context()); u != nil {
+		userID = u.ID
+	}
+
+	rows, err := h.svc.ListTenders(r.Context(), userID, p)
 	if err != nil {
 		apierr.InternalError("failed to list tenders").Render(w)
 		return

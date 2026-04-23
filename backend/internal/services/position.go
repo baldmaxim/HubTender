@@ -60,6 +60,7 @@ func (s *PositionService) CreatePosition(
 		return nil, fmt.Errorf("positionService.CreatePosition: %w", err)
 	}
 	s.cache.Delete("tender:overview:" + p.TenderID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return p, nil
 }
 
@@ -75,5 +76,6 @@ func (s *PositionService) UpdatePosition(
 		return nil, fmt.Errorf("positionService.UpdatePosition: %w", err)
 	}
 	s.cache.Delete("tender:overview:" + tenderID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return p, nil
 }

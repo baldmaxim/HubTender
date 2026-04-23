@@ -42,6 +42,9 @@ func (s *BulkBoqService) BulkUpdateCommercial(
 		s.cache.Delete("tender:overview:" + tid)
 		s.cache.Delete("positions:with_costs:" + tid)
 	}
+	if len(tenderIDs) > 0 {
+		s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	}
 
 	return count, nil
 }

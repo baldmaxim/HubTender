@@ -59,6 +59,7 @@ func (s *BoqService) CreateBoqItem(
 		return nil, fmt.Errorf("boqService.CreateBoqItem: %w", err)
 	}
 	s.cache.Delete("tender:overview:" + item.TenderID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return item, nil
 }
 
@@ -73,6 +74,7 @@ func (s *BoqService) UpdateBoqItem(
 		return nil, fmt.Errorf("boqService.UpdateBoqItem: %w", err)
 	}
 	s.cache.Delete("tender:overview:" + item.TenderID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return item, nil
 }
 
@@ -87,5 +89,6 @@ func (s *BoqService) DeleteBoqItem(
 		return nil, fmt.Errorf("boqService.DeleteBoqItem: %w", err)
 	}
 	s.cache.Delete("tender:overview:" + item.TenderID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return item, nil
 }

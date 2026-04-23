@@ -124,7 +124,7 @@ func main() {
 	subcontractSvc := services.NewSubcontractService(subcontractRepo, inMemCache)
 	transferSvc := services.NewTransferService(transferRepo, inMemCache)
 
-	healthH := handlers.NewHealthHandler(pool)
+	healthH := handlers.NewHealthHandler(pool, inMemCache)
 	meH := handlers.NewMeHandler(userSvc)
 	refH := handlers.NewReferenceHandler(refSvc)
 	tenderH := handlers.NewTenderHandler(tenderSvc)
@@ -157,6 +157,7 @@ func main() {
 	// Public routes.
 	r.Get("/health", healthH.ServeHTTP)
 	r.Get("/health/db", healthH.CheckDB)
+	r.Get("/health/cache", healthH.CacheStats)
 
 	// Authenticated API routes.
 	authMW := middleware.JWTAuth(kf, cfg.SupabaseJWTIssuer)

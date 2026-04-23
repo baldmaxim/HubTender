@@ -39,6 +39,7 @@ func (s *ImportBoqService) BulkImport(
 
 	s.cache.Delete("tender:overview:" + in.TenderID)
 	s.cache.Delete("positions:with_costs:" + in.TenderID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 
 	return result, nil
 }

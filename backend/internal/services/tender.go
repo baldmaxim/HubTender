@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,7 +14,11 @@ import (
 	"github.com/su10/hubtender/backend/internal/repository"
 )
 
-const tenderOverviewCacheTTL = 60 * time.Second
+const (
+	tenderOverviewCacheTTL = 60 * time.Second
+	tenderListCacheTTL     = 30 * time.Second
+	tenderListKeyPrefix    = "tenders:list:"
+)
 
 // tenderRepoer is the interface TenderService depends on.
 type tenderRepoer interface {
@@ -28,8 +34,8 @@ type tenderRepoer interface {
 // thundering-herd: concurrent requests for the same tender ID coalesce
 // into a single DB hit.
 type TenderService struct {
-	repo    tenderRepoer
-	cache   *cache.InMem
+	repo  tenderRepoer
+	cache *cache.InMem
 	// inflight serialises concurrent loads for the same tender ID.
 	// Key: tender ID string, Value: *sync.Mutex.
 	inflight sync.Map
@@ -40,17 +46,58 @@ func NewTenderService(repo *repository.TenderRepo, c *cache.InMem) *TenderServic
 	return &TenderService{repo: repo, cache: c}
 }
 
-// ListTenders returns a paginated list of tenders. Results are not cached
-// at the service layer because filters and cursors vary per request.
+// ListTenders returns a paginated list of tenders, cached per-user-per-filters
+// for 30s. Invalidated on any tender create/update and by other services that
+// mutate tender-level aggregates (see DeleteByPrefix calls on tenderListKeyPrefix).
 func (s *TenderService) ListTenders(
 	ctx context.Context,
+	userID string,
 	p repository.TenderListParams,
 ) ([]repository.TenderRow, error) {
+	key := tenderListCacheKey(userID, p)
+
+	if v, ok := s.cache.Get(key); ok {
+		if rows, ok := v.([]repository.TenderRow); ok {
+			return rows, nil
+		}
+	}
+
 	rows, err := s.repo.ListTenders(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("tenderService.ListTenders: %w", err)
 	}
+
+	s.cache.Set(key, rows, tenderListCacheTTL)
 	return rows, nil
+}
+
+// tenderListCacheKey builds a stable cache key from userID and list params.
+// Different users get different entries (RLS may filter different rows);
+// each (archived/housing_class/search/cursor/limit) tuple gets its own slot.
+func tenderListCacheKey(userID string, p repository.TenderListParams) string {
+	var b strings.Builder
+	b.Grow(96)
+	b.WriteString(tenderListKeyPrefix)
+	b.WriteString(userID)
+	b.WriteString("|arch=")
+	if p.IsArchived != nil {
+		b.WriteString(strconv.FormatBool(*p.IsArchived))
+	}
+	b.WriteString("|hc=")
+	b.WriteString(p.HousingClass)
+	b.WriteString("|q=")
+	b.WriteString(p.Search)
+	b.WriteString("|cu=")
+	if p.CursorUpdatedAt != nil {
+		b.WriteString(strconv.FormatInt(p.CursorUpdatedAt.UnixNano(), 10))
+	}
+	b.WriteString("|ci=")
+	if p.CursorID != nil {
+		b.WriteString(*p.CursorID)
+	}
+	b.WriteString("|lim=")
+	b.WriteString(strconv.Itoa(p.Limit))
+	return b.String()
 }
 
 // GetTenderOverview returns the aggregate overview for a tender, caching
@@ -104,7 +151,7 @@ func (s *TenderService) GetTenderByID(ctx context.Context, id string) (*reposito
 	return t, nil
 }
 
-// CreateTender inserts a new tender and invalidates any stale overview cache.
+// CreateTender inserts a new tender and invalidates affected caches.
 func (s *TenderService) CreateTender(
 	ctx context.Context,
 	in repository.CreateTenderInput,
@@ -114,10 +161,11 @@ func (s *TenderService) CreateTender(
 		return nil, fmt.Errorf("tenderService.CreateTender: %w", err)
 	}
 	s.cache.Delete("tender:overview:" + t.ID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return t, nil
 }
 
-// UpdateTender patches a tender and invalidates the overview cache.
+// UpdateTender patches a tender and invalidates affected caches.
 func (s *TenderService) UpdateTender(
 	ctx context.Context,
 	id string,
@@ -128,5 +176,6 @@ func (s *TenderService) UpdateTender(
 		return nil, fmt.Errorf("tenderService.UpdateTender: %w", err)
 	}
 	s.cache.Delete("tender:overview:" + id)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return t, nil
 }

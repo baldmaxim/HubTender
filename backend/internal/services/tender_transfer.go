@@ -30,9 +30,8 @@ func NewTransferService(repo *repository.TransferRepo, c *cache.InMem) *Transfer
 
 // ExecuteVersionTransfer runs the full version-transfer inside a single
 // transaction, then evicts the cache keys that may now be stale:
-//   - tender:overview:<newTenderID>  — invalidated so the new tender loads fresh
-//   - tenders                        — defensive eviction; becomes active when
-//     tender-list caching is introduced
+//   - tender:overview:<newTenderID>  — the target tender reloads fresh
+//   - tenders:list:*                 — list results across all users are stale
 func (s *TransferService) ExecuteVersionTransfer(
 	ctx context.Context,
 	in repository.TransferInput,
@@ -43,7 +42,7 @@ func (s *TransferService) ExecuteVersionTransfer(
 	}
 
 	s.cache.Delete("tender:overview:" + result.TenderID)
-	s.cache.Delete("tenders")
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 
 	return result, nil
 }

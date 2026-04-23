@@ -31,5 +31,6 @@ func (s *SubcontractService) ToggleExclusion(
 	}
 	s.cache.Delete("tender:overview:" + tenderID)
 	s.cache.Delete("positions:with_costs:" + tenderID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return added, nil
 }

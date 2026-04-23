@@ -89,7 +89,9 @@ export function useUnits() {
     'units',
     24 * 60 * 60_000,
     async () => {
-      const res = await apiFetch<{ data: UnitRow[] }>('/api/v1/references/units');
+      const res = await apiFetch<{ data: UnitRow[] }>('/api/v1/references/units', {
+        cacheKey: 'ref:units',
+      });
       return res.data;
     },
     async () => {
@@ -108,7 +110,9 @@ export function useRoles() {
     'roles',
     60 * 60_000,
     async () => {
-      const res = await apiFetch<{ data: RoleRow[] }>('/api/v1/references/roles');
+      const res = await apiFetch<{ data: RoleRow[] }>('/api/v1/references/roles', {
+        cacheKey: 'ref:roles',
+      });
       return res.data;
     },
     async () => {
@@ -124,7 +128,9 @@ export function useMaterialNames() {
     'material_names',
     15 * 60_000,
     async () => {
-      const res = await apiFetch<{ data: MaterialNameRow[] }>('/api/v1/references/material-names');
+      const res = await apiFetch<{ data: MaterialNameRow[] }>('/api/v1/references/material-names', {
+        cacheKey: 'ref:material_names',
+      });
       return res.data;
     },
     async () => {
@@ -143,7 +149,9 @@ export function useWorkNames() {
     'work_names',
     15 * 60_000,
     async () => {
-      const res = await apiFetch<{ data: WorkNameRow[] }>('/api/v1/references/work-names');
+      const res = await apiFetch<{ data: WorkNameRow[] }>('/api/v1/references/work-names', {
+        cacheKey: 'ref:work_names',
+      });
       return res.data;
     },
     async () => {
@@ -162,7 +170,9 @@ export function useCostCategoriesRef() {
     'cost_categories',
     60 * 60_000,
     async () => {
-      const res = await apiFetch<{ data: CostCategoryRow[] }>('/api/v1/references/cost-categories');
+      const res = await apiFetch<{ data: CostCategoryRow[] }>('/api/v1/references/cost-categories', {
+        cacheKey: 'ref:cost_categories',
+      });
       return res.data;
     },
     async () => {
@@ -183,11 +193,13 @@ export function useDetailCostCategoriesRef(tenderId?: string) {
     cacheKey,
     60 * 60_000,
     async () => {
-      const res = await apiFetch<{ data: DetailCostCategoryRow[] }>(path);
+      const res = await apiFetch<{ data: DetailCostCategoryRow[] }>(path, {
+        cacheKey: `ref:detail_cost_categories:${tenderId ?? ''}`,
+      });
       return res.data;
     },
     async () => {
-      let query = supabase
+      const query = supabase
         .from('detail_cost_categories')
         .select('*')
         .order('order_num', { ascending: true });
