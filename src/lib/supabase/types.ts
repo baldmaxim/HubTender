@@ -857,12 +857,20 @@ export interface RedistributionRule {
     detail_cost_category_id?: string;
     category_name: string;
   }>;
+  // Legacy single-operation form (до поддержки итераций) — читается при загрузке для совместимости.
   position_adjustment?: {
     mode: 'deduct' | 'transfer' | 'add';
     amount: number;
     sourceIds: string[];
     targetIds: string[];
   };
+  // Multi-step итерации: массив последовательно применяемых операций.
+  position_adjustments?: Array<{
+    mode: 'deduct' | 'transfer' | 'add';
+    amount: number;
+    sourceIds: string[];
+    targetIds: string[];
+  }>;
 }
 
 export interface CostRedistributionResultInsert {

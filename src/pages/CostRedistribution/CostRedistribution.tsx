@@ -65,7 +65,7 @@ const CostRedistribution: React.FC = () => {
 
   // Формируем Map для быстрого доступа к BOQ элементам
   const boqItemsMap = useMemo(() => {
-    const map = new Map<string, (typeof boqItems)[number]>();
+    const map = new Map<string, any>();
     for (const item of boqItems) {
       map.set(item.id, item);
     }
@@ -117,7 +117,7 @@ const CostRedistribution: React.FC = () => {
   const adjustment = usePositionAdjustment(adjustmentBaseRows);
 
   const hasAnyRedistribution =
-    calculationState.results.length > 0 || adjustment.appliedRule !== null;
+    calculationState.results.length > 0 || adjustment.appliedRules.length > 0;
 
   const preparedResults = useMemo(() => {
     if (!hasAnyRedistribution || categoryLevelRows.length === 0) {
@@ -229,19 +229,25 @@ const CostRedistribution: React.FC = () => {
           setResults(results);
 
           // Восстановить rules и targets из первой записи (все имеют одинаковые правила)
-          const redistributionRules = savedData.redistributionRules as unknown as Record<string, unknown> | null | undefined;
+          const redistributionRules = savedData.redistributionRules as any;
           if (redistributionRules) {
             if (redistributionRules.deductions) {
-              setRules(redistributionRules.deductions as Parameters<typeof setRules>[0]);
+              setRules(redistributionRules.deductions);
             }
             if (redistributionRules.targets) {
-              setTargets(redistributionRules.targets as Parameters<typeof setTargets>[0]);
+              setTargets(redistributionRules.targets);
             }
-            const positionAdjustment = redistributionRules.position_adjustment as
+            // Новая форма — массив итераций; legacy — одиночная операция.
+            const positionAdjustments = redistributionRules.position_adjustments as
+              | PositionAdjustmentRule[]
+              | undefined;
+            const legacyPositionAdjustment = redistributionRules.position_adjustment as
               | PositionAdjustmentRule
               | undefined;
-            if (positionAdjustment && positionAdjustment.amount > 0) {
-              adjustment.hydrate(positionAdjustment);
+            if (Array.isArray(positionAdjustments) && positionAdjustments.length > 0) {
+              adjustment.hydrate(positionAdjustments);
+            } else if (legacyPositionAdjustment && legacyPositionAdjustment.amount > 0) {
+              adjustment.hydrate([legacyPositionAdjustment]);
             } else {
               adjustment.reset();
             }
@@ -301,7 +307,7 @@ const CostRedistribution: React.FC = () => {
         calculationResult.results,
         sourceRules,
         targetCosts,
-        null
+        []
       );
     } catch (error) {
       console.error('Ошибка при переходе к результатам:', error);
@@ -335,6 +341,7 @@ const CostRedistribution: React.FC = () => {
         boqItemsMap,
         tenderTitle: `${selectedTender.title} (v${selectedTender.version})`,
         insuranceTotal,
+        positionAdjustmentDeltas: adjustment.appliedDeltas,
       });
     });
   };
@@ -360,7 +367,7 @@ const CostRedistribution: React.FC = () => {
       calculationState.results,
       sourceRules,
       targetCosts,
-      adjustment.appliedRule,
+      adjustment.appliedRules,
       fallbackBoqItem
     );
   };
@@ -372,7 +379,7 @@ const CostRedistribution: React.FC = () => {
     void handleSavePositionAdjustment();
     // Intentionally depend only on appliedRule identity; saving is idempotent per rule.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adjustment.appliedRule]);
+  }, [adjustment.appliedRules]);
 
   // Элементы вкладок
   const tabItems = [

@@ -22,13 +22,22 @@ interface ExportData {
   boqItemsMap: Map<string, BoqItemFull>;
   tenderTitle: string;
   insuranceTotal?: number;
+  // Пропорциональная дельта работ по позициям (суммарная по всем итерациям position-level)
+  positionAdjustmentDeltas?: Map<string, number>;
 }
 
 /**
  * Экспорт результатов перераспределения в Excel
  */
 export function exportRedistributionToExcel(data: ExportData): void {
-  const { clientPositions, redistributionResults, boqItemsMap, tenderTitle, insuranceTotal = 0 } = data;
+  const {
+    clientPositions,
+    redistributionResults,
+    boqItemsMap,
+    tenderTitle,
+    insuranceTotal = 0,
+    positionAdjustmentDeltas,
+  } = data;
 
   // Формируем Map результатов для быстрого доступа
   const resultsMap = new Map<string, RedistributionResult>();
@@ -104,11 +113,17 @@ export function exportRedistributionToExcel(data: ExportData): void {
       }
     }
 
+    // Применяем position-level дельту (сумму всех итераций между строками) поверх
+    // уже готового category-level total_works_after.
+    const positionDelta = positionAdjustmentDeltas?.get(position.id) ?? 0;
+    const adjustedWorksAfter = totalWorksAfter + positionDelta;
+    const adjustedRedistribution = totalRedistribution + positionDelta;
+
     // Рассчитываем цену за единицу
     const quantity = position.manual_volume || position.volume || 1;
     const materialUnitPrice = totalMaterials / quantity;
     const workUnitPriceBefore = totalWorksBefore / quantity;
-    const workUnitPriceAfter = totalWorksAfter / quantity;
+    const workUnitPriceAfter = adjustedWorksAfter / quantity;
 
     // Определяем конечность позиции по hierarchy_level
     const isLeaf = isLeafPosition(index, positions);
@@ -130,8 +145,8 @@ export function exportRedistributionToExcel(data: ExportData): void {
       work_unit_price_after: workUnitPriceAfter,
       total_materials: totalMaterials,
       total_works_before: totalWorksBefore,
-      total_works_after: totalWorksAfter,
-      redistribution_amount: totalRedistribution,
+      total_works_after: adjustedWorksAfter,
+      redistribution_amount: adjustedRedistribution,
       manual_note: position.manual_note,
       isLeaf,
       is_additional: position.is_additional,

@@ -30,7 +30,7 @@ export function useSaveResults() {
       results: RedistributionResult[],
       sourceRules: SourceRule[],
       targetCosts: TargetCost[],
-      positionAdjustment: PositionAdjustmentRule | null = null,
+      positionAdjustments: PositionAdjustmentRule[] = [],
       fallbackBoqItem?: { id: string; total_commercial_work_cost: number }
     ): Promise<boolean> => {
       if (!tenderId || !tacticId) {
@@ -89,14 +89,14 @@ export function useSaveResults() {
             detail_cost_category_id: target.detail_cost_category_id,
             category_name: target.category_name,
           })),
-          ...(positionAdjustment && positionAdjustment.amount > 0
+          ...(positionAdjustments.length > 0
             ? {
-                position_adjustment: {
-                  mode: positionAdjustment.mode,
-                  amount: positionAdjustment.amount,
-                  sourceIds: positionAdjustment.sourceIds,
-                  targetIds: positionAdjustment.targetIds,
-                },
+                position_adjustments: positionAdjustments.map((rule) => ({
+                  mode: rule.mode,
+                  amount: rule.amount,
+                  sourceIds: rule.sourceIds,
+                  targetIds: rule.targetIds,
+                })),
               }
             : {}),
         };

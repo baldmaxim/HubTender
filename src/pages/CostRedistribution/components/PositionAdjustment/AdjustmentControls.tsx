@@ -46,13 +46,23 @@ export function AdjustmentControls({
           <InputNumber
             min={0}
             step={1000}
+            precision={2}
             value={amount}
             style={{ width: 200 }}
             formatter={(value) => {
-              const str = String(value ?? '');
-              return str.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+              if (value === undefined || value === null) return '';
+              const [intPart, decPart = ''] = String(value).split('.');
+              const intFmt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+              return decPart ? `${intFmt},${decPart}` : intFmt;
             }}
-            parser={(value) => Number(String(value ?? '').replace(/\s/g, ''))}
+            parser={(display) => {
+              const cleaned = String(display ?? '')
+                .replace(/\s/g, '')
+                .replace(',', '.')
+                .replace(/[^\d.-]/g, '');
+              const n = parseFloat(cleaned);
+              return Number.isFinite(n) ? n : 0;
+            }}
             onChange={(value) => onAmountChange(Number(value ?? 0))}
             addonAfter="₽"
           />

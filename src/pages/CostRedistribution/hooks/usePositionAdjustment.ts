@@ -21,10 +21,39 @@ function emptyDraft(mode: PositionAdjustmentMode = 'transfer'): Draft {
   return { mode, amount: 0, sourceIds: new Set(), targetIds: new Set() };
 }
 
+function applyDeltasToBase(
+  base: AdjustmentBaseRow[],
+  deltas: Map<string, number>
+): AdjustmentBaseRow[] {
+  if (deltas.size === 0) return base;
+  return base.map((row) => {
+    const delta = deltas.get(row.position_id);
+    return delta ? { ...row, total_works_after: row.total_works_after + delta } : row;
+  });
+}
+
+function cumulativeDeltas(
+  base: AdjustmentBaseRow[],
+  rules: PositionAdjustmentRule[]
+): { cumulative: Map<string, number>; current: AdjustmentBaseRow[] } {
+  const cumulative = new Map<string, number>();
+  let state = base;
+  for (const rule of rules) {
+    const { deltas } = calculatePositionAdjustment(rule, state);
+    if (deltas.size === 0) continue;
+    for (const [id, value] of deltas) {
+      cumulative.set(id, (cumulative.get(id) ?? 0) + value);
+    }
+    state = applyDeltasToBase(state, deltas);
+  }
+  return { cumulative, current: state };
+}
+
 export interface UsePositionAdjustmentReturn {
   draft: Draft;
-  appliedRule: PositionAdjustmentRule | null;
+  appliedRules: PositionAdjustmentRule[];
   appliedDeltas: Map<string, number>;
+  currentBaseRows: AdjustmentBaseRow[];
   previewDeltas: Map<string, number>;
   previewErrors: PositionAdjustmentValidationError[];
   setMode: (mode: PositionAdjustmentMode) => void;
@@ -32,26 +61,29 @@ export interface UsePositionAdjustmentReturn {
   setSourceIds: (ids: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   setTargetIds: (ids: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   apply: () => PositionAdjustmentValidationError[];
+  removeIteration: (index: number) => void;
   reset: () => void;
-  hydrate: (rule: PositionAdjustmentRule) => void;
+  hydrate: (rules: PositionAdjustmentRule[]) => void;
 }
 
 export function usePositionAdjustment(
   baseRows: AdjustmentBaseRow[]
 ): UsePositionAdjustmentReturn {
   const [draft, setDraft] = useState<Draft>(() => emptyDraft('transfer'));
-  const [appliedRule, setAppliedRule] = useState<PositionAdjustmentRule | null>(null);
+  const [appliedRules, setAppliedRules] = useState<PositionAdjustmentRule[]>([]);
+
+  const { cumulative: appliedDeltas, current: currentBaseRows } = useMemo(
+    () => cumulativeDeltas(baseRows, appliedRules),
+    [baseRows, appliedRules]
+  );
 
   const setMode = useCallback((mode: PositionAdjustmentMode) => {
-    setDraft((prev) => {
-      const next: Draft = {
-        mode,
-        amount: prev.amount,
-        sourceIds: mode === 'add' ? new Set() : new Set(prev.sourceIds),
-        targetIds: mode === 'deduct' ? new Set() : new Set(prev.targetIds),
-      };
-      return next;
-    });
+    setDraft((prev) => ({
+      mode,
+      amount: prev.amount,
+      sourceIds: mode === 'add' ? new Set() : new Set(prev.sourceIds),
+      targetIds: mode === 'deduct' ? new Set() : new Set(prev.targetIds),
+    }));
   }, []);
 
   const setAmount = useCallback((amount: number) => {
@@ -94,50 +126,48 @@ export function usePositionAdjustment(
     [draft]
   );
 
-  // Ленивый preview: пока пользователь быстро вводит сумму, ввод остаётся отзывчивым,
-  // а пересчёт дельт по тысячам строк идёт в фоновом приоритете.
+  // Ленивый preview: пересчёт дельт идёт с низким приоритетом, сам input отзывчив.
   const deferredDraftRule = useDeferredValue(draftRule);
-  const deferredBaseRows = useDeferredValue(baseRows);
+  const deferredCurrentBaseRows = useDeferredValue(currentBaseRows);
 
   const preview = useMemo(
-    () => calculatePositionAdjustment(deferredDraftRule, deferredBaseRows),
-    [deferredDraftRule, deferredBaseRows]
+    () => calculatePositionAdjustment(deferredDraftRule, deferredCurrentBaseRows),
+    [deferredDraftRule, deferredCurrentBaseRows]
   );
 
-  const appliedDeltas = useMemo(() => {
-    if (!appliedRule) {
-      return new Map<string, number>();
-    }
-    return calculatePositionAdjustment(appliedRule, baseRows).deltas;
-  }, [appliedRule, baseRows]);
-
   const apply = useCallback((): PositionAdjustmentValidationError[] => {
-    const errors = validatePositionAdjustment(draftRule, baseRows);
+    const errors = validatePositionAdjustment(draftRule, currentBaseRows);
     if (errors.length === 0) {
-      setAppliedRule(draftRule);
+      setAppliedRules((prev) => [...prev, draftRule]);
+      setDraft((prev) => ({
+        mode: prev.mode,
+        amount: 0,
+        sourceIds: new Set(),
+        targetIds: new Set(),
+      }));
     }
     return errors;
-  }, [draftRule, baseRows]);
+  }, [draftRule, currentBaseRows]);
+
+  const removeIteration = useCallback((index: number) => {
+    setAppliedRules((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   const reset = useCallback(() => {
-    setAppliedRule(null);
+    setAppliedRules([]);
     setDraft(emptyDraft('transfer'));
   }, []);
 
-  const hydrate = useCallback((rule: PositionAdjustmentRule) => {
-    setAppliedRule(rule);
-    setDraft({
-      mode: rule.mode,
-      amount: rule.amount,
-      sourceIds: new Set(rule.sourceIds),
-      targetIds: new Set(rule.targetIds),
-    });
+  const hydrate = useCallback((rules: PositionAdjustmentRule[]) => {
+    setAppliedRules(rules);
+    setDraft(emptyDraft('transfer'));
   }, []);
 
   return {
     draft,
-    appliedRule,
+    appliedRules,
     appliedDeltas,
+    currentBaseRows,
     previewDeltas: preview.deltas,
     previewErrors: preview.errors,
     setMode,
@@ -145,6 +175,7 @@ export function usePositionAdjustment(
     setSourceIds,
     setTargetIds,
     apply,
+    removeIteration,
     reset,
     hydrate,
   };

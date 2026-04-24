@@ -15,18 +15,23 @@ export interface BlockRow {
 
 export function buildBlockRows(
   baseRows: ResultRow[],
-  deltas: Map<string, number>
+  previewDeltas: Map<string, number>,
+  appliedDeltas?: Map<string, number>
 ): BlockRow[] {
-  return baseRows.map((row) => ({
-    key: row.position_id,
-    position_id: row.position_id,
-    position_number: row.position_number,
-    section_number: row.section_number,
-    item_no: row.item_no,
-    work_name: row.work_name,
-    is_additional: row.is_additional,
-    isLeaf: row.isLeaf,
-    total: row.rounded_total_works ?? row.total_works_after,
-    preview_delta: deltas.get(row.position_id) ?? 0,
-  }));
+  return baseRows.map((row) => {
+    const appliedDelta = appliedDeltas?.get(row.position_id) ?? 0;
+    const baseTotal = row.rounded_total_works ?? row.total_works_after;
+    return {
+      key: row.position_id,
+      position_id: row.position_id,
+      position_number: row.position_number,
+      section_number: row.section_number,
+      item_no: row.item_no,
+      work_name: row.work_name,
+      is_additional: row.is_additional,
+      isLeaf: row.isLeaf,
+      total: baseTotal + appliedDelta,
+      preview_delta: previewDeltas.get(row.position_id) ?? 0,
+    };
+  });
 }
