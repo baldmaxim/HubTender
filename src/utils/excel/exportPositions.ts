@@ -486,7 +486,7 @@ export async function exportPositionsToExcel(
 
     // Экспортировать файл
     XLSX.writeFile(workbook, fileName);
-  } catch (error: any) {
+  } catch (error) {
     console.error('Ошибка экспорта в Excel:', error);
     throw error;
   }

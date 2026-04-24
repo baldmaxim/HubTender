@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '../../lib/supabase';
+import { getErrorMessage } from '../errors';
 import type { ClientPosition } from '../../lib/supabase';
 import { copyBoqItems } from './copyBoqItems';
 
@@ -258,14 +259,14 @@ export async function transferAdditionalPositions(
         success: true,
       });
 
-    } catch (error: any) {
+    } catch (error) {
       results.push({
         additionalPosition: additionalWork,
         originalParentId,
         newParentId: null,
         reason: 'no_parent_found',
         success: false,
-        error: error.message || 'Неизвестная ошибка',
+        error: getErrorMessage(error) || 'Неизвестная ошибка',
       });
     }
   }

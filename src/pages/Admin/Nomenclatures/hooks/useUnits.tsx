@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
 import { supabase } from '../../../../lib/supabase';
+import { getErrorMessage } from '../../../../utils/errors';
 
 const { confirm } = Modal;
 
@@ -102,9 +103,9 @@ export const useUnits = () => {
 
       await loadUnits();
       return true;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка сохранения единицы измерения:', error);
-      message.error(error.message || 'Ошибка сохранения единицы измерения');
+      message.error(getErrorMessage(error) || 'Ошибка сохранения единицы измерения');
       return false;
     }
   };
@@ -131,9 +132,9 @@ export const useUnits = () => {
 
           message.success('Единица измерения удалена');
           await loadUnits();
-        } catch (error: any) {
+        } catch (error) {
           console.error('Ошибка удаления единицы измерения:', error);
-          message.error(error.message || 'Ошибка удаления единицы измерения');
+          message.error(getErrorMessage(error) || 'Ошибка удаления единицы измерения');
         }
       },
     });

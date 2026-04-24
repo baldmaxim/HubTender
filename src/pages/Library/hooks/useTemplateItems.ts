@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
+import { getErrorMessage } from '../../../utils/errors';
 import type { TemplateItem } from '../../../lib/supabase';
 
 export interface TemplateItemWithDetails extends TemplateItem {
@@ -132,9 +133,9 @@ export const useTemplateItems = () => {
       });
 
       setLoadedTemplateItems(prev => ({ ...prev, [templateId]: sortItemsByHierarchy(formatted) }));
-    } catch (error: any) {
+    } catch (error) {
       fetchedRef.current.delete(templateId); // позволяем повторную попытку
-      message.error('Ошибка загрузки элементов шаблона: ' + error.message);
+      message.error('Ошибка загрузки элементов шаблона: ' + getErrorMessage(error));
     } finally {
       setLoadingTemplates(prev => { const s = new Set(prev); s.delete(templateId); return s; });
     }
@@ -186,8 +187,8 @@ export const useTemplateItems = () => {
           );
         return { ...prev, [templateId]: updatedItems };
       });
-    } catch (error: any) {
-      message.error('Ошибка удаления элемента: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка удаления элемента: ' + getErrorMessage(error));
     }
   };
 

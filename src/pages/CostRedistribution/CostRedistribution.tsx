@@ -15,9 +15,12 @@ import {
   useCostCategories,
   useDistributionCalculator,
   useSaveResults,
+  usePositionAdjustment,
 } from './hooks';
 import { smartRoundResults } from './utils';
 import { buildResultRows } from './utils/buildResultRows';
+import { TabPositionAdjustment } from './components/PositionAdjustment/TabPositionAdjustment';
+import type { PositionAdjustmentRule } from './types/positionAdjustment';
 
 const CostRedistribution: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState('setup');
@@ -95,12 +98,38 @@ const CostRedistribution: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calculationState.results]);
 
+  const categoryLevelRows = useMemo(() => {
+    if (clientPositions.length === 0) {
+      return [];
+    }
+    return buildResultRows(clientPositions, boqItemsByPosition, resultsMap);
+  }, [clientPositions, boqItemsByPosition, resultsMap]);
+
+  const adjustmentBaseRows = useMemo(
+    () =>
+      categoryLevelRows.map((row) => ({
+        position_id: row.position_id,
+        total_works_after: row.total_works_after,
+      })),
+    [categoryLevelRows]
+  );
+
+  const adjustment = usePositionAdjustment(adjustmentBaseRows);
+
+  const hasAnyRedistribution =
+    calculationState.results.length > 0 || adjustment.appliedRule !== null;
+
   const preparedResults = useMemo(() => {
-    if (activeTab !== 'results' || calculationState.results.length === 0) {
+    if (!hasAnyRedistribution || categoryLevelRows.length === 0) {
       return null;
     }
 
-    const baseRows = buildResultRows(clientPositions, boqItemsByPosition, resultsMap);
+    const baseRows = buildResultRows(
+      clientPositions,
+      boqItemsByPosition,
+      resultsMap,
+      adjustment.appliedDeltas
+    );
     const roundedRows = smartRoundResults(baseRows);
     const totalWorksBase = roundedRows.reduce(
       (sum, row) => sum + (row.rounded_total_works ?? row.total_works_after),
@@ -142,12 +171,13 @@ const CostRedistribution: React.FC = () => {
       totals,
     };
   }, [
-    activeTab,
-    calculationState.results.length,
+    hasAnyRedistribution,
+    categoryLevelRows.length,
     clientPositions,
     boqItemsByPosition,
     resultsMap,
     insuranceTotal,
+    adjustment.appliedDeltas,
   ]);
 
   // Загрузка страхования от судимостей при смене тендера
@@ -177,6 +207,7 @@ const CostRedistribution: React.FC = () => {
         clearRules();
         clearTargets();
         clearResults();
+        adjustment.reset();
         return;
       }
 
@@ -206,6 +237,16 @@ const CostRedistribution: React.FC = () => {
             if (redistributionRules.targets) {
               setTargets(redistributionRules.targets);
             }
+            const positionAdjustment = redistributionRules.position_adjustment as
+              | PositionAdjustmentRule
+              | undefined;
+            if (positionAdjustment && positionAdjustment.amount > 0) {
+              adjustment.hydrate(positionAdjustment);
+            } else {
+              adjustment.reset();
+            }
+          } else {
+            adjustment.reset();
           }
 
           // Переключить на вкладку результатов
@@ -217,6 +258,7 @@ const CostRedistribution: React.FC = () => {
           clearRules();
           clearTargets();
           clearResults();
+          adjustment.reset();
           setActiveTab('setup');
         }
       } catch (error) {
@@ -225,6 +267,8 @@ const CostRedistribution: React.FC = () => {
     };
 
     loadResults();
+    // adjustment exposes stable callbacks but the full object identity changes each render; avoid cycle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId, selectedTacticId, loadSavedResults, setResults, setRules, setTargets, clearRules, clearTargets, clearResults]);
 
   // Обработчики
@@ -245,6 +289,10 @@ const CostRedistribution: React.FC = () => {
         return;
       }
 
+      // При пересчёте category-level сбрасываем position-level, чтобы не применять
+      // старое правило к новой базе (source/target могут уже не соответствовать).
+      adjustment.reset();
+
       setActiveTab('results');
 
       void saveResults(
@@ -252,7 +300,8 @@ const CostRedistribution: React.FC = () => {
         selectedTacticId,
         calculationResult.results,
         sourceRules,
-        targetCosts
+        targetCosts,
+        null
       );
     } catch (error) {
       console.error('Ошибка при переходе к результатам:', error);
@@ -264,6 +313,7 @@ const CostRedistribution: React.FC = () => {
     clearRules();
     clearTargets();
     clearResults();
+    adjustment.reset();
   };
 
   const handleExport = () => {
@@ -289,11 +339,42 @@ const CostRedistribution: React.FC = () => {
     });
   };
 
+  const handleSavePositionAdjustment = async () => {
+    if (!selectedTenderId || !selectedTacticId) {
+      return;
+    }
+    // Fallback boq_item_id для случая «position-level без category-level»:
+    // схема cost_redistribution_results требует NOT NULL boq_item_id, а JSONB-правила
+    // храним на любой реальной строке тендера.
+    const fallbackBoqItemId = boqItems[0]?.id;
+    if (calculationState.results.length === 0 && !fallbackBoqItemId) {
+      return;
+    }
+    await saveResults(
+      selectedTenderId,
+      selectedTacticId,
+      calculationState.results,
+      sourceRules,
+      targetCosts,
+      adjustment.appliedRule,
+      fallbackBoqItemId
+    );
+  };
+
+  // При смене applied-правила сохраняем в БД
+  useEffect(() => {
+    if (!selectedTenderId || !selectedTacticId) return;
+    if (calculationState.results.length === 0 && boqItems.length === 0) return;
+    void handleSavePositionAdjustment();
+    // Intentionally depend only on appliedRule identity; saving is idempotent per rule.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adjustment.appliedRule]);
+
   // Элементы вкладок
   const tabItems = [
     {
       key: 'setup',
-      label: 'Настройка перераспределения',
+      label: 'Перераспределение Затрат',
       children: (
         <TabSetup
           categories={categories}
@@ -314,12 +395,23 @@ const CostRedistribution: React.FC = () => {
       ),
     },
     {
+      key: 'position-adjustment',
+      label: 'Между строками',
+      children: (
+        <TabPositionAdjustment
+          clientPositions={clientPositions}
+          baseRows={categoryLevelRows}
+          adjustment={adjustment}
+        />
+      ),
+    },
+    {
       key: 'results',
       label: 'Таблица результатов',
       children: (
         <TabResults
           rows={preparedResults?.rows ?? []}
-          hasResults={calculationState.results.length > 0}
+          hasResults={hasAnyRedistribution}
           loading={loading}
         />
       ),
@@ -338,7 +430,7 @@ const CostRedistribution: React.FC = () => {
         loading={loading}
         totals={preparedResults?.totals}
         insuranceTotal={insuranceTotal}
-        hasResults={calculationState.results.length > 0}
+        hasResults={hasAnyRedistribution}
         onExport={handleExport}
       />
 

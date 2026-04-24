@@ -857,6 +857,12 @@ export interface RedistributionRule {
     detail_cost_category_id?: string;
     category_name: string;
   }>;
+  position_adjustment?: {
+    mode: 'deduct' | 'transfer' | 'add';
+    amount: number;
+    sourceIds: string[];
+    targetIds: string[];
+  };
 }
 
 export interface CostRedistributionResultInsert {

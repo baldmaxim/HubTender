@@ -8,6 +8,7 @@ import {
   message,
 } from 'antd';
 import { supabase } from '../../lib/supabase';
+import { getErrorMessage } from '../../utils/errors';
 
 const { TextArea } = Input;
 
@@ -50,7 +51,7 @@ const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
 
       if (error) throw error;
       setUnits(data || []);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка загрузки единиц измерения:', error);
       message.error('Не удалось загрузить единицы измерения');
     }
@@ -127,9 +128,9 @@ const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
       message.success('Дополнительная работа успешно добавлена');
       form.resetFields();
       onSuccess(inserted.id);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка добавления дополнительной работы:', error);
-      message.error('Ошибка добавления: ' + error.message);
+      message.error('Ошибка добавления: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }

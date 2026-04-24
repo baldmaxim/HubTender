@@ -10,6 +10,7 @@ import type { ParsedRow } from '../../../../../utils/matching';
 import { findBestMatches } from '../../../../../utils/matching';
 import { executeVersionTransfer } from '../../../../../utils/versionTransfer';
 import { matchReducer, initialMatchState, type MatchPair, type VersionMatchState } from '../types';
+import { getErrorMessage } from '../../../../../utils/errors';
 
 const PAGE_SIZE = 1000;
 
@@ -90,9 +91,9 @@ export function useVersionMatching({
       );
 
       dispatch({ type: 'SET_OLD_POSITIONS', payload: data || [] });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка загрузки старых позиций:', error);
-      message.error(`Не удалось загрузить позиции: ${error.message}`);
+      message.error(`Не удалось загрузить позиции: ${getErrorMessage(error)}`);
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -268,9 +269,9 @@ export function useVersionMatching({
       message.success(
         `Новая версия создана! Тендер №${sourceTender.tender_number} v${createResult.version}`
       );
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка создания версии:', error);
-      message.error(`Не удалось создать версию: ${error.message}`);
+      message.error(`Не удалось создать версию: ${getErrorMessage(error)}`);
     } finally {
       dispatch({ type: 'SET_CREATING', payload: false });
     }

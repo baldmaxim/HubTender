@@ -16,6 +16,7 @@ import {
   CostCategory,
   Location,
 } from '../../../lib/supabase';
+import { getErrorMessage } from '../../../utils/errors';
 
 const { Title, Text } = Typography;
 
@@ -70,9 +71,9 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
       })) || [];
 
       setCategories(categoriesWithRelations);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка загрузки категорий затрат:', error);
-      message.error(`Не удалось загрузить категории: ${error.message}`);
+      message.error(`Не удалось загрузить категории: ${getErrorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -107,9 +108,9 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
       });
 
       setExclusions(newExclusions);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка загрузки исключений:', error);
-      message.error(`Не удалось загрузить исключения: ${error.message}`);
+      message.error(`Не удалось загрузить исключения: ${getErrorMessage(error)}`);
     }
   };
 
@@ -174,9 +175,9 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
         const typeLabel = type === 'works' ? 'работ' : 'материалов';
         message.success(`Рост субподряда ${typeLabel} включён для этой категории`);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка изменения настройки:', error);
-      message.error(`Не удалось изменить настройку: ${error.message}`);
+      message.error(`Не удалось изменить настройку: ${getErrorMessage(error)}`);
     } finally {
       setSaving(false);
     }
@@ -245,9 +246,9 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
         const typeLabel = type === 'works' ? 'работ' : 'материалов';
         message.success(`Рост субподряда ${typeLabel} включён для всей категории`);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка изменения настройки группы:', error);
-      message.error(`Не удалось изменить настройку: ${error.message}`);
+      message.error(`Не удалось изменить настройку: ${getErrorMessage(error)}`);
     } finally {
       setSaving(false);
     }

@@ -4,6 +4,7 @@ import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutl
 import { useTheme } from '../../contexts/ThemeContext';
 import { getVersionColorByTitle } from '../../utils/versionColor';
 import { supabase } from '../../lib/supabase';
+import { getErrorMessage } from '../../utils/errors';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import dayjs from 'dayjs';
 import {
@@ -138,8 +139,8 @@ const FinancialIndicators: React.FC = () => {
       setVolumeTitle(tempVolumeTitle);
       setEditingVolumeTitle(false);
       message.success('Заголовок обновлен');
-    } catch (error: any) {
-      message.error('Ошибка обновления заголовка: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка обновления заголовка: ' + getErrorMessage(error));
     }
   };
 

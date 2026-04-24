@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx-js-style';
 import dayjs from 'dayjs';
 import { message } from 'antd';
 import { supabase } from '../../../../lib/supabase';
+import { getErrorMessage } from '../../../../utils/errors';
 import type { CostRow } from '../hooks/useCostData';
 
 interface ExportParams {
@@ -752,8 +753,8 @@ export async function exportConstructionCostToExcel(
     // Экспортируем файл
     XLSX.writeFile(wb, fileName);
     message.success('Файл успешно экспортирован');
-  } catch (error: any) {
+  } catch (error) {
     console.error('Ошибка экспорта:', error);
-    message.error('Ошибка экспорта: ' + error.message);
+    message.error('Ошибка экспорта: ' + getErrorMessage(error));
   }
 }

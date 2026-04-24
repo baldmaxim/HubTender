@@ -17,6 +17,7 @@ import {
   processWorkBindings,
   calculateTotalAmount,
 } from '../utils';
+import { getErrorMessage } from '../../../utils/errors';
 
 const PAGE_SIZE = 1000;
 
@@ -413,9 +414,9 @@ export const useMassBoqImport = () => {
       }
       message.success(`Импортировано: ${msgParts.join(', ')}`);
       return true;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка импорта:', error);
-      message.error('Ошибка при импорте: ' + error.message);
+      message.error('Ошибка при импорте: ' + getErrorMessage(error));
       return false;
     } finally {
       setUploading(false);
@@ -503,8 +504,8 @@ export const useMassBoqImport = () => {
         message.info('Подходящие записи уже есть в номенклатуре. Теперь нажмите «Загрузить».');
       }
       return true;
-    } catch (error: any) {
-      message.error(error.message);
+    } catch (error) {
+      message.error(getErrorMessage(error));
       return false;
     } finally {
       setUploading(false);

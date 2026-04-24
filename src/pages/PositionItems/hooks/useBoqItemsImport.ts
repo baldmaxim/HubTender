@@ -4,6 +4,7 @@ import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { insertBoqItemWithAudit } from '../../../lib/supabaseWithAudit';
+import { getErrorMessage } from '../../../utils/errors';
 
 // ===========================
 // ТИПЫ И ИНТЕРФЕЙСЫ
@@ -915,7 +916,7 @@ export const useBoqItemsImport = () => {
       console.log('[BoqImport] Курсы валют загружены:', rates);
 
       return rates;
-    } catch (error: any) {
+    } catch (error) {
       console.error('[BoqImport] Критическая ошибка загрузки курсов валют:', error);
       throw error;
     }
@@ -1030,9 +1031,9 @@ export const useBoqItemsImport = () => {
       console.log('[BoqImport] Диапазон sort_number:', `${maxSortNumber + 1} - ${maxSortNumber + totalItems}`);
       message.success(`Успешно импортировано ${totalItems} элементов`);
       return true;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка импорта:', error);
-      message.error('Ошибка при импорте: ' + error.message);
+      message.error('Ошибка при импорте: ' + getErrorMessage(error));
       return false;
     } finally {
       setUploading(false);
@@ -1110,8 +1111,8 @@ export const useBoqItemsImport = () => {
       }
 
       return true;
-    } catch (error: any) {
-      message.error(error.message);
+    } catch (error) {
+      message.error(getErrorMessage(error));
       return false;
     } finally {
       setUploading(false);

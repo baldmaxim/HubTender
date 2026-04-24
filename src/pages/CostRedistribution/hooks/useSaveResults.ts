@@ -7,6 +7,7 @@ import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
 import type { RedistributionResult, SourceRule, TargetCost } from '../utils';
 import type { CostRedistributionResultInsert, RedistributionRule } from '../../../lib/supabase';
+import type { PositionAdjustmentRule } from '../types/positionAdjustment';
 
 interface LoadedRedistributionResults {
   results: Array<{
@@ -28,14 +29,16 @@ export function useSaveResults() {
       tacticId: string,
       results: RedistributionResult[],
       sourceRules: SourceRule[],
-      targetCosts: TargetCost[]
+      targetCosts: TargetCost[],
+      positionAdjustment: PositionAdjustmentRule | null = null,
+      fallbackBoqItemId?: string
     ): Promise<boolean> => {
       if (!tenderId || !tacticId) {
         message.error('Не выбран тендер или тактика наценок');
         return false;
       }
 
-      if (results.length === 0) {
+      if (results.length === 0 && !fallbackBoqItemId) {
         message.error('Нет результатов для сохранения');
         return false;
       }
@@ -51,7 +54,20 @@ export function useSaveResults() {
         const changedResults = results.filter((result) =>
           Math.abs(result.deducted_amount) > 0.000001 || Math.abs(result.added_amount) > 0.000001
         );
-        const resultsToPersist = changedResults.length > 0 ? changedResults : results.slice(0, 1);
+        const resultsToPersist =
+          changedResults.length > 0
+            ? changedResults
+            : results.length > 0
+              ? results.slice(0, 1)
+              : [
+                  {
+                    boq_item_id: fallbackBoqItemId as string,
+                    original_work_cost: 0,
+                    deducted_amount: 0,
+                    added_amount: 0,
+                    final_work_cost: 0,
+                  } satisfies RedistributionResult,
+                ];
 
         // Формируем JSONB с правилами перераспределения
         const redistribution_rules: RedistributionRule = {
@@ -68,6 +84,16 @@ export function useSaveResults() {
             detail_cost_category_id: target.detail_cost_category_id,
             category_name: target.category_name,
           })),
+          ...(positionAdjustment && positionAdjustment.amount > 0
+            ? {
+                position_adjustment: {
+                  mode: positionAdjustment.mode,
+                  amount: positionAdjustment.amount,
+                  sourceIds: positionAdjustment.sourceIds,
+                  targetIds: positionAdjustment.targetIds,
+                },
+              }
+            : {}),
         };
 
         // Формируем массив записей для вставки

@@ -8,6 +8,7 @@ import {
   type DeliveryPriceType,
 } from '../../../lib/supabase';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
+import { getErrorMessage } from '../../../utils/errors';
 
 type PositionCountMap = Record<string, { works: number; materials: number; total: number }>;
 
@@ -210,8 +211,8 @@ export const useClientPositions = () => {
       }
 
       setTenders((data as Tender[]) || []);
-    } catch (error: any) {
-      message.error('Ошибка загрузки тендеров: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки тендеров: ' + getErrorMessage(error));
     }
   }, []);
 
@@ -268,8 +269,8 @@ export const useClientPositions = () => {
       const { counts, totalSum: nextTotalSum } = buildPositionStats(boqItems, tender);
       setPositionCounts(counts);
       setTotalSum(nextTotalSum);
-    } catch (error: any) {
-      message.error('Ошибка загрузки позиций: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки позиций: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }

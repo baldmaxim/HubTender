@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
+import { getErrorMessage } from '../../../utils/errors';
 import type { Template } from '../../../lib/supabase';
 
 export interface TemplateWithDetails extends Template {
@@ -42,8 +43,8 @@ export const useTemplates = () => {
       });
 
       setTemplates(formattedTemplates);
-    } catch (error: any) {
-      message.error('Ошибка загрузки шаблонов: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки шаблонов: ' + getErrorMessage(error));
     }
   };
 
@@ -58,8 +59,8 @@ export const useTemplates = () => {
 
       message.success('Шаблон удален');
       fetchTemplates();
-    } catch (error: any) {
-      message.error('Ошибка удаления шаблона: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка удаления шаблона: ' + getErrorMessage(error));
     }
   };
 

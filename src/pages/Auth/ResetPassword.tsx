@@ -3,6 +3,7 @@ import { Form, Input, Button, Card, Typography, message } from 'antd';
 import { LockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { getErrorMessage } from '../../utils/errors';
 
 const { Title } = Typography;
 
@@ -119,9 +120,9 @@ export default function ResetPassword() {
       });
 
       // Не ждем результата - обработаем через событие USER_UPDATED
-    } catch (err: any) {
+    } catch (err) {
       console.error('❌ Submit error:', err);
-      message.error(err.message || 'Ошибка смены пароля');
+      message.error(getErrorMessage(err) || 'Ошибка смены пароля');
       setLoading(false);
     }
   };

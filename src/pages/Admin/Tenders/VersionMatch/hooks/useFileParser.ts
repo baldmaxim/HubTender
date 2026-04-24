@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { parseExcelForVersion, getParseStatistics, type ParseExcelResult } from '../../../../../utils/parseExcelForVersion';
 import type { ParsedRow } from '../../../../../utils/matching';
+import { getErrorMessage } from '../../../../../utils/errors';
 
 export interface UseFileParserResult {
   parsedData: ParsedRow[] | null;
@@ -56,9 +57,9 @@ export function useFileParser(): UseFileParserResult {
       // Сохранить данные
       setParsedData(result.positions);
 
-    } catch (err: any) {
+    } catch (err) {
       console.error('Ошибка парсинга Excel:', err);
-      setError(`Не удалось прочитать файл: ${err.message}`);
+      setError(`Не удалось прочитать файл: ${getErrorMessage(err)}`);
     } finally {
       setParsing(false);
     }

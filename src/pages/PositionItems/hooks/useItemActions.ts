@@ -18,6 +18,7 @@ import {
   updateBoqItemWithAudit,
   deleteBoqItemWithAudit,
 } from '../../../lib/supabaseWithAudit';
+import { getErrorMessage } from '../../../utils/errors';
 
 interface UseItemActionsProps {
   position: ClientPosition | null;
@@ -64,8 +65,8 @@ export const useItemActions = ({
         .eq('id', positionId);
 
       if (error) throw error;
-    } catch (error: any) {
-      console.error('Ошибка обновления итогов позиции:', error.message);
+    } catch (error) {
+      console.error('Ошибка обновления итогов позиции:', getErrorMessage(error));
     }
   };
 
@@ -104,8 +105,8 @@ export const useItemActions = ({
       message.success('Работа добавлена');
       await fetchItems();
       await updateClientPositionTotals(position.id);
-    } catch (error: any) {
-      message.error('Ошибка добавления работы: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка добавления работы: ' + getErrorMessage(error));
     }
   };
 
@@ -164,8 +165,8 @@ export const useItemActions = ({
       message.success('Материал добавлен');
       await fetchItems();
       await updateClientPositionTotals(position.id);
-    } catch (error: any) {
-      message.error('Ошибка добавления материала: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка добавления материала: ' + getErrorMessage(error));
     }
   };
 
@@ -184,8 +185,8 @@ export const useItemActions = ({
       );
       await fetchItems();
       await updateClientPositionTotals(position.id);
-    } catch (error: any) {
-      message.error('Ошибка вставки шаблона: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка вставки шаблона: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -200,8 +201,8 @@ export const useItemActions = ({
       if (position) {
         await updateClientPositionTotals(position.id);
       }
-    } catch (error: any) {
-      message.error('Ошибка удаления: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка удаления: ' + getErrorMessage(error));
     }
   };
 
@@ -246,8 +247,8 @@ export const useItemActions = ({
           total_amount: totalAmount,
         });
       }
-    } catch (error: any) {
-      console.error('Ошибка обновления количества материалов:', error.message);
+    } catch (error) {
+      console.error('Ошибка обновления количества материалов:', getErrorMessage(error));
     }
   };
 
@@ -274,8 +275,8 @@ export const useItemActions = ({
         await updateClientPositionTotals(position.id);
       }
       onSuccess();
-    } catch (error: any) {
-      message.error('Ошибка сохранения: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка сохранения: ' + getErrorMessage(error));
     }
   };
 
@@ -296,8 +297,8 @@ export const useItemActions = ({
 
       if (error) throw error;
       onSuccess();
-    } catch (error: any) {
-      message.error('Ошибка сохранения данных ГП: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка сохранения данных ГП: ' + getErrorMessage(error));
     }
   };
 
@@ -319,8 +320,8 @@ export const useItemActions = ({
       if (error) throw error;
       onSuccess();
       message.success('Данные дополнительной работы сохранены');
-    } catch (error: any) {
-      message.error('Ошибка сохранения данных: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка сохранения данных: ' + getErrorMessage(error));
     }
   };
 
@@ -421,8 +422,8 @@ export const useItemActions = ({
 
       await fetchItems();
       message.success('Элемент перемещен');
-    } catch (error: any) {
-      message.error('Ошибка перемещения: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка перемещения: ' + getErrorMessage(error));
     }
   };
 

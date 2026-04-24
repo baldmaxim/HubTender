@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { supabase, type Tender } from '../../../../lib/supabase';
+import { getErrorMessage } from '../../../../utils/errors';
 import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
 import {
   calculateLiveCommercialAmounts,
@@ -114,8 +115,8 @@ export const useCostData = () => {
 
       if (error) throw error;
       setTenders(data || []);
-    } catch (error: any) {
-      message.error('Ошибка загрузки тендеров: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки тендеров: ' + getErrorMessage(error));
     }
   };
 
@@ -644,9 +645,9 @@ export const useCostData = () => {
       console.log('Ожидается: 5,613,631,822');
 
       setData(rows);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка загрузки затрат:', error);
-      message.error(`Не удалось загрузить данные затрат: ${error.message || 'Неизвестная ошибка'}`);
+      message.error(`Не удалось загрузить данные затрат: ${getErrorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -771,8 +772,8 @@ export const useCostData = () => {
         });
         message.success('Объем группы сохранен');
       }
-    } catch (error: any) {
-      message.error('Ошибка сохранения: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка сохранения: ' + getErrorMessage(error));
     }
   };
 

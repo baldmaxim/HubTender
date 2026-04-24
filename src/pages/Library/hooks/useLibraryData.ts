@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
 import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
+import { getErrorMessage } from '../../../utils/errors';
 
 interface CostCategoryOption {
   value: string;
@@ -31,8 +32,8 @@ export const useLibraryData = () => {
       }));
 
       setWorks(formatted);
-    } catch (error: any) {
-      message.error('Ошибка загрузки работ: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки работ: ' + getErrorMessage(error));
     }
   };
 
@@ -52,8 +53,8 @@ export const useLibraryData = () => {
       }));
 
       setMaterials(formatted);
-    } catch (error: any) {
-      message.error('Ошибка загрузки материалов: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки материалов: ' + getErrorMessage(error));
     }
   };
 
@@ -74,8 +75,8 @@ export const useLibraryData = () => {
       }));
 
       setCostCategories(options);
-    } catch (error: any) {
-      message.error('Ошибка загрузки категорий затрат: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки категорий затрат: ' + getErrorMessage(error));
     }
   };
 

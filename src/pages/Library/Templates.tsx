@@ -19,6 +19,7 @@ import { createTemplateColumns, getRowClassName } from './utils/templateColumns'
 import { templateRowStyles } from './utils/templateStyles';
 import type { TemplateItemWithDetails } from './hooks/useTemplateItems';
 import type { LibraryFolder } from '../../lib/supabase';
+import { getErrorMessage } from '../../utils/errors';
 
 const { Text } = Typography;
 
@@ -146,8 +147,8 @@ const Templates: React.FC = () => {
         setCostCategorySearchText('');
         fetchTemplates();
       }
-    } catch (error: any) {
-      message.error('Ошибка создания шаблона: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка создания шаблона: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -198,8 +199,8 @@ const Templates: React.FC = () => {
       await addWorkToTemplate(templateId, work);
       setEditingSelectedWork(null);
       setEditingWorkSearchText('');
-    } catch (error: any) {
-      message.error('Ошибка добавления работы: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка добавления работы: ' + getErrorMessage(error));
     }
   };
 
@@ -214,8 +215,8 @@ const Templates: React.FC = () => {
       await addMaterialToTemplate(templateId, material);
       setEditingSelectedMaterial(null);
       setEditingMaterialSearchText('');
-    } catch (error: any) {
-      message.error('Ошибка добавления материала: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка добавления материала: ' + getErrorMessage(error));
     }
   };
 

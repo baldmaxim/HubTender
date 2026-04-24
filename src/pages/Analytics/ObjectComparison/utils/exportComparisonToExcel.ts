@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx-js-style';
 import dayjs from 'dayjs';
 import { message } from 'antd';
 import type { ComparisonRow, CostType } from '../types';
+import { getErrorMessage } from '../../../../utils/errors';
 
 interface ExportParams {
   comparisonData: ComparisonRow[];
@@ -234,8 +235,8 @@ export function exportComparisonToExcel(params: ExportParams): void {
 
     XLSX.writeFile(wb, fileName);
     message.success('Файл успешно экспортирован');
-  } catch (error: any) {
+  } catch (error) {
     console.error('Ошибка экспорта:', error);
-    message.error('Ошибка экспорта: ' + error.message);
+    message.error('Ошибка экспорта: ' + getErrorMessage(error));
   }
 }

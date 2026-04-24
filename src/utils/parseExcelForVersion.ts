@@ -12,6 +12,7 @@
 
 import * as XLSX from 'xlsx';
 import type { ParsedRow } from './matching';
+import { getErrorMessage } from './errors';
 
 export interface ParseExcelResult {
   positions: ParsedRow[];
@@ -104,16 +105,16 @@ export async function parseExcelForVersion(
         }
 
         result.positions.push(parsedRow);
-      } catch (error: any) {
-        result.errors.push(`Строка ${rowNumber}: ошибка парсинга - ${error.message}`);
+      } catch (error) {
+        result.errors.push(`Строка ${rowNumber}: ошибка парсинга - ${getErrorMessage(error)}`);
       }
     });
 
     if (result.positions.length === 0 && result.errors.length === 0) {
       result.errors.push('Файл не содержит данных или все строки пустые');
     }
-  } catch (error: any) {
-    result.errors.push(`Ошибка чтения файла: ${error.message}`);
+  } catch (error) {
+    result.errors.push(`Ошибка чтения файла: ${getErrorMessage(error)}`);
   }
 
   return result;

@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase';
 import dayjs from 'dayjs';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { TenderDeadlineExtension } from '../../../lib/supabase/types';
+import { getErrorMessage } from '../../../utils/errors';
 
 interface TenderRecord {
   id: string;
@@ -184,9 +185,9 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
       message.success(`Доступ успешно продлен для ${selectedUserIds.length} пользователей`);
       setModalVisible(false);
       loadAllUsersWithExtensions(); // Перезагрузить данные
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка сохранения:', error);
-      message.error('Ошибка: ' + error.message);
+      message.error('Ошибка: ' + getErrorMessage(error));
     }
   };
 
@@ -259,9 +260,9 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
       setDeleteModalVisible(false);
       setSelectedDeleteUserIds([]);
       loadAllUsersWithExtensions(); // Перезагрузить данные
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка удаления:', error);
-      message.error('Ошибка: ' + error.message);
+      message.error('Ошибка: ' + getErrorMessage(error));
     }
   };
 

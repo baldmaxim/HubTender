@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
 import { supabase } from '../../../../lib/supabase';
+import { getErrorMessage } from '../../../../utils/errors';
 
 const { confirm } = Modal;
 
@@ -152,9 +153,9 @@ export const useWorks = () => {
 
       await loadWorks();
       return true;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка сохранения работы:', error);
-      message.error(error.message || 'Ошибка сохранения работы');
+      message.error(getErrorMessage(error) || 'Ошибка сохранения работы');
       return false;
     }
   };
@@ -181,9 +182,9 @@ export const useWorks = () => {
 
           message.success('Работа удалена');
           await loadWorks();
-        } catch (error: any) {
+        } catch (error) {
           console.error('Ошибка удаления работы:', error);
-          message.error(error.message || 'Ошибка удаления работы');
+          message.error(getErrorMessage(error) || 'Ошибка удаления работы');
         }
       },
     });
@@ -273,9 +274,9 @@ export const useWorks = () => {
 
           message.success(`Удалено ${remapPairs.length} дублей`);
           await loadWorks();
-        } catch (error: any) {
+        } catch (error) {
           console.error('Ошибка удаления дублей:', error);
-          message.error(error.message || 'Ошибка удаления дублей');
+          message.error(getErrorMessage(error) || 'Ошибка удаления дублей');
         }
       },
     });

@@ -3,6 +3,7 @@
  */
 
 import { supabase } from '../../lib/supabase';
+import { getErrorMessage } from '../errors';
 
 /**
  * Маппинг для переноса данных
@@ -130,12 +131,12 @@ export async function transferPositionData(
       }
     });
 
-  } catch (error: any) {
+  } catch (error) {
     toTransfer.forEach(mapping => {
       result.errors.push({
         oldId: mapping.oldPositionId,
         newId: mapping.newPositionId,
-        error: error.message || 'Неизвестная ошибка',
+        error: getErrorMessage(error) || 'Неизвестная ошибка',
       });
     });
   }

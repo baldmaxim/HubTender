@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
+import { getErrorMessage } from '../../../utils/errors';
 
 export const usePositionFilters = (
   userId: string | undefined,
@@ -40,8 +41,8 @@ export const usePositionFilters = (
       const positionIds = new Set((data || []).map(item => item.position_id));
       setSelectedPositionIds(positionIds);
       setIsFilterActive(positionIds.size > 0);
-    } catch (error: any) {
-      message.error('Ошибка загрузки фильтра: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки фильтра: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -85,8 +86,8 @@ export const usePositionFilters = (
       setSelectedPositionIds(new Set(positionIds));
       setIsFilterActive(positionIds.length > 0);
       message.success('Фильтр сохранен');
-    } catch (error: any) {
-      message.error('Ошибка сохранения фильтра: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка сохранения фильтра: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -102,8 +103,8 @@ export const usePositionFilters = (
         position_id: positionId,
       });
       setSelectedPositionIds(prev => new Set([...prev, positionId]));
-    } catch (error: any) {
-      message.error('Ошибка добавления позиции в фильтр: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка добавления позиции в фильтр: ' + getErrorMessage(error));
     }
   };
 
@@ -124,8 +125,8 @@ export const usePositionFilters = (
       setSelectedPositionIds(new Set());
       setIsFilterActive(false);
       message.success('Фильтр отключен');
-    } catch (error: any) {
-      message.error('Ошибка очистки фильтра: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка очистки фильтра: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }

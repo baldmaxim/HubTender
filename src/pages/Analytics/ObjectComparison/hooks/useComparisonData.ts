@@ -3,6 +3,7 @@ import { message } from 'antd';
 import { supabase, type Tender } from '../../../../lib/supabase';
 import { fetchTenders as apiFetchTenders, fetchTendersByIds as apiFetchTendersByIds } from '../../../../lib/api/tenders';
 import type { CostType, ComparisonRow, TenderCosts } from '../types';
+import { getErrorMessage } from '../../../../utils/errors';
 
 const MATERIAL_TYPES = ['мат', 'суб-мат', 'мат-комп.'];
 const WORK_TYPES = ['раб', 'суб-раб', 'раб-комп.'];
@@ -254,8 +255,8 @@ export function useComparisonData() {
     try {
       const data = await apiFetchTenders();
       setTenders(data);
-    } catch (error: any) {
-      message.error('Ошибка загрузки тендеров: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки тендеров: ' + getErrorMessage(error));
     }
   };
 
@@ -310,8 +311,8 @@ export function useComparisonData() {
       const data = buildHierarchy(itemsAll, costType, volsAll, loadedNotes);
       setComparisonData(data);
       message.success('Данные успешно загружены');
-    } catch (error: any) {
-      message.error('Ошибка загрузки данных: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки данных: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -343,8 +344,8 @@ export function useComparisonData() {
         else next.delete(mapKey);
         return next;
       });
-    } catch (error: any) {
-      message.error('Ошибка сохранения примечания: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка сохранения примечания: ' + getErrorMessage(error));
     }
   }, [selectedTenders]);
 

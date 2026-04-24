@@ -10,7 +10,8 @@ export function buildResultRows(
     total_commercial_work_cost: number;
     total_commercial_material_cost: number;
   }>>,
-  resultsMap: Map<string, RedistributionResult>
+  resultsMap: Map<string, RedistributionResult>,
+  positionAdjustments?: Map<string, number>
 ): ResultRow[] {
   const regularPositions = clientPositions.filter((position) => !position.is_additional);
   const additionalPositions = clientPositions.filter((position) => position.is_additional);
@@ -73,6 +74,10 @@ export function buildResultRows(
       }
     }
 
+    const positionDelta = positionAdjustments?.get(position.id) ?? 0;
+    const adjustedWorksAfter = totalWorksAfter + positionDelta;
+    const adjustedRedistribution = totalRedistribution + positionDelta;
+
     const quantity = position.manual_volume || position.volume || 1;
 
     return {
@@ -89,11 +94,11 @@ export function buildResultRows(
       quantity,
       material_unit_price: totalMaterials / quantity,
       work_unit_price_before: totalWorksBefore / quantity,
-      work_unit_price_after: totalWorksAfter / quantity,
+      work_unit_price_after: adjustedWorksAfter / quantity,
       total_materials: totalMaterials,
       total_works_before: totalWorksBefore,
-      total_works_after: totalWorksAfter,
-      redistribution_amount: totalRedistribution,
+      total_works_after: adjustedWorksAfter,
+      redistribution_amount: adjustedRedistribution,
       manual_note: position.manual_note,
       isLeaf: isLeafPosition(index, positions),
       is_additional: position.is_additional,

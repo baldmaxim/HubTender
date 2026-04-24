@@ -9,6 +9,7 @@ import {
   type CurrencyType,
 } from '../../../lib/supabase';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
+import { getErrorMessage } from '../../../utils/errors';
 
 interface Template {
   id: string;
@@ -78,8 +79,8 @@ export const useBoqItems = (positionId: string | undefined) => {
           cny: data.tenders.cny_rate || 0,
         });
       }
-    } catch (error: any) {
-      message.error('Ошибка загрузки позиции: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки позиции: ' + getErrorMessage(error));
     }
   };
 
@@ -267,8 +268,8 @@ export const useBoqItems = (positionId: string | undefined) => {
 
       const sortedItems = sortItemsByHierarchy(formattedItems);
       setItems(sortedItems);
-    } catch (error: any) {
-      message.error('Ошибка загрузки элементов: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки элементов: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -290,8 +291,8 @@ export const useBoqItems = (positionId: string | undefined) => {
       }));
 
       setWorks(formatted);
-    } catch (error: any) {
-      message.error('Ошибка загрузки работ: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки работ: ' + getErrorMessage(error));
     }
   };
 
@@ -311,8 +312,8 @@ export const useBoqItems = (positionId: string | undefined) => {
       }));
 
       setMaterials(formatted);
-    } catch (error: any) {
-      message.error('Ошибка загрузки материалов: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки материалов: ' + getErrorMessage(error));
     }
   };
 
@@ -351,8 +352,8 @@ export const useBoqItems = (positionId: string | undefined) => {
       });
 
       setTemplates(templatesWithCategories);
-    } catch (error: any) {
-      message.error('Ошибка загрузки шаблонов: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки шаблонов: ' + getErrorMessage(error));
     }
   };
 
@@ -379,8 +380,8 @@ export const useBoqItems = (positionId: string | undefined) => {
       }));
 
       setCostCategories(options);
-    } catch (error: any) {
-      message.error('Ошибка загрузки категорий затрат: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки категорий затрат: ' + getErrorMessage(error));
     }
   };
 
@@ -410,8 +411,8 @@ export const useBoqItems = (positionId: string | undefined) => {
       }
 
       setWorkNames(allWorks);
-    } catch (error: any) {
-      message.error('Ошибка загрузки наименований работ: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки наименований работ: ' + getErrorMessage(error));
     }
   };
 
@@ -441,8 +442,8 @@ export const useBoqItems = (positionId: string | undefined) => {
       }
 
       setMaterialNames(allMaterials);
-    } catch (error: any) {
-      message.error('Ошибка загрузки наименований материалов: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка загрузки наименований материалов: ' + getErrorMessage(error));
     }
   };
 
@@ -455,7 +456,7 @@ export const useBoqItems = (positionId: string | undefined) => {
 
       if (error) throw error;
       setUnits(data || []);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка загрузки единиц измерения:', error);
     }
   };

@@ -9,6 +9,7 @@ import {
 } from 'antd';
 import { supabase } from '../../lib/supabase';
 import { insertTemplateItems } from '../../utils/insertTemplateItems';
+import { getErrorMessage } from '../../utils/errors';
 
 interface Tender {
   id: string;
@@ -91,7 +92,7 @@ const InsertTemplateIntoPositionModal: React.FC<InsertTemplateIntoPositionModalP
 
       if (error) throw error;
       setTenders(data || []);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка загрузки тендеров:', error);
       message.error('Не удалось загрузить тендеры');
     }
@@ -176,7 +177,7 @@ const InsertTemplateIntoPositionModal: React.FC<InsertTemplateIntoPositionModalP
       console.log('Листовых позиций + ДОП работ:', leaves.length);
 
       setLeafPositions(leaves);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка загрузки позиций:', error);
       message.error('Не удалось загрузить позиции');
     }
@@ -263,9 +264,9 @@ const InsertTemplateIntoPositionModal: React.FC<InsertTemplateIntoPositionModalP
 
       form.resetFields();
       onSuccess();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка вставки шаблона:', error);
-      message.error('Ошибка вставки: ' + error.message);
+      message.error('Ошибка вставки: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }

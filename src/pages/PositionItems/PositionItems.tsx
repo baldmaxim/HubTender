@@ -15,6 +15,7 @@ import { supabase } from '../../lib/supabase';
 import { useDeadlineCheck } from '../../hooks/useDeadlineCheck';
 import { useAuth } from '../../contexts/AuthContext';
 import { deleteBoqItemWithAudit, updateBoqItemWithAudit } from '../../lib/supabaseWithAudit';
+import { getErrorMessage } from '../../utils/errors';
 
 const { Text, Title } = Typography;
 
@@ -150,8 +151,8 @@ const PositionItems: React.FC = () => {
           setSelectedDeleteIds(new Set());
           await fetchItems();
           message.success(`Удалено ${count} элемент${count === 1 ? '' : count < 5 ? 'а' : 'ов'}`);
-        } catch (error: any) {
-          message.error('Ошибка удаления: ' + error.message);
+        } catch (error) {
+          message.error('Ошибка удаления: ' + getErrorMessage(error));
         } finally {
           setIsBulkDeleting(false);
         }
@@ -191,8 +192,8 @@ const PositionItems: React.FC = () => {
           // Обновляем состояние
           await fetchItems();
           message.success('Все элементы успешно удалены');
-        } catch (error: any) {
-          message.error('Ошибка при удалении элементов: ' + error.message);
+        } catch (error) {
+          message.error('Ошибка при удалении элементов: ' + getErrorMessage(error));
         }
       },
     });
@@ -232,8 +233,8 @@ const PositionItems: React.FC = () => {
           // Очищаем выбор
           setSelectedCostCategoryId(null);
           setCostSearchText('');
-        } catch (error: any) {
-          message.error('Ошибка при применении затраты: ' + error.message);
+        } catch (error) {
+          message.error('Ошибка при применении затраты: ' + getErrorMessage(error));
         }
       },
     });

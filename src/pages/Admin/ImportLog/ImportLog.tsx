@@ -19,6 +19,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
+import { getErrorMessage } from '../../../utils/errors';
 
 const { Text } = Typography;
 
@@ -127,8 +128,8 @@ const ImportLog: React.FC = () => {
       }));
 
       setSessions(rows);
-    } catch (err: any) {
-      message.error('Ошибка загрузки журнала: ' + err.message);
+    } catch (err) {
+      message.error('Ошибка загрузки журнала: ' + getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -217,8 +218,8 @@ const ImportLog: React.FC = () => {
 
       message.success(`Импорт отменён. Удалено ${session.items_count} элементов BOQ.`);
       fetchSessions();
-    } catch (err: any) {
-      message.error('Ошибка при отмене импорта: ' + err.message);
+    } catch (err) {
+      message.error('Ошибка при отмене импорта: ' + getErrorMessage(err));
     } finally {
       setCancelling(null);
     }

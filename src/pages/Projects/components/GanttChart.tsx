@@ -20,6 +20,7 @@ import {
 } from 'chart.js';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { ProjectFull, ProjectCompletion } from '../../../lib/supabase/types';
+import { getErrorMessage } from '../../../utils/errors';
 
 // Register Chart.js components
 ChartJS.register(
@@ -943,8 +944,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       XLSX.writeFile(wb, `Выполнение_объектов_${dayjs().format('YYYY-MM-DD')}.xlsx`);
 
       message.success('Экспорт завершен успешно');
-    } catch (error: any) {
-      message.error('Ошибка экспорта: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка экспорта: ' + getErrorMessage(error));
     }
   };
 

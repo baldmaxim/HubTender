@@ -5,6 +5,7 @@ import type { ColumnsType } from 'antd/es/table';
 import type { IndicatorRow } from '../hooks/useFinancialData';
 import { exportFinancialIndicatorsToExcel } from '../utils/exportToExcel';
 import { supabase } from '../../../lib/supabase';
+import { getErrorMessage } from '../../../utils/errors';
 
 const { Text } = Typography;
 
@@ -53,8 +54,8 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
       setEditingSp(false);
       setEditingCustomer(false);
       onAreaUpdated();
-    } catch (error: any) {
-      message.error('Ошибка обновления площади: ' + error.message);
+    } catch (error) {
+      message.error('Ошибка обновления площади: ' + getErrorMessage(error));
     }
   };
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
 import { supabase } from '../../../../lib/supabase';
+import { getErrorMessage } from '../../../../utils/errors';
 
 const { confirm } = Modal;
 
@@ -152,9 +153,9 @@ export const useMaterials = () => {
 
       await loadMaterials();
       return true;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка сохранения материала:', error);
-      message.error(error.message || 'Ошибка сохранения материала');
+      message.error(getErrorMessage(error) || 'Ошибка сохранения материала');
       return false;
     }
   };
@@ -181,9 +182,9 @@ export const useMaterials = () => {
 
           message.success('Материал удален');
           await loadMaterials();
-        } catch (error: any) {
+        } catch (error) {
           console.error('Ошибка удаления материала:', error);
-          message.error(error.message || 'Ошибка удаления материала');
+          message.error(getErrorMessage(error) || 'Ошибка удаления материала');
         }
       },
     });
@@ -273,9 +274,9 @@ export const useMaterials = () => {
 
           message.success(`Удалено ${remapPairs.length} дублей`);
           await loadMaterials();
-        } catch (error: any) {
+        } catch (error) {
           console.error('Ошибка удаления дублей:', error);
-          message.error(error.message || 'Ошибка удаления дублей');
+          message.error(getErrorMessage(error) || 'Ошибка удаления дублей');
         }
       },
     });

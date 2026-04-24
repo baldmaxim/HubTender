@@ -3,6 +3,7 @@ import { Form, Input, Button, Card, Typography, message } from 'antd';
 import { MailOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { getErrorMessage } from '../../utils/errors';
 
 const { Title, Text } = Typography;
 
@@ -25,8 +26,8 @@ export default function ForgotPassword() {
 
       setEmailSent(true);
       message.success('Письмо для восстановления пароля отправлено');
-    } catch (err: any) {
-      message.error(err.message || 'Ошибка отправки письма');
+    } catch (err) {
+      message.error(getErrorMessage(err) || 'Ошибка отправки письма');
     } finally {
       setLoading(false);
     }

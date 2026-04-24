@@ -3,6 +3,7 @@
  */
 
 import { supabase } from '../../lib/supabase';
+import { getErrorMessage } from '../errors';
 
 const PAGE_SIZE = 1000;
 
@@ -185,8 +186,8 @@ export async function copyBoqItems(
       result.errors.push(`Ошибка обновления итогов: ${updateTotalsError.message}`);
     }
 
-  } catch (error: any) {
-    result.errors.push(`Неожиданная ошибка: ${error.message}`);
+  } catch (error) {
+    result.errors.push(`Неожиданная ошибка: ${getErrorMessage(error)}`);
   }
 
   return result;

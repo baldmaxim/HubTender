@@ -4,6 +4,7 @@ import { UploadOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../../../lib/supabase';
+import { getErrorMessage } from '../../../../utils/errors';
 
 const { confirm } = Modal;
 
@@ -246,20 +247,20 @@ ORDER BY sort_order;`;
           }
 
           await loadData();
-        } catch (error: any) {
+        } catch (error) {
           console.error('Ошибка обработки файла:', error);
-          message.error('Ошибка обработки файла Excel: ' + error.message);
-          setImportErrors([error.message || 'Неизвестная ошибка']);
+          message.error('Ошибка обработки файла Excel: ' + getErrorMessage(error));
+          setImportErrors([getErrorMessage(error)]);
         } finally {
           setUploading(false);
         }
       };
 
       reader.readAsBinaryString(file as any);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка импорта:', error);
       message.error('Ошибка импорта файла');
-      setImportErrors([error.message || 'Неизвестная ошибка при чтении файла']);
+      setImportErrors([getErrorMessage(error)]);
       setUploading(false);
     }
 

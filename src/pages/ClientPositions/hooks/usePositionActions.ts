@@ -4,6 +4,7 @@ import { supabase, type ClientPosition } from '../../../lib/supabase';
 import { copyBoqItems } from '../../../utils/copyBoqItems';
 import { exportPositionsToExcel } from '../../../utils/excel';
 import { pluralize } from '../../../utils/pluralize';
+import { getErrorMessage } from '../../../utils/errors';
 
 export const usePositionActions = (
   _clientPositions: ClientPosition[],
@@ -49,9 +50,9 @@ export const usePositionActions = (
       if (selectedTenderId) {
         await fetchClientPositions(selectedTenderId); // Обновить таблицу
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка вставки:', error);
-      message.error('Ошибка вставки: ' + error.message);
+      message.error('Ошибка вставки: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -112,9 +113,9 @@ export const usePositionActions = (
       if (selectedTenderId) {
         await fetchClientPositions(selectedTenderId);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка массовой вставки:', error);
-      message.error('Ошибка массовой вставки: ' + error.message);
+      message.error('Ошибка массовой вставки: ' + getErrorMessage(error));
     } finally {
       setIsBulkPasting(false);
     }
@@ -137,10 +138,10 @@ export const usePositionActions = (
       );
       hideLoading();
       message.success('Файл успешно экспортирован');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка экспорта:', error);
       hideLoading();
-      message.error('Ошибка экспорта: ' + error.message);
+      message.error('Ошибка экспорта: ' + getErrorMessage(error));
     }
   };
 
@@ -186,9 +187,9 @@ export const usePositionActions = (
       }
 
       message.success('Примечание ГП успешно вставлено');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка вставки примечания:', error);
-      message.error('Ошибка вставки примечания: ' + error.message);
+      message.error('Ошибка вставки примечания: ' + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -235,9 +236,9 @@ export const usePositionActions = (
       if (selectedTenderId) {
         await fetchClientPositions(selectedTenderId);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Ошибка массовой вставки примечания:', error);
-      message.error('Ошибка массовой вставки примечания: ' + error.message);
+      message.error('Ошибка массовой вставки примечания: ' + getErrorMessage(error));
     } finally {
       setIsBulkPasting(false);
     }
@@ -327,9 +328,9 @@ export const usePositionActions = (
           message.success(
             `Работы и материалы удалены из ${count} ${pluralize(count, 'позиции', 'позиций', 'позиций')}`
           );
-        } catch (error: any) {
+        } catch (error) {
           console.error('Ошибка массового удаления:', error);
-          message.error('Ошибка удаления: ' + error.message);
+          message.error('Ошибка удаления: ' + getErrorMessage(error));
         } finally {
           setIsBulkDeleting(false);
           setLoading(false);
@@ -374,9 +375,9 @@ export const usePositionActions = (
           }
 
           message.success('Работы и материалы удалены');
-        } catch (error: any) {
+        } catch (error) {
           console.error('Ошибка очистки позиции:', error);
-          message.error('Ошибка очистки: ' + error.message);
+          message.error('Ошибка очистки: ' + getErrorMessage(error));
         } finally {
           setLoading(false);
         }
@@ -425,9 +426,9 @@ export const usePositionActions = (
           if (selectedTenderId) {
             await fetchClientPositions(selectedTenderId);
           }
-        } catch (error: any) {
+        } catch (error) {
           console.error('Ошибка удаления ДОП работы:', error);
-          message.error('Ошибка удаления: ' + error.message);
+          message.error('Ошибка удаления: ' + getErrorMessage(error));
         } finally {
           setLoading(false);
         }
@@ -517,9 +518,9 @@ export const usePositionActions = (
           message.success(
             `Уровень иерархии понижен у ${count} ${pluralize(count, 'позиции', 'позиций', 'позиций')}`
           );
-        } catch (error: any) {
+        } catch (error) {
           console.error('Ошибка изменения уровня:', error);
-          message.error('Ошибка изменения уровня: ' + error.message);
+          message.error('Ошибка изменения уровня: ' + getErrorMessage(error));
         } finally {
           setIsLevelChanging(false);
           setLoading(false);
