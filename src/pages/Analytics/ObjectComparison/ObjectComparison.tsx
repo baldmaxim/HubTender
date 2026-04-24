@@ -92,7 +92,13 @@ const ObjectComparison: React.FC = () => {
       fixed: 'left' as const,
       width: 280,
       render: (text: string, record: ComparisonRow) => (
-        <Text strong={record.is_main_category}>{text}</Text>
+        <Text
+          strong={record.is_main_category || record.is_location}
+          italic={record.is_location}
+          type={record.is_location ? 'secondary' : undefined}
+        >
+          {text}
+        </Text>
       ),
     };
 
@@ -143,16 +149,23 @@ const ObjectComparison: React.FC = () => {
         title: <div style={{ textAlign: 'center' }}>Примечание</div>,
         key: 'note',
         width: 200,
-        render: (_: unknown, record: ComparisonRow) => (
-          <Input.TextArea
-            defaultValue={record.note || ''}
-            autoSize={{ minRows: 1, maxRows: 3 }}
-            onBlur={(e) => handleNoteBlur(record, e.target.value)}
-            placeholder="—"
-            variant="borderless"
-            style={{ padding: '2px 4px', fontSize: '13px' }}
-          />
-        ),
+        render: (_: unknown, record: ComparisonRow) => {
+          // У промежуточного уровня «локализация» нет собственной заметки —
+          // заметки живут только на категории и на детализации.
+          if (record.is_location) {
+            return <Text type="secondary">—</Text>;
+          }
+          return (
+            <Input.TextArea
+              defaultValue={record.note || ''}
+              autoSize={{ minRows: 1, maxRows: 3 }}
+              onBlur={(e) => handleNoteBlur(record, e.target.value)}
+              placeholder="—"
+              variant="borderless"
+              style={{ padding: '2px 4px', fontSize: '13px' }}
+            />
+          );
+        },
       });
     }
 

@@ -15,6 +15,10 @@ export interface ComparisonRow {
   key: string;
   category: string;
   is_main_category?: boolean;
+  // Промежуточный уровень «локализация» между категорией и детализацией.
+  // Сейчас используется только для категорий «отделочные работы» и
+  // «двери/люки/ворота» — по аналогии со страницей «Затраты на строительство».
+  is_location?: boolean;
   tenders: TenderCosts[];
   note?: string | null;
   mainCategoryName?: string;

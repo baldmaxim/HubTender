@@ -128,13 +128,22 @@ async function fetchNotes(tenderId1: string, tenderId2: string): Promise<NotesMa
   return map;
 }
 
+// Для этих категорий добавляем промежуточный уровень «локализация» между
+// категорией и детализацией — по аналогии с «Затраты на строительство».
+// Совпадение по подстроке, чтобы ловить варианты «Отделочные работы»,
+// «Двери, люки, ворота» и т.п.
+function categoryHasLocationGrouping(categoryName: string): boolean {
+  const lower = categoryName.toLowerCase();
+  return lower.includes('отделочн') || lower.includes('двер');
+}
+
 function getItemCategory(item: BoqItemForComparison) {
   const mainCategory = item.detail_cost_categories?.cost_categories?.name || 'Без категории';
-  const detailName = item.detail_cost_categories?.name || 'Без детализации';
+  const rawDetailName = item.detail_cost_categories?.name || 'Без детализации';
   const location = item.detail_cost_categories?.location || '';
-  const detailKey = `${mainCategory}__${detailName}__${location}`;
+  const detailKey = `${mainCategory}__${rawDetailName}__${location}`;
   const detailCategoryId = item.detail_cost_category_id || null;
-  return { mainCategory, detailName: location ? `${detailName} (${location})` : detailName, detailKey, detailCategoryId };
+  return { mainCategory, rawDetailName, location, detailKey, detailCategoryId };
 }
 
 function addItemToRow(row: ComparisonRow, item: BoqItemForComparison, tenderIdx: number, costType: CostType) {
@@ -164,13 +173,21 @@ function buildHierarchy(
   const detailRows = new Map<string, ComparisonRow>();
   const mainToDetails = new Map<string, Set<string>>();
   const detailKeyToCatId = new Map<string, string>();
+  // Запоминаем связку detailKey → (rawDetailName, location) для второго прохода,
+  // где решаем: вставлять уровень локализации или нет.
+  const detailKeyMeta = new Map<string, { rawName: string; location: string }>();
+  // Уникальные локализации по категории — если ≥2, добавляем уровень «локализация».
+  const locationsByCategory = new Map<string, Set<string>>();
 
   for (let idx = 0; idx < numTenders; idx++) {
     for (const item of itemsAll[idx]) {
-      const { mainCategory, detailName, detailKey, detailCategoryId } = getItemCategory(item);
+      const { mainCategory, rawDetailName, location, detailKey, detailCategoryId } = getItemCategory(item);
 
       if (!detailRows.has(detailKey)) {
-        detailRows.set(detailKey, makeRow(detailKey, detailName, numTenders));
+        // Имя детали для таблицы — пока как есть; location допишем ниже, если
+        // не будет отдельного уровня локализации.
+        detailRows.set(detailKey, makeRow(detailKey, rawDetailName, numTenders));
+        detailKeyMeta.set(detailKey, { rawName: rawDetailName, location });
       }
       if (detailCategoryId && !detailKeyToCatId.has(detailKey)) {
         detailKeyToCatId.set(detailKey, detailCategoryId);
@@ -181,6 +198,11 @@ function buildHierarchy(
         mainToDetails.set(mainCategory, new Set());
       }
       mainToDetails.get(mainCategory)!.add(detailKey);
+
+      if (!locationsByCategory.has(mainCategory)) {
+        locationsByCategory.set(mainCategory, new Set());
+      }
+      locationsByCategory.get(mainCategory)!.add(location);
     }
   }
 
@@ -200,17 +222,31 @@ function buildHierarchy(
 
   for (const mainCat of sortedCategories) {
     const detailKeys = mainToDetails.get(mainCat)!;
-    const mainRow = makeRow(`main__${mainCat}`, mainCat, numTenders, true);
-    const children: ComparisonRow[] = [];
+    const locations = locationsByCategory.get(mainCat) ?? new Set<string>();
+    // Вставляем уровень локализации только если категория в whitelist'е и
+    // в ней реально ≥2 разных локализаций (включая возможный пустой '').
+    const wantLocationLevel = categoryHasLocationGrouping(mainCat) && locations.size >= 2;
 
+    const mainRow = makeRow(`main__${mainCat}`, mainCat, numTenders, true);
+
+    // Сначала собираем непустые detail-строки с их мета (location).
+    const activeDetails: { row: ComparisonRow; location: string }[] = [];
     for (const dk of detailKeys) {
       const detail = detailRows.get(dk)!;
       calcPerUnit(detail);
-
       if (detail.tenders.every(t => t.total === 0)) continue;
 
       detail.mainCategoryName = mainCat;
       if (notes) detail.note = notes.get(dk) || null;
+
+      const meta = detailKeyMeta.get(dk) ?? { rawName: detail.category, location: '' };
+      // Если уровень локализации НЕ добавляем — по-старому дописываем "(location)"
+      // к имени детали, иначе локализация уйдёт в имя родительской строки.
+      if (!wantLocationLevel && meta.location) {
+        detail.category = `${meta.rawName} (${meta.location})`;
+      } else {
+        detail.category = meta.rawName;
+      }
 
       for (let idx = 0; idx < numTenders; idx++) {
         mainRow.tenders[idx].materials += detail.tenders[idx].materials;
@@ -218,12 +254,51 @@ function buildHierarchy(
         mainRow.tenders[idx].total += detail.tenders[idx].total;
       }
 
-      children.push(detail);
+      activeDetails.push({ row: detail, location: meta.location });
     }
 
-    if (children.length === 0) continue;
+    if (activeDetails.length === 0) continue;
 
-    children.sort((a, b) => a.category.localeCompare(b.category, 'ru'));
+    let children: ComparisonRow[];
+    if (wantLocationLevel) {
+      // Группируем по локализации.
+      const byLocation = new Map<string, ComparisonRow[]>();
+      for (const { row, location } of activeDetails) {
+        const key = location || '_no_location';
+        const bucket = byLocation.get(key);
+        if (bucket) bucket.push(row);
+        else byLocation.set(key, [row]);
+      }
+
+      const locationRows: ComparisonRow[] = [];
+      for (const [locKey, group] of byLocation) {
+        const location = locKey === '_no_location' ? '' : locKey;
+        const locRow = makeRow(
+          `loc__${mainCat}__${locKey}`,
+          location || 'Без локации',
+          numTenders,
+        );
+        locRow.is_location = true;
+        locRow.mainCategoryName = mainCat;
+        for (const g of group) {
+          for (let idx = 0; idx < numTenders; idx++) {
+            locRow.tenders[idx].materials += g.tenders[idx].materials;
+            locRow.tenders[idx].works += g.tenders[idx].works;
+            locRow.tenders[idx].total += g.tenders[idx].total;
+            locRow.tenders[idx].volume += g.tenders[idx].volume;
+          }
+        }
+        calcPerUnit(locRow);
+        group.sort((a, b) => a.category.localeCompare(b.category, 'ru'));
+        locRow.children = group;
+        locationRows.push(locRow);
+      }
+      locationRows.sort((a, b) => a.category.localeCompare(b.category, 'ru'));
+      children = locationRows;
+    } else {
+      children = activeDetails.map(({ row }) => row);
+      children.sort((a, b) => a.category.localeCompare(b.category, 'ru'));
+    }
 
     if (volumeMapsAll) {
       const groupKey = `category-${mainCat}`;

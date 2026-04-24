@@ -15,14 +15,25 @@ interface ExportParams {
   tenderLabels: string[];
 }
 
-type RowType = 'header' | 'subheader' | 'category' | 'detail' | 'total';
+type RowType = 'header' | 'subheader' | 'category' | 'location' | 'detail' | 'total';
 
+// Рекурсивно разворачиваем иерархию в плоский список. Промежуточный уровень
+// «локализация» появляется только для whitelist-категорий (отделочные, двери)
+// с ≥2 разными локализациями — поэтому не у всех ветвей три уровня.
 function flattenRows(data: ComparisonRow[]): { row: ComparisonRow; type: RowType }[] {
   const result: { row: ComparisonRow; type: RowType }[] = [];
   for (const mainRow of data) {
     result.push({ row: mainRow, type: 'category' });
-    if (mainRow.children) {
-      for (const child of mainRow.children) {
+    if (!mainRow.children) continue;
+    for (const child of mainRow.children) {
+      if (child.is_location) {
+        result.push({ row: child, type: 'location' });
+        if (child.children) {
+          for (const grand of child.children) {
+            result.push({ row: grand, type: 'detail' });
+          }
+        }
+      } else {
         result.push({ row: child, type: 'detail' });
       }
     }
@@ -75,7 +86,13 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
   // Data rows
   const flat = flattenRows(comparisonData);
   for (const { row, type } of flat) {
-    const dataRow: (string | number)[] = [type === 'detail' ? `    ${row.category}` : row.category.toUpperCase()];
+    const categoryLabel =
+      type === 'category'
+        ? row.category.toUpperCase()
+        : type === 'location'
+          ? `  ${row.category}`
+          : `      ${row.category}`;
+    const dataRow: (string | number)[] = [categoryLabel];
     for (let i = 0; i < numTenders; i++) {
       const t = row.tenders[i] || { materials: 0, works: 0, total: 0, mat_per_unit: 0, work_per_unit: 0, total_per_unit: 0, volume: 0 };
       dataRow.push(t.materials, t.works, t.total, t.mat_per_unit || '', t.work_per_unit || '', t.total_per_unit || '');
@@ -158,6 +175,9 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
 
   const beigeHeaderFill = { fgColor: { rgb: 'F5F5DC' } };
   const yellowCategoryFill = { fgColor: { rgb: 'FFFFE0' } };
+  // Лёгкий светло-голубой фон для уровня «локализация» — визуально отделяет
+  // подкатегорию от обычных строк детализации, но не забивает категорию.
+  const locationFill = { fgColor: { rgb: 'EAF5FF' } };
   const totalFill = { fgColor: { rgb: 'D4EDDA' } };
   const whiteFill = { fgColor: { rgb: 'FFFFFF' } };
   const thinBorder = {
@@ -177,6 +197,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
       let fill = whiteFill;
       if (rowType === 'header' || rowType === 'subheader') fill = beigeHeaderFill;
       else if (rowType === 'category') fill = yellowCategoryFill;
+      else if (rowType === 'location') fill = locationFill;
       else if (rowType === 'total') fill = totalFill;
 
       const alignment: Record<string, unknown> = { vertical: 'center' };
@@ -191,8 +212,17 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
       if (C >= 1 && rowType !== 'header' && rowType !== 'subheader') numFmt = '#,##0';
 
       const font: Record<string, unknown> = {};
-      if (rowType === 'header' || rowType === 'subheader' || rowType === 'category' || rowType === 'total') {
+      if (
+        rowType === 'header' ||
+        rowType === 'subheader' ||
+        rowType === 'category' ||
+        rowType === 'location' ||
+        rowType === 'total'
+      ) {
         font.bold = true;
+      }
+      if (rowType === 'location') {
+        font.italic = true;
       }
       if (perUnitCols.has(C) && rowType !== 'header' && rowType !== 'subheader') {
         font.color = { rgb: '0891B2' };
