@@ -3,12 +3,20 @@
  */
 
 import React from 'react';
-import { Card, Row, Col, Select, Typography, Space, Statistic, Button } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Select, Typography, Space, Statistic, Button, Tag } from 'antd';
+import { CheckCircleOutlined, DownloadOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { Tender } from '../../../lib/supabase';
 import type { MarkupTactic } from '../hooks';
 
 const { Title } = Typography;
+
+// Один модульный Intl.NumberFormat для всех Statistic в шапке —
+// раньше на каждый ре-рендер создавалась новая regex-замена inline.
+const RU_INTEGER_FORMAT = new Intl.NumberFormat('ru-RU', {
+  maximumFractionDigits: 0,
+});
+const formatRuInteger = (value: number | string) =>
+  RU_INTEGER_FORMAT.format(Math.round(Number(value)));
 
 interface RedistributionHeaderProps {
   tenders: Tender[];
@@ -26,6 +34,8 @@ interface RedistributionHeaderProps {
   insuranceTotal?: number;
   hasResults?: boolean;
   onExport?: () => void;
+  saving?: boolean;
+  savedRecently?: boolean;
 }
 
 export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
@@ -40,13 +50,27 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
   insuranceTotal = 0,
   hasResults = false,
   onExport,
+  saving = false,
+  savedRecently = false,
 }) => {
   return (
     <Card style={{ marginBottom: 16 }}>
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
-        <Title level={2} style={{ margin: 0 }}>
-          Перераспределение стоимости работ
-        </Title>
+        <Space align="center" size="middle">
+          <Title level={2} style={{ margin: 0 }}>
+            Перераспределение стоимости работ
+          </Title>
+          {saving && (
+            <Tag icon={<LoadingOutlined />} color="processing">
+              Сохраняется…
+            </Tag>
+          )}
+          {!saving && savedRecently && (
+            <Tag icon={<CheckCircleOutlined />} color="success">
+              Сохранено
+            </Tag>
+          )}
+        </Space>
 
         <Row gutter={16} align="middle">
           <Col xs={24} sm={12} lg={4}>
@@ -100,7 +124,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                   title="Итого материалы"
                   value={totals.totalMaterials}
                   precision={0}
-                  formatter={(value) => Math.round(Number(value)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
+                  formatter={(value) => formatRuInteger(value as number | string)}
                   valueStyle={{ fontSize: 18 }}
                 />
               </div>
@@ -109,7 +133,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                   title="Итого работы"
                   value={totals.totalWorks}
                   precision={0}
-                  formatter={(value) => Math.round(Number(value)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
+                  formatter={(value) => formatRuInteger(value as number | string)}
                   valueStyle={{ fontSize: 18 }}
                 />
               </div>
@@ -118,7 +142,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                   title="Итого"
                   value={totals.total}
                   precision={0}
-                  formatter={(value) => Math.round(Number(value)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
+                  formatter={(value) => formatRuInteger(value as number | string)}
                   valueStyle={{ color: '#10b981', fontWeight: 600, fontSize: 18 }}
                 />
               </div>
@@ -128,7 +152,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                     title="Страхование от судимостей"
                     value={insuranceTotal}
                     precision={0}
-                    formatter={(value) => Math.round(Number(value)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
+                    formatter={(value) => formatRuInteger(value as number | string)}
                     valueStyle={{ color: '#10b981', fontWeight: 600, fontSize: 18 }}
                   />
                   <div style={{ fontSize: 12, color: '#10b981' }}>

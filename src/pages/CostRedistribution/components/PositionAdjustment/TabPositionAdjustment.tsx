@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Button, Card, Col, Empty, List, Row, Space, Tag, Typography, message } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import { AdjustmentControls } from './AdjustmentControls';
@@ -47,7 +47,7 @@ interface TabPositionAdjustmentProps {
   adjustment: UsePositionAdjustmentReturn;
 }
 
-export function TabPositionAdjustment({
+function TabPositionAdjustmentImpl({
   clientPositions,
   baseRows,
   adjustment,
@@ -186,3 +186,8 @@ export function TabPositionAdjustment({
     </Space>
   );
 }
+
+// Вкладка рендерится каждый тик autosave/nonce главной страницы; memo
+// отсекает ре-рендеры, пока baseRows/adjustment стабильны по ссылке
+// (adjustment стабилизирован useMemo внутри usePositionAdjustment).
+export const TabPositionAdjustment = memo(TabPositionAdjustmentImpl);

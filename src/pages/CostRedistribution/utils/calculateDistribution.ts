@@ -41,31 +41,62 @@ export interface RedistributionCalculationResult {
   isBalanced: boolean;
 }
 
+// Индексы для быстрого поиска items по категории. Строятся один раз
+// в calculateRedistribution и передаются во все helpers.
+interface BoqItemIndex {
+  byDetailId: Map<string, BoqItemWithCosts[]>;
+  byCategoryId: Map<string, BoqItemWithCosts[]>;
+  byId: Map<string, BoqItemWithCosts>;
+}
+
+function buildBoqItemIndex(
+  boqItems: BoqItemWithCosts[],
+  detailCategoriesMap?: Map<string, string>
+): BoqItemIndex {
+  const byDetailId = new Map<string, BoqItemWithCosts[]>();
+  const byCategoryId = new Map<string, BoqItemWithCosts[]>();
+  const byId = new Map<string, BoqItemWithCosts>();
+
+  for (const item of boqItems) {
+    byId.set(item.id, item);
+    const did = item.detail_cost_category_id;
+    if (!did) continue;
+
+    const detailList = byDetailId.get(did);
+    if (detailList) detailList.push(item);
+    else byDetailId.set(did, [item]);
+
+    const cid = detailCategoriesMap?.get(did);
+    if (!cid) continue;
+    const catList = byCategoryId.get(cid);
+    if (catList) catList.push(item);
+    else byCategoryId.set(cid, [item]);
+  }
+
+  return { byDetailId, byCategoryId, byId };
+}
+
 /**
  * Шаг 1: Вычисление сумм вычета для каждого правила
  */
 export function calculateDeductions(
   boqItems: BoqItemWithCosts[],
   sourceRules: SourceRule[],
-  detailCategoriesMap?: Map<string, string> // detail_cost_category_id -> cost_category_id
+  detailCategoriesMap?: Map<string, string>, // detail_cost_category_id -> cost_category_id
+  index?: BoqItemIndex
 ): Map<string, { deductedAmount: number; affectedItems: string[] }> {
   const deductions = new Map<string, { deductedAmount: number; affectedItems: string[] }>();
+  const idx = index ?? buildBoqItemIndex(boqItems, detailCategoriesMap);
 
   for (const rule of sourceRules) {
     let itemsInCategory: BoqItemWithCosts[] = [];
 
     if (rule.level === 'detail' && rule.detail_cost_category_id) {
       // Выбрана конкретная detail категория
-      itemsInCategory = boqItems.filter(
-        (item) => item.detail_cost_category_id === rule.detail_cost_category_id
-      );
-    } else if (rule.level === 'category' && rule.category_id && detailCategoriesMap) {
-      // Выбрана вся категория - находим все detail категории этой категории
-      itemsInCategory = boqItems.filter((item) => {
-        if (!item.detail_cost_category_id) return false;
-        const itemCategoryId = detailCategoriesMap.get(item.detail_cost_category_id);
-        return itemCategoryId === rule.category_id;
-      });
+      itemsInCategory = idx.byDetailId.get(rule.detail_cost_category_id) ?? [];
+    } else if (rule.level === 'category' && rule.category_id) {
+      // Выбрана вся категория - все items под её detail-ами уже преиндексированы
+      itemsInCategory = idx.byCategoryId.get(rule.category_id) ?? [];
     }
 
     if (itemsInCategory.length === 0) {
@@ -99,7 +130,8 @@ export function calculateDeductions(
  */
 export function applyDeductions(
   boqItems: BoqItemWithCosts[],
-  deductions: Map<string, { deductedAmount: number; affectedItems: string[] }>
+  deductions: Map<string, { deductedAmount: number; affectedItems: string[] }>,
+  boqItemsById?: Map<string, BoqItemWithCosts>
 ): Map<string, { original: number; deducted: number }> {
   const itemDeductions = new Map<string, { original: number; deducted: number }>();
 
@@ -111,8 +143,8 @@ export function applyDeductions(
     });
   }
 
-  // Создаем Map для быстрого поиска BOQ items
-  const boqItemsMap = new Map(boqItems.map(item => [item.id, item]));
+  // Переиспользуем готовый индекс из calculateRedistribution, если передан.
+  const boqItemsMap = boqItemsById ?? new Map(boqItems.map(item => [item.id, item]));
 
   // Применяем вычеты ПРОПОРЦИОНАЛЬНО стоимости каждого элемента
   for (const [, { deductedAmount, affectedItems }] of deductions) {
@@ -163,7 +195,8 @@ export function calculateAdditions(
   boqItems: BoqItemWithCosts[],
   targetCosts: TargetCost[],
   totalDeduction: number,
-  detailCategoriesMap?: Map<string, string> // detail_cost_category_id -> cost_category_id
+  detailCategoriesMap?: Map<string, string>, // detail_cost_category_id -> cost_category_id
+  index?: BoqItemIndex
 ): Map<string, number> {
   const itemAdditions = new Map<string, number>();
 
@@ -176,19 +209,24 @@ export function calculateAdditions(
     return itemAdditions;
   }
 
-  // Найти все элементы в целевых категориях
-  const targetItems = boqItems.filter((item) => {
-    return targetCosts.some((target) => {
-      if (target.level === 'detail' && target.detail_cost_category_id) {
-        return target.detail_cost_category_id === item.detail_cost_category_id;
-      } else if (target.level === 'category' && target.category_id && detailCategoriesMap) {
-        if (!item.detail_cost_category_id) return false;
-        const itemCategoryId = detailCategoriesMap.get(item.detail_cost_category_id);
-        return itemCategoryId === target.category_id;
-      }
-      return false;
-    });
-  });
+  // Найти все элементы в целевых категориях — идём через преиндекс вместо
+  // boqItems.filter(...) с вложенным targetCosts.some(...).
+  const idx = index ?? buildBoqItemIndex(boqItems, detailCategoriesMap);
+  const targetItems: BoqItemWithCosts[] = [];
+  const seenIds = new Set<string>();
+  for (const target of targetCosts) {
+    let bucket: BoqItemWithCosts[] = [];
+    if (target.level === 'detail' && target.detail_cost_category_id) {
+      bucket = idx.byDetailId.get(target.detail_cost_category_id) ?? [];
+    } else if (target.level === 'category' && target.category_id) {
+      bucket = idx.byCategoryId.get(target.category_id) ?? [];
+    }
+    for (const it of bucket) {
+      if (seenIds.has(it.id)) continue;
+      seenIds.add(it.id);
+      targetItems.push(it);
+    }
+  }
 
   if (targetItems.length === 0) {
     return itemAdditions;
@@ -228,11 +266,15 @@ export function calculateRedistribution(
   targetCosts: TargetCost[],
   detailCategoriesMap?: Map<string, string> // detail_cost_category_id -> cost_category_id
 ): RedistributionCalculationResult {
+  // Преиндекс: строим byDetailId / byCategoryId / byId один раз и передаём
+  // во все helpers. Убирает O(rules × items) и пересборку Map внутри applyDeductions.
+  const index = buildBoqItemIndex(boqItems, detailCategoriesMap);
+
   // Шаг 1: Рассчитать вычеты
-  const deductions = calculateDeductions(boqItems, sourceRules, detailCategoriesMap);
+  const deductions = calculateDeductions(boqItems, sourceRules, detailCategoriesMap, index);
 
   // Шаг 2: Применить вычеты
-  const itemDeductions = applyDeductions(boqItems, deductions);
+  const itemDeductions = applyDeductions(boqItems, deductions, index.byId);
 
   // Рассчитать общую сумму вычета
   const totalDeducted = Array.from(itemDeductions.values()).reduce(
@@ -241,7 +283,7 @@ export function calculateRedistribution(
   );
 
   // Шаг 3: Рассчитать добавления
-  const itemAdditions = calculateAdditions(boqItems, targetCosts, totalDeducted, detailCategoriesMap);
+  const itemAdditions = calculateAdditions(boqItems, targetCosts, totalDeducted, detailCategoriesMap, index);
 
   // Рассчитать общую сумму добавления
   const totalAdded = Array.from(itemAdditions.values()).reduce((sum, added) => sum + added, 0);

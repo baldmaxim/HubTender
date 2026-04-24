@@ -5,8 +5,12 @@
 import { useState, useCallback } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
+import {
+  saveRedistributionResults,
+  type RedistributionRecord as ApiRedistributionRecord,
+} from '../../../lib/api/redistributions';
 import type { RedistributionResult, SourceRule, TargetCost } from '../utils';
-import type { CostRedistributionResultInsert, RedistributionRule } from '../../../lib/supabase';
+import type { RedistributionRule } from '../../../lib/supabase';
 import type { PositionAdjustmentRule } from '../types/positionAdjustment';
 
 interface LoadedRedistributionResults {
@@ -45,17 +49,11 @@ export function useSaveResults() {
 
       setSaving(true);
       try {
-        console.log('🔄 Сохранение результатов перераспределения...');
-        console.log('📊 Результатов:', results.length);
-
-        // Получить текущего пользователя (опционально)
         const { data: { user } } = await supabase.auth.getUser();
 
         const changedResults = results.filter((result) =>
           Math.abs(result.deducted_amount) > 0.000001 || Math.abs(result.added_amount) > 0.000001
         );
-        // Когда category-level пуст, сохраняем синтетический placeholder с реальными
-        // оригинальными суммами работ — чтобы при перезагрузке он не искажал итоги.
         const placeholderFromBoqItem = fallbackBoqItem
           ? ({
               boq_item_id: fallbackBoqItem.id,
@@ -74,16 +72,20 @@ export function useSaveResults() {
                 ? [placeholderFromBoqItem]
                 : [];
 
-        // Формируем JSONB с правилами перераспределения
-        const redistribution_rules: RedistributionRule = {
-          deductions: sourceRules.map(rule => ({
+        if (resultsToPersist.length === 0) {
+          message.error('Нет результатов для сохранения');
+          return false;
+        }
+
+        const rules: RedistributionRule = {
+          deductions: sourceRules.map((rule) => ({
             level: rule.level,
             category_id: rule.category_id,
             detail_cost_category_id: rule.detail_cost_category_id,
             category_name: rule.category_name,
             percentage: rule.percentage,
           })),
-          targets: targetCosts.map(target => ({
+          targets: targetCosts.map((target) => ({
             level: target.level,
             category_id: target.category_id,
             detail_cost_category_id: target.detail_cost_category_id,
@@ -101,46 +103,22 @@ export function useSaveResults() {
             : {}),
         };
 
-        // Формируем массив записей для вставки
-        const records: CostRedistributionResultInsert[] = resultsToPersist.map(result => ({
-          tender_id: tenderId,
-          markup_tactic_id: tacticId,
+        const records: ApiRedistributionRecord[] = resultsToPersist.map((result) => ({
           boq_item_id: result.boq_item_id,
           original_work_cost: result.original_work_cost,
           deducted_amount: result.deducted_amount,
           added_amount: result.added_amount,
           final_work_cost: result.final_work_cost,
-          redistribution_rules,
-          created_by: user?.id,
         }));
 
-        // Удаляем старые результаты для этого тендера и тактики
-        const { error: deleteError } = await supabase
-          .from('cost_redistribution_results')
-          .delete()
-          .eq('tender_id', tenderId)
-          .eq('markup_tactic_id', tacticId);
+        await saveRedistributionResults({
+          tenderId,
+          tacticId,
+          records,
+          rules,
+          createdBy: user?.id ?? null,
+        });
 
-        if (deleteError) {
-          console.error('Ошибка удаления старых результатов:', deleteError);
-          throw deleteError;
-        }
-
-        // Вставляем новые результаты батчами по 500 записей
-        const BATCH_SIZE = 500;
-        for (let i = 0; i < records.length; i += BATCH_SIZE) {
-          const batch = records.slice(i, i + BATCH_SIZE);
-          const { error: insertError } = await supabase
-            .from('cost_redistribution_results')
-            .insert(batch);
-
-          if (insertError) {
-            console.error(`Ошибка вставки батча ${Math.floor(i / BATCH_SIZE) + 1}:`, insertError);
-            throw insertError;
-          }
-        }
-
-        console.log(`✅ Результаты успешно сохранены: ${records.length}`);
         message.success('Результаты перераспределения сохранены');
         return true;
       } catch (error) {
@@ -161,13 +139,12 @@ export function useSaveResults() {
       }
 
       try {
-        console.log('🔄 Загрузка сохраненных результатов...');
-
         const { data: rulesRow, error: rulesError } = await supabase
           .from('cost_redistribution_results')
           .select('redistribution_rules')
           .eq('tender_id', tenderId)
           .eq('markup_tactic_id', tacticId)
+          .not('redistribution_rules', 'is', null)
           .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle();
@@ -206,7 +183,6 @@ export function useSaveResults() {
         }
 
         if (allResults.length > 0) {
-          console.log('✅ Загружено сохраненных результатов:', allResults.length);
           return {
             results: allResults,
             redistributionRules: rulesRow?.redistribution_rules ?? null,

@@ -2,7 +2,7 @@
  * Каскадный селектор для выбора затраты: Категория → Детализация → Локация
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Cascader } from 'antd';
 import type { CascaderProps } from 'antd';
 import type { CostCategory, DetailCostCategory } from '../../types';
@@ -33,28 +33,32 @@ export const CascadeCostSelector: React.FC<CascadeCostSelectorProps> = ({
   disabled = false,
   style,
 }) => {
-  const [options, setOptions] = useState<Option[]>([]);
   const [selectedValue, setSelectedValue] = useState<string[]>([]);
 
-  // Построение иерархии опций
-  useEffect(() => {
-    const categoryOptions: Option[] = categories.map(category => {
-      const details = detailCategories.filter(
-        detail => detail.cost_category_id === category.id
-      );
+  // Иерархия опций — чистый derived-state через useMemo; useEffect+setOptions
+  // заставлял рендериться дважды (сначала с [], потом с данными) и пересоздавал
+  // массив даже когда categories/detailCategories не менялись.
+  const options = useMemo<Option[]>(() => {
+    // Преиндекс detailCategories по cost_category_id — O(n) вместо n*filter на каждую категорию.
+    const detailsByCategory = new Map<string, DetailCostCategory[]>();
+    for (const detail of detailCategories) {
+      const bucket = detailsByCategory.get(detail.cost_category_id);
+      if (bucket) bucket.push(detail);
+      else detailsByCategory.set(detail.cost_category_id, [detail]);
+    }
 
-      // Группируем по названию детализации
+    return categories.map(category => {
+      const details = detailsByCategory.get(category.id) ?? [];
+
       const detailGroups = new Map<string, DetailCostCategory[]>();
       for (const detail of details) {
-        if (!detailGroups.has(detail.name)) {
-          detailGroups.set(detail.name, []);
-        }
-        detailGroups.get(detail.name)!.push(detail);
+        const list = detailGroups.get(detail.name);
+        if (list) list.push(detail);
+        else detailGroups.set(detail.name, [detail]);
       }
 
       const detailOptions: Option[] = Array.from(detailGroups.entries()).map(
         ([detailName, detailItems]) => {
-          // Если у детализации есть локации
           if (detailItems.length > 1 || detailItems[0].location) {
             return {
               value: `detail_${detailName}`,
@@ -66,8 +70,6 @@ export const CascadeCostSelector: React.FC<CascadeCostSelectorProps> = ({
               })),
             };
           }
-
-          // Если локации нет - прямой выбор
           return {
             value: detailItems[0].id,
             label: detailName,
@@ -82,8 +84,6 @@ export const CascadeCostSelector: React.FC<CascadeCostSelectorProps> = ({
         children: detailOptions,
       };
     });
-
-    setOptions(categoryOptions);
   }, [categories, detailCategories]);
 
   // Обновление selectedValue при изменении value prop

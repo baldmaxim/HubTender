@@ -2,7 +2,7 @@
  * Страница перераспределения стоимости работ
  */
 
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Tabs, message } from 'antd';
 import { supabase } from '../../lib/supabase';
 import { RedistributionHeader } from './components/RedistributionHeader';
@@ -22,9 +22,16 @@ import { buildResultRows } from './utils/buildResultRows';
 import { TabPositionAdjustment } from './components/PositionAdjustment/TabPositionAdjustment';
 import type { PositionAdjustmentRule } from './types/positionAdjustment';
 
+const AUTOSAVE_DEBOUNCE_MS = 800;
+const SAVED_TAG_DURATION_MS = 2000;
+
 const CostRedistribution: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState('setup');
   const [insuranceTotal, setInsuranceTotal] = useState(0);
+  const [savedRecently, setSavedRecently] = useState(false);
+  const [autosaveNonce, setAutosaveNonce] = useState(0);
+  const isSavingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
 
   // Хуки для управления данными
   const {
@@ -65,7 +72,7 @@ const CostRedistribution: React.FC = () => {
 
   // Формируем Map для быстрого доступа к BOQ элементам
   const boqItemsMap = useMemo(() => {
-    const map = new Map<string, any>();
+    const map = new Map<string, (typeof boqItems)[number]>();
     for (const item of boqItems) {
       map.set(item.id, item);
     }
@@ -124,13 +131,26 @@ const CostRedistribution: React.FC = () => {
       return null;
     }
 
-    const baseRows = buildResultRows(
-      clientPositions,
-      boqItemsByPosition,
-      resultsMap,
-      adjustment.appliedDeltas
-    );
-    const roundedRows = smartRoundResults(baseRows);
+    // Apply position-adjustment deltas on top of categoryLevelRows instead of
+    // rebuilding from clientPositions/boqItemsByPosition — buildResultRows
+    // is O(positions × boqItemsPerPosition), calling it twice per render was
+    // the biggest hot spot on large tenders (see plan H1).
+    const adjustedRows = adjustment.appliedDeltas.size === 0
+      ? categoryLevelRows
+      : categoryLevelRows.map((row) => {
+          const delta = adjustment.appliedDeltas.get(row.position_id) ?? 0;
+          if (delta === 0) return row;
+          const adjustedWorksAfter = row.total_works_after + delta;
+          const q = row.quantity || 1;
+          return {
+            ...row,
+            total_works_after: adjustedWorksAfter,
+            work_unit_price_after: adjustedWorksAfter / q,
+            redistribution_amount: row.redistribution_amount + delta,
+          };
+        });
+
+    const roundedRows = smartRoundResults(adjustedRows);
     const totalWorksBase = roundedRows.reduce(
       (sum, row) => sum + (row.rounded_total_works ?? row.total_works_after),
       0
@@ -172,10 +192,7 @@ const CostRedistribution: React.FC = () => {
     };
   }, [
     hasAnyRedistribution,
-    categoryLevelRows.length,
-    clientPositions,
-    boqItemsByPosition,
-    resultsMap,
+    categoryLevelRows,
     insuranceTotal,
     adjustment.appliedDeltas,
   ]);
@@ -212,11 +229,9 @@ const CostRedistribution: React.FC = () => {
       }
 
       try {
-        console.log('🔄 Загрузка сохраненных результатов...');
         const savedData = await loadSavedResults(selectedTenderId, selectedTacticId);
 
         if (savedData && savedData.results.length > 0) {
-          console.log('✅ Найдены сохраненные результаты:', savedData.results.length);
 
           // Восстановить результаты
           const results = savedData.results.map(item => ({
@@ -229,7 +244,7 @@ const CostRedistribution: React.FC = () => {
           setResults(results);
 
           // Восстановить rules и targets из первой записи (все имеют одинаковые правила)
-          const redistributionRules = savedData.redistributionRules as any;
+          const redistributionRules = savedData.redistributionRules;
           if (redistributionRules) {
             if (redistributionRules.deductions) {
               setRules(redistributionRules.deductions);
@@ -259,7 +274,6 @@ const CostRedistribution: React.FC = () => {
           setActiveTab('results');
           message.success('Загружены сохраненные результаты');
         } else {
-          console.log('ℹ️ Сохраненных результатов не найдено');
           // Очистить при отсутствии данных
           clearRules();
           clearTargets();
@@ -278,7 +292,7 @@ const CostRedistribution: React.FC = () => {
   }, [selectedTenderId, selectedTacticId, loadSavedResults, setResults, setRules, setTargets, clearRules, clearTargets, clearResults]);
 
   // Обработчики
-  const handleGoToResults = async () => {
+  const handleGoToResults = useCallback(async () => {
     if (!selectedTenderId || !selectedTacticId) {
       message.warning('Выберите тендер и схему наценок');
       return;
@@ -313,27 +327,35 @@ const CostRedistribution: React.FC = () => {
       console.error('Ошибка при переходе к результатам:', error);
       message.error('Не удалось выполнить расчет и сохранение');
     }
-  };
+  }, [
+    selectedTenderId,
+    selectedTacticId,
+    canCalculate,
+    calculate,
+    adjustment,
+    saveResults,
+    sourceRules,
+    targetCosts,
+  ]);
 
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     clearRules();
     clearTargets();
     clearResults();
     adjustment.reset();
-  };
+  }, [clearRules, clearTargets, clearResults, adjustment]);
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     if (!selectedTenderId) {
       return;
     }
 
-    const selectedTender = tenders.find(t => t.id === selectedTenderId);
+    const selectedTender = tenders.find((t) => t.id === selectedTenderId);
 
     if (!selectedTender) {
       return;
     }
 
-    // Импортируем функцию экспорта
     import('./utils/exportToExcel').then(({ exportRedistributionToExcel }) => {
       exportRedistributionToExcel({
         clientPositions,
@@ -344,9 +366,17 @@ const CostRedistribution: React.FC = () => {
         positionAdjustmentDeltas: adjustment.appliedDeltas,
       });
     });
-  };
+  }, [
+    selectedTenderId,
+    tenders,
+    clientPositions,
+    calculationState.results,
+    boqItemsMap,
+    insuranceTotal,
+    adjustment.appliedDeltas,
+  ]);
 
-  const handleSavePositionAdjustment = async () => {
+  const handleSavePositionAdjustment = useCallback(async () => {
     if (!selectedTenderId || !selectedTacticId) {
       return;
     }
@@ -361,7 +391,7 @@ const CostRedistribution: React.FC = () => {
     if (calculationState.results.length === 0 && !fallbackBoqItem) {
       return;
     }
-    await saveResults(
+    const ok = await saveResults(
       selectedTenderId,
       selectedTacticId,
       calculationState.results,
@@ -370,16 +400,66 @@ const CostRedistribution: React.FC = () => {
       adjustment.appliedRules,
       fallbackBoqItem
     );
-  };
+    if (ok) {
+      setSavedRecently(true);
+    }
+  }, [
+    selectedTenderId,
+    selectedTacticId,
+    boqItems,
+    calculationState.results,
+    sourceRules,
+    targetCosts,
+    adjustment.appliedRules,
+    saveResults,
+  ]);
 
-  // При смене applied-правила сохраняем в БД
+  // Сохранение position-level правил с дебаунсом и mutex'ом.
+  // - Debounce: даём пользователю ~800 мс «замереть» перед записью.
+  // - Mutex (isSavingRef): если save уже в полёте — ставим pendingSaveRef
+  //   и после завершения бампаем nonce, чтобы effect перезапустил таймер
+  //   со свежим состоянием. Без этого rapid-fire правки приводили бы к гонке
+  //   delete+insert и риску «частичных» записей в cost_redistribution_results.
   useEffect(() => {
     if (!selectedTenderId || !selectedTacticId) return;
     if (calculationState.results.length === 0 && boqItems.length === 0) return;
-    void handleSavePositionAdjustment();
-    // Intentionally depend only on appliedRule identity; saving is idempotent per rule.
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (cancelled) return;
+      if (isSavingRef.current) {
+        pendingSaveRef.current = true;
+        return;
+      }
+      isSavingRef.current = true;
+      try {
+        await handleSavePositionAdjustment();
+      } finally {
+        isSavingRef.current = false;
+        if (pendingSaveRef.current) {
+          pendingSaveRef.current = false;
+          setAutosaveNonce((n) => n + 1);
+        }
+      }
+    }, AUTOSAVE_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // Intentionally exclude boqItems.length / calculationState.results.length:
+    // those are already represented by selectedTenderId/selectedTacticId + the
+    // state that handleSavePositionAdjustment reads. Including them would cause
+    // an extra save on initial load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adjustment.appliedRules]);
+  }, [adjustment.appliedRules, selectedTenderId, selectedTacticId, autosaveNonce, handleSavePositionAdjustment]);
+
+  // «Сохранено» бейдж гаснет через 2 сек после завершения сохранения.
+  useEffect(() => {
+    if (!savedRecently) return;
+    const t = window.setTimeout(() => setSavedRecently(false), SAVED_TAG_DURATION_MS);
+    return () => window.clearTimeout(t);
+  }, [savedRecently]);
 
   // Элементы вкладок
   const tabItems = [
@@ -443,6 +523,8 @@ const CostRedistribution: React.FC = () => {
         insuranceTotal={insuranceTotal}
         hasResults={hasAnyRedistribution}
         onExport={handleExport}
+        saving={saving}
+        savedRecently={savedRecently}
       />
 
       <Tabs

@@ -2,7 +2,7 @@
  * Вкладка "Таблица результатов"
  */
 
-import React from 'react';
+import React, { memo } from 'react';
 import { ResultsTable } from './Results/ResultsTable';
 import type { ResultRow } from './Results/ResultsTableColumns';
 
@@ -12,7 +12,7 @@ interface TabResultsProps {
   loading?: boolean;
 }
 
-export const TabResults: React.FC<TabResultsProps> = ({
+const TabResultsImpl: React.FC<TabResultsProps> = ({
   rows,
   hasResults,
   loading,
@@ -27,3 +27,7 @@ export const TabResults: React.FC<TabResultsProps> = ({
     </div>
   );
 };
+
+// Вкладка рендерится из родителя на каждый тик autosave/nonce — memo
+// срезает ре-рендеры, пока rows/hasResults/loading стабильны по ссылке.
+export const TabResults = memo(TabResultsImpl);

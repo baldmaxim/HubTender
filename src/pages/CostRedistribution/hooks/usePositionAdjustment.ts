@@ -163,20 +163,40 @@ export function usePositionAdjustment(
     setDraft(emptyDraft('transfer'));
   }, []);
 
-  return {
-    draft,
-    appliedRules,
-    appliedDeltas,
-    currentBaseRows,
-    previewDeltas: preview.deltas,
-    previewErrors: preview.errors,
-    setMode,
-    setAmount,
-    setSourceIds,
-    setTargetIds,
-    apply,
-    removeIteration,
-    reset,
-    hydrate,
-  };
+  // Стабильная ссылка на composite return — без неё любая React.memo-обёртка
+  // вокруг TabPositionAdjustment была бы бесполезной (объект-литерал каждый раз новый).
+  return useMemo<UsePositionAdjustmentReturn>(
+    () => ({
+      draft,
+      appliedRules,
+      appliedDeltas,
+      currentBaseRows,
+      previewDeltas: preview.deltas,
+      previewErrors: preview.errors,
+      setMode,
+      setAmount,
+      setSourceIds,
+      setTargetIds,
+      apply,
+      removeIteration,
+      reset,
+      hydrate,
+    }),
+    [
+      draft,
+      appliedRules,
+      appliedDeltas,
+      currentBaseRows,
+      preview.deltas,
+      preview.errors,
+      setMode,
+      setAmount,
+      setSourceIds,
+      setTargetIds,
+      apply,
+      removeIteration,
+      reset,
+      hydrate,
+    ]
+  );
 }

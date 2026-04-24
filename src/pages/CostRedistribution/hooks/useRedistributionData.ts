@@ -14,7 +14,6 @@ export interface MarkupTactic {
   id: string;
   name: string;
   is_global: boolean;
-  tender_id: string | null;
 }
 
 export interface ClientPosition {
@@ -116,16 +115,19 @@ export function useRedistributionData() {
 
   const loadTenders = async () => {
     try {
+      // Страница использует только id/title/version для dropdown и
+      // markup_tactic_id для авто-выбора схемы — узкая проекция
+      // экономит сеть и десериализацию на тендерах с большим JSONB-контентом.
       const { data, error } = await supabase
         .from('tenders')
-        .select('*')
+        .select('id, title, version, markup_tactic_id, created_at')
         .order('created_at', { ascending: false });
 
       if (error) {
         throw error;
       }
 
-      setTenders(data || []);
+      setTenders((data ?? []) as unknown as Tender[]);
     } catch (error) {
       console.error('Ошибка загрузки тендеров:', error);
       message.error('Не удалось загрузить список тендеров');
@@ -136,7 +138,7 @@ export function useRedistributionData() {
     try {
       const { data, error } = await supabase
         .from('markup_tactics')
-        .select('*')
+        .select('id, name, is_global')
         .order('is_global', { ascending: false })
         .order('name');
 

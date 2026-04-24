@@ -12,7 +12,17 @@ type FetchOptions = Omit<RequestInit, 'headers'> & {
    * Use stable strings, not URLs (e.g. 'ref:roles') — handlers may alias paths.
    */
   cacheKey?: string;
+  /**
+   * Per-call timeout in milliseconds. Defaults to DEFAULT_FETCH_TIMEOUT_MS.
+   * Pass 0 to disable the timeout (e.g. long-running exports).
+   */
+  timeoutMs?: number;
 };
+
+// Если Go BFF недоступен/висит, браузерный fetch по умолчанию ждёт десятки
+// секунд и может блокировать autosave-цепочки. 10 с — запас для здорового
+// ответа и быстрый fail в сценариях «сервис лежит».
+const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 
 interface CachedResponse {
   etag: string;
@@ -32,7 +42,7 @@ export async function apiFetch<T>(
   path: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  const { cacheKey, ...rest } = options;
+  const { cacheKey, timeoutMs, signal: callerSignal, ...rest } = options;
   const token = await getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -45,9 +55,22 @@ export async function apiFetch<T>(
     headers['If-None-Match'] = cached.etag;
   }
 
+  // Timeout + пользовательский signal. AbortSignal.any объединяет оба
+  // (браузеры Chromium 116+, Firefox 124+, Safari 17.4+).
+  const timeout = timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+  const signals: AbortSignal[] = [];
+  if (timeout > 0) signals.push(AbortSignal.timeout(timeout));
+  if (callerSignal) signals.push(callerSignal);
+  const signal = signals.length === 0
+    ? undefined
+    : signals.length === 1
+      ? signals[0]
+      : AbortSignal.any(signals);
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...rest,
     headers,
+    signal,
   });
 
   if (res.status === 304 && cached) {

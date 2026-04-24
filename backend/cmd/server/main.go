@@ -111,6 +111,7 @@ func main() {
 	timelineRepo := repository.NewTimelineRepo(pool)
 	subcontractRepo := repository.NewSubcontractRepo(pool)
 	transferRepo := repository.NewTransferRepo(pool)
+	redistributionRepo := repository.NewRedistributionRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -123,6 +124,7 @@ func main() {
 	timelineSvc := services.NewTimelineService(timelineRepo)
 	subcontractSvc := services.NewSubcontractService(subcontractRepo, inMemCache)
 	transferSvc := services.NewTransferService(transferRepo, inMemCache)
+	redistributionSvc := services.NewRedistributionService(redistributionRepo, inMemCache)
 
 	healthH := handlers.NewHealthHandler(pool, inMemCache)
 	meH := handlers.NewMeHandler(userSvc)
@@ -140,6 +142,7 @@ func main() {
 	userRegH := handlers.NewUserRegisterHandler(userSvc)
 	subcontractH := handlers.NewSubcontractHandler(subcontractSvc)
 	transferH := handlers.NewTenderTransferHandler(transferSvc)
+	redistributionH := handlers.NewRedistributionHandler(redistributionSvc)
 	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
@@ -209,6 +212,9 @@ func main() {
 
 		// Phase 5: version transfer (replaces public.execute_version_transfer RPC).
 		r.Post("/api/v1/tenders/{id}/versions/transfer", transferH.Transfer)
+
+		// Phase 5: atomic redistribution save (cost_redistribution_results).
+		r.Post("/api/v1/redistributions/save", redistributionH.Save)
 	})
 
 	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because

@@ -2,7 +2,7 @@
  * Селектор для выбора категории ИЛИ детализации (два отдельных Select)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Select, Space, Form } from 'antd';
 import type { CostCategory, DetailCostCategory } from '../../types';
 
@@ -77,6 +77,17 @@ export const CategoryDetailSelector: React.FC<CategoryDetailSelectorProps> = ({
     onChange?.('', '', 'detail');
   };
 
+  // Стабильные options для Select — иначе Ant Design считает их новыми и
+  // перерисовывает dropdown-виртуализацию при каждом рендере родителя.
+  const categoryOptions = useMemo(
+    () => categories.map(cat => ({ label: cat.name, value: cat.id })),
+    [categories]
+  );
+  const detailOptions = useMemo(
+    () => detailCategories.map(detail => ({ label: detail.full_name, value: detail.id })),
+    [detailCategories]
+  );
+
   return (
     <Space direction="vertical" style={{ width: '100%', ...style }}>
       <Form.Item label="Категория" style={{ marginBottom: 0 }}>
@@ -93,10 +104,7 @@ export const CategoryDetailSelector: React.FC<CategoryDetailSelectorProps> = ({
           filterOption={(input, option) =>
             (option?.label?.toString() ?? '').toLowerCase().includes(input.toLowerCase())
           }
-          options={categories.map(cat => ({
-            label: cat.name,
-            value: cat.id,
-          }))}
+          options={categoryOptions}
         />
       </Form.Item>
 
@@ -114,10 +122,7 @@ export const CategoryDetailSelector: React.FC<CategoryDetailSelectorProps> = ({
           filterOption={(input, option) =>
             (option?.label?.toString() ?? '').toLowerCase().includes(input.toLowerCase())
           }
-          options={detailCategories.map(detail => ({
-            label: detail.full_name,
-            value: detail.id,
-          }))}
+          options={detailOptions}
         />
       </Form.Item>
     </Space>

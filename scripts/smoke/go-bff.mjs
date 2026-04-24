@@ -91,6 +91,10 @@ async function main() {
   await unauth('/api/v1/references/units');
   await unauth('/api/v1/tenders');
   await unauth('/api/v1/ws');
+  {
+    const res = await fetch(API_URL + '/api/v1/redistributions/save', { method: 'POST' });
+    record('401 unauth POST /api/v1/redistributions/save', res.status === 401, `got ${res.status}`);
+  }
 
   console.log('');
   console.log('Signing in as', EMAIL);

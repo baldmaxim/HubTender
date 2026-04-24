@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Button, Card, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { ClientPosition } from '../../hooks';
@@ -32,7 +32,7 @@ function DeltaCell({ value }: { value: number }) {
   return <span style={{ color, fontWeight: 500 }}>{`${sign}${formatNumber(value)}`}</span>;
 }
 
-export function PositionsBlock({
+function PositionsBlockImpl({
   title,
   rows,
   selectedIds,
@@ -68,7 +68,10 @@ export function PositionsBlock({
     onSelectionChange(new Set());
   };
 
-  const columns: ColumnsType<BlockRow> = [
+  // Колонки чисто презентационные — зависят только от render-функций ниже,
+  // поэтому мемо с пустыми зависимостями: иначе Ant Table трактует новую ссылку
+  // массива как изменение схемы и ремоунтит header/ячейки.
+  const columns = useMemo<ColumnsType<BlockRow>>(() => [
     {
       title: '№',
       dataIndex: 'position_number',
@@ -126,7 +129,7 @@ export function PositionsBlock({
       align: 'right',
       render: (value: number) => <DeltaCell value={value} />,
     },
-  ];
+  ], []);
 
   const rowSelection = {
     selectedRowKeys: Array.from(selectedIds),
@@ -198,4 +201,8 @@ export function PositionsBlock({
     </Card>
   );
 }
+
+// Два экземпляра блока (Откуда/Куда) висят рядом на большом tender'е;
+// memo отсекает ре-рендеры, когда меняется draft другого блока.
+export const PositionsBlock = memo(PositionsBlockImpl);
 
