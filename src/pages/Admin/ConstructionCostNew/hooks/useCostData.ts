@@ -1,6 +1,23 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { supabase, type Tender } from '../../../../lib/supabase';
+
+interface BoqItemForCost {
+  detail_cost_category_id: string | null;
+  boq_item_type: string | null;
+  material_type: string | null;
+  quantity: number | null;
+  unit_rate: number | null;
+  currency_type: string | null;
+  delivery_price_type: string | null;
+  delivery_amount: number | null;
+  consumption_coefficient: number | null;
+  parent_work_item_id: string | null;
+  total_amount: number | null;
+  total_commercial_material_cost: number | null;
+  total_commercial_work_cost: number | null;
+  client_positions: { tender_id: string } | null;
+}
 import { getErrorMessage } from '../../../../utils/errors';
 import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
 import {
@@ -163,7 +180,7 @@ export const useCostData = () => {
       console.log('Loaded group volumes from DB:', Array.from(groupVolumesMap.entries()));
 
       // Загружаем ВСЕ BOQ элементы с батчингом (Supabase лимит 1000 строк)
-      let boqItems: any[] = [];
+      let boqItems: BoqItemForCost[] = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;
@@ -196,7 +213,7 @@ export const useCostData = () => {
         if (error) throw error;
 
         if (data && data.length > 0) {
-          boqItems = [...boqItems, ...data];
+          boqItems = [...boqItems, ...(data as unknown as BoqItemForCost[])];
           from += batchSize;
           hasMore = data.length === batchSize;
         } else {

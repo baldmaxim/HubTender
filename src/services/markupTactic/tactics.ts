@@ -488,7 +488,8 @@ export async function applyTacticToTender(
 async function updatePositionTotals(positionId: string): Promise<void> {
   try {
     // Загружаем все элементы позиции с батчингом
-    let boqItems: any[] = [];
+    type BoqItemCosts = Pick<BoqItem, 'total_commercial_material_cost' | 'total_commercial_work_cost'>;
+    let boqItems: BoqItemCosts[] = [];
     let from = 0;
     const batchSize = 1000;
     let hasMore = true;

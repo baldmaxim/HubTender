@@ -2,7 +2,7 @@
 import { Input, DatePicker, Select, Tag, message, Button } from 'antd';
 import { EditOutlined, CalendarOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import type { TenderRegistryWithRelations, TenderStatus, ConstructionScope } from '../../../lib/supabase';
+import type { TenderRegistryWithRelations, TenderStatus, ConstructionScope, ChronologyItem, TenderPackageItem } from '../../../lib/supabase';
 import { supabase } from '../../../lib/supabase';
 import { getStatusBadge } from '../utils/design';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -42,8 +42,8 @@ const getThemeColors = (isDark: boolean) => ({
 interface ChronologyItemEditProps {
   event: any;
   index: number;
-  onUpdate: (updatedItems: any[]) => Promise<void>;
-  allItems: any[];
+  onUpdate: (updatedItems: ChronologyItem[]) => Promise<void>;
+  allItems: ChronologyItem[];
   isDark: boolean;
   readOnly?: boolean;
 }
@@ -182,8 +182,8 @@ const ChronologyItemEdit: React.FC<ChronologyItemEditProps> = ({ event, index, o
 interface PackageItemEditProps {
   file: any;
   index: number;
-  onUpdate: (updatedItems: any[]) => Promise<void>;
-  allItems: any[];
+  onUpdate: (updatedItems: TenderPackageItem[]) => Promise<void>;
+  allItems: TenderPackageItem[];
   isDark: boolean;
   readOnly?: boolean;
 }

@@ -43,7 +43,7 @@ export const ImportExcel: React.FC<ImportExcelProps> = ({
           const worksheet = workbook.Sheets[sheetName];
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-          const rows = jsonData.slice(1) as any[][];
+          const rows = jsonData.slice(1) as unknown[][];
 
           if (rows.length === 0) {
             message.error('Excel файл пуст или имеет неверный формат');
@@ -51,8 +51,16 @@ export const ImportExcel: React.FC<ImportExcelProps> = ({
             return;
           }
 
+          interface DetailItem {
+            categoryKey: string;
+            orderNum: number;
+            name: string;
+            unit: string;
+            location: string;
+            rowNum: number;
+          }
           const categoriesMap = new Map<string, { name: string; unit: string }>();
-          const detailsList: any[] = [];
+          const detailsList: DetailItem[] = [];
           const unknownUnits = new Set<string>();
           const errors: string[] = [];
 

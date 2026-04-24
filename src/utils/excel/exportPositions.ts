@@ -55,7 +55,7 @@ async function loadClientPositions(tenderId: string): Promise<ClientPosition[]> 
  * Загружает ВСЕ BOQ items для всего тендера с батчингом
  */
 async function loadAllBoqItemsForTender(tenderId: string): Promise<Map<string, BoqItemFull[]>> {
-  let allItems: any[] = [];
+  let allItems: BoqItemFull[] = [];
   let from = 0;
   const batchSize = 1000;
   let hasMore = true;

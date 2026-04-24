@@ -17,6 +17,7 @@ import {
   Tooltip as ChartTooltip,
   Legend,
   Filler,
+  type ChartDataset,
 } from 'chart.js';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { ProjectFull, ProjectCompletion } from '../../../lib/supabase/types';
@@ -271,7 +272,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       return null;
     }
 
-    const datasets: any[] = [];
+    const datasets: ChartDataset<'line'>[] = [];
 
     if (hasActual) {
       datasets.push({
@@ -414,7 +415,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
     const hasActual = actualData.some(v => v !== null);
     const hasForecast = forecastData.some(v => v !== null);
 
-    const datasets: any[] = [];
+    const datasets: ChartDataset<'line'>[] = [];
 
     if (hasActual) {
       datasets.push({
@@ -655,7 +656,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
 
     if (allMonths.length === 0 || (!hasActual && !hasForecast)) return null;
 
-    const datasets: any[] = [];
+    const datasets: ChartDataset<'line'>[] = [];
 
     if (hasActual) {
       datasets.push({
@@ -751,7 +752,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       const headers = ['Объект', ...months.map(m => m.label), 'ИТОГО'];
 
       // Create data rows (one row per visible project)
-      const rows: any[][] = [];
+      const rows: (string | number)[][] = [];
 
       // Determine which months are after current date (for styling)
       const now = dayjs();
@@ -764,7 +765,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       });
 
       visibleProjects.forEach((project) => {
-        const row: any[] = [project.name];
+        const row: (string | number)[] = [project.name];
         let projectTotal = 0;
 
         // Add data for each month
@@ -790,7 +791,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       });
 
       // Add ИТОГО row (sum across all projects)
-      const totalsRow: any[] = ['ИТОГО'];
+      const totalsRow: (string | number)[] = ['ИТОГО'];
       let grandTotal = 0;
 
       months.forEach(month => {

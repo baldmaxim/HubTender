@@ -31,14 +31,14 @@ export function useSaveResults() {
       sourceRules: SourceRule[],
       targetCosts: TargetCost[],
       positionAdjustment: PositionAdjustmentRule | null = null,
-      fallbackBoqItemId?: string
+      fallbackBoqItem?: { id: string; total_commercial_work_cost: number }
     ): Promise<boolean> => {
       if (!tenderId || !tacticId) {
         message.error('Не выбран тендер или тактика наценок');
         return false;
       }
 
-      if (results.length === 0 && !fallbackBoqItemId) {
+      if (results.length === 0 && !fallbackBoqItem) {
         message.error('Нет результатов для сохранения');
         return false;
       }
@@ -54,20 +54,25 @@ export function useSaveResults() {
         const changedResults = results.filter((result) =>
           Math.abs(result.deducted_amount) > 0.000001 || Math.abs(result.added_amount) > 0.000001
         );
+        // Когда category-level пуст, сохраняем синтетический placeholder с реальными
+        // оригинальными суммами работ — чтобы при перезагрузке он не искажал итоги.
+        const placeholderFromBoqItem = fallbackBoqItem
+          ? ({
+              boq_item_id: fallbackBoqItem.id,
+              original_work_cost: fallbackBoqItem.total_commercial_work_cost,
+              deducted_amount: 0,
+              added_amount: 0,
+              final_work_cost: fallbackBoqItem.total_commercial_work_cost,
+            } satisfies RedistributionResult)
+          : null;
         const resultsToPersist =
           changedResults.length > 0
             ? changedResults
             : results.length > 0
               ? results.slice(0, 1)
-              : [
-                  {
-                    boq_item_id: fallbackBoqItemId as string,
-                    original_work_cost: 0,
-                    deducted_amount: 0,
-                    added_amount: 0,
-                    final_work_cost: 0,
-                  } satisfies RedistributionResult,
-                ];
+              : placeholderFromBoqItem
+                ? [placeholderFromBoqItem]
+                : [];
 
         // Формируем JSONB с правилами перераспределения
         const redistribution_rules: RedistributionRule = {
@@ -170,7 +175,13 @@ export function useSaveResults() {
         if (rulesError) throw rulesError;
 
         // CRITICAL: Supabase limit 1000 rows - use batching
-        let allResults: any[] = [];
+        let allResults: Array<{
+          boq_item_id: string;
+          original_work_cost: number;
+          deducted_amount: number;
+          added_amount: number;
+          final_work_cost: number;
+        }> = [];
         let from = 0;
         const batchSize = 1000;
         let hasMore = true;

@@ -24,7 +24,7 @@ export const parseExcelData = (rows: unknown[]): ParseExcelResult => {
   // Текущий номер позиции (наследуется от родительской строки)
   let currentPositionNumber = '';
 
-  const hasStandaloneMaterialPayload = (cells: any[]): boolean => {
+  const hasStandaloneMaterialPayload = (cells: unknown[]): boolean => {
     return Boolean(
       cells[2] || // затрата
       cells[6] || // наименование

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { supabase } from '../../../../lib/supabase';
+import type { Tables } from '../../../../lib/supabase/database.types';
 
 export const useUnitsManagement = () => {
   const [availableUnits, setAvailableUnits] = useState<string[]>([]);
-  const [unitsData, setUnitsData] = useState<any[]>([]);
+  const [unitsData, setUnitsData] = useState<Tables<'units'>[]>([]);
 
   const loadUnits = async () => {
     try {

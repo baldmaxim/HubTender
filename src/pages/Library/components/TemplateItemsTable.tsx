@@ -1,10 +1,11 @@
 import React from 'react';
 import { Table } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import type { TemplateItemWithDetails } from '../hooks/useTemplateItems';
 
 interface TemplateItemsTableProps {
   dataSource: TemplateItemWithDetails[];
-  columns: any[];
+  columns: ColumnsType<TemplateItemWithDetails>;
   rowClassName: (record: TemplateItemWithDetails) => string;
 }
 

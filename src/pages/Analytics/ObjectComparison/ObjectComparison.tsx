@@ -97,7 +97,7 @@ const ObjectComparison: React.FC = () => {
     };
 
     const tenderGroups = labels.map((label: string, i: number) => {
-      const children: any[] = [];
+      const children: ColumnsType<ComparisonRow> = [];
 
       if (isDetail) {
         children.push(
@@ -117,11 +117,11 @@ const ObjectComparison: React.FC = () => {
       return { title: <div style={{ textAlign: 'center' }}>{label}</div>, children };
     });
 
-    const result: any[] = [categoryCol, ...tenderGroups];
+    const result: ColumnsType<ComparisonRow> = [categoryCol, ...tenderGroups];
 
     // Diff group — only for exactly 2 loaded tenders
     if (!isMulti) {
-      const diffChildren: any[] = [];
+      const diffChildren: ColumnsType<ComparisonRow> = [];
       if (isDetail) {
         diffChildren.push(
           { title: <div style={{ textAlign: 'center' }}>Материалы</div>, key: 'diff_mat', align: 'right' as const, width: 140, render: (_: any, r: ComparisonRow) => { const d = getDiff(r, 'materials'); return <DiffCell value={d.value} percent={d.percent} />; } },

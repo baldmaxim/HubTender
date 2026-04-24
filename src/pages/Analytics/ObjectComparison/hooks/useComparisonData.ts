@@ -5,6 +5,20 @@ import { fetchTenders as apiFetchTenders, fetchTendersByIds as apiFetchTendersBy
 import type { CostType, ComparisonRow, TenderCosts } from '../types';
 import { getErrorMessage } from '../../../../utils/errors';
 
+interface BoqItemForComparison {
+  total_amount: number | null;
+  boq_item_type: string | null;
+  total_commercial_material_cost: number | null;
+  total_commercial_work_cost: number | null;
+  detail_cost_category_id: string | null;
+  detail_cost_categories: {
+    name: string | null;
+    location: string | null;
+    cost_categories: { name: string | null } | null;
+  } | null;
+  client_positions: { tender_id: string } | null;
+}
+
 const MATERIAL_TYPES = ['мат', 'суб-мат', 'мат-комп.'];
 const WORK_TYPES = ['раб', 'суб-раб', 'раб-комп.'];
 
@@ -50,7 +64,7 @@ async function fetchVolumes(tenderId: string): Promise<{ detailMap: Map<string, 
 }
 
 async function fetchBoqItems(tenderId: string) {
-  let items: any[] = [];
+  let items: BoqItemForComparison[] = [];
   let from = 0;
   const batchSize = 1000;
   let hasMore = true;
@@ -77,7 +91,7 @@ async function fetchBoqItems(tenderId: string) {
     if (error) throw error;
 
     if (data && data.length > 0) {
-      items = [...items, ...data];
+      items = [...items, ...(data as unknown as BoqItemForComparison[])];
       from += batchSize;
       hasMore = data.length === batchSize;
     } else {
@@ -114,7 +128,7 @@ async function fetchNotes(tenderId1: string, tenderId2: string): Promise<NotesMa
   return map;
 }
 
-function getItemCategory(item: any) {
+function getItemCategory(item: BoqItemForComparison) {
   const mainCategory = item.detail_cost_categories?.cost_categories?.name || 'Без категории';
   const detailName = item.detail_cost_categories?.name || 'Без детализации';
   const location = item.detail_cost_categories?.location || '';
@@ -123,7 +137,7 @@ function getItemCategory(item: any) {
   return { mainCategory, detailName: location ? `${detailName} (${location})` : detailName, detailKey, detailCategoryId };
 }
 
-function addItemToRow(row: ComparisonRow, item: any, tenderIdx: number, costType: CostType) {
+function addItemToRow(row: ComparisonRow, item: BoqItemForComparison, tenderIdx: number, costType: CostType) {
   const t = row.tenders[tenderIdx];
   if (!t) return;
   if (costType === 'commercial') {
@@ -141,7 +155,7 @@ function addItemToRow(row: ComparisonRow, item: any, tenderIdx: number, costType
 }
 
 function buildHierarchy(
-  itemsAll: any[][],
+  itemsAll: BoqItemForComparison[][],
   costType: CostType,
   volumeMapsAll?: { detailMap: Map<string, number>; groupMap: Map<string, number> }[],
   notes?: NotesMap

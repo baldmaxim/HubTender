@@ -217,7 +217,7 @@ const sortDetailRows = (rows: CostRow[], categoryName: string, locationName?: st
 type RowType = 'header' | 'subheader' | 'category' | 'location' | 'detail';
 
 interface ExportDataWithTypes {
-  data: any[][];
+  data: (string | number)[][];
   rowTypes: RowType[];
 }
 
@@ -229,7 +229,7 @@ function buildExportData(
   oppositeCostMap: Map<string, OppositeCosts>,
   areaSp: number
 ): ExportDataWithTypes {
-  const exportData: any[][] = [];
+  const exportData: (string | number)[][] = [];
   const rowTypes: RowType[] = [];
 
   // Заголовки

@@ -343,11 +343,15 @@ const CostRedistribution: React.FC = () => {
     if (!selectedTenderId || !selectedTacticId) {
       return;
     }
-    // Fallback boq_item_id для случая «position-level без category-level»:
+    // Placeholder для случая «position-level без category-level»:
     // схема cost_redistribution_results требует NOT NULL boq_item_id, а JSONB-правила
-    // храним на любой реальной строке тендера.
-    const fallbackBoqItemId = boqItems[0]?.id;
-    if (calculationState.results.length === 0 && !fallbackBoqItemId) {
+    // храним на любой реальной строке тендера. Чтобы она не искажала суммы при reload,
+    // передаём её реальный total_commercial_work_cost.
+    const first = boqItems[0];
+    const fallbackBoqItem = first
+      ? { id: first.id, total_commercial_work_cost: first.total_commercial_work_cost ?? 0 }
+      : undefined;
+    if (calculationState.results.length === 0 && !fallbackBoqItem) {
       return;
     }
     await saveResults(
@@ -357,7 +361,7 @@ const CostRedistribution: React.FC = () => {
       sourceRules,
       targetCosts,
       adjustment.appliedRule,
-      fallbackBoqItemId
+      fallbackBoqItem
     );
   };
 

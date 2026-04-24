@@ -153,8 +153,22 @@ const Bsm: React.FC = () => {
         expenseMap.set(cat.id, label);
       });
 
+      interface RawBoqItem {
+        id: string;
+        boq_item_type: string;
+        material_type: string | null;
+        quantity: number | null;
+        unit_code: string;
+        total_amount: number | null;
+        work_name_id: string | null;
+        material_name_id: string | null;
+        quote_link: string | null;
+        detail_cost_category_id: string | null;
+        work_names: { name: string } | null;
+        material_names: { name: string } | null;
+      }
       // Загружаем ВСЕ BOQ элементы с батчингом (Supabase лимит 1000 строк)
-      let data: any[] = [];
+      let data: RawBoqItem[] = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;
@@ -187,7 +201,7 @@ const Bsm: React.FC = () => {
         if (error) throw error;
 
         if (batchData && batchData.length > 0) {
-          data = [...data, ...batchData];
+          data = [...data, ...(batchData as unknown as RawBoqItem[])];
           from += batchSize;
           hasMore = batchData.length === batchSize;
         } else {
@@ -198,7 +212,7 @@ const Bsm: React.FC = () => {
       // Group by material/work + затрата and aggregate
       const grouped = new Map<string, BoqItemData>();
 
-      data?.forEach((item: any) => {
+      data?.forEach((item: RawBoqItem) => {
         const name = item.work_names?.name || item.material_names?.name || '—';
         const expenseKey = item.detail_cost_category_id || '';
         const key = `${item.boq_item_type}_${item.work_name_id || item.material_name_id}_${expenseKey}`;
@@ -215,11 +229,11 @@ const Bsm: React.FC = () => {
             : '—';
           grouped.set(key, {
             id: key,
-            boq_item_type: item.boq_item_type,
-            material_type: item.material_type,
+            boq_item_type: item.boq_item_type as BoqItemType,
+            material_type: item.material_type as 'основн.' | 'вспомогат.' | undefined,
             name: name,
             total_quantity: item.quantity || 0,
-            unit_code: item.unit_code,
+            unit_code: item.unit_code as UnitType,
             price_per_unit: item.total_amount && item.quantity ? (item.total_amount / item.quantity) : 0,
             total_amount: item.total_amount || 0,
             usage_count: 1,
@@ -314,8 +328,20 @@ const Bsm: React.FC = () => {
         return;
       }
 
+      interface BoqItemForLinkMatch {
+        id: string;
+        boq_item_type: string;
+        material_type: string | null;
+        work_name_id: string | null;
+        material_name_id: string | null;
+        unit_code: string;
+        quantity: number | null;
+        total_amount: number | null;
+        work_names: { name: string } | null;
+        material_names: { name: string } | null;
+      }
       // Шаг 2: Получить все boq_items текущего тендера с батчингом
-      let boqItems: any[] = [];
+      let boqItems: BoqItemForLinkMatch[] = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;
@@ -347,7 +373,7 @@ const Bsm: React.FC = () => {
         }
 
         if (data && data.length > 0) {
-          boqItems = [...boqItems, ...data];
+          boqItems = [...boqItems, ...(data as unknown as BoqItemForLinkMatch[])];
           from += batchSize;
           hasMore = data.length === batchSize;
         } else {

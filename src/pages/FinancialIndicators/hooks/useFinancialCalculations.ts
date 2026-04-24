@@ -1,6 +1,11 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
+import type { BoqItem } from '../../../lib/supabase';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
+
+type BoqItemWithPosition = BoqItem & {
+  client_position: { tender_id: string } | null;
+};
 
 export interface IndicatorRow {
   key: string;
@@ -142,7 +147,7 @@ export const useFinancialCalculations = () => {
       })();
 
       // Загружаем ВСЕ BOQ элементы с батчингом (Supabase лимит 1000 строк)
-      let boqItems: any[] = [];
+      let boqItems: BoqItemWithPosition[] = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;

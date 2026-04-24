@@ -86,7 +86,7 @@ export const useNomenclatureUpload = () => {
       const tableName = mode === 'materials' ? 'material_names' : 'work_names';
 
       // Загружаем все записи батчами
-      let allRecords: any[] = [];
+      let allRecords: Array<{ name: string; unit: string }> = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;

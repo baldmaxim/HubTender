@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, Form, Input, Select, Alert, Typography, Button } from 'antd';
 import { TreeNode } from '../hooks/useConstructionCost.tsx';
 import { useTheme } from '../../../../contexts/ThemeContext';
+import type { Tables } from '../../../../lib/supabase/database.types';
 
 const { Paragraph } = Typography;
 
@@ -9,7 +10,7 @@ interface CostModalsProps {
   editModalOpen: boolean;
   editingItem: TreeNode | null;
   form: any;
-  unitsData: any[];
+  unitsData: Tables<'units'>[];
   sqlModalOpen: boolean;
   sqlContent: string;
   importErrors: string[];

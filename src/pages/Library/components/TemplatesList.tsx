@@ -27,7 +27,14 @@ import {
 } from '@ant-design/icons';
 import type { TemplateWithDetails } from '../hooks/useTemplates';
 import type { TemplateItemWithDetails } from '../hooks/useTemplateItems';
-import type { LibraryFolder } from '../../../lib/supabase';
+import type { LibraryFolder, WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
+
+interface CostCategoryOption {
+  value: string;
+  label: string;
+  cost_category_name: string;
+  location: string;
+}
 
 const { Text } = Typography;
 
@@ -41,7 +48,7 @@ interface TemplatesListProps {
   editingTemplateCostCategorySearchText: string;
   setEditingTemplateCostCategorySearchText: (text: string) => void;
   editingItems: TemplateItemWithDetails[];
-  costCategories: any[];
+  costCategories: CostCategoryOption[];
   currentTheme: string;
   onEditTemplate: (template: TemplateWithDetails) => void;
   onCancelEditTemplate: () => void;
@@ -58,8 +65,8 @@ interface TemplatesListProps {
   setEditingSelectedWork: (id: string | null) => void;
   editingSelectedMaterial: string | null;
   setEditingSelectedMaterial: (id: string | null) => void;
-  works: any[];
-  materials: any[];
+  works: WorkLibraryFull[];
+  materials: MaterialLibraryFull[];
   onAddWorkToTemplate: (templateId: string) => void;
   onAddMaterialToTemplate: (templateId: string) => void;
   getColumns: any;

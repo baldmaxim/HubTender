@@ -94,7 +94,7 @@ async function readExcelFile(file: File): Promise<any[][] | null> {
 /**
  * Парсинг импортируемых данных
  */
-function parseImportData(rows: any[][]) {
+function parseImportData(rows: unknown[][]) {
   const uniqueCategories = new Map<string, { name: string; unit: string }>();
   const uniqueLocations = new Set<string>();
   const detailItems: ImportData[] = [];

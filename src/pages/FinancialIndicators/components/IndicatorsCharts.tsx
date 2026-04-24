@@ -693,7 +693,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   };
 
   // Обработчик клика на сегмент круговой диаграммы
-  const handlePieClick = async (_event: any, elements: any[]) => {
+  const handlePieClick = async (_event: any, elements: Array<{ index: number }>) => {
     if (elements.length === 0) return;
 
     const index = elements[0].index;
@@ -1357,9 +1357,19 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           generateLabels: function(chart: any) {
             const currentLevel = drillDownPath[drillDownPath.length - 1];
 
+            type LegendItem = {
+              text: string;
+              fillStyle: string;
+              strokeStyle?: string;
+              lineWidth?: number;
+              hidden: boolean;
+              index: number;
+              fontColor?: string;
+              fontStyle?: string;
+            };
             // Для уровня 2 (direct_costs или markups) добавляем разделители
             if (currentLevel.type === 'direct_costs') {
-              const labels: any[] = [];
+              const labels: LegendItem[] = [];
 
               // Добавляем заголовок "Прямые затраты, в том числе:"
               labels.push({
@@ -1391,7 +1401,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
             }
 
             if (currentLevel.type === 'markups') {
-              const labels: any[] = [];
+              const labels: LegendItem[] = [];
 
               // Добавляем заголовок "Наценки, в том числе:"
               labels.push({

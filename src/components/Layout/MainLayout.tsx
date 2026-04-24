@@ -452,7 +452,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   });
 
   // Фильтруем меню на основе прав доступа пользователя
-  const filterMenuByAccess = (items: any[]): any[] => {
+  const filterMenuByAccess = (items: MenuProps['items']): MenuProps['items'] => {
     if (!user) return items;
 
     return items

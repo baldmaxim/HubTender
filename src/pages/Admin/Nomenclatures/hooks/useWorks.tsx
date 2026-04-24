@@ -36,7 +36,7 @@ export const useWorks = () => {
     setLoading(true);
     try {
       // Загружаем данные батчами, так как Supabase ограничивает 1000 строк за запрос
-      let allWorks: any[] = [];
+      let allWorks: WorkRecord[] = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;

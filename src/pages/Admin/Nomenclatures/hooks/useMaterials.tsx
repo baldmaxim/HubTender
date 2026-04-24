@@ -36,7 +36,7 @@ export const useMaterials = () => {
     setLoading(true);
     try {
       // Загружаем данные батчами, так как Supabase ограничивает 1000 строк за запрос
-      let allMaterials: any[] = [];
+      let allMaterials: MaterialRecord[] = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;

@@ -1,12 +1,19 @@
 import { useState } from 'react';
 import { Button, Select, AutoComplete, InputNumber, Input, message } from 'antd';
 import { CloseOutlined, SaveOutlined } from '@ant-design/icons';
-import type { BoqItemFull, CurrencyType } from '../../lib/supabase';
+import type { BoqItemFull, CurrencyType, WorkName } from '../../lib/supabase';
+
+interface CostCategoryOption {
+  value: string;
+  label: string;
+  cost_category_name: string;
+  location: string;
+}
 
 interface WorkEditFormProps {
   record: BoqItemFull;
-  workNames: any[];
-  costCategories: any[];
+  workNames: WorkName[];
+  costCategories: CostCategoryOption[];
   currencyRates: { usd: number; eur: number; cny: number };
   onSave: (data: any) => Promise<void>;
   onCancel: () => void;

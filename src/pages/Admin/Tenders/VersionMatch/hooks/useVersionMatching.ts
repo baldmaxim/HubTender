@@ -5,7 +5,7 @@
 import { useReducer, useCallback, useEffect, useMemo } from 'react';
 import { message } from 'antd';
 import { supabase } from '../../../../../lib/supabase';
-import type { Tender } from '../../../../../lib/supabase';
+import type { Tender, ClientPosition } from '../../../../../lib/supabase';
 import type { ParsedRow } from '../../../../../utils/matching';
 import { findBestMatches } from '../../../../../utils/matching';
 import { executeVersionTransfer } from '../../../../../utils/versionTransfer';
@@ -50,7 +50,7 @@ export function useVersionMatching({
   const fetchAllClientPositions = useCallback(async (
     filters: (query: any) => any
   ) => {
-    const items: any[] = [];
+    const items: ClientPosition[] = [];
     let from = 0;
 
     for (;;) {

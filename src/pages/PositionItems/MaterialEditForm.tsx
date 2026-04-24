@@ -1,13 +1,20 @@
 import { useState, useEffect } from 'react';
 import { Button, Select, AutoComplete, InputNumber, Input, message, Tag } from 'antd';
 import { CloseOutlined, SaveOutlined, LinkOutlined } from '@ant-design/icons';
-import type { BoqItemFull, CurrencyType } from '../../lib/supabase';
+import type { BoqItemFull, CurrencyType, MaterialName } from '../../lib/supabase';
+
+interface CostCategoryOption {
+  value: string;
+  label: string;
+  cost_category_name: string;
+  location: string;
+}
 
 interface MaterialEditFormProps {
   record: BoqItemFull;
-  materialNames: any[];
+  materialNames: MaterialName[];
   workItems: BoqItemFull[]; // Список работ для привязки
-  costCategories: any[];
+  costCategories: CostCategoryOption[];
   currencyRates: { usd: number; eur: number; cny: number };
   gpVolume: number; // Количество ГП из позиции заказчика
   onSave: (data: any) => Promise<void>;

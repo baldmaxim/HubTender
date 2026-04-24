@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Upload, message, Table, Alert } from 'antd';
+import type { UploadFile } from 'antd/es/upload';
 import { InboxOutlined } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
 import { supabase, type ConstructionScope, type TenderStatus } from '../../lib/supabase';
@@ -39,7 +40,7 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
 }) => {
   const [parsedData, setParsedData] = useState<ParsedTender[]>([]);
   const [loading, setLoading] = useState(false);
-  const [fileList, setFileList] = useState<any[]>([]);
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
 
   const parseExcelDate = (excelDate: any): string | null => {
     if (!excelDate) return null;

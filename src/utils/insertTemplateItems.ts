@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import type { BoqItem } from '../lib/supabase';
 import { insertBoqItemWithAudit, updateBoqItemWithAudit } from '../lib/supabaseWithAudit';
 
 interface InsertTemplateResult {
@@ -174,7 +175,7 @@ export async function insertTemplateItems(
     };
   });
 
-  const newBoqItems: any[] = [];
+  const newBoqItems: BoqItem[] = [];
 
   for (const boqItem of boqItemsToInsert) {
     const { data } = await insertBoqItemWithAudit(userId, boqItem);

@@ -1,6 +1,9 @@
 import { Button, Space, Popconfirm, Tooltip, Tag } from 'antd';
+import type { ColumnType } from 'antd/es/table';
 import { DeleteOutlined, SaveOutlined, CloseOutlined, EditOutlined } from '@ant-design/icons';
 import { WorkLibraryFull, WorkItemType, CurrencyType, UnitType } from '../../../../lib/supabase';
+
+type EditableColumn = ColumnType<WorkLibraryFull> & { editable?: boolean };
 
 interface GetColumnsParams {
   currentPage: number;
@@ -21,7 +24,7 @@ const currencySymbols: Record<CurrencyType, string> = {
   CNY: '¥'
 };
 
-export const getWorksTableColumns = (params: GetColumnsParams): any[] => {
+export const getWorksTableColumns = (params: GetColumnsParams): EditableColumn[] => {
   const { currentPage, pageSize, isEditing, onEdit, onSave, onCancel, onDelete, editingKey, selectedUnit } = params;
 
   return [

@@ -3,6 +3,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import type { MarkupStep } from '../lib/supabase';
 
 export async function showGlobalTactic() {
   console.log('=== СТРУКТУРА ГЛОБАЛЬНОЙ (БАЗОВОЙ) СХЕМЫ НАЦЕНОК ===\n');
@@ -155,7 +156,7 @@ function getOperationDescription(action: string, operandType: string, operandKey
   return `${actionText} ${operandKey}`;
 }
 
-function buildFormula(sequence: any[]): string {
+function buildFormula(sequence: MarkupStep[]): string {
   if (!sequence || sequence.length === 0) return 'Пустая формула';
 
   let formula = 'ПРЯМЫЕ_ЗАТРАТЫ';

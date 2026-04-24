@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import type { BoqItem } from '../lib/supabase';
 
 interface CalculateGrandTotalParams {
   tenderId: string;
@@ -25,7 +26,7 @@ export const calculateGrandTotal = async ({ tenderId }: CalculateGrandTotalParam
       .eq('tender_id', tenderId);
 
     // Загружаем ВСЕ BOQ элементы с батчингом
-    let boqItems: any[] = [];
+    let boqItems: BoqItem[] = [];
     let from = 0;
     const batchSize = 1000;
     let hasMore = true;
@@ -43,7 +44,7 @@ export const calculateGrandTotal = async ({ tenderId }: CalculateGrandTotalParam
       if (error) throw error;
 
       if (data && data.length > 0) {
-        boqItems = [...boqItems, ...data];
+        boqItems = [...boqItems, ...(data as unknown as BoqItem[])];
         from += batchSize;
         hasMore = data.length === batchSize;
       } else {

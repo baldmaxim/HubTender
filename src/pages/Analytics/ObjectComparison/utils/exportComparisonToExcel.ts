@@ -3,6 +3,7 @@
  */
 
 import * as XLSX from 'xlsx-js-style';
+import type { ColInfo, Range } from 'xlsx-js-style';
 import dayjs from 'dayjs';
 import { message } from 'antd';
 import type { ComparisonRow, CostType } from '../types';
@@ -45,15 +46,15 @@ function buildTotalRow(data: ComparisonRow[]): ComparisonRow {
   return { key: 'total', category: 'ИТОГО', is_main_category: true, tenders: totals };
 }
 
-function buildExportData(params: ExportParams): { data: any[][]; rowTypes: RowType[]; numTenders: number } {
+function buildExportData(params: ExportParams): { data: (string | number)[][]; rowTypes: RowType[]; numTenders: number } {
   const { comparisonData, tenderLabels } = params;
   const numTenders = tenderLabels.length;
-  const exportData: any[][] = [];
+  const exportData: (string | number)[][] = [];
   const rowTypes: RowType[] = [];
   const hasDiff = numTenders === 2;
 
   // Row 1: group headers
-  const headerRow: any[] = ['Категория затрат'];
+  const headerRow: (string | number)[] = ['Категория затрат'];
   for (const label of tenderLabels) {
     headerRow.push(label, '', '', '', '', '');
   }
@@ -64,7 +65,7 @@ function buildExportData(params: ExportParams): { data: any[][]; rowTypes: RowTy
 
   // Row 2: sub-headers
   const subCols = ['Материалы', 'Работы', 'Итого', 'Мат/ед.', 'Раб/ед.', 'Итого/ед.'];
-  const subHeaderRow: any[] = [''];
+  const subHeaderRow: (string | number)[] = [''];
   for (let i = 0; i < numTenders; i++) subHeaderRow.push(...subCols);
   if (hasDiff) subHeaderRow.push(...subCols);
   subHeaderRow.push('');
@@ -74,7 +75,7 @@ function buildExportData(params: ExportParams): { data: any[][]; rowTypes: RowTy
   // Data rows
   const flat = flattenRows(comparisonData);
   for (const { row, type } of flat) {
-    const dataRow: any[] = [type === 'detail' ? `    ${row.category}` : row.category.toUpperCase()];
+    const dataRow: (string | number)[] = [type === 'detail' ? `    ${row.category}` : row.category.toUpperCase()];
     for (let i = 0; i < numTenders; i++) {
       const t = row.tenders[i] || { materials: 0, works: 0, total: 0, mat_per_unit: 0, work_per_unit: 0, total_per_unit: 0, volume: 0 };
       dataRow.push(t.materials, t.works, t.total, t.mat_per_unit || '', t.work_per_unit || '', t.total_per_unit || '');
@@ -98,7 +99,7 @@ function buildExportData(params: ExportParams): { data: any[][]; rowTypes: RowTy
 
   // Total row
   const totalRow = buildTotalRow(comparisonData);
-  const totalDataRow: any[] = ['ИТОГО'];
+  const totalDataRow: (string | number)[] = ['ИТОГО'];
   for (let i = 0; i < numTenders; i++) {
     const t = totalRow.tenders[i] || { materials: 0, works: 0, total: 0, mat_per_unit: 0, work_per_unit: 0, total_per_unit: 0, volume: 0 };
     totalDataRow.push(t.materials, t.works, t.total, '', '', '');
@@ -121,7 +122,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
   const diffStartCol = hasDiff ? 1 + numTenders * 6 : -1;
 
   // Column widths
-  const cols: any[] = [{ wch: 45 }];
+  const cols: ColInfo[] = [{ wch: 45 }];
   for (let i = 0; i < numTenders; i++) {
     cols.push({ wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 });
   }
@@ -130,7 +131,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
   ws['!cols'] = cols;
 
   // Merges for row 0
-  const merges: any[] = [
+  const merges: Range[] = [
     { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
   ];
   for (let i = 0; i < numTenders; i++) {

@@ -7,9 +7,18 @@ import {
   type WorkLibraryFull,
   type MaterialLibraryFull,
   type CurrencyType,
+  type WorkName,
+  type MaterialName,
 } from '../../../lib/supabase';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 import { getErrorMessage } from '../../../utils/errors';
+
+interface CostCategoryOption {
+  value: string;
+  label: string;
+  cost_category_name: string;
+  location: string;
+}
 
 interface Template {
   id: string;
@@ -26,9 +35,9 @@ export const useBoqItems = (positionId: string | undefined) => {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(false);
   const [currencyRates, setCurrencyRates] = useState<{ usd: number; eur: number; cny: number }>({ usd: 0, eur: 0, cny: 0 });
-  const [costCategories, setCostCategories] = useState<any[]>([]);
-  const [workNames, setWorkNames] = useState<any[]>([]);
-  const [materialNames, setMaterialNames] = useState<any[]>([]);
+  const [costCategories, setCostCategories] = useState<CostCategoryOption[]>([]);
+  const [workNames, setWorkNames] = useState<WorkName[]>([]);
+  const [materialNames, setMaterialNames] = useState<MaterialName[]>([]);
   const [units, setUnits] = useState<Array<{ code: string; name: string }>>([]);
 
   // Состояния для данных ГП
@@ -387,7 +396,7 @@ export const useBoqItems = (positionId: string | undefined) => {
 
   const fetchWorkNames = async () => {
     try {
-      let allWorks: any[] = [];
+      let allWorks: WorkName[] = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;
@@ -418,7 +427,7 @@ export const useBoqItems = (positionId: string | undefined) => {
 
   const fetchMaterialNames = async () => {
     try {
-      let allMaterials: any[] = [];
+      let allMaterials: MaterialName[] = [];
       let from = 0;
       const batchSize = 1000;
       let hasMore = true;

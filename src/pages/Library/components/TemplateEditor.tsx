@@ -16,19 +16,27 @@ import {
 } from '@ant-design/icons';
 import { TemplateItemsTable } from './TemplateItemsTable';
 import type { TemplateItemWithDetails } from '../hooks/useTemplateItems';
+import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
+
+interface CostCategoryOption {
+  value: string;
+  label: string;
+  cost_category_name: string;
+  location: string;
+}
 
 interface TemplateEditorProps {
   form: any;
   templateItems: TemplateItemWithDetails[];
-  costCategories: any[];
+  costCategories: CostCategoryOption[];
   costCategorySearchText: string;
   setCostCategorySearchText: (text: string) => void;
-  works: any[];
+  works: WorkLibraryFull[];
   workSearchText: string;
   setWorkSearchText: (text: string) => void;
   selectedWork: string | null;
   setSelectedWork: (id: string | null) => void;
-  materials: any[];
+  materials: MaterialLibraryFull[];
   materialSearchText: string;
   setMaterialSearchText: (text: string) => void;
   selectedMaterial: string | null;

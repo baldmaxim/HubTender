@@ -3,6 +3,7 @@
  */
 
 import { supabase } from '../../lib/supabase';
+import type { BoqItem } from '../../lib/supabase';
 import { getErrorMessage } from '../errors';
 
 const PAGE_SIZE = 1000;
@@ -40,7 +41,7 @@ export async function copyBoqItems(
 
   try {
     // 1. Загрузить все boq_items старой позиции батчами
-    const oldItems: any[] = [];
+    const oldItems: BoqItem[] = [];
     let from = 0;
 
     for (;;) {
