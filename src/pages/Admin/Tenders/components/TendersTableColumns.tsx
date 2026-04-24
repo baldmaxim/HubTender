@@ -285,7 +285,7 @@ export const getTendersTableColumns = (params: GetColumnsParams): ColumnsType<Te
       key: 'actions',
       width: 100,
       fixed: 'right',
-      render: (_: any, record: TenderRecord) => (
+      render: (_: unknown, record: TenderRecord) => (
         <Space size={2}>
           <Button
             type="text"

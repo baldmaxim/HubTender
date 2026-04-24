@@ -23,8 +23,8 @@ export function getFieldDiffs(record: BoqItemAudit): AuditDiffField[] {
     .filter((field) => !['updated_at', 'created_at'].includes(field))
     .map((field) => ({
       field,
-      oldValue: (old_data as any)[field],
-      newValue: (new_data as any)[field],
+      oldValue: (old_data as unknown as Record<string, unknown>)[field],
+      newValue: (new_data as unknown as Record<string, unknown>)[field],
       displayName: getFieldDisplayName(field),
     }));
 }
@@ -76,7 +76,7 @@ export function getFieldDisplayName(field: string): string {
  */
 export function formatFieldValue(
   field: string,
-  value: any,
+  value: unknown,
   costCategoriesMap?: Map<string, string>,
   workNamesMap?: Map<string, string>,
   materialNamesMap?: Map<string, string>
@@ -141,20 +141,20 @@ export function formatFieldValue(
 
   // Даты
   if (field === 'created_at' || field === 'updated_at' || field === 'changed_at') {
-    return dayjs(value).format('DD.MM.YYYY HH:mm');
+    return dayjs(String(value)).format('DD.MM.YYYY HH:mm');
   }
 
   // Enum значения
   if (field === 'boq_item_type') {
-    return value; // мат, суб-мат, раб и т.д.
+    return String(value); // мат, суб-мат, раб и т.д.
   }
 
   if (field === 'material_type') {
-    return value; // основн., вспомогат.
+    return String(value); // основн., вспомогат.
   }
 
   if (field === 'currency_type') {
-    return value; // RUB, USD, EUR, CNY
+    return String(value); // RUB, USD, EUR, CNY
   }
 
   // UUID (сокращенно)
@@ -261,7 +261,7 @@ export function getItemNameId(record: BoqItemAudit): { work_name_id?: string; ma
   }
 
   return {
-    work_name_id: (data as any).work_name_id || undefined,
-    material_name_id: (data as any).material_name_id || undefined,
+    work_name_id: data.work_name_id || undefined,
+    material_name_id: data.material_name_id || undefined,
   };
 }

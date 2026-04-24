@@ -5,11 +5,21 @@ import type { ParsedBoqItem, PositionUpdateData, ClientPosition } from '../utils
 
 const { Text } = Typography;
 
+interface ExistingBoqItem {
+  id: string;
+  work_names?: { name?: string } | null;
+  material_names?: { name?: string } | null;
+  boq_item_type?: string | null;
+  quantity?: number | null;
+  total_amount?: number | null;
+  client_position_id?: string;
+}
+
 interface BoqPreviewTableProps {
   parsedData: ParsedBoqItem[];
   positionUpdates: Map<string, PositionUpdateData>;
   clientPositionsMap: Map<string, ClientPosition>;
-  existingItemsByPosition: Map<string, any[]>;
+  existingItemsByPosition: Map<string, ExistingBoqItem[]>;
 }
 
 interface PreviewRow {
@@ -81,7 +91,9 @@ export const BoqPreviewTable: React.FC<BoqPreviewTableProps> = ({
       });
 
       existing.forEach(item => {
-        const name = item.work_names?.name || item.material_names?.name || '—';
+        const wn = Array.isArray(item.work_names) ? item.work_names[0] : item.work_names;
+        const mn = Array.isArray(item.material_names) ? item.material_names[0] : item.material_names;
+        const name = wn?.name || mn?.name || '—';
         result.push({
           key: `ex-${item.id}`,
           isGroupHeader: false,
@@ -116,7 +128,7 @@ export const BoqPreviewTable: React.FC<BoqPreviewTableProps> = ({
       title: 'Наименование',
       key: 'name',
       ellipsis: true,
-      render: (_: any, row: PreviewRow) => {
+      render: (_: unknown, row: PreviewRow) => {
         if (row.isGroupHeader) {
           return {
             children: <Text strong style={{ fontSize: 12 }}>{row.positionLabel}</Text>,
@@ -130,7 +142,7 @@ export const BoqPreviewTable: React.FC<BoqPreviewTableProps> = ({
       title: 'Тип',
       key: 'type',
       width: 90,
-      render: (_: any, row: PreviewRow) => {
+      render: (_: unknown, row: PreviewRow) => {
         if (row.isGroupHeader) return { children: null, props: { colSpan: 0 } };
         return <Tag color={TYPE_TAG_COLORS[row.itemType || ''] || 'default'} style={{ fontSize: 11 }}>{row.itemType}</Tag>;
       },
@@ -140,7 +152,7 @@ export const BoqPreviewTable: React.FC<BoqPreviewTableProps> = ({
       key: 'qty',
       width: 80,
       align: 'right' as const,
-      render: (_: any, row: PreviewRow) => {
+      render: (_: unknown, row: PreviewRow) => {
         if (row.isGroupHeader) return { children: null, props: { colSpan: 0 } };
         return <Text style={{ fontSize: 12 }}>{row.quantity != null ? row.quantity.toLocaleString('ru-RU', { maximumFractionDigits: 4 }) : '—'}</Text>;
       },
@@ -150,7 +162,7 @@ export const BoqPreviewTable: React.FC<BoqPreviewTableProps> = ({
       key: 'amount',
       width: 110,
       align: 'right' as const,
-      render: (_: any, row: PreviewRow) => {
+      render: (_: unknown, row: PreviewRow) => {
         if (row.isGroupHeader) return { children: null, props: { colSpan: 0 } };
         if (row.amount == null) return <Text type="secondary" style={{ fontSize: 12 }}>—</Text>;
         const formatted = row.amount.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -162,7 +174,7 @@ export const BoqPreviewTable: React.FC<BoqPreviewTableProps> = ({
       key: 'status',
       width: 110,
       align: 'center' as const,
-      render: (_: any, row: PreviewRow) => {
+      render: (_: unknown, row: PreviewRow) => {
         if (row.isGroupHeader) return { children: null, props: { colSpan: 0 } };
         return row.status === 'existing'
           ? <Tag style={{ fontSize: 11 }}>Существующий</Tag>

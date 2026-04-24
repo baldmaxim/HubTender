@@ -22,7 +22,7 @@ import { getErrorMessage } from '../../../utils/errors';
 const PAGE_SIZE = 1000;
 
 const fetchAllPages = async <T>(
-  queryFactory: (from: number, to: number) => any
+  queryFactory: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
 ): Promise<T[]> => {
   const items: T[] = [];
   let from = 0;
@@ -71,7 +71,7 @@ export const useMassBoqImport = () => {
   const [unitMappings, setUnitMappings] = useState<Record<string, string>>({});
 
   // Существующие BOQ items по позициям (для предпросмотра)
-  const [existingItemsByPosition, setExistingItemsByPosition] = useState<Map<string, any[]>>(new Map());
+  const [existingItemsByPosition, setExistingItemsByPosition] = useState<Map<string, { id: string; work_names?: { name?: string } | null; material_names?: { name?: string } | null; boq_item_type?: string | null; quantity?: number | null; total_amount?: number | null; client_position_id: string }[]>>(new Map());
 
   // Курсы валют
   const [currencyRates, setCurrencyRates] = useState({ usd: 1, eur: 1, cny: 1 });
@@ -89,21 +89,21 @@ export const useMassBoqImport = () => {
         positionsData,
         unitsResult,
       ] = await Promise.all([
-        fetchAllPages<any>((from, to) => (
+        fetchAllPages<{ id: string; name: string; unit: string }>((from, to) => (
           supabase
             .from('work_names')
             .select('id, name, unit')
             .order('name')
             .range(from, to)
         )),
-        fetchAllPages<any>((from, to) => (
+        fetchAllPages<{ id: string; name: string; unit: string }>((from, to) => (
           supabase
             .from('material_names')
             .select('id, name, unit')
             .order('name')
             .range(from, to)
         )),
-        fetchAllPages<any>((from, to) => (
+        fetchAllPages<{ id: string; name: string; location: string; cost_categories: { name: string }[] | { name: string } | null }>((from, to) => (
           supabase
             .from('detail_cost_categories')
             .select(`
@@ -113,7 +113,7 @@ export const useMassBoqImport = () => {
             .order('name')
             .range(from, to)
         )),
-        fetchAllPages<any>((from, to) => (
+        fetchAllPages<{ id: string; position_number: string; work_name: string | null }>((from, to) => (
           supabase
             .from('client_positions')
             .select('id, position_number, work_name')
@@ -129,18 +129,19 @@ export const useMassBoqImport = () => {
       ]);
 
       const worksMap = new Map<string, string>();
-      worksData.forEach((w: any) => {
+      worksData.forEach((w) => {
         worksMap.set(buildNomenclatureLookupKey(w.name, w.unit), w.id);
       });
 
       const materialsMap = new Map<string, string>();
-      materialsData.forEach((m: any) => {
+      materialsData.forEach((m) => {
         materialsMap.set(buildNomenclatureLookupKey(m.name, m.unit), m.id);
       });
 
       const costsMap = new Map<string, string>();
-      costsData.forEach((c: any) => {
-        const costCategoryName = c.cost_categories?.name || '';
+      costsData.forEach((c) => {
+        const cc = Array.isArray(c.cost_categories) ? c.cost_categories[0] : c.cost_categories;
+        const costCategoryName = cc?.name || '';
         costsMap.set(
           `${normalizeString(costCategoryName)}|${normalizeString(c.name)}|${normalizeString(c.location)}`,
           c.id
@@ -152,12 +153,12 @@ export const useMassBoqImport = () => {
       );
 
       const positionsMap = new Map<string, ClientPosition>();
-      positionsData.forEach((p: any) => {
+      positionsData.forEach((p) => {
         const normalizedNum = normalizePositionNumber(p.position_number);
         positionsMap.set(normalizedNum, {
           id: p.id,
-          position_number: p.position_number,
-          work_name: p.work_name,
+          position_number: Number(p.position_number),
+          work_name: p.work_name ?? '',
         });
       });
 
@@ -393,9 +394,10 @@ export const useMassBoqImport = () => {
         throw error;
       }
 
-      const insertedItemsCount = Number((rpcResult as any)?.inserted_items_count || 0);
-      const updatedPositionsCount = Number((rpcResult as any)?.updated_positions_count || 0);
-      const importSessionId = (rpcResult as any)?.import_session_id || null;
+      const rpcResultObj = rpcResult as Record<string, unknown> | null;
+      const insertedItemsCount = Number(rpcResultObj?.inserted_items_count || 0);
+      const updatedPositionsCount = Number(rpcResultObj?.updated_positions_count || 0);
+      const importSessionId = (rpcResultObj?.import_session_id as string | null) || null;
 
       setUploadProgress(100);
 
@@ -436,10 +438,10 @@ export const useMassBoqImport = () => {
       .in('client_position_id', positionIds)
       .order('sort_number');
 
-    const map = new Map<string, any[]>();
-    data?.forEach((item: any) => {
+    const map = new Map<string, { id: string; work_names?: { name?: string } | null; material_names?: { name?: string } | null; boq_item_type?: string | null; quantity?: number | null; total_amount?: number | null; client_position_id: string }[]>();
+    data?.forEach((item) => {
       if (!map.has(item.client_position_id)) map.set(item.client_position_id, []);
-      map.get(item.client_position_id)!.push(item);
+      map.get(item.client_position_id)!.push(item as unknown as { id: string; work_names?: { name?: string } | null; material_names?: { name?: string } | null; boq_item_type?: string | null; quantity?: number | null; total_amount?: number | null; client_position_id: string });
     });
     setExistingItemsByPosition(map);
   };

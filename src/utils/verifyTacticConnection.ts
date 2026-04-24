@@ -214,7 +214,7 @@ export async function verifyTacticConnection(tenderId?: string) {
 
 // Экспортируем в window для вызова из консоли
 if (typeof window !== 'undefined') {
-  (window as any).verifyTacticConnection = verifyTacticConnection;
+  (window as unknown as Record<string, unknown>).verifyTacticConnection = verifyTacticConnection;
   console.log('Для проверки связи тендер-тактика выполните:');
   console.log('window.verifyTacticConnection() или window.verifyTacticConnection("ID_ТЕНДЕРА")');
 }

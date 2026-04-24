@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
-import type { BoqItem } from '../../../lib/supabase';
+import type { BoqItem, MarkupStep } from '../../../lib/supabase';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 
 type BoqItemWithPosition = BoqItem & {
@@ -94,17 +94,18 @@ export const useFinancialCalculations = () => {
 
         // sequences имеет структуру: { "мат": [MarkupStep], "раб": [MarkupStep], ... }
         // MarkupStep содержит operand1Key, operand2Key и т.д. с КЛЮЧАМИ параметров (не ID!)
-        Object.values(tactic.sequences).forEach((sequenceArray: any) => {
+        Object.values(tactic.sequences).forEach((sequenceArray: MarkupStep[]) => {
           if (Array.isArray(sequenceArray)) {
-            sequenceArray.forEach((step: any) => {
+            sequenceArray.forEach((step: MarkupStep) => {
+              const s = step as unknown as Record<string, unknown>;
               for (let i = 1; i <= 5; i++) {
                 const keyField = `operand${i}Key`;
                 const typeField = `operand${i}Type`;
 
-                if (step[typeField] === 'markup' && step[keyField]) {
-                  sequenceParameterKeys.add(step[keyField]);
-                } else if (step[typeField] === 'number' && step[keyField]) {
-                  sequenceNumberValues.add(parseFloat(step[keyField]));
+                if (s[typeField] === 'markup' && s[keyField]) {
+                  sequenceParameterKeys.add(String(s[keyField]));
+                } else if (s[typeField] === 'number' && s[keyField]) {
+                  sequenceNumberValues.add(parseFloat(String(s[keyField])));
                 }
               }
             });

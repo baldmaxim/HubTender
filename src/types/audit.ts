@@ -37,8 +37,8 @@ export interface BoqItemAudit {
  */
 export interface AuditDiffField {
   field: string;
-  oldValue: any;
-  newValue: any;
+  oldValue: unknown;
+  newValue: unknown;
   displayName: string; // Русское название поля для отображения
 }
 

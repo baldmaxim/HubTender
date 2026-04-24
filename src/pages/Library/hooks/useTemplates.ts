@@ -25,10 +25,12 @@ export const useTemplates = () => {
 
       if (error) throw error;
 
-      const formattedTemplates: TemplateWithDetails[] = (data || []).map((item: any) => {
-        const costCategoryName = item.detail_cost_categories?.cost_categories?.name || '';
-        const detailCategoryName = item.detail_cost_categories?.name || '';
-        const location = item.detail_cost_categories?.location || '';
+      const formattedTemplates: TemplateWithDetails[] = (data || []).map((item) => {
+        const dcc = Array.isArray(item.detail_cost_categories) ? item.detail_cost_categories[0] : item.detail_cost_categories;
+        const costCats = dcc ? (Array.isArray(dcc.cost_categories) ? dcc.cost_categories[0] : dcc.cost_categories) : undefined;
+        const costCategoryName = costCats?.name || '';
+        const detailCategoryName = dcc?.name || '';
+        const location = dcc?.location || '';
         const costCategoryFull = costCategoryName && detailCategoryName && location
           ? `${costCategoryName} / ${detailCategoryName} / ${location}`
           : '';

@@ -12,7 +12,7 @@ interface CostCategoryOption {
 
 export const useTemplateEditing = (
   loadedTemplateItems: Record<string, TemplateItemWithDetails[]>,
-  setLoadedTemplateItems: (fn: (prev: any) => any) => void,
+  setLoadedTemplateItems: (fn: (prev: Record<string, TemplateItemWithDetails[]>) => Record<string, TemplateItemWithDetails[]>) => void,
   costCategories: CostCategoryOption[]
 ) => {
   const [editingTemplateForm] = Form.useForm();

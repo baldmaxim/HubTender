@@ -228,7 +228,7 @@ const InsertTemplateIntoPositionModal: React.FC<InsertTemplateIntoPositionModalP
     }
   };
 
-  const handlePositionSelect = (_value: string, option: any) => {
+  const handlePositionSelect = (_value: string, option: { label: string; key: string }) => {
     setPositionSearch(option.label);
     setSelectedPositionId(option.key);
   };

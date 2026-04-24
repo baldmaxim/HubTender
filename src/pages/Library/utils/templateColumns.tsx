@@ -31,10 +31,10 @@ export const createTemplateColumns = (
     handleUpdateItemCoeff: (id: string, value: number | null, templateId?: string) => void;
     handleDeleteItem: (id: string) => void;
     handleDeleteTemplateItem: (templateId: string, itemId: string) => void;
-    getCostCategoryOptions: (searchText: string) => any[];
-    setTemplateItems: (items: any) => void;
-    setEditingItems: (items: any) => void;
-    setLoadedTemplateItems: (fn: (prev: any) => any) => void;
+    getCostCategoryOptions: (searchText: string) => { value: string; id: string; label: string }[];
+    setTemplateItems: (items: TemplateItemWithDetails[]) => void;
+    setEditingItems: (items: TemplateItemWithDetails[]) => void;
+    setLoadedTemplateItems: (fn: (prev: Record<string, TemplateItemWithDetails[]>) => Record<string, TemplateItemWithDetails[]>) => void;
   }
 ) => {
   const workItemsForSelect = currentItems.filter((item) => item.kind === 'work');
@@ -267,7 +267,7 @@ export const createTemplateColumns = (
                 if (isEditing) {
                   handlers.setEditingItems(updatedItems);
                 } else if (templateId) {
-                  handlers.setLoadedTemplateItems((prev: any) => ({
+                  handlers.setLoadedTemplateItems((prev) => ({
                     ...prev,
                     [templateId]: updatedItems,
                   }));
@@ -275,7 +275,7 @@ export const createTemplateColumns = (
                   handlers.setTemplateItems(updatedItems);
                 }
               }}
-              onSelect={(_value, option: any) => {
+              onSelect={(_value, option: { id?: string; label?: string }) => {
                 const updatedItems = currentItems.map((item) => {
                   if (item.id === record.id) {
                     return {
@@ -290,7 +290,7 @@ export const createTemplateColumns = (
                 if (isEditing) {
                   handlers.setEditingItems(updatedItems);
                 } else if (templateId) {
-                  handlers.setLoadedTemplateItems((prev: any) => ({
+                  handlers.setLoadedTemplateItems((prev) => ({
                     ...prev,
                     [templateId]: updatedItems,
                   }));
@@ -313,7 +313,7 @@ export const createTemplateColumns = (
                 if (isEditing) {
                   handlers.setEditingItems(updatedItems);
                 } else if (templateId) {
-                  handlers.setLoadedTemplateItems((prev: any) => ({
+                  handlers.setLoadedTemplateItems((prev) => ({
                     ...prev,
                     [templateId]: updatedItems,
                   }));

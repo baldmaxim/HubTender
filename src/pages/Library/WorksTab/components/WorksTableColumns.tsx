@@ -34,7 +34,7 @@ export const getWorksTableColumns = (params: GetColumnsParams): EditableColumn[]
       width: 25,
       editable: true,
       align: 'center' as const,
-      render: (_: any, __: any, index: number) => (currentPage - 1) * pageSize + index + 1,
+      render: (_: unknown, __: unknown, index: number) => (currentPage - 1) * pageSize + index + 1,
     },
     {
       title: 'Вид работы',

@@ -99,7 +99,7 @@ export const CostTable: React.FC<CostTableProps> = ({
       key: 'action',
       align: 'center',
       width: '10%',
-      render: (_: any, record: TreeNode) => (
+      render: (_: unknown, record: TreeNode) => (
         <Space size="small">
           {record.type === 'category' && (
             <Button

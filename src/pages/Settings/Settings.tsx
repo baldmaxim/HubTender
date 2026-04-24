@@ -146,7 +146,7 @@ const Settings: React.FC = () => {
   };
 
   // Обновление настроек
-  const updateFontSettings = (key: keyof FontSettings, value: any) => {
+  const updateFontSettings = (key: keyof FontSettings, value: FontSettings[keyof FontSettings]) => {
     const newSettings = { ...fontSettings, [key]: value };
     setFontSettings(newSettings);
     applyFontSettings(newSettings);

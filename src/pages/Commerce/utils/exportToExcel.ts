@@ -197,7 +197,7 @@ export function exportCommerceToExcel(
       const isNumeric = numericColIndices.includes(col);
 
       // Базовый стиль с границами
-      const baseStyle: any = {
+      const baseStyle: Record<string, unknown> = {
         border: cellBorderStyle,
         alignment: {
           wrapText: true,

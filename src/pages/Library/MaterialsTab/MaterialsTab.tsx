@@ -4,7 +4,7 @@ import {
   FolderOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
   AppstoreOutlined, FileOutlined,
 } from '@ant-design/icons';
-import type { LibraryFolder } from '../../../lib/supabase';
+import type { LibraryFolder, MaterialLibraryFull } from '../../../lib/supabase';
 import { useMaterialsData } from './hooks/useMaterialsData';
 import { useMaterialsActions } from './hooks/useMaterialsActions';
 import { MaterialsAddForm } from './components/MaterialsAddForm';
@@ -17,8 +17,11 @@ interface MaterialsTabProps {
 }
 
 type FolderRow = LibraryFolder & { _type: 'folder' };
+type TableRow = FolderRow | MaterialLibraryFull;
 
-const MaterialsTab = forwardRef<any, MaterialsTabProps>((props, ref) => {
+export type MaterialsTabHandle = { handleAdd: () => void };
+
+const MaterialsTab = forwardRef<MaterialsTabHandle, MaterialsTabProps>((props, ref) => {
   const { searchText } = props;
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
@@ -91,17 +94,20 @@ const MaterialsTab = forwardRef<any, MaterialsTabProps>((props, ref) => {
     if (activeFolder === folderId) setActiveFolder(null);
   };
 
-  const getRowClassName = (record: any) => {
-    if (record._type === 'folder') {
+  const getRowClassName = (record: TableRow) => {
+    if ('_type' in record && record._type === 'folder') {
       return activeFolder === record.id ? 'folder-row folder-row-active' : 'folder-row';
     }
-    if (actions.isEditing(record)) return 'editable-row';
-    switch (record.item_type) {
-      case 'мат': return 'material-row-mat';
-      case 'суб-мат': return 'material-row-sub-mat';
-      case 'мат-комп.': return 'material-row-mat-comp';
-      default: return '';
+    if (actions.isEditing(record as MaterialLibraryFull)) return 'editable-row';
+    if ('item_type' in record) {
+      switch ((record as MaterialLibraryFull).item_type) {
+        case 'мат': return 'material-row-mat';
+        case 'суб-мат': return 'material-row-sub-mat';
+        case 'мат-комп.': return 'material-row-mat-comp';
+        default: return '';
+      }
     }
+    return '';
   };
 
   const baseColumns = getMaterialsTableColumns({
@@ -116,15 +122,17 @@ const MaterialsTab = forwardRef<any, MaterialsTabProps>((props, ref) => {
     selectedUnit: actions.selectedUnit,
   });
 
-  const mergedColumns = baseColumns.map((col: any) => {
+  type AntColumn = Record<string, unknown>;
+
+  const mergedColumns = (baseColumns as AntColumn[]).map((col) => {
     if (!col.editable) return col;
     return {
       ...col,
-      onCell: (record: any) => ({
+      onCell: (record: TableRow) => ({
         record,
         dataIndex: col.dataIndex,
         title: col.title,
-        editing: actions.isEditing(record),
+        editing: actions.isEditing(record as MaterialLibraryFull),
         materialNames,
         onMaterialNameSelect: actions.handleMaterialNameSelect,
       }),
@@ -132,14 +140,14 @@ const MaterialsTab = forwardRef<any, MaterialsTabProps>((props, ref) => {
   });
 
   // Override columns to handle folder rows
-  const finalColumns = mergedColumns.map((col: any) => ({
+  const finalColumns = mergedColumns.map((col) => ({
     ...col,
-    onCell: (record: any) => {
-      if (record._type === 'folder') return {};
-      return col.onCell ? col.onCell(record) : {};
+    onCell: (record: TableRow) => {
+      if ('_type' in record && record._type === 'folder') return {};
+      return typeof col.onCell === 'function' ? col.onCell(record) : {};
     },
-    render: (value: any, record: any, index: number) => {
-      if (record._type === 'folder') {
+    render: (value: unknown, record: TableRow, index: number) => {
+      if ('_type' in record && record._type === 'folder') {
         if (col.dataIndex === 'material_name') {
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -185,7 +193,7 @@ const MaterialsTab = forwardRef<any, MaterialsTabProps>((props, ref) => {
         }
         return null;
       }
-      return col.render ? col.render(value, record, index) : value;
+      return typeof col.render === 'function' ? (col.render as (v: unknown, r: TableRow, i: number) => unknown)(value, record, index) : value;
     },
   }));
 
@@ -272,21 +280,21 @@ const MaterialsTab = forwardRef<any, MaterialsTabProps>((props, ref) => {
           rowSelection={{
             selectedRowKeys,
             onChange: keys => setSelectedRowKeys(keys),
-            getCheckboxProps: (record: any) => ({
-              disabled: record._type === 'folder',
-              style: record._type === 'folder' ? { display: 'none' } : undefined,
+            getCheckboxProps: (record: TableRow) => ({
+              disabled: '_type' in record && record._type === 'folder',
+              style: '_type' in record && record._type === 'folder' ? { display: 'none' } : undefined,
             }),
           }}
           dataSource={tableData}
           columns={finalColumns}
           rowClassName={getRowClassName}
-          onRow={(record: any) => ({
+          onRow={(record: TableRow) => ({
             onClick: () => {
-              if (record._type === 'folder') {
+              if ('_type' in record && record._type === 'folder') {
                 setActiveFolder(activeFolder === record.id ? null : record.id);
               }
             },
-            style: { cursor: record._type === 'folder' ? 'pointer' : undefined },
+            style: { cursor: '_type' in record && record._type === 'folder' ? 'pointer' : undefined },
           })}
           pagination={{
             current: currentPage,

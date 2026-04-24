@@ -36,6 +36,10 @@ interface ExclusionState {
 
 type ExclusionType = 'works' | 'materials';
 
+type GroupRow = { key: string; categoryName: string; children: LeafRow[] };
+type LeafRow = { key: string } & CostCategoryWithDetails;
+type TableRow = GroupRow | LeafRow;
+
 export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tenderId }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -281,8 +285,8 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
       dataIndex: 'name',
       key: 'name',
       width: '35%',
-      render: (text: string, record: any) => {
-        if (record.children) {
+      render: (text: string, record: TableRow) => {
+        if ('children' in record) {
           return <Text strong style={{ fontSize: 16 }}>{record.categoryName}</Text>;
         }
         return <Text>{text}</Text>;
@@ -293,8 +297,8 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
       dataIndex: ['location', 'location'],
       key: 'location',
       width: '25%',
-      render: (text: string, record: any) => {
-        if (record.children) return null;
+      render: (text: string, record: TableRow) => {
+        if ('children' in record) return null;
         return <Tag color="blue">{text}</Tag>;
       },
     },
@@ -303,10 +307,10 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
       key: 'apply_works_growth',
       width: '20%',
       align: 'center' as const,
-      render: (_: any, record: any) => {
+      render: (_: unknown, record: TableRow) => {
         // Для родительской группы (категории)
-        if (record.children) {
-          const allIds = record.children.map((child: any) => child.id);
+        if ('children' in record) {
+          const allIds = record.children.map((child) => child.id);
           const allExcluded = allIds.every((id: string) => exclusions.works.has(id));
           const someExcluded = allIds.some((id: string) => exclusions.works.has(id));
 
@@ -335,10 +339,10 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
       key: 'apply_materials_growth',
       width: '20%',
       align: 'center' as const,
-      render: (_: any, record: any) => {
+      render: (_: unknown, record: TableRow) => {
         // Для родительской группы (категории)
-        if (record.children) {
-          const allIds = record.children.map((child: any) => child.id);
+        if ('children' in record) {
+          const allIds = record.children.map((child) => child.id);
           const allExcluded = allIds.every((id: string) => exclusions.materials.has(id));
           const someExcluded = allIds.some((id: string) => exclusions.materials.has(id));
 

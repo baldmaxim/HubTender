@@ -29,7 +29,8 @@ export async function loadMarkupParameters(tenderId: string): Promise<Map<string
 
     if (tenderPercentages && tenderPercentages.length > 0) {
       for (const param of tenderPercentages) {
-        const keyName = (param.markup_parameter as any)?.key;
+        const mp = param.markup_parameter;
+        const keyName = (Array.isArray(mp) ? mp[0] : mp)?.key;
         if (keyName) {
           parametersMap.set(keyName, param.value);
         }

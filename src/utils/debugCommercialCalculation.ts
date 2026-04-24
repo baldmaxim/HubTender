@@ -58,7 +58,7 @@ export async function debugCommercialCalculation(tenderId: string) {
     } else {
       console.log(`✓ Загружено параметров: ${markupParams.length}`);
       markupParams.forEach(p => {
-        const param = p.markup_parameter as any;
+        const param = p.markup_parameter as { key?: string } | null;
         if (param?.key) {
           parametersMap.set(param.key, p.value);
           console.log(`  ${param.key}: ${p.value}%`);
@@ -249,7 +249,7 @@ export async function debugCommercialCalculation(tenderId: string) {
 
 // Экспортируем в window для вызова из консоли
 if (typeof window !== 'undefined') {
-  (window as any).debugCommercialCalculation = debugCommercialCalculation;
+  (window as unknown as Record<string, unknown>).debugCommercialCalculation = debugCommercialCalculation;
   console.log('Для отладки расчета выполните в консоли:');
   console.log('window.debugCommercialCalculation("ID_ТЕНДЕРА")');
 }

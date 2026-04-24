@@ -59,7 +59,7 @@ export const useWorks = () => {
         }
       }
 
-      const formattedData: WorkRecord[] = allWorks.map((item: any) => ({
+      const formattedData: WorkRecord[] = allWorks.map((item) => ({
         key: item.id,
         id: item.id,
         name: item.name,
@@ -77,7 +77,7 @@ export const useWorks = () => {
     }
   };
 
-  const saveWork = async (values: any, editingWorkId?: string) => {
+  const saveWork = async (values: { name: string; unit: string }, editingWorkId?: string) => {
     try {
       if (editingWorkId) {
         // Валидация: проверить что unit существует в справочнике

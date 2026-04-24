@@ -91,6 +91,12 @@ interface MaterialNameRecord {
   unit: string;
 }
 
+interface CostCategoryRecord {
+  id: string;
+  name: string;
+  location: string;
+  cost_categories?: { name: string } | { name: string }[] | null;
+}
 
 const PAGE_SIZE = 1000;
 
@@ -121,7 +127,7 @@ const buildNomenclatureLookupKey = (name: string, unit: string): string => {
 };
 
 const fetchAllPages = async <T>(
-  queryFactory: (from: number, to: number) => any
+  queryFactory: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
 ): Promise<T[]> => {
   const items: T[] = [];
   let from = 0;
@@ -147,13 +153,13 @@ const fetchAllPages = async <T>(
   return items;
 };
 
-const parseNumber = (value: any): number | undefined => {
+const parseNumber = (value: unknown): number | undefined => {
   if (value === null || value === undefined || value === '') return undefined;
   const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : Number(value);
   return isNaN(num) ? undefined : num;
 };
 
-const parseBoolean = (value: any): boolean => {
+const parseBoolean = (value: unknown): boolean => {
   if (!value) return false;
   const str = String(value).toLowerCase().trim();
   return str === 'да' || str === 'yes' || str === 'true' || str === '1';
@@ -300,7 +306,7 @@ export const useBoqItemsImport = () => {
             .order('name')
             .range(from, to)
         )),
-        fetchAllPages<any>((from, to) => (
+        fetchAllPages<CostCategoryRecord>((from, to) => (
           supabase
             .from('detail_cost_categories')
             .select(`
@@ -326,8 +332,9 @@ export const useBoqItemsImport = () => {
 
       const nextCostsMap = new Map<string, string>();
       let costLogCount = 0;
-      allCosts.forEach((cost: any) => {
-        const costCategoryName = cost.cost_categories?.name || '';
+      allCosts.forEach((cost) => {
+        const cc = Array.isArray(cost.cost_categories) ? cost.cost_categories[0] : cost.cost_categories;
+        const costCategoryName = cc?.name || '';
         const key = `${normalizeString(costCategoryName)}|${normalizeString(cost.name)}|${normalizeString(cost.location)}`;
         nextCostsMap.set(key, cost.id);
 
@@ -402,8 +409,9 @@ export const useBoqItemsImport = () => {
 
       const costsMap = new Map<string, string>();
       let costLogCount = 0;
-      costs?.forEach((c: any) => {
-        const costCategoryName = c.cost_categories?.name || '';
+      costs?.forEach((c: CostCategoryRecord) => {
+        const ccc = Array.isArray(c.cost_categories) ? c.cost_categories[0] : c.cost_categories;
+        const costCategoryName = ccc?.name || '';
         // Основной ключ - раздельные части
         const key = `${normalizeString(costCategoryName)}|${normalizeString(c.name)}|${normalizeString(c.location)}`;
         costsMap.set(key, c.id);
@@ -470,7 +478,7 @@ export const useBoqItemsImport = () => {
             const hasData = row.some(cell => cell !== undefined && cell !== null && cell !== '');
             if (!hasData) return;
 
-            const cells = row as any[];
+            const cells = row as unknown[];
             const rowNum = index + 2; // +2 потому что индекс с 0 и пропустили заголовок
 
             // Маппинг колонок согласно структуре из шаблона
@@ -478,10 +486,10 @@ export const useBoqItemsImport = () => {
               rowIndex: rowNum,
 
               // Колонка 4: Тип элемента
-              boq_item_type: cells[4] ? String(cells[4]).trim() as any : 'мат',
+              boq_item_type: cells[4] ? String(cells[4]).trim() as ParsedBoqItem['boq_item_type'] : 'мат',
 
               // Колонка 5: Тип материала (с нормализацией)
-              material_type: normalizeMaterialType(cells[5]),
+              material_type: normalizeMaterialType(cells[5] != null ? String(cells[5]) : undefined),
 
               // Колонка 6: Наименование
               nameText: cells[6] ? normalizeString(String(cells[6])) : '',
@@ -503,10 +511,10 @@ export const useBoqItemsImport = () => {
               quantity: parseNumber(cells[11]), // Будет пересчитано для привязанных материалов
 
               // Колонка 12: Валюта
-              currency_type: cells[12] ? String(cells[12]).trim() as any : 'RUB',
+              currency_type: cells[12] ? String(cells[12]).trim() as ParsedBoqItem['currency_type'] : 'RUB',
 
               // Колонка 13: Тип доставки (с нормализацией)
-              delivery_price_type: normalizeDeliveryPriceType(cells[13]),
+              delivery_price_type: normalizeDeliveryPriceType(cells[13] != null ? String(cells[13]) : undefined),
 
               // Колонка 14: Стоимость доставки
               delivery_amount: parseNumber(cells[14]),
@@ -979,7 +987,7 @@ export const useBoqItemsImport = () => {
         const totalAmount = calculateTotalAmount(item, rates);
 
         // Формируем данные для вставки
-        const insertData: any = {
+        const insertData: Record<string, unknown> = {
           tender_id: tenderId,
           client_position_id: positionId,
           sort_number: actualSortNumber,

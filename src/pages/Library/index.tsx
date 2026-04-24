@@ -1,16 +1,16 @@
 import React, { useState, useRef } from 'react';
 import { Tabs, Input, Button, Space, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
-import MaterialsTab from './MaterialsTab/MaterialsTab';
-import WorksTab from './WorksTab/WorksTab';
+import MaterialsTab, { type MaterialsTabHandle } from './MaterialsTab/MaterialsTab';
+import WorksTab, { type WorksTabHandle } from './WorksTab/WorksTab';
 
 const { Title } = Typography;
 
 const Library: React.FC = () => {
   const [activeTab, setActiveTab] = useState('materials');
   const [searchText, setSearchText] = useState('');
-  const materialsTabRef = useRef<any>(null);
-  const worksTabRef = useRef<any>(null);
+  const materialsTabRef = useRef<MaterialsTabHandle>(null);
+  const worksTabRef = useRef<WorksTabHandle>(null);
 
   const handleAdd = () => {
     if (activeTab === 'materials' && materialsTabRef.current) {

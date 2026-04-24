@@ -23,7 +23,17 @@ export async function copyInsuranceData(
 
   if (error || !data) return;
 
-  const row = data as any;
+  interface InsuranceRow {
+    judicial_pct?: number | null;
+    total_pct?: number | null;
+    apt_price_m2?: number | null;
+    apt_area?: number | null;
+    parking_price_m2?: number | null;
+    parking_area?: number | null;
+    storage_price_m2?: number | null;
+    storage_area?: number | null;
+  }
+  const row = data as unknown as InsuranceRow;
 
   await supabase
     .from('tender_insurance')

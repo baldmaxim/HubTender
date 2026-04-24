@@ -3,6 +3,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import type { BoqItemType } from '../lib/supabase';
 import { calculateMarkupResult } from './markupCalculator';
 import { loadMarkupParameters } from '../services/markupTacticService';
 
@@ -78,7 +79,7 @@ export async function verifyCoefficients(tenderId?: string) {
       const result = calculateMarkupResult({
         baseAmount: testAmount,
         baseCost: testAmount,
-        itemType: type as any,
+        itemType: type as BoqItemType,
         markupSequence: sequence,
         markupParameters
       });
@@ -112,7 +113,7 @@ export async function verifyCoefficients(tenderId?: string) {
 
 // Экспортируем в window для удобного вызова из консоли
 if (typeof window !== 'undefined') {
-  (window as any).verifyCoefficients = verifyCoefficients;
+  (window as unknown as Record<string, unknown>).verifyCoefficients = verifyCoefficients;
   console.log('Для проверки коэффициентов выполните:');
   console.log('window.verifyCoefficients() или window.verifyCoefficients("ID_ТЕНДЕРА")');
 }

@@ -34,7 +34,7 @@ export const getMaterialsTableColumns = (params: GetColumnsParams): EditableColu
       width: 50,
       editable: true,
       align: 'center' as const,
-      render: (_: any, __: any, index: number) => (currentPage - 1) * pageSize + index + 1,
+      render: (_: unknown, __: unknown, index: number) => (currentPage - 1) * pageSize + index + 1,
     },
     {
       title: 'Вид материала',

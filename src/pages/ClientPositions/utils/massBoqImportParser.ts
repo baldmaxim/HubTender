@@ -40,11 +40,11 @@ export const parseExcelData = (rows: unknown[]): ParseExcelResult => {
     const hasData = row.some(cell => cell !== undefined && cell !== null && cell !== '');
     if (!hasData) return;
 
-    const cells = row as any[];
+    const cells = row as unknown[];
     const rowNum = index + 2;
 
     // Номер позиции из колонки 1 (вторая колонка в Excel)
-    const rowPositionNumber = normalizePositionNumber(cells[1]);
+    const rowPositionNumber = normalizePositionNumber(cells[1] as string | number | null | undefined);
 
     // Тип элемента BOQ из колонки 4.
     // Независимый материал выводим только для дочерней BOQ-строки без номера позиции.
@@ -111,8 +111,8 @@ export const parseExcelData = (rows: unknown[]): ParseExcelResult => {
       rowIndex: rowNum,
       positionNumber: effectivePositionNumber,
 
-      boq_item_type: boqType as any,
-      material_type: normalizeMaterialType(cells[5]),
+      boq_item_type: boqType as ParsedBoqItem['boq_item_type'],
+      material_type: normalizeMaterialType(cells[5] as string | undefined),
       nameText: cells[6] ? normalizeString(String(cells[6])) : '',
       unit_code: cells[7] ? String(cells[7]).trim() : '',
 
@@ -123,8 +123,8 @@ export const parseExcelData = (rows: unknown[]): ParseExcelResult => {
       base_quantity: parseNumber(cells[11]),
       quantity: parseNumber(cells[11]),
 
-      currency_type: cells[12] ? String(cells[12]).trim() as any : 'RUB',
-      delivery_price_type: normalizeDeliveryPriceType(cells[13]),
+      currency_type: cells[12] ? String(cells[12]).trim() as ParsedBoqItem['currency_type'] : 'RUB',
+      delivery_price_type: normalizeDeliveryPriceType(cells[13] as string | undefined),
       delivery_amount: parseNumber(cells[14]),
       unit_rate: parseNumber(cells[15]),
 
@@ -161,9 +161,8 @@ export const parseExcelData = (rows: unknown[]): ParseExcelResult => {
 
   // Логирование первых 5 строк — полный дамп ячеек для диагностики
   console.log('[MassBoqImport] Первые 5 строк (все ячейки):');
-  rows.slice(0, 5).forEach((row: any, idx: number) => {
-    const cells = row as any[];
-    const dump = cells.map((c: any, i: number) => `[${i}]=${c}`).join(', ');
+  rows.slice(0, 5).forEach((row: unknown[], idx: number) => {
+    const dump = row.map((c, i: number) => `[${i}]=${c}`).join(', ');
     console.log(`  Строка ${idx + 2}: ${dump}`);
   });
 

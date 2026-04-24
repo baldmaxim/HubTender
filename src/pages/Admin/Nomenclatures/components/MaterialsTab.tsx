@@ -14,7 +14,7 @@ interface MaterialsTabProps {
   showDuplicatesOnly: boolean;
   duplicatesCount: number;
   onDelete: (record: MaterialRecord) => void;
-  onSave: (values: any, editingId?: string) => Promise<boolean>;
+  onSave: (values: { name: string; unit: string }, editingId?: string) => Promise<boolean>;
   onPageChange: (page: number, newPageSize: number) => void;
   onToggleDuplicates: () => void;
   onDeleteDuplicates: () => void;
@@ -79,7 +79,7 @@ export const MaterialsTab = forwardRef<MaterialsTabRef, MaterialsTabProps>(({
       key: 'index',
       width: 60,
       align: 'center',
-      render: (_: any, __: any, index: number) => (currentPage - 1) * pageSize + index + 1,
+      render: (_: unknown, __: unknown, index: number) => (currentPage - 1) * pageSize + index + 1,
     },
     {
       title: 'Наименование',
@@ -109,7 +109,7 @@ export const MaterialsTab = forwardRef<MaterialsTabRef, MaterialsTabProps>(({
       key: 'action',
       width: 120,
       align: 'center',
-      render: (_: any, record: MaterialRecord) => (
+      render: (_: unknown, record: MaterialRecord) => (
         <Space size="small">
           <Tooltip title="Редактировать">
             <Button

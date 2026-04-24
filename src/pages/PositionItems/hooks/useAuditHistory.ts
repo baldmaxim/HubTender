@@ -69,7 +69,7 @@ export function useAuditHistory(
       if (auditError) throw auditError;
 
       // Трансформация данных: user из joined объекта
-      let transformedData: BoqItemAudit[] = (data || []).map((record: any) => ({
+      let transformedData: BoqItemAudit[] = (data || []).map((record) => ({
         ...record,
         user: Array.isArray(record.user) ? record.user[0] : record.user,
       }));
@@ -82,23 +82,23 @@ export function useAuditHistory(
       transformedData.forEach((record) => {
         const itemData = record.new_data || record.old_data;
         if (itemData) {
-          if ((itemData as any).work_name_id) {
-            workNameIds.add((itemData as any).work_name_id);
+          if (itemData.work_name_id) {
+            workNameIds.add(itemData.work_name_id);
           }
-          if ((itemData as any).material_name_id) {
-            materialNameIds.add((itemData as any).material_name_id);
+          if (itemData.material_name_id) {
+            materialNameIds.add(itemData.material_name_id);
           }
-          if ((itemData as any).detail_cost_category_id) {
-            costCategoryIds.add((itemData as any).detail_cost_category_id);
+          if (itemData.detail_cost_category_id) {
+            costCategoryIds.add(itemData.detail_cost_category_id);
           }
         }
 
         // Также проверяем changed_fields для detail_cost_category_id
-        if (record.old_data && (record.old_data as any).detail_cost_category_id) {
-          costCategoryIds.add((record.old_data as any).detail_cost_category_id);
+        if (record.old_data?.detail_cost_category_id) {
+          costCategoryIds.add(record.old_data.detail_cost_category_id);
         }
-        if (record.new_data && (record.new_data as any).detail_cost_category_id) {
-          costCategoryIds.add((record.new_data as any).detail_cost_category_id);
+        if (record.new_data?.detail_cost_category_id) {
+          costCategoryIds.add(record.new_data.detail_cost_category_id);
         }
       });
 
@@ -151,8 +151,8 @@ export function useAuditHistory(
         let item_name = '-';
 
         if (itemData) {
-          const workNameId = (itemData as any).work_name_id;
-          const materialNameId = (itemData as any).material_name_id;
+          const workNameId = itemData.work_name_id;
+          const materialNameId = itemData.material_name_id;
 
           if (workNameId && workNamesMap.has(workNameId)) {
             item_name = workNamesMap.get(workNameId)!;

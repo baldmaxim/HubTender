@@ -83,7 +83,7 @@ const ObjectComparison: React.FC = () => {
 
     const isMulti = loadedCount > 2;
     const isDetail = !isMulti && viewMode === 'detailed';
-    const labels = loadedInfos.map((info: any, i: number) => tenderLabel(info, `Тендер ${i + 1}`));
+    const labels = loadedInfos.map((info, i: number) => tenderLabel(info, `Тендер ${i + 1}`));
 
     const categoryCol = {
       title: <div style={{ textAlign: 'center' }}>Категория затрат</div>,
@@ -101,18 +101,18 @@ const ObjectComparison: React.FC = () => {
 
       if (isDetail) {
         children.push(
-          { title: <div style={{ textAlign: 'center' }}>Материалы</div>, key: `t${i}_mat`, align: 'right' as const, width: 130, render: (_: any, r: ComparisonRow) => <Text strong={r.is_main_category}>{formatNum(r.tenders[i]?.materials ?? 0)}</Text> },
-          { title: <div style={{ textAlign: 'center' }}>Работы</div>, key: `t${i}_work`, align: 'right' as const, width: 130, render: (_: any, r: ComparisonRow) => <Text strong={r.is_main_category}>{formatNum(r.tenders[i]?.works ?? 0)}</Text> },
+          { title: <div style={{ textAlign: 'center' }}>Материалы</div>, key: `t${i}_mat`, align: 'right' as const, width: 130, render: (_: unknown, r: ComparisonRow) => <Text strong={r.is_main_category}>{formatNum(r.tenders[i]?.materials ?? 0)}</Text> },
+          { title: <div style={{ textAlign: 'center' }}>Работы</div>, key: `t${i}_work`, align: 'right' as const, width: 130, render: (_: unknown, r: ComparisonRow) => <Text strong={r.is_main_category}>{formatNum(r.tenders[i]?.works ?? 0)}</Text> },
         );
       }
-      children.push({ title: <div style={{ textAlign: 'center' }}>Итого</div>, key: `t${i}_total`, align: 'right' as const, width: 140, render: (_: any, r: ComparisonRow) => <Text strong>{formatNum(r.tenders[i]?.total ?? 0)}</Text> });
+      children.push({ title: <div style={{ textAlign: 'center' }}>Итого</div>, key: `t${i}_total`, align: 'right' as const, width: 140, render: (_: unknown, r: ComparisonRow) => <Text strong>{formatNum(r.tenders[i]?.total ?? 0)}</Text> });
       if (isDetail) {
         children.push(
-          { title: <div style={{ textAlign: 'center' }}>Мат/ед.</div>, key: `t${i}_mpu`, align: 'right' as const, width: 110, render: (_: any, r: ComparisonRow) => <Text style={{ color: '#0891b2' }}>{formatPerUnit(r.tenders[i]?.mat_per_unit ?? 0)}</Text> },
-          { title: <div style={{ textAlign: 'center' }}>Раб/ед.</div>, key: `t${i}_wpu`, align: 'right' as const, width: 110, render: (_: any, r: ComparisonRow) => <Text style={{ color: '#0891b2' }}>{formatPerUnit(r.tenders[i]?.work_per_unit ?? 0)}</Text> },
+          { title: <div style={{ textAlign: 'center' }}>Мат/ед.</div>, key: `t${i}_mpu`, align: 'right' as const, width: 110, render: (_: unknown, r: ComparisonRow) => <Text style={{ color: '#0891b2' }}>{formatPerUnit(r.tenders[i]?.mat_per_unit ?? 0)}</Text> },
+          { title: <div style={{ textAlign: 'center' }}>Раб/ед.</div>, key: `t${i}_wpu`, align: 'right' as const, width: 110, render: (_: unknown, r: ComparisonRow) => <Text style={{ color: '#0891b2' }}>{formatPerUnit(r.tenders[i]?.work_per_unit ?? 0)}</Text> },
         );
       }
-      children.push({ title: <div style={{ textAlign: 'center' }}>Итого/ед.</div>, key: `t${i}_tpu`, align: 'right' as const, width: 110, render: (_: any, r: ComparisonRow) => <Text strong style={{ color: '#0891b2' }}>{formatPerUnit(r.tenders[i]?.total_per_unit ?? 0)}</Text> });
+      children.push({ title: <div style={{ textAlign: 'center' }}>Итого/ед.</div>, key: `t${i}_tpu`, align: 'right' as const, width: 110, render: (_: unknown, r: ComparisonRow) => <Text strong style={{ color: '#0891b2' }}>{formatPerUnit(r.tenders[i]?.total_per_unit ?? 0)}</Text> });
 
       return { title: <div style={{ textAlign: 'center' }}>{label}</div>, children };
     });
@@ -124,18 +124,18 @@ const ObjectComparison: React.FC = () => {
       const diffChildren: ColumnsType<ComparisonRow> = [];
       if (isDetail) {
         diffChildren.push(
-          { title: <div style={{ textAlign: 'center' }}>Материалы</div>, key: 'diff_mat', align: 'right' as const, width: 140, render: (_: any, r: ComparisonRow) => { const d = getDiff(r, 'materials'); return <DiffCell value={d.value} percent={d.percent} />; } },
-          { title: <div style={{ textAlign: 'center' }}>Работы</div>, key: 'diff_work', align: 'right' as const, width: 140, render: (_: any, r: ComparisonRow) => { const d = getDiff(r, 'works'); return <DiffCell value={d.value} percent={d.percent} />; } },
+          { title: <div style={{ textAlign: 'center' }}>Материалы</div>, key: 'diff_mat', align: 'right' as const, width: 140, render: (_: unknown, r: ComparisonRow) => { const d = getDiff(r, 'materials'); return <DiffCell value={d.value} percent={d.percent} />; } },
+          { title: <div style={{ textAlign: 'center' }}>Работы</div>, key: 'diff_work', align: 'right' as const, width: 140, render: (_: unknown, r: ComparisonRow) => { const d = getDiff(r, 'works'); return <DiffCell value={d.value} percent={d.percent} />; } },
         );
       }
-      diffChildren.push({ title: <div style={{ textAlign: 'center' }}>Итого</div>, key: 'diff_total', align: 'right' as const, width: 140, render: (_: any, r: ComparisonRow) => { const d = getDiff(r, 'total'); return <DiffCell value={d.value} percent={d.percent} bold />; } });
+      diffChildren.push({ title: <div style={{ textAlign: 'center' }}>Итого</div>, key: 'diff_total', align: 'right' as const, width: 140, render: (_: unknown, r: ComparisonRow) => { const d = getDiff(r, 'total'); return <DiffCell value={d.value} percent={d.percent} bold />; } });
       if (isDetail) {
         diffChildren.push(
-          { title: <div style={{ textAlign: 'center' }}>Мат/ед.</div>, key: 'diff_mpu', align: 'right' as const, width: 110, render: (_: any, r: ComparisonRow) => <DiffPerUnitCell value={getDiff(r, 'mat_per_unit').value} /> },
-          { title: <div style={{ textAlign: 'center' }}>Раб/ед.</div>, key: 'diff_wpu', align: 'right' as const, width: 110, render: (_: any, r: ComparisonRow) => <DiffPerUnitCell value={getDiff(r, 'work_per_unit').value} /> },
+          { title: <div style={{ textAlign: 'center' }}>Мат/ед.</div>, key: 'diff_mpu', align: 'right' as const, width: 110, render: (_: unknown, r: ComparisonRow) => <DiffPerUnitCell value={getDiff(r, 'mat_per_unit').value} /> },
+          { title: <div style={{ textAlign: 'center' }}>Раб/ед.</div>, key: 'diff_wpu', align: 'right' as const, width: 110, render: (_: unknown, r: ComparisonRow) => <DiffPerUnitCell value={getDiff(r, 'work_per_unit').value} /> },
         );
       }
-      diffChildren.push({ title: <div style={{ textAlign: 'center' }}>Итого/ед.</div>, key: 'diff_tpu', align: 'right' as const, width: 110, render: (_: any, r: ComparisonRow) => <DiffPerUnitCell value={getDiff(r, 'total_per_unit').value} /> });
+      diffChildren.push({ title: <div style={{ textAlign: 'center' }}>Итого/ед.</div>, key: 'diff_tpu', align: 'right' as const, width: 110, render: (_: unknown, r: ComparisonRow) => <DiffPerUnitCell value={getDiff(r, 'total_per_unit').value} /> });
 
       result.push({ title: <div style={{ textAlign: 'center' }}>Разница</div>, children: diffChildren });
 
@@ -143,7 +143,7 @@ const ObjectComparison: React.FC = () => {
         title: <div style={{ textAlign: 'center' }}>Примечание</div>,
         key: 'note',
         width: 200,
-        render: (_: any, record: ComparisonRow) => (
+        render: (_: unknown, record: ComparisonRow) => (
           <Input.TextArea
             defaultValue={record.note || ''}
             autoSize={{ minRows: 1, maxRows: 3 }}
@@ -171,7 +171,7 @@ const ObjectComparison: React.FC = () => {
     ? ((diffValue / tenderTotals[0]) * 100).toFixed(2)
     : '0';
 
-  const tenderLabelsForExport = loadedInfos.map((info: any, i: number) => tenderLabel(info, `Тендер ${i + 1}`));
+  const tenderLabelsForExport = loadedInfos.map((info, i: number) => tenderLabel(info, `Тендер ${i + 1}`));
 
   const comparisonCardTitle = (
     <Row justify="space-between" align="middle">
@@ -273,7 +273,7 @@ const ObjectComparison: React.FC = () => {
         {comparisonData.length > 0 && (
           <Card title={`Общая статистика (${costLabel.toLowerCase()} затраты)`}>
             <Row gutter={[16, 16]}>
-              {loadedInfos.map((info: any, i: number) => (
+              {loadedInfos.map((info, i: number) => (
                 <Col key={i} xs={24} md={loadedCount <= 3 ? Math.floor(24 / (loadedCount + (loadedCount === 2 ? 1 : 0))) : 6}>
                   <Statistic
                     title={`Итого: ${tenderLabel(info, `Тендер ${i + 1}`)}`}

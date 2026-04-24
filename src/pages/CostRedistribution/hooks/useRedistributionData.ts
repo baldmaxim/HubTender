@@ -197,7 +197,7 @@ export function useRedistributionData() {
 
         const liveItems = data.map((item) => {
           const { materialCost, workCost } = calculateLiveCommercialAmounts(
-            item as any,
+            item,
             calculationContext
           );
 

@@ -53,7 +53,7 @@ export const TenderGridRow: React.FC<TenderGridRowProps> = ({
   isDark,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const statusColor = getStatusDotColor((tender.status as any)?.name);
+  const statusColor = getStatusDotColor((tender.status as { name?: string } | null | undefined)?.name);
   const colors = getRowColors(isDark);
 
   return (
@@ -150,7 +150,7 @@ export const TenderGridRow: React.FC<TenderGridRowProps> = ({
       {/* Объем строительства */}
       <div style={{ textAlign: 'center' }}>
         {(() => {
-          const scopeName = (tender.construction_scope as any)?.name;
+          const scopeName = (tender.construction_scope as { name?: string } | null | undefined)?.name;
           if (!scopeName) return <span style={{ fontSize: 11, color: colors.mutedText }}>—</span>;
           const color = SCOPE_COLOR_MAP[scopeName.toLowerCase()] || 'default';
           return <Tag color={color} style={{ margin: 0, fontSize: 11 }}>{scopeName}</Tag>;

@@ -120,13 +120,13 @@ const Users: React.FC = () => {
       }
 
       // Преобразуем данные для удобства использования
-      const requests: PendingRequest[] = (data || []).map((item: any) => ({
+      const requests: PendingRequest[] = (data || []).map((item) => ({
         id: item.id,
         full_name: item.full_name,
         email: item.email,
         role_code: item.role_code,
-        role_name: item.roles?.name,
-        role_color: item.roles?.color,
+        role_name: (Array.isArray(item.roles) ? item.roles[0] : item.roles)?.name,
+        role_color: (Array.isArray(item.roles) ? item.roles[0] : item.roles)?.color,
         registration_date: item.registration_date,
       }));
 
@@ -168,10 +168,10 @@ const Users: React.FC = () => {
       }
 
       // Преобразуем данные для удобства использования
-      const usersData: UserRecord[] = (data || []).map((item: any) => ({
+      const usersData: UserRecord[] = (data || []).map((item) => ({
         ...item,
-        role_name: item.roles?.name,
-        role_color: item.roles?.color,
+        role_name: (Array.isArray(item.roles) ? item.roles[0] : item.roles)?.name,
+        role_color: (Array.isArray(item.roles) ? item.roles[0] : item.roles)?.color,
         roles: undefined, // Удаляем вложенный объект
       }));
 
@@ -376,7 +376,7 @@ const Users: React.FC = () => {
       const allowedPages = role.allowed_pages || [];
 
       // Формируем объект обновления
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         full_name: values.full_name,
         email: values.email,
         role_code: values.role_code,
@@ -687,7 +687,7 @@ const Users: React.FC = () => {
       key: 'actions',
       width: 180,
       align: 'center',
-      render: (_: any, record: PendingRequest) => (
+      render: (_: unknown, record: PendingRequest) => (
         <Space size="small">
           <Popconfirm
             title="Одобрить пользователя?"
@@ -779,7 +779,7 @@ const Users: React.FC = () => {
       width: 160,
       align: 'center',
       fixed: 'right',
-      render: (_: any, record: UserRecord) => (
+      render: (_: unknown, record: UserRecord) => (
         <Space size="small">
           <Tooltip
             title="Редактировать"
@@ -883,7 +883,7 @@ const Users: React.FC = () => {
       width: 150,
       align: 'center',
       fixed: 'right',
-      render: (_: any, record: RoleRecord) => (
+      render: (_: unknown, record: RoleRecord) => (
         <Space size="small">
           <Tooltip
             title="Редактировать права доступа"

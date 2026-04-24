@@ -138,8 +138,8 @@ export async function checkDatabaseStructure() {
     if (rlsError) {
       console.log('  Не удалось проверить RLS (функция может отсутствовать)');
     } else if (rls) {
-      console.log(`  RLS статус: ${(rls as any).enabled ? 'ВКЛЮЧЕН' : 'ВЫКЛЮЧЕН'}`);
-      if ((rls as any).enabled) {
+      console.log(`  RLS статус: ${(rls as Record<string, unknown>)['enabled'] ? 'ВКЛЮЧЕН' : 'ВЫКЛЮЧЕН'}`);
+      if ((rls as Record<string, unknown>)['enabled']) {
         console.log('  ⚠️ RLS включен - убедитесь, что есть политики для обновления');
       }
     }
@@ -153,7 +153,7 @@ export async function checkDatabaseStructure() {
 
 // Экспортируем в window для вызова из консоли
 if (typeof window !== 'undefined') {
-  (window as any).checkDatabaseStructure = checkDatabaseStructure;
+  (window as unknown as Record<string, unknown>).checkDatabaseStructure = checkDatabaseStructure;
   console.log('Для проверки структуры БД выполните в консоли:');
   console.log('window.checkDatabaseStructure()');
 }

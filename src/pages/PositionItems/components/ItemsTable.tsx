@@ -117,7 +117,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       width: 60,
       align: 'center',
       fixed: 'left',
-      render: (_: any, record: BoqItemFull, index: number) => (
+      render: (_: unknown, record: BoqItemFull, index: number) => (
         <Space direction="vertical" size={0} style={{ width: '100%' }}>
           <Tooltip title="Переместить вверх">
             <Button
@@ -153,7 +153,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       key: 'type',
       width: 80,
       align: 'center',
-      render: (_: any, record: BoqItemFull) => {
+      render: (_: unknown, record: BoqItemFull) => {
         const isMaterial = ['мат', 'суб-мат', 'мат-комп.'].includes(record.boq_item_type);
         const itemType = record.boq_item_type;
 
@@ -219,7 +219,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       key: 'cost_category',
       width: 150,
       align: 'center',
-      render: (_: any, record: BoqItemFull) => {
+      render: (_: unknown, record: BoqItemFull) => {
         if (!record.detail_cost_category_full || record.detail_cost_category_full === '-') {
           return '-';
         }
@@ -239,7 +239,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       title: <div style={{ textAlign: 'center' }}>Наименование</div>,
       key: 'name',
       width: 200,
-      render: (_: any, record: BoqItemFull) => {
+      render: (_: unknown, record: BoqItemFull) => {
         const isMaterial = ['мат', 'суб-мат', 'мат-комп.'].includes(record.boq_item_type);
         const parentWork = record.parent_work_item_id
           ? items.find(item => item.id === record.parent_work_item_id)
@@ -320,7 +320,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       key: 'price',
       width: 100,
       align: 'center',
-      render: (_: any, record: BoqItemFull) => {
+      render: (_: unknown, record: BoqItemFull) => {
         const symbol = currencySymbols[record.currency_type || 'RUB'];
         return record.unit_rate
           ? `${record.unit_rate.toLocaleString('ru-RU')} ${symbol}`
@@ -332,7 +332,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       key: 'delivery',
       width: 110,
       align: 'center',
-      render: (_: any, record: BoqItemFull) => {
+      render: (_: unknown, record: BoqItemFull) => {
         const isMaterial = ['мат', 'суб-мат', 'мат-комп.'].includes(record.boq_item_type);
 
         if (!isMaterial || !record.delivery_price_type) {
@@ -368,7 +368,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       key: 'total',
       width: 100,
       align: 'center',
-      render: (_: any, record: BoqItemFull) => {
+      render: (_: unknown, record: BoqItemFull) => {
         const total = calculateTotal(record);
         const displayValue = total > 0 ? `${total.toLocaleString('ru-RU')}` : '-';
 
@@ -443,7 +443,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       key: 'actions',
       width: 100,
       align: 'center',
-      render: (_: any, record: BoqItemFull) => {
+      render: (_: unknown, record: BoqItemFull) => {
         if (isDeleteMode) {
           const isSelected = selectedDeleteIds.has(record.id);
           return (

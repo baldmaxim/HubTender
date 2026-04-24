@@ -14,7 +14,7 @@ interface WorksTabProps {
   showDuplicatesOnly: boolean;
   duplicatesCount: number;
   onDelete: (record: WorkRecord) => void;
-  onSave: (values: any, editingId?: string) => Promise<boolean>;
+  onSave: (values: { name: string; unit: string }, editingId?: string) => Promise<boolean>;
   onPageChange: (page: number, newPageSize: number) => void;
   onToggleDuplicates: () => void;
   onDeleteDuplicates: () => void;
@@ -79,7 +79,7 @@ export const WorksTab = forwardRef<WorksTabRef, WorksTabProps>(({
       key: 'index',
       width: 60,
       align: 'center',
-      render: (_: any, __: any, index: number) => (currentPage - 1) * pageSize + index + 1,
+      render: (_: unknown, __: unknown, index: number) => (currentPage - 1) * pageSize + index + 1,
     },
     {
       title: 'Наименование',
@@ -109,7 +109,7 @@ export const WorksTab = forwardRef<WorksTabRef, WorksTabProps>(({
       key: 'action',
       width: 120,
       align: 'center',
-      render: (_: any, record: WorkRecord) => (
+      render: (_: unknown, record: WorkRecord) => (
         <Space size="small">
           <Tooltip title="Редактировать">
             <Button

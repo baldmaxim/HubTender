@@ -102,7 +102,7 @@ export async function insertBoqItemWithAudit(
 
   const { data: result, error } = await supabase.rpc('insert_boq_item_with_audit', {
     p_user_id: userId,
-    p_data: data as any,
+    p_data: data as unknown,
   });
 
   if (error) throw error;
@@ -141,7 +141,7 @@ export async function updateBoqItemWithAudit(
   const { data: result, error } = await supabase.rpc('update_boq_item_with_audit', {
     p_user_id: userId,
     p_item_id: itemId,
-    p_data: data as any,
+    p_data: data as unknown,
   });
 
   if (error) throw error;

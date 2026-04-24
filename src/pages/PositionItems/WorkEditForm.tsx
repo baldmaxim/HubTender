@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Select, AutoComplete, InputNumber, Input, message } from 'antd';
 import { CloseOutlined, SaveOutlined } from '@ant-design/icons';
-import type { BoqItemFull, CurrencyType, WorkName } from '../../lib/supabase';
+import type { BoqItemFull, CurrencyType, WorkName, BoqItemType } from '../../lib/supabase';
 
 interface CostCategoryOption {
   value: string;
@@ -10,12 +10,24 @@ interface CostCategoryOption {
   location: string;
 }
 
+interface WorkFormData {
+  boq_item_type: BoqItemType;
+  work_name_id: string | null;
+  unit_code: string | null;
+  quantity: number;
+  unit_rate: number;
+  currency_type: CurrencyType;
+  detail_cost_category_id: string | null;
+  quote_link: string;
+  description: string;
+}
+
 interface WorkEditFormProps {
   record: BoqItemFull;
   workNames: WorkName[];
   costCategories: CostCategoryOption[];
   currencyRates: { usd: number; eur: number; cny: number };
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Record<string, unknown>) => Promise<void>;
   onCancel: () => void;
   readOnly?: boolean;
 }
@@ -51,7 +63,7 @@ const WorkEditForm: React.FC<WorkEditFormProps> = ({
   onCancel,
   readOnly,
 }) => {
-  const [formData, setFormData] = useState<any>({
+  const [formData, setFormData] = useState<WorkFormData>({
     boq_item_type: record.boq_item_type,
     work_name_id: record.work_name_id,
     unit_code: record.unit_code,
@@ -110,7 +122,7 @@ const WorkEditForm: React.FC<WorkEditFormProps> = ({
     await onSave({
       ...formData,
       total_amount: totalAmount,
-    });
+    } as unknown as Record<string, unknown>);
   };
 
   // Получить опции для AutoComplete затрат
@@ -172,13 +184,13 @@ const WorkEditForm: React.FC<WorkEditFormProps> = ({
                 unit_code: null,
               });
             }}
-            onSelect={(_value, option: any) => {
+            onSelect={(_value, option: { id?: string; label?: string; unit?: string }) => {
               setFormData({
                 ...formData,
-                work_name_id: option.id,
-                unit_code: option.unit,
+                work_name_id: option.id ?? null,
+                unit_code: option.unit ?? null,
               });
-              setWorkSearchText(option.label);
+              setWorkSearchText(option.label ?? '');
             }}
             onClear={() => {
               setWorkSearchText('');
@@ -246,7 +258,7 @@ const WorkEditForm: React.FC<WorkEditFormProps> = ({
             style={{ width: '100%' }}
             size="small"
             formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-            parser={(value) => value!.replace(/\s/g, '').replace(/,/g, '.')}
+            parser={(value) => parseFloat(value!.replace(/\s/g, '').replace(/,/g, '.'))}
           />
         </div>
 
@@ -272,12 +284,12 @@ const WorkEditForm: React.FC<WorkEditFormProps> = ({
           onChange={(value) => {
             setCostSearchText(value);
           }}
-          onSelect={(_value, option: any) => {
+          onSelect={(_value, option: { id?: string; label?: string }) => {
             setFormData({
               ...formData,
-              detail_cost_category_id: option.id,
+              detail_cost_category_id: option.id ?? null,
             });
-            setCostSearchText(option.label);
+            setCostSearchText(option.label ?? '');
           }}
           options={getCostCategoryOptions()}
           placeholder="Выберите затрату на строительство"

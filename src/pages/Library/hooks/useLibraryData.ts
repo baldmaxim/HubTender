@@ -25,10 +25,10 @@ export const useLibraryData = () => {
 
       if (error) throw error;
 
-      const formatted = (data || []).map((item: any) => ({
+      const formatted = (data || []).map((item) => ({
         ...item,
-        work_name: item.work_names?.name || '',
-        unit: item.work_names?.unit || '',
+        work_name: (Array.isArray(item.work_names) ? item.work_names[0] : item.work_names)?.name || '',
+        unit: (Array.isArray(item.work_names) ? item.work_names[0] : item.work_names)?.unit || '',
       }));
 
       setWorks(formatted);
@@ -46,10 +46,10 @@ export const useLibraryData = () => {
 
       if (error) throw error;
 
-      const formatted = (data || []).map((item: any) => ({
+      const formatted = (data || []).map((item) => ({
         ...item,
-        material_name: item.material_names?.name || '',
-        unit: item.material_names?.unit || '',
+        material_name: (Array.isArray(item.material_names) ? item.material_names[0] : item.material_names)?.name || '',
+        unit: (Array.isArray(item.material_names) ? item.material_names[0] : item.material_names)?.unit || '',
       }));
 
       setMaterials(formatted);
@@ -67,12 +67,15 @@ export const useLibraryData = () => {
 
       if (error) throw error;
 
-      const options: CostCategoryOption[] = (data || []).map((item: any) => ({
-        value: item.id,
-        label: `${item.cost_categories?.name} / ${item.name} / ${item.location}`,
-        cost_category_name: item.cost_categories?.name || '',
-        location: item.location,
-      }));
+      const options: CostCategoryOption[] = (data || []).map((item) => {
+        const cc = Array.isArray(item.cost_categories) ? item.cost_categories[0] : item.cost_categories;
+        return {
+          value: item.id,
+          label: `${cc?.name} / ${item.name} / ${item.location}`,
+          cost_category_name: cc?.name || '',
+          location: item.location,
+        };
+      });
 
       setCostCategories(options);
     } catch (error) {

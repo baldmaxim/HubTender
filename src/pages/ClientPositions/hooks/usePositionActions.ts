@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
-import { supabase, type ClientPosition } from '../../../lib/supabase';
+import { supabase, type ClientPosition, type Tender } from '../../../lib/supabase';
 import { copyBoqItems } from '../../../utils/copyBoqItems';
 import { exportPositionsToExcel } from '../../../utils/excel';
 import { pluralize } from '../../../utils/pluralize';
@@ -122,7 +122,7 @@ export const usePositionActions = (
   };
 
   // Экспорт в Excel
-  const handleExportToExcel = async (selectedTender: any, filteredPositionIds?: Set<string> | null) => {
+  const handleExportToExcel = async (selectedTender: Tender, filteredPositionIds?: Set<string> | null) => {
     if (!selectedTender) {
       message.error('Выберите тендер для экспорта');
       return;

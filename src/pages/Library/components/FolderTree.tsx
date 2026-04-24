@@ -200,7 +200,7 @@ export const FolderTree: React.FC<FolderTreeProps> = ({
           else if (key === '__none__') onFolderSelect('none');
           else onFolderSelect(key as string);
         }}
-        titleRender={(nodeData: any) => {
+        titleRender={(nodeData: DataNode & { folderData?: FolderNode }) => {
           if (nodeData.key === '__all__') {
             return <span style={{ fontSize: 13 }}><AppstoreOutlined style={{ marginRight: 6, opacity: 0.7 }} />Все</span>;
           }
@@ -217,7 +217,7 @@ export const FolderTree: React.FC<FolderTreeProps> = ({
             />
           );
         }}
-        icon={(props: any) => {
+        icon={(props: { data?: DataNode; expanded?: boolean }) => {
           if (props.data?.key === '__all__' || props.data?.key === '__none__') return null;
           return props.expanded ? <FolderOpenOutlined style={{ fontSize: 13 }} /> : <FolderOutlined style={{ fontSize: 13 }} />;
         }}

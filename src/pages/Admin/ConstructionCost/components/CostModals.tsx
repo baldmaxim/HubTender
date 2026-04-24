@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, Form, Input, Select, Alert, Typography, Button } from 'antd';
+import type { FormInstance } from 'antd';
 import { TreeNode } from '../hooks/useConstructionCost.tsx';
 import { useTheme } from '../../../../contexts/ThemeContext';
 import type { Tables } from '../../../../lib/supabase/database.types';
@@ -9,7 +10,7 @@ const { Paragraph } = Typography;
 interface CostModalsProps {
   editModalOpen: boolean;
   editingItem: TreeNode | null;
-  form: any;
+  form: FormInstance;
   unitsData: Tables<'units'>[];
   sqlModalOpen: boolean;
   sqlContent: string;
@@ -19,9 +20,9 @@ interface CostModalsProps {
   addLocationModalOpen: boolean;
   selectedCategory: TreeNode | null;
   selectedDetail: TreeNode | null;
-  addCategoryForm: any;
-  addDetailForm: any;
-  addLocationForm: any;
+  addCategoryForm: FormInstance;
+  addDetailForm: FormInstance;
+  addLocationForm: FormInstance;
   onEditSave: () => void;
   onEditCancel: () => void;
   onSqlClose: () => void;

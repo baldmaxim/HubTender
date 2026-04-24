@@ -105,10 +105,10 @@ const ImportLog: React.FC = () => {
           : Promise.resolve({ data: [] }),
       ]);
 
-      const usersMap = new Map((usersRes.data || []).map((u: any) => [u.id, u]));
-      const tendersMap = new Map((tendersRes.data || []).map((t: any) => [t.id, t]));
+      const usersMap = new Map((usersRes.data || []).map((u) => [u.id, u]));
+      const tendersMap = new Map((tendersRes.data || []).map((t) => [t.id, t]));
 
-      const rows: ImportSessionRow[] = rawSessions.map((s: any) => ({
+      const rows: ImportSessionRow[] = rawSessions.map((s) => ({
         id: s.id,
         user_id: s.user_id,
         tender_id: s.tender_id,

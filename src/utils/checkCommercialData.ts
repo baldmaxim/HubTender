@@ -90,7 +90,7 @@ export async function checkCommercialData(tenderId?: string) {
     } else {
       console.log(`   Найдено параметров: ${markupParams.length}`);
       markupParams.slice(0, 5).forEach(p => {
-        const param = p.markup_parameter as any;
+        const param = p.markup_parameter as { label?: string; key?: string } | null;
         console.log(`     - ${param?.label || param?.key}: ${p.value}%`);
       });
     }

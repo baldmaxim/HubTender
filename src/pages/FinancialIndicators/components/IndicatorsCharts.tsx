@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Typography, Table, Button, Spin } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { supabase } from '../../../lib/supabase';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 import {
@@ -10,6 +11,7 @@ import {
 
 const { Text, Title } = Typography;
 import { Bar, Doughnut } from 'react-chartjs-2';
+import type { Chart, TooltipItem, LegendItem as ChartLegendItem, ChartEvent, ActiveElement, LegendElement } from 'chart.js';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { IndicatorRow } from '../hooks/useFinancialData';
 
@@ -29,6 +31,13 @@ interface CategoryBreakdown {
   total_amount: number;
   works_amount: number;
   materials_amount: number;
+}
+
+interface SummaryTableRow {
+  key: number;
+  indicator_name: string;
+  amount: number;
+  price_per_m2: number;
 }
 
 interface DrillDownLevel {
@@ -580,8 +589,9 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
 
       // Маппинг detail_cost_category_id → cost_category name
       const detailToCategoryName = new Map<string, string>();
-      (categories || []).forEach((cat: any) => {
-        const name = cat.cost_categories?.name || '';
+      (categories || []).forEach((cat) => {
+        const cc = Array.isArray(cat.cost_categories) ? cat.cost_categories[0] : cat.cost_categories;
+        const name = cc?.name || '';
         if (name) detailToCategoryName.set(cat.id, name);
       });
 
@@ -596,7 +606,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       const groupVolumes = new Map<string, number>();
       const detailVolumes = new Map<string, number>();
 
-      (volumes || []).forEach((v: any) => {
+      (volumes || []).forEach((v) => {
         if (v.group_key) {
           groupVolumes.set(v.group_key, v.volume || 0);
         } else if (v.detail_cost_category_id) {
@@ -648,8 +658,9 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         if (error) throw error;
 
         if (data && data.length > 0) {
-          data.forEach((item: any) => {
-            const categoryName = detailToCategoryName.get(item.detail_cost_category_id) || '';
+          data.forEach((rawItem) => {
+            const item = rawItem as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0];
+            const categoryName = detailToCategoryName.get(rawItem.detail_cost_category_id) || '';
             if (!targetCategories.has(categoryName)) return;
 
             const { commercialTotal, baseAmount } = calculateLiveCommercialAmounts(item, calculationContext);
@@ -693,7 +704,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   };
 
   // Обработчик клика на сегмент круговой диаграммы
-  const handlePieClick = async (_event: any, elements: Array<{ index: number }>) => {
+  const handlePieClick = async (_event: ChartEvent, elements: ActiveElement[]) => {
     if (elements.length === 0) return;
 
     const index = elements[0].index;
@@ -1125,13 +1136,13 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   };
 
   // Колонки таблицы детализации по категориям затрат
-  const breakdownColumns = [
+  const breakdownColumns: ColumnsType<CategoryBreakdown> = [
     {
       title: '№',
       dataIndex: 'key',
       key: 'key',
       width: 50,
-      render: (_: any, __: any, index: number) => index + 1,
+      render: (_: unknown, __: unknown, index: number) => index + 1,
     },
     {
       title: 'Категория затрат',
@@ -1301,13 +1312,13 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
     return [];
   };
 
-  const summaryTableColumns = [
+  const summaryTableColumns: ColumnsType<SummaryTableRow> = [
     {
       title: '№',
       dataIndex: 'key',
       key: 'key',
       width: 50,
-      render: (_: any, __: any, index: number) => index + 1,
+      render: (_: unknown, __: unknown, index: number) => index + 1,
     },
     {
       title: 'Показатель',
@@ -1354,7 +1365,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           font: { size: 10 },
           boxWidth: 12,
           boxHeight: 12,
-          generateLabels: function(chart: any) {
+          generateLabels: function(chart: Chart) {
             const currentLevel = drillDownPath[drillDownPath.length - 1];
 
             type LegendItem = {
@@ -1384,9 +1395,10 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               });
 
               // Добавляем все элементы прямых затрат с процентами
-              const total = chart.data.datasets[0].data.reduce((a: number, b: number) => a + b, 0);
-              chart.data.labels.forEach((label: string, i: number) => {
-                const value = chart.data.datasets[0].data[i];
+              const dataArr1 = chart.data.datasets[0].data as number[];
+              const total = dataArr1.reduce((a: number, b: number) => a + b, 0);
+              (chart.data.labels as string[]).forEach((label: string, i: number) => {
+                const value = dataArr1[i];
                 const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
                 labels.push({
                   text: `${label} (${percentage}%)`,
@@ -1416,9 +1428,10 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               });
 
               // Добавляем все элементы наценок с процентами
-              const totalMarkups = chart.data.datasets[0].data.reduce((a: number, b: number) => a + b, 0);
-              chart.data.labels.forEach((label: string, i: number) => {
-                const value = chart.data.datasets[0].data[i];
+              const dataArr2 = chart.data.datasets[0].data as number[];
+              const totalMarkups = dataArr2.reduce((a: number, b: number) => a + b, 0);
+              (chart.data.labels as string[]).forEach((label: string, i: number) => {
+                const value = dataArr2[i];
                 const percentage = totalMarkups > 0 ? ((value / totalMarkups) * 100).toFixed(1) : '0.0';
                 labels.push({
                   text: `${label} (${percentage}%)`,
@@ -1433,9 +1446,10 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
             }
 
             // Для всех остальных уровней (root, indicator, profit_breakdown) - стандартные метки с процентами
-            const total = chart.data.datasets[0].data.reduce((a: number, b: number) => a + b, 0);
-            return chart.data.labels.map((label: string, i: number) => {
-              const value = chart.data.datasets[0].data[i];
+            const dataArr3 = chart.data.datasets[0].data as number[];
+            const total = dataArr3.reduce((a: number, b: number) => a + b, 0);
+            return (chart.data.labels as string[]).map((label: string, i: number) => {
+              const value = dataArr3[i];
               const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
               return {
                 text: `${label} (${percentage}%)`,
@@ -1448,7 +1462,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           },
         },
         maxWidth: 200,
-        onClick: function(e: any, legendItem: any, legend: any) {
+        onClick: function(e: ChartEvent, legendItem: ChartLegendItem, legend: LegendElement<'doughnut'>) {
           // Игнорируем клики на заголовки и разделители
           if (legendItem.index < 0) return;
 
@@ -1457,19 +1471,19 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           const chart = legend.chart;
 
           // Вызываем handlePieClick программно
-          const elements = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, false);
+          const elements = chart.getElementsAtEventForMode(e as unknown as Event, 'nearest', { intersect: true }, false);
           if (elements.length === 0) {
             // Создаем псевдо-элемент для handlePieClick
-            handlePieClick(e, [{ index }]);
+            handlePieClick(e, [{ index, datasetIndex: 0, element: chart.getDatasetMeta(0).data[index] }]);
           }
         },
       },
       tooltip: {
         callbacks: {
-          label: function(context: any) {
+          label: function(context: TooltipItem<'doughnut'>) {
             const label = context.label || '';
-            const value = context.parsed || 0;
-            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+            const value = (context.parsed as number) || 0;
+            const total = (context.dataset.data as number[]).reduce((a: number, b: number) => a + b, 0);
             const percentage = ((value / total) * 100).toFixed(1);
             return `${label}: ${value.toLocaleString('ru-RU')} руб. (${percentage}%)`;
           }
@@ -1480,7 +1494,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   };
 
   // Обработчик клика по столбцу в барной диаграмме
-  const handleBarClick = async (_event: any, elements: any) => {
+  const handleBarClick = async (_event: ChartEvent, elements: ActiveElement[]) => {
     if (elements.length === 0) return;
 
     const clickedIndex = elements[0].index;
@@ -1639,7 +1653,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       },
       tooltip: {
         callbacks: {
-          label: function(context: any) {
+          label: function(context: TooltipItem<'bar'>) {
             const value = context.parsed.y || 0;
             return `Стоимость за м²: ${value.toLocaleString('ru-RU')} руб.`;
           }
@@ -1665,7 +1679,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           maxRotation: currentLevel.type === 'indicator' && breakdownData.length > 0 ? 0 : 0,
           minRotation: 0,
           autoSkip: false,
-          callback: function(value: any) {
+          callback: function(value: number) {
             const label = this.getLabelForValue(value);
             const maxLen = currentLevel.type === 'markups' ? 14 : 20;
             // Разбиваем длинные метки на несколько строк

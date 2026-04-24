@@ -250,7 +250,7 @@ export function useComparisonData() {
   const [comparisonData, setComparisonData] = useState<ComparisonRow[]>([]);
   const [costType, setCostType] = useState<CostType>('base');
 
-  const [rawItemsAll, setRawItemsAll] = useState<any[][] | null>(null);
+  const [rawItemsAll, setRawItemsAll] = useState<BoqItemForComparison[][] | null>(null);
   const [volumeMapsAll, setVolumeMapsAll] = useState<{ detailMap: Map<string, number>; groupMap: Map<string, number> }[] | null>(null);
   const [notesMap, setNotesMap] = useState<NotesMap>(new Map());
 

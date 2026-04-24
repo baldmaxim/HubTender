@@ -82,7 +82,7 @@ export const usePricingDistribution = () => {
 
   const updateDistributionField = useCallback((
     field: keyof PricingDistribution,
-    value: any
+    value: PricingDistribution[keyof PricingDistribution]
   ) => {
     setPricingDistribution(prev => {
       if (!prev) return null;

@@ -11,7 +11,7 @@ interface UnitsTabProps {
   currentPage: number;
   pageSize: number;
   onDelete: (record: UnitRecord) => void;
-  onSave: (values: any, editingCode?: string) => Promise<boolean>;
+  onSave: (values: { code?: string; name: string; category?: string; sort_order?: number; is_active?: boolean }, editingCode?: string) => Promise<boolean>;
   onPageChange: (page: number, newPageSize: number) => void;
 }
 
@@ -72,7 +72,7 @@ export const UnitsTab = forwardRef<UnitsTabRef, UnitsTabProps>(({
       key: 'index',
       width: 60,
       align: 'center',
-      render: (_: any, __: any, index: number) => (currentPage - 1) * pageSize + index + 1,
+      render: (_: unknown, __: unknown, index: number) => (currentPage - 1) * pageSize + index + 1,
     },
     {
       title: 'Наименование',
@@ -130,7 +130,7 @@ export const UnitsTab = forwardRef<UnitsTabRef, UnitsTabProps>(({
       key: 'action',
       width: 120,
       align: 'center',
-      render: (_: any, record: UnitRecord) => (
+      render: (_: unknown, record: UnitRecord) => (
         <Space size="small">
           <Tooltip title="Редактировать">
             <Button

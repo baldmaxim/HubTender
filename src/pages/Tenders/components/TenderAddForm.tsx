@@ -65,14 +65,14 @@ export const TenderAddForm: React.FC<TenderAddFormProps> = ({
 
       const nextSortOrder = maxData?.[0]?.sort_order ? maxData[0].sort_order + 1 : 1;
 
-      const chronologyItems = (values.chronology_items || []).map((item: any) => ({
-        date: item.date?.toISOString() || null,
+      const chronologyItems = (values.chronology_items || []).map((item: { date?: { toISOString?: () => string }; text?: string; type?: string }) => ({
+        date: item.date?.toISOString?.() || null,
         text: item.text,
         type: item.type || 'default',
       }));
 
-      const tenderPackageItems = (values.tender_package_items || []).map((item: any) => ({
-        date: item.date?.toISOString() || null,
+      const tenderPackageItems = (values.tender_package_items || []).map((item: { date?: { toISOString?: () => string }; text?: string; link?: string }) => ({
+        date: item.date?.toISOString?.() || null,
         text: item.text,
         link: item.link?.trim() || null,
       }));

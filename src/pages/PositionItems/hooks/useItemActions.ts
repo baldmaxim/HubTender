@@ -253,7 +253,7 @@ export const useItemActions = ({
   };
 
   const handleFormSave = async (
-    data: any,
+    data: Record<string, unknown>,
     expandedRowKeys: string[],
     items: BoqItemFull[],
     onSuccess: () => void

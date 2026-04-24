@@ -117,20 +117,20 @@ export const buildNomenclatureLookupKey = (name: string, unit: string): string =
   return `${normalizeForLookup(name)}|${normalizeForLookup(unit)}`;
 };
 
-export const parseNumber = (value: any): number | undefined => {
+export const parseNumber = (value: unknown): number | undefined => {
   if (value === null || value === undefined || value === '') return undefined;
   const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : Number(value);
   return isNaN(num) ? undefined : num;
 };
 
-export const parseBoolean = (value: any): boolean => {
+export const parseBoolean = (value: unknown): boolean => {
   if (!value) return false;
   const str = String(value).toLowerCase().trim();
   return str === 'да' || str === 'yes' || str === 'true' || str === '1';
 };
 
 // Нормализация номера позиции для сравнения
-export const normalizePositionNumber = (value: any): string => {
+export const normalizePositionNumber = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined || value === '') return '';
 
   // Приводим к строке и убираем пробелы

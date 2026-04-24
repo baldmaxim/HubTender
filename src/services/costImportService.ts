@@ -66,7 +66,7 @@ export const costImportService = {
 /**
  * Чтение Excel файла
  */
-async function readExcelFile(file: File): Promise<any[][] | null> {
+async function readExcelFile(file: File): Promise<unknown[][] | null> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
@@ -76,7 +76,7 @@ async function readExcelFile(file: File): Promise<any[][] | null> {
         const workbook = XLSX.read(data, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
 
         // Пропускаем заголовки и пустые строки
         const dataRows = jsonData.slice(1).filter(row => row && row.length >= 6);

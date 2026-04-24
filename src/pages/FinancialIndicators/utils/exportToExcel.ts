@@ -155,7 +155,7 @@ export function exportFinancialIndicatorsToExcel(
       const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
       if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' };
 
-      let cellStyle: any;
+      let cellStyle: Record<string, unknown>;
 
       // Определяем стиль в зависимости от типа строки
       if (rowData.is_header) {

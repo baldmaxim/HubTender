@@ -111,7 +111,7 @@ export const useBoqItems = (positionId: string | undefined) => {
     sortedItems.slice(0, 3).forEach((item, index) => {
       console.log(`  ${index}:`, {
         sort_number: item.sort_number,
-        name: (item as any).work_names?.name || (item as any).material_names?.name,
+        name: (item as { work_names?: { name?: string }; material_names?: { name?: string } }).work_names?.name || (item as { work_names?: { name?: string }; material_names?: { name?: string } }).material_names?.name,
         type: item.boq_item_type,
       });
     });
@@ -140,7 +140,7 @@ export const useBoqItems = (positionId: string | undefined) => {
     result.slice(0, 3).forEach((item, index) => {
       console.log(`  ${index}:`, {
         sort_number: item.sort_number,
-        name: (item as any).work_names?.name || (item as any).material_names?.name,
+        name: (item as { work_names?: { name?: string }; material_names?: { name?: string } }).work_names?.name || (item as { work_names?: { name?: string }; material_names?: { name?: string } }).material_names?.name,
         type: item.boq_item_type,
       });
     });
@@ -235,7 +235,7 @@ export const useBoqItems = (positionId: string | undefined) => {
         }, {} as Record<string, number>);
       }
 
-      const formattedItems: BoqItemFull[] = (data || []).map((item: any) => {
+      const formattedItems: BoqItemFull[] = (data || []).map((item) => {
         let detailCostCategoryFull = '-';
         if (item.detail_cost_categories) {
           const categoryName = item.detail_cost_categories.cost_categories?.name || '';
@@ -293,7 +293,7 @@ export const useBoqItems = (positionId: string | undefined) => {
 
       if (error) throw error;
 
-      const formatted: WorkLibraryFull[] = (data || []).map((item: any) => ({
+      const formatted: WorkLibraryFull[] = (data || []).map((item) => ({
         ...item,
         work_name: item.work_names?.name,
         unit: item.work_names?.unit,
@@ -314,7 +314,7 @@ export const useBoqItems = (positionId: string | undefined) => {
 
       if (error) throw error;
 
-      const formatted: MaterialLibraryFull[] = (data || []).map((item: any) => ({
+      const formatted: MaterialLibraryFull[] = (data || []).map((item) => ({
         ...item,
         material_name: item.material_names?.name,
         unit: item.material_names?.unit,
@@ -342,13 +342,15 @@ export const useBoqItems = (positionId: string | undefined) => {
       if (templatesError) throw templatesError;
 
       // Преобразуем данные, добавляя detail_cost_category_full
-      const templatesWithCategories = (templatesData || []).map((template: any) => {
+      const templatesWithCategories = (templatesData || []).map((template) => {
         let detailCostCategoryFull = null;
 
         if (template.detail_cost_categories) {
-          const categoryName = template.detail_cost_categories.cost_categories?.name || '';
-          const detailName = template.detail_cost_categories.name || '';
-          const location = template.detail_cost_categories.location || '';
+          const dcc = Array.isArray(template.detail_cost_categories) ? template.detail_cost_categories[0] : template.detail_cost_categories;
+          const cc = Array.isArray(dcc?.cost_categories) ? dcc.cost_categories[0] : dcc?.cost_categories;
+          const categoryName = cc?.name || '';
+          const detailName = dcc?.name || '';
+          const location = dcc?.location || '';
           detailCostCategoryFull = `${categoryName} / ${detailName} / ${location}`;
         }
 
@@ -381,12 +383,15 @@ export const useBoqItems = (positionId: string | undefined) => {
 
       if (error) throw error;
 
-      const options = (data || []).map((item: any) => ({
-        value: item.id,
-        label: `${item.cost_categories?.name} / ${item.name} / ${item.location}`,
-        cost_category_name: item.cost_categories?.name || '',
-        location: item.location || '',
-      }));
+      const options = (data || []).map((item) => {
+        const ccat = Array.isArray(item.cost_categories) ? item.cost_categories[0] : item.cost_categories;
+        return {
+          value: item.id,
+          label: `${ccat?.name} / ${item.name} / ${item.location}`,
+          cost_category_name: ccat?.name || '',
+          location: item.location || '',
+        };
+      });
 
       setCostCategories(options);
     } catch (error) {

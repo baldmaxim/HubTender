@@ -147,8 +147,9 @@ const Bsm: React.FC = () => {
         .select('id, name, location, cost_categories(name)');
 
       const expenseMap = new Map<string, string>();
-      (categories || []).forEach((cat: any) => {
-        const catName = cat.cost_categories?.name || '';
+      (categories || []).forEach((cat) => {
+        const cc = Array.isArray(cat.cost_categories) ? cat.cost_categories[0] : cat.cost_categories;
+        const catName = cc?.name || '';
         const label = [catName, cat.name, cat.location].filter(Boolean).join(' / ');
         expenseMap.set(cat.id, label);
       });
@@ -389,7 +390,7 @@ const Bsm: React.FC = () => {
       let updatedCount = 0;
 
       for (const sourceItem of itemsWithLinks) {
-        const matchingItems = boqItems?.filter((targetItem: any) => {
+        const matchingItems = boqItems?.filter((targetItem) => {
           // Совпадение по виду строки
           if (targetItem.boq_item_type !== sourceItem.boq_item_type) return false;
 

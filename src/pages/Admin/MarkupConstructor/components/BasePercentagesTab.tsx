@@ -47,7 +47,7 @@ export const BasePercentagesTab: React.FC<BasePercentagesTabProps> = ({
     {
       title: '№',
       width: 60,
-      render: (_: any, __: any, index: number) => index + 1,
+      render: (_: unknown, __: unknown, index: number) => index + 1,
     },
     {
       title: 'Название параметра',
@@ -97,7 +97,7 @@ export const BasePercentagesTab: React.FC<BasePercentagesTabProps> = ({
     {
       title: 'Порядок',
       width: 120,
-      render: (_: any, record: MarkupParameter, index: number) => (
+      render: (_: unknown, record: MarkupParameter, index: number) => (
         <Space>
           <Button
             size="small"
@@ -117,7 +117,7 @@ export const BasePercentagesTab: React.FC<BasePercentagesTabProps> = ({
     {
       title: 'Действия',
       width: 100,
-      render: (_: any, record: MarkupParameter) => (
+      render: (_: unknown, record: MarkupParameter) => (
         <Button
           danger
           size="small"

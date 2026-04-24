@@ -71,32 +71,45 @@ const sortItemsByHierarchy = (items: TemplateItemWithDetails[]): TemplateItemWit
   return result;
 };
 
-const formatItem = (item: any, parentWorkName?: string): TemplateItemWithDetails => {
+type RawTemplateItem = {
+  detail_cost_categories?: { name?: string; location?: string; cost_categories?: { name?: string } | Array<{ name?: string }> } | null;
+  works_library?: { work_names?: { name?: string; unit?: string } | Array<{ name?: string; unit?: string }>; item_type?: string; unit_rate?: number; currency_type?: string } | null;
+  materials_library?: { material_names?: { name?: string; unit?: string } | Array<{ name?: string; unit?: string }>; item_type?: string; material_type?: string; consumption_coefficient?: number; unit_rate?: number; currency_type?: string; delivery_price_type?: string; delivery_amount?: number } | null;
+  [key: string]: unknown;
+};
+
+const formatItem = (item: RawTemplateItem, parentWorkName?: string): TemplateItemWithDetails => {
   let detailCostCategoryFull: string | undefined;
-  if (item.detail_cost_categories) {
-    const cat = item.detail_cost_categories.cost_categories?.name || '';
-    const det = item.detail_cost_categories.name || '';
-    const loc = item.detail_cost_categories.location || '';
+  const dcc = item.detail_cost_categories;
+  if (dcc) {
+    const costCats = Array.isArray(dcc.cost_categories) ? dcc.cost_categories[0] : dcc.cost_categories;
+    const cat = costCats?.name || '';
+    const det = dcc.name || '';
+    const loc = dcc.location || '';
     detailCostCategoryFull = `${cat} / ${det} / ${loc}`;
   }
+  const wl = item.works_library;
+  const wn = wl ? (Array.isArray(wl.work_names) ? wl.work_names[0] : wl.work_names) : undefined;
+  const ml = item.materials_library;
+  const mn = ml ? (Array.isArray(ml.material_names) ? ml.material_names[0] : ml.material_names) : undefined;
   return {
-    ...item,
-    work_name: item.works_library?.work_names?.name,
-    work_unit: item.works_library?.work_names?.unit,
-    work_item_type: item.works_library?.item_type,
-    work_unit_rate: item.works_library?.unit_rate,
-    work_currency_type: item.works_library?.currency_type,
-    material_name: item.materials_library?.material_names?.name,
-    material_unit: item.materials_library?.material_names?.unit,
-    material_item_type: item.materials_library?.item_type,
-    material_type: item.materials_library?.material_type,
-    material_consumption_coefficient: item.materials_library?.consumption_coefficient,
-    material_unit_rate: item.materials_library?.unit_rate,
-    material_currency_type: item.materials_library?.currency_type,
-    material_delivery_price_type: item.materials_library?.delivery_price_type,
-    material_delivery_amount: item.materials_library?.delivery_amount,
+    ...(item as unknown as TemplateItem),
+    work_name: wn?.name,
+    work_unit: wn?.unit,
+    work_item_type: wl?.item_type,
+    work_unit_rate: wl?.unit_rate,
+    work_currency_type: wl?.currency_type,
+    material_name: mn?.name,
+    material_unit: mn?.unit,
+    material_item_type: ml?.item_type,
+    material_type: ml?.material_type,
+    material_consumption_coefficient: ml?.consumption_coefficient,
+    material_unit_rate: ml?.unit_rate,
+    material_currency_type: ml?.currency_type,
+    material_delivery_price_type: ml?.delivery_price_type,
+    material_delivery_amount: ml?.delivery_amount,
     parent_work_name: parentWorkName,
-    detail_cost_category_name: item.detail_cost_categories?.name,
+    detail_cost_category_name: dcc?.name,
     detail_cost_category_full: detailCostCategoryFull,
   };
 };
@@ -124,12 +137,15 @@ export const useTemplateItems = () => {
 
       const raw = data || [];
       // Строим Map для поиска родительских имён за O(n)
-      const idToWork = new Map<string, any>(
-        raw.filter(i => i.kind === 'work').map(i => [i.id, i])
+      const rawItems = raw as unknown as RawTemplateItem[];
+      const idToWork = new Map<string, RawTemplateItem>(
+        rawItems.filter(i => i.kind === 'work').map(i => [i.id as string, i])
       );
-      const formatted = raw.map(item => {
-        const parent = item.parent_work_item_id ? idToWork.get(item.parent_work_item_id) : undefined;
-        return formatItem(item, parent?.works_library?.work_names?.name);
+      const formatted = rawItems.map(item => {
+        const parent = item.parent_work_item_id ? idToWork.get(item.parent_work_item_id as string) : undefined;
+        const wn = parent?.works_library;
+        const wnNames = wn ? (Array.isArray(wn.work_names) ? wn.work_names[0] : wn.work_names) : undefined;
+        return formatItem(item, wnNames?.name);
       });
 
       setLoadedTemplateItems(prev => ({ ...prev, [templateId]: sortItemsByHierarchy(formatted) }));

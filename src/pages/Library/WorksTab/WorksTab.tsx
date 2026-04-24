@@ -4,7 +4,7 @@ import {
   FolderOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
   AppstoreOutlined, FileOutlined,
 } from '@ant-design/icons';
-import type { LibraryFolder } from '../../../lib/supabase';
+import type { LibraryFolder, WorkLibraryFull } from '../../../lib/supabase';
 import { useWorksData } from './hooks/useWorksData';
 import { useWorksActions } from './hooks/useWorksActions';
 import { WorksAddForm } from './components/WorksAddForm';
@@ -17,8 +17,11 @@ interface WorksTabProps {
 }
 
 type FolderRow = LibraryFolder & { _type: 'folder' };
+type TableRow = FolderRow | WorkLibraryFull;
 
-const WorksTab = forwardRef<any, WorksTabProps>((props, ref) => {
+export type WorksTabHandle = { handleAdd: () => void };
+
+const WorksTab = forwardRef<WorksTabHandle, WorksTabProps>((props, ref) => {
   const { searchText } = props;
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
@@ -91,17 +94,20 @@ const WorksTab = forwardRef<any, WorksTabProps>((props, ref) => {
     if (activeFolder === folderId) setActiveFolder(null);
   };
 
-  const getRowClassName = (record: any) => {
-    if (record._type === 'folder') {
+  const getRowClassName = (record: TableRow) => {
+    if ('_type' in record && record._type === 'folder') {
       return activeFolder === record.id ? 'folder-row folder-row-active' : 'folder-row';
     }
-    if (actions.isEditing(record)) return 'editable-row';
-    switch (record.item_type) {
-      case 'раб': return 'work-row-rab';
-      case 'суб-раб': return 'work-row-sub-rab';
-      case 'раб-комп.': return 'work-row-rab-comp';
-      default: return '';
+    if (actions.isEditing(record as WorkLibraryFull)) return 'editable-row';
+    if ('item_type' in record) {
+      switch ((record as WorkLibraryFull).item_type) {
+        case 'раб': return 'work-row-rab';
+        case 'суб-раб': return 'work-row-sub-rab';
+        case 'раб-комп.': return 'work-row-rab-comp';
+        default: return '';
+      }
     }
+    return '';
   };
 
   const baseColumns = getWorksTableColumns({
@@ -116,15 +122,17 @@ const WorksTab = forwardRef<any, WorksTabProps>((props, ref) => {
     selectedUnit: actions.selectedUnit,
   });
 
-  const mergedColumns = baseColumns.map((col: any) => {
+  type AntColumn = Record<string, unknown>;
+
+  const mergedColumns = (baseColumns as AntColumn[]).map((col) => {
     if (!col.editable) return col;
     return {
       ...col,
-      onCell: (record: any) => ({
+      onCell: (record: TableRow) => ({
         record,
         dataIndex: col.dataIndex,
         title: col.title,
-        editing: actions.isEditing(record),
+        editing: actions.isEditing(record as WorkLibraryFull),
         workNames,
         onWorkNameSelect: actions.handleWorkNameSelect,
       }),
@@ -132,14 +140,14 @@ const WorksTab = forwardRef<any, WorksTabProps>((props, ref) => {
   });
 
   // Override columns to handle folder rows
-  const finalColumns = mergedColumns.map((col: any) => ({
+  const finalColumns = mergedColumns.map((col) => ({
     ...col,
-    onCell: (record: any) => {
-      if (record._type === 'folder') return {};
-      return col.onCell ? col.onCell(record) : {};
+    onCell: (record: TableRow) => {
+      if ('_type' in record && record._type === 'folder') return {};
+      return typeof col.onCell === 'function' ? col.onCell(record) : {};
     },
-    render: (value: any, record: any, index: number) => {
-      if (record._type === 'folder') {
+    render: (value: unknown, record: TableRow, index: number) => {
+      if ('_type' in record && record._type === 'folder') {
         if (col.dataIndex === 'work_name') {
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -185,7 +193,7 @@ const WorksTab = forwardRef<any, WorksTabProps>((props, ref) => {
         }
         return null;
       }
-      return col.render ? col.render(value, record, index) : value;
+      return typeof col.render === 'function' ? (col.render as (v: unknown, r: TableRow, i: number) => unknown)(value, record, index) : value;
     },
   }));
 
@@ -270,21 +278,21 @@ const WorksTab = forwardRef<any, WorksTabProps>((props, ref) => {
           rowSelection={{
             selectedRowKeys,
             onChange: keys => setSelectedRowKeys(keys),
-            getCheckboxProps: (record: any) => ({
-              disabled: record._type === 'folder',
-              style: record._type === 'folder' ? { display: 'none' } : undefined,
+            getCheckboxProps: (record: TableRow) => ({
+              disabled: '_type' in record && record._type === 'folder',
+              style: '_type' in record && record._type === 'folder' ? { display: 'none' } : undefined,
             }),
           }}
           dataSource={tableData}
           columns={finalColumns}
           rowClassName={getRowClassName}
-          onRow={(record: any) => ({
+          onRow={(record: TableRow) => ({
             onClick: () => {
-              if (record._type === 'folder') {
+              if ('_type' in record && record._type === 'folder') {
                 setActiveFolder(activeFolder === record.id ? null : record.id);
               }
             },
-            style: { cursor: record._type === 'folder' ? 'pointer' : undefined },
+            style: { cursor: '_type' in record && record._type === 'folder' ? 'pointer' : undefined },
           })}
           pagination={{
             current: currentPage,

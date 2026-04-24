@@ -230,7 +230,7 @@ export async function initializeTestMarkup(tenderId?: string) {
 
 // Экспортируем для использования в консоли браузера
 if (typeof window !== 'undefined') {
-  (window as any).initializeTestMarkup = initializeTestMarkup;
+  (window as unknown as Record<string, unknown>).initializeTestMarkup = initializeTestMarkup;
   console.log('Для инициализации тестовых данных выполните в консоли:');
   console.log('window.initializeTestMarkup()');
 }

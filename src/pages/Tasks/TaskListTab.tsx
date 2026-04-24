@@ -140,7 +140,7 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
       key: 'tender_title',
       align: 'left' as const,
       width: 200,
-      render: (_: any, record: UserTaskWithRelations) => record.tender?.title || 'Прочее',
+      render: (_: unknown, record: UserTaskWithRelations) => record.tender?.title || 'Прочее',
     },
     {
       title: 'Описание задачи',
@@ -153,7 +153,7 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
       key: 'actions',
       align: 'center' as const,
       width: 19,
-      render: (_: any, record: UserTaskWithRelations) => {
+      render: (_: unknown, record: UserTaskWithRelations) => {
         const isRunning = record.task_status === 'running';
 
         return (

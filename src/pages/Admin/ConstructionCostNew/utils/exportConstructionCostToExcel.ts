@@ -51,7 +51,8 @@ async function fetchOppositeCosts(
 
   const oppositeCostMap = new Map<string, OppositeCosts>();
 
-  (oppositeBOQItems || []).forEach((item: any) => {
+  type OppItem = { detail_cost_category_id: string | null; boq_item_type: string | null; total_amount?: number | null; total_commercial_material_cost?: number | null; total_commercial_work_cost?: number | null };
+  (oppositeBOQItems as unknown as OppItem[] || []).forEach((item) => {
     const catId = item.detail_cost_category_id;
     if (!catId) return;
 
@@ -667,7 +668,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[]): void {
       }
 
       // Выравнивание
-      const alignment: any = { vertical: 'center' };
+      const alignment: Record<string, unknown> = { vertical: 'center' };
       if (rowType === 'header' || rowType === 'subheader') {
         alignment.horizontal = 'center';
       } else if (C === 1) {
@@ -685,7 +686,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[]): void {
       }
 
       // Жирный шрифт и цвет
-      const font: any = {};
+      const font: Record<string, unknown> = {};
       if (rowType === 'header' || rowType === 'subheader') {
         font.bold = true;
       } else if (rowType === 'category' || rowType === 'location') {

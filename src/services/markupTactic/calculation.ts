@@ -373,15 +373,15 @@ function filterVATFromSequence(
     }
 
     // Вариант 2: шаг с числовым множителем НДС (operand1Type="number", имя содержит "НДС")
-    const stepName = ((step as any).name || '').toLowerCase();
+    const stepName = (step.name || '').toLowerCase();
     if (stepName.includes('ндс') || stepName.includes('nds') || stepName.includes('vat')) {
       // Извлекаем коэффициент НДС из числового операнда
       const operandTypes = [
-        { key: step.operand1Key, type: (step as any).operand1Type },
-        { key: step.operand2Key, type: (step as any).operand2Type },
-        { key: step.operand3Key, type: (step as any).operand3Type },
-        { key: step.operand4Key, type: (step as any).operand4Type },
-        { key: step.operand5Key, type: (step as any).operand5Type },
+        { key: step.operand1Key, type: step.operand1Type },
+        { key: step.operand2Key, type: step.operand2Type },
+        { key: step.operand3Key, type: step.operand3Type },
+        { key: step.operand4Key, type: step.operand4Type },
+        { key: step.operand5Key, type: step.operand5Type },
       ];
 
       for (const op of operandTypes) {

@@ -44,8 +44,8 @@ export const TenderTable: React.FC<TenderTableProps> = ({
       key: 'index',
       width: 80,
       align: 'center' as const,
-      render: (_: any, record: TenderRegistryWithRelations, index: number) => {
-        const statusName = (record.status as any)?.name;
+      render: (_: unknown, record: TenderRegistryWithRelations, index: number) => {
+        const statusName = (record.status as { name?: string } | null | undefined)?.name;
         const color = getStatusColor(statusName);
 
         return (
@@ -118,7 +118,7 @@ export const TenderTable: React.FC<TenderTableProps> = ({
             key: 'actions',
             width: 150,
             align: 'center' as const,
-            render: (_: any, record: TenderRegistryWithRelations, index: number) => (
+            render: (_: unknown, record: TenderRegistryWithRelations, index: number) => (
               <Space size="small">
                 {!isArchiveTab && (
                   <>

@@ -433,7 +433,7 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
                         {
                           title: '→ В базе данных',
                           key: 'mapping',
-                          render: (_: any, row: { excelUnit: string }) => (
+                          render: (_: unknown, row: { excelUnit: string }) => (
                             <Select
                               showSearch
                               style={{ width: 220 }}
@@ -455,7 +455,7 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
                           title: 'Статус',
                           key: 'status',
                           width: 100,
-                          render: (_: any, row: { excelUnit: string }) =>
+                          render: (_: unknown, row: { excelUnit: string }) =>
                             unitMappings[row.excelUnit]
                               ? <Tag color="success">✓ Сопоставлено</Tag>
                               : <Tag color="warning">Не задано</Tag>,

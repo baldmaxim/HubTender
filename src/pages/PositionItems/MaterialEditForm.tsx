@@ -1,13 +1,32 @@
 import { useState, useEffect } from 'react';
 import { Button, Select, AutoComplete, InputNumber, Input, message, Tag } from 'antd';
 import { CloseOutlined, SaveOutlined, LinkOutlined } from '@ant-design/icons';
-import type { BoqItemFull, CurrencyType, MaterialName } from '../../lib/supabase';
+import type { BoqItemFull, CurrencyType, MaterialName, BoqItemType, MaterialType, DeliveryPriceType } from '../../lib/supabase';
 
 interface CostCategoryOption {
   value: string;
   label: string;
   cost_category_name: string;
   location: string;
+}
+
+interface MaterialFormData {
+  boq_item_type: BoqItemType;
+  material_type: MaterialType;
+  material_name_id: string | null;
+  unit_code: string | null;
+  parent_work_item_id: string | null;
+  consumption_coefficient: number;
+  conversion_coefficient: number;
+  base_quantity: number;
+  quantity: number;
+  unit_rate: number;
+  currency_type: CurrencyType;
+  delivery_price_type: DeliveryPriceType;
+  delivery_amount: number;
+  detail_cost_category_id: string | null;
+  quote_link: string;
+  description: string;
 }
 
 interface MaterialEditFormProps {
@@ -17,7 +36,7 @@ interface MaterialEditFormProps {
   costCategories: CostCategoryOption[];
   currencyRates: { usd: number; eur: number; cny: number };
   gpVolume: number; // Количество ГП из позиции заказчика
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Record<string, unknown>) => Promise<void>;
   onCancel: () => void;
   readOnly?: boolean;
 }
@@ -69,7 +88,7 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
   onCancel,
   readOnly,
 }) => {
-  const [formData, setFormData] = useState<any>({
+  const [formData, setFormData] = useState<MaterialFormData>({
     boq_item_type: record.boq_item_type,
     material_type: record.material_type || 'основн.',
     material_name_id: record.material_name_id,
@@ -172,7 +191,7 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
     }
 
     const newQuantity = calculateQuantity();
-    setFormData((prev: any) => ({ ...prev, quantity: newQuantity }));
+    setFormData((prev) => ({ ...prev, quantity: newQuantity }));
     // calculateQuantity and isManualQuantity are defined in this component; excluded to avoid refetch loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -208,7 +227,7 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
     }
 
     // Подготовить данные для сохранения
-    const dataToSave: any = {
+    const dataToSave: MaterialFormData = {
       ...formData,
     };
 
@@ -248,9 +267,8 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
     // Для непривязанных материалов всегда применять коэффициент расхода к итоговой сумме
     const consumptionCoeff = !dataToSave.parent_work_item_id ? (formData.consumption_coefficient || 1) : 1;
     const totalAmount = dataToSave.quantity * consumptionCoeff * (formData.unit_rate * rate + deliveryPrice);
-    dataToSave.total_amount = totalAmount; // Сохраняем в БД с полной точностью (5 знаков)
 
-    await onSave(dataToSave);
+    await onSave({ ...(dataToSave as unknown as Record<string, unknown>), total_amount: totalAmount });
   };
 
   // Получить опции для AutoComplete затрат
@@ -326,13 +344,13 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
                 unit_code: null,
               });
             }}
-            onSelect={(_value, option: any) => {
+            onSelect={(_value, option: { id?: string; label?: string; unit?: string }) => {
               setFormData({
                 ...formData,
-                material_name_id: option.id,
-                unit_code: option.unit,
+                material_name_id: option.id ?? null,
+                unit_code: option.unit ?? null,
               });
-              setMaterialSearchText(option.label);
+              setMaterialSearchText(option.label ?? '');
             }}
             onClear={() => {
               setMaterialSearchText('');
@@ -474,7 +492,7 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
             style={{ width: '100%' }}
             size="small"
             formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-            parser={(value) => value!.replace(/\s/g, '').replace(/,/g, '.')}
+            parser={(value) => parseFloat(value!.replace(/\s/g, '').replace(/,/g, '.'))}
           />
         </div>
 
@@ -528,7 +546,7 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
               style={{ width: '100%' }}
               size="small"
               formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-              parser={(value) => value!.replace(/\s/g, '').replace(/,/g, '.')}
+              parser={(value) => parseFloat(value!.replace(/\s/g, '').replace(/,/g, '.'))}
             />
           </div>
         )}
@@ -554,12 +572,12 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
             onChange={(value) => {
               setCostSearchText(value);
             }}
-            onSelect={(_value, option: any) => {
+            onSelect={(_value, option: { id?: string; label?: string }) => {
               setFormData({
                 ...formData,
-                detail_cost_category_id: option.id,
+                detail_cost_category_id: option.id ?? null,
               });
-              setCostSearchText(option.label);
+              setCostSearchText(option.label ?? '');
             }}
             options={getCostCategoryOptions()}
             placeholder="Выберите затрату на строительство"

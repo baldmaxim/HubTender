@@ -206,9 +206,11 @@ const MarkupPercentages: React.FC = () => {
       });
 
       if (data && data.length > 0) {
-        data.forEach((record: any) => {
-          if (record.markup_parameter) {
-            markupValues[record.markup_parameter.key] = record.value || 0;
+        data.forEach((record) => {
+          const mp = record.markup_parameter;
+          const p = Array.isArray(mp) ? mp[0] : mp;
+          if (p) {
+            markupValues[p.key] = record.value || 0;
           }
         });
         setCurrentMarkupId(tenderId);

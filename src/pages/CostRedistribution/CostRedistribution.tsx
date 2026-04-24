@@ -65,7 +65,7 @@ const CostRedistribution: React.FC = () => {
 
   // Формируем Map для быстрого доступа к BOQ элементам
   const boqItemsMap = useMemo(() => {
-    const map = new Map<string, any>();
+    const map = new Map<string, (typeof boqItems)[number]>();
     for (const item of boqItems) {
       map.set(item.id, item);
     }
@@ -229,13 +229,13 @@ const CostRedistribution: React.FC = () => {
           setResults(results);
 
           // Восстановить rules и targets из первой записи (все имеют одинаковые правила)
-          const redistributionRules = savedData.redistributionRules as any;
+          const redistributionRules = savedData.redistributionRules as unknown as Record<string, unknown> | null | undefined;
           if (redistributionRules) {
             if (redistributionRules.deductions) {
-              setRules(redistributionRules.deductions);
+              setRules(redistributionRules.deductions as Parameters<typeof setRules>[0]);
             }
             if (redistributionRules.targets) {
-              setTargets(redistributionRules.targets);
+              setTargets(redistributionRules.targets as Parameters<typeof setTargets>[0]);
             }
             const positionAdjustment = redistributionRules.position_adjustment as
               | PositionAdjustmentRule

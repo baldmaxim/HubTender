@@ -59,7 +59,7 @@ export const useMaterials = () => {
         }
       }
 
-      const formattedData: MaterialRecord[] = allMaterials.map((item: any) => ({
+      const formattedData: MaterialRecord[] = allMaterials.map((item) => ({
         key: item.id,
         id: item.id,
         name: item.name,
@@ -77,7 +77,7 @@ export const useMaterials = () => {
     }
   };
 
-  const saveMaterial = async (values: any, editingMaterialId?: string) => {
+  const saveMaterial = async (values: { name: string; unit: string }, editingMaterialId?: string) => {
     try {
       if (editingMaterialId) {
         // Валидация: проверить что unit существует в справочнике

@@ -85,7 +85,7 @@ const EmployeeTasksTab: React.FC<EmployeeTasksTabProps> = ({ searchUserId }) => 
       title: <div style={{ textAlign: 'center' }}>Наименование проекта</div>,
       key: 'tender_title',
       align: 'center' as const,
-      render: (_: any, record: UserTaskWithRelations) => record.tender?.title || 'Прочее',
+      render: (_: unknown, record: UserTaskWithRelations) => record.tender?.title || 'Прочее',
       sorter: (a: UserTaskWithRelations, b: UserTaskWithRelations) =>
         (a.tender?.title || 'Прочее').localeCompare(b.tender?.title || 'Прочее'),
     },

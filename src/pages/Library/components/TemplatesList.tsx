@@ -44,7 +44,7 @@ interface TemplatesListProps {
   openedTemplate: string | null;
   setOpenedTemplate: (id: string | null) => void;
   editingTemplate: string | null;
-  editingTemplateForm: any;
+  editingTemplateForm: import('antd').FormInstance;
   editingTemplateCostCategorySearchText: string;
   setEditingTemplateCostCategorySearchText: (text: string) => void;
   editingItems: TemplateItemWithDetails[];
@@ -69,8 +69,8 @@ interface TemplatesListProps {
   materials: MaterialLibraryFull[];
   onAddWorkToTemplate: (templateId: string) => void;
   onAddMaterialToTemplate: (templateId: string) => void;
-  getColumns: any;
-  getRowClassName: any;
+  getColumns: (isEditing: boolean, items: TemplateItemWithDetails[], templateId?: string, isEditingTemplate?: boolean, isEditingItems?: boolean) => unknown[];
+  getRowClassName: (record: TemplateItemWithDetails) => string;
   folders?: LibraryFolder[];
   onMoveTemplate?: (templateId: string, folderId: string | null) => void;
   selectedTemplateIds?: Set<string>;
@@ -169,7 +169,7 @@ export const TemplatesList: React.FC<TemplatesListProps> = ({
                   placeholder="Затрата на строительство..."
                   value={editingTemplateCostCategorySearchText}
                   onChange={setEditingTemplateCostCategorySearchText}
-                  onSelect={(value, option: any) => {
+                  onSelect={(value, option: { id?: string }) => {
                     setEditingTemplateCostCategorySearchText(value);
                     editingTemplateForm.setFieldValue('detail_cost_category_id', option.id);
                   }}
@@ -352,9 +352,9 @@ export const TemplatesList: React.FC<TemplatesListProps> = ({
                             .map(w => ({ value: `${w.work_name} (${w.unit})`, id: w.id, label: `${w.work_name} (${w.unit})` }))}
                           value={editingWorkSearchText}
                           onChange={setEditingWorkSearchText}
-                          onSelect={(value, option: any) => {
+                          onSelect={(value, option: { id?: string }) => {
                             setEditingWorkSearchText(value);
-                            setEditingSelectedWork(option.id);
+                            setEditingSelectedWork(option.id ?? null);
                           }}
                           placeholder="Введите работу (2+ символа)..."
                           filterOption={false}
@@ -372,9 +372,9 @@ export const TemplatesList: React.FC<TemplatesListProps> = ({
                             .map(m => ({ value: `${m.material_name} (${m.unit})`, id: m.id, label: `${m.material_name} (${m.unit})` }))}
                           value={editingMaterialSearchText}
                           onChange={setEditingMaterialSearchText}
-                          onSelect={(value, option: any) => {
+                          onSelect={(value, option: { id?: string }) => {
                             setEditingMaterialSearchText(value);
-                            setEditingSelectedMaterial(option.id);
+                            setEditingSelectedMaterial(option.id ?? null);
                           }}
                           placeholder="Введите материал (2+ символа)..."
                           filterOption={false}

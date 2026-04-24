@@ -90,9 +90,9 @@ async function loadAllBoqItemsForTender(tenderId: string): Promise<Map<string, B
   }
 
   // Дедуплицировать по ID (LEFT JOIN может возвращать дубликаты)
-  const uniqueItems = new Map<string, any>();
+  const uniqueItems = new Map<string, BoqItemFull>();
 
-  allItems.forEach((item: any) => {
+  allItems.forEach((item) => {
     if (!uniqueItems.has(item.id)) {
       uniqueItems.set(item.id, item);
     }
@@ -101,7 +101,7 @@ async function loadAllBoqItemsForTender(tenderId: string): Promise<Map<string, B
   // Группировать по client_position_id
   const itemsByPosition = new Map<string, BoqItemFull[]>();
 
-  uniqueItems.forEach((item: any) => {
+  uniqueItems.forEach((item) => {
     const positionId = item.client_position_id;
     if (!itemsByPosition.has(positionId)) {
       itemsByPosition.set(positionId, []);
@@ -144,7 +144,7 @@ function sortItemsByHierarchy(items: BoqItemFull[], positionName?: string): BoqI
   console.log(`Всего элементов: ${items.length}`);
   console.log('Первые 10 элементов ДО сортировки (по sort_number из БД):');
   items.slice(0, 10).forEach((item, idx) => {
-    const name = (item as any).work_names?.name || (item as any).material_names?.name || 'N/A';
+    const name = (item as { work_names?: { name?: string }; material_names?: { name?: string } }).work_names?.name || (item as { work_names?: { name?: string }; material_names?: { name?: string } }).material_names?.name || 'N/A';
     console.log(`  ${idx}: [sort=${item.sort_number}] ${name} (${item.boq_item_type})`);
   });
 
@@ -181,7 +181,7 @@ function sortItemsByHierarchy(items: BoqItemFull[], positionName?: string): BoqI
   // ЛОГИРОВАНИЕ: Порядок элементов ПОСЛЕ сортировки
   console.log('Первые 10 элементов ПОСЛЕ сортировки (финальный порядок для Excel):');
   result.slice(0, 10).forEach((item, idx) => {
-    const name = (item as any).work_names?.name || (item as any).material_names?.name || 'N/A';
+    const name = (item as { work_names?: { name?: string }; material_names?: { name?: string } }).work_names?.name || (item as { work_names?: { name?: string }; material_names?: { name?: string } }).material_names?.name || 'N/A';
     console.log(`  ${idx}: [sort=${item.sort_number}] ${name} (${item.boq_item_type})`);
   });
   console.log('=== КОНЕЦ СОРТИРОВКИ ===\n');

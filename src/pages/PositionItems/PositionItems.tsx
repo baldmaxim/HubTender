@@ -86,11 +86,11 @@ const PositionItems: React.FC = () => {
     return items.reduce((sum, item) => sum + (item.total_amount || 0), 0);
   }, [items]);
 
-  const handleEditClick = (record: any) => {
+  const handleEditClick = (record: { id: string }) => {
     setExpandedRowKeys([record.id]);
   };
 
-  const onFormSave = async (data: any) => {
+  const onFormSave = async (data: Record<string, unknown>) => {
     await handleFormSave(data, expandedRowKeys, items, () => setExpandedRowKeys([]));
   };
 
@@ -437,9 +437,9 @@ const PositionItems: React.FC = () => {
                             <AutoComplete
                               value={costSearchText}
                               onChange={(value) => setCostSearchText(value)}
-                              onSelect={(value, option: any) => {
-                                setSelectedCostCategoryId(option.id);
-                                setCostSearchText(option.label);
+                              onSelect={(_value, option: { id?: string; label?: string }) => {
+                                setSelectedCostCategoryId(option.id ?? null);
+                                setCostSearchText(option.label ?? '');
                               }}
                               options={getCostCategoryOptions()}
                               placeholder="Выберите затрату на строительство"

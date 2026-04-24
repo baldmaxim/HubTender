@@ -23,52 +23,13 @@ import {
   Table
 } from 'antd';
 import { SaveOutlined, ReloadOutlined, PlusOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, EditOutlined, CloseOutlined, ArrowLeftOutlined, CheckOutlined, CopyOutlined } from '@ant-design/icons';
-import { supabase, Tender, MarkupParameter, MarkupTactic, PricingDistribution, PricingDistributionInsert, DistributionTarget } from '../../../lib/supabase';
+import { supabase, Tender, MarkupParameter, MarkupTactic, MarkupStep, PricingDistribution, PricingDistributionInsert, DistributionTarget } from '../../../lib/supabase';
 import { formatNumberWithSpaces, parseNumberWithSpaces, parseNumberInput, formatNumberInput } from '../../../utils/numberFormat';
 import dayjs from 'dayjs';
 import './MarkupConstructor.css';
 
 const { Title, Text } = Typography;
 
-interface MarkupStep {
-  name?: string; // Название пункта
-  baseIndex: number; // -1 для базовой стоимости, или индекс пункта в массиве
-
-  // Первая операция
-  action1: 'multiply' | 'divide' | 'add' | 'subtract';
-  operand1Type: 'markup' | 'step' | 'number'; // наценка, результат другого шага или число
-  operand1Key?: string | number; // ключ наценки (если operand1Type = 'markup') или число
-  operand1Index?: number; // индекс шага (если operand1Type = 'step')
-  operand1MultiplyFormat?: 'addOne' | 'direct'; // формат умножения: 'addOne' = (1 + %), 'direct' = %
-
-  // Вторая операция (опциональная)
-  action2?: 'multiply' | 'divide' | 'add' | 'subtract';
-  operand2Type?: 'markup' | 'step' | 'number';
-  operand2Key?: string | number;
-  operand2Index?: number;
-  operand2MultiplyFormat?: 'addOne' | 'direct';
-
-  // Третья операция (опциональная)
-  action3?: 'multiply' | 'divide' | 'add' | 'subtract';
-  operand3Type?: 'markup' | 'step' | 'number';
-  operand3Key?: string | number;
-  operand3Index?: number;
-  operand3MultiplyFormat?: 'addOne' | 'direct';
-
-  // Четвертая операция (опциональная)
-  action4?: 'multiply' | 'divide' | 'add' | 'subtract';
-  operand4Type?: 'markup' | 'step' | 'number';
-  operand4Key?: string | number;
-  operand4Index?: number;
-  operand4MultiplyFormat?: 'addOne' | 'direct';
-
-  // Пятая операция (опциональная)
-  action5?: 'multiply' | 'divide' | 'add' | 'subtract';
-  operand5Type?: 'markup' | 'step' | 'number';
-  operand5Key?: string | number;
-  operand5Index?: number;
-  operand5MultiplyFormat?: 'addOne' | 'direct';
-}
 
 type TabKey = 'works' | 'materials' | 'subcontract_works' | 'subcontract_materials' | 'work_comp' | 'material_comp';
 
@@ -845,9 +806,11 @@ const MarkupConstructor: React.FC = () => {
 
       if (data && data.length > 0) {
         // Заполняем значения из загруженных записей
-        data.forEach((record: any) => {
-          if (record.markup_parameter) {
-            markupValues[record.markup_parameter.key] = record.value || 0;
+        data.forEach((record) => {
+          const mp = record.markup_parameter;
+          const p = Array.isArray(mp) ? mp[0] : mp;
+          if (p) {
+            markupValues[p.key] = record.value || 0;
           }
         });
         setCurrentMarkupId(tenderId);
@@ -1420,8 +1383,8 @@ const MarkupConstructor: React.FC = () => {
 
           // Подготавливаем данные для копирования
           // Используем текущие данные из состояния или данные из БД
-          let sequencesToCopy: Record<string, any>;
-          let baseCostsToCopy: Record<string, any>;
+          let sequencesToCopy: Record<string, MarkupStep[]>;
+          let baseCostsToCopy: Record<string, number>;
 
           if (currentTacticId && isDataLoaded) {
             // Если схема активна и загружена, используем текущие данные из состояния

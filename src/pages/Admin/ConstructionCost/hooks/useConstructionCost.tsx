@@ -173,7 +173,7 @@ export const useConstructionCost = () => {
     });
   };
 
-  const saveEdit = async (values: any, editingItem: TreeNode | null) => {
+  const saveEdit = async (values: { name?: string; unit?: string; location?: string }, editingItem: TreeNode | null) => {
     try {
       if (editingItem?.type === 'category' && editingItem.categoryId) {
         const { error } = await supabase

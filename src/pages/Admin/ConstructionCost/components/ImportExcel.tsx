@@ -264,7 +264,7 @@ ORDER BY sort_order;`;
         }
       };
 
-      reader.readAsBinaryString(file as any);
+      reader.readAsBinaryString(file as unknown as Blob);
     } catch (error) {
       console.error('Ошибка импорта:', error);
       message.error('Ошибка импорта файла');

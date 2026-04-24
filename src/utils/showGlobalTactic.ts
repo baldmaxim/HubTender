@@ -3,7 +3,7 @@
  */
 
 import { supabase } from '../lib/supabase';
-import type { MarkupStep } from '../lib/supabase';
+import type { MarkupStep, MarkupTactic } from '../lib/supabase';
 
 export async function showGlobalTactic() {
   console.log('=== СТРУКТУРА ГЛОБАЛЬНОЙ (БАЗОВОЙ) СХЕМЫ НАЦЕНОК ===\n');
@@ -40,7 +40,7 @@ export async function showGlobalTactic() {
   }
 }
 
-function displayTactic(tactic: any) {
+function displayTactic(tactic: MarkupTactic) {
   console.log(`Название: ${tactic.name}`);
   console.log(`ID: ${tactic.id}`);
   console.log(`Глобальная: ${tactic.is_global ? 'ДА' : 'НЕТ'}`);
@@ -68,7 +68,7 @@ function displayTactic(tactic: any) {
     console.log(`  Количество шагов: ${sequence.length}`);
     console.log('  Формула расчёта:');
 
-    sequence.forEach((step: any, index: number) => {
+    sequence.forEach((step: MarkupStep, index: number) => {
       console.log(`\n  Шаг ${index + 1}: "${step.name || 'Без названия'}"`);
 
       // База для расчёта
@@ -116,12 +116,12 @@ function displayTactic(tactic: any) {
     const sequence = sequences[type];
     if (!sequence || !Array.isArray(sequence)) continue;
 
-    sequence.forEach((step: any) => {
-      if (step.operand1Type === 'markup') usedParams.add(step.operand1Key);
-      if (step.operand2Type === 'markup') usedParams.add(step.operand2Key);
-      if (step.operand3Type === 'markup') usedParams.add(step.operand3Key);
-      if (step.operand4Type === 'markup') usedParams.add(step.operand4Key);
-      if (step.operand5Type === 'markup') usedParams.add(step.operand5Key);
+    sequence.forEach((step: MarkupStep) => {
+      if (step.operand1Type === 'markup' && step.operand1Key != null) usedParams.add(String(step.operand1Key));
+      if (step.operand2Type === 'markup' && step.operand2Key != null) usedParams.add(String(step.operand2Key));
+      if (step.operand3Type === 'markup' && step.operand3Key != null) usedParams.add(String(step.operand3Key));
+      if (step.operand4Type === 'markup' && step.operand4Key != null) usedParams.add(String(step.operand4Key));
+      if (step.operand5Type === 'markup' && step.operand5Key != null) usedParams.add(String(step.operand5Key));
     });
   }
 
@@ -135,7 +135,7 @@ function displayTactic(tactic: any) {
   }
 }
 
-function getOperationDescription(action: string, operandType: string, operandKey: any): string {
+function getOperationDescription(action: string, operandType: string, operandKey: string | number | undefined): string {
   const actionMap: { [key: string]: string } = {
     'multiply': 'умножить на',
     'divide': 'разделить на',
@@ -150,7 +150,7 @@ function getOperationDescription(action: string, operandType: string, operandKey
   } else if (operandType === 'markup') {
     return `${actionText} ${operandKey}% (параметр из БД)`;
   } else if (operandType === 'step') {
-    return `${actionText} результат шага ${operandKey + 1}`;
+    return `${actionText} результат шага ${typeof operandKey === 'number' ? operandKey + 1 : operandKey}`;
   }
 
   return `${actionText} ${operandKey}`;
@@ -161,7 +161,7 @@ function buildFormula(sequence: MarkupStep[]): string {
 
   let formula = 'ПРЯМЫЕ_ЗАТРАТЫ';
 
-  sequence.forEach((step: any) => {
+  sequence.forEach((step: MarkupStep) => {
     const op = getOperatorSymbol(step.action1);
     const value = getOperandDisplay(step.operand1Type, step.operand1Key);
 
@@ -192,20 +192,20 @@ function getOperatorSymbol(action: string): string {
   return symbols[action] || action;
 }
 
-function getOperandDisplay(type: string, key: any): string {
+function getOperandDisplay(type: string, key: string | number | undefined): string {
   if (type === 'number') {
     return String(key);
   } else if (type === 'markup') {
     return `[${key}%]`;
   } else if (type === 'step') {
-    return `[Шаг${key + 1}]`;
+    return `[Шаг${typeof key === 'number' ? key + 1 : key}]`;
   }
   return String(key);
 }
 
 // Экспортируем в window
 if (typeof window !== 'undefined') {
-  (window as any).showGlobalTactic = showGlobalTactic;
+  (window as unknown as Record<string, unknown>).showGlobalTactic = showGlobalTactic;
   console.log('Для отображения глобальной схемы выполните:');
   console.log('window.showGlobalTactic()');
 }

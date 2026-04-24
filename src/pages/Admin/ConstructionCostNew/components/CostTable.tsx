@@ -168,7 +168,7 @@ const CostTable: React.FC<CostTableProps> = ({
       key: 'materials_total',
       width: 110,
       align: 'right',
-      render: (_: any, record: CostRow) => {
+      render: (_: unknown, record: CostRow) => {
         const total = record.materials_cost + record.materials_comp_cost;
         return total.toLocaleString('ru-RU', { minimumFractionDigits: 0 });
       },
@@ -178,7 +178,7 @@ const CostTable: React.FC<CostTableProps> = ({
       key: 'works_total',
       width: 110,
       align: 'right',
-      render: (_: any, record: CostRow) => {
+      render: (_: unknown, record: CostRow) => {
         const total = record.works_cost + record.works_comp_cost;
         return total.toLocaleString('ru-RU', { minimumFractionDigits: 0 });
       },
@@ -208,7 +208,7 @@ const CostTable: React.FC<CostTableProps> = ({
       key: 'total_works',
       width: 130,
       align: 'right',
-      render: (_: any, record: CostRow) => {
+      render: (_: unknown, record: CostRow) => {
         const totalWorks = record.works_cost + record.sub_works_cost + record.works_comp_cost;
         return (
           <Text style={{ color: '#0891b2' }}>
@@ -222,7 +222,7 @@ const CostTable: React.FC<CostTableProps> = ({
       key: 'total_materials',
       width: 150,
       align: 'right',
-      render: (_: any, record: CostRow) => {
+      render: (_: unknown, record: CostRow) => {
         const totalMaterials = record.materials_cost + record.sub_materials_cost + record.materials_comp_cost;
         return (
           <Text style={{ color: '#059669' }}>
@@ -270,7 +270,7 @@ const CostTable: React.FC<CostTableProps> = ({
       width: 200,
       align: 'right',
       fixed: 'right',
-      render: (_: any, record: CostRow) => {
+      render: (_: unknown, record: CostRow) => {
         if (!areaSp) return '-';
         const costPerArea = record.total_cost / areaSp;
         return (

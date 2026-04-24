@@ -31,7 +31,7 @@ export const useUnits = () => {
 
       if (error) throw error;
 
-      const formattedData: UnitRecord[] = data?.map((item: any) => ({
+      const formattedData: UnitRecord[] = data?.map((item) => ({
         key: item.code,
         code: item.code,
         name: item.name,
@@ -60,7 +60,7 @@ export const useUnits = () => {
 
       if (error) throw error;
 
-      const unitOptions = data?.map((item: any) => ({
+      const unitOptions = data?.map((item) => ({
         code: item.code,
         name: item.name,
       })) || [];
@@ -71,7 +71,7 @@ export const useUnits = () => {
     }
   };
 
-  const saveUnit = async (values: any, editingUnitCode?: string) => {
+  const saveUnit = async (values: { code?: string; name: string; category?: string; sort_order?: number; is_active?: boolean }, editingUnitCode?: string) => {
     try {
       if (editingUnitCode) {
         const { error } = await supabase

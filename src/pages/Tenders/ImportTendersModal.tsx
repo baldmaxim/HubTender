@@ -42,7 +42,7 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
 
-  const parseExcelDate = (excelDate: any): string | null => {
+  const parseExcelDate = (excelDate: unknown): string | null => {
     if (!excelDate) return null;
 
     // Если это уже строка в формате даты
@@ -78,22 +78,25 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
           console.log('Найденные колонки:', Object.keys(jsonData[0]));
         }
 
-        const parsed: ParsedTender[] = jsonData.map((row: any) => ({
-          tender_number: row['Номер тендера'] || row['Номер'] || undefined,
-          title: row['Наименование ЖК'] || row['Наименование'] || '',
-          client_name: row['Заказчик'] || '',
-          object_address: row['Адрес объекта'] || row['Адрес'] || undefined,
-          construction_scope: row['Работа'] || row['Объем строительства'] || undefined,
-          area: row['Площадь по СП, м2'] ? parseFloat(row['Площадь по СП, м2']) : (row['Площадь'] ? parseFloat(row['Площадь']) : undefined),
-          submission_date: parseExcelDate(row['Дата подачи КП']) || undefined,
-          chronology: row['Хронологии тендеров (дата выхода на площадку)'] || row['Хронология'] || undefined,
-          construction_start_date: parseExcelDate(row['Дата выхода на строительную площадку']) || undefined,
-          site_visit_date: parseExcelDate(row['Дата посещения площадки']) || undefined,
-          site_visit_photo_url: row['Фото посещения площадки'] || undefined,
-          has_tender_package: row['Наличие тендерного пакета'] || undefined,
-          invitation_date: parseExcelDate(row['Когда поступило приглашение']) || parseExcelDate(row['Дата приглашения']) || undefined,
-          status: row['Статус'] || undefined,
-        }));
+        const parsed: ParsedTender[] = (jsonData as Record<string, unknown>[]).map((row) => {
+          const str = (v: unknown): string | undefined => v ? String(v) : undefined;
+          return {
+            tender_number: str(row['Номер тендера'] ?? row['Номер']),
+            title: str(row['Наименование ЖК'] ?? row['Наименование']) ?? '',
+            client_name: str(row['Заказчик']) ?? '',
+            object_address: str(row['Адрес объекта'] ?? row['Адрес']),
+            construction_scope: str(row['Работа'] ?? row['Объем строительства']),
+            area: row['Площадь по СП, м2'] ? parseFloat(String(row['Площадь по СП, м2'])) : (row['Площадь'] ? parseFloat(String(row['Площадь'])) : undefined),
+            submission_date: parseExcelDate(row['Дата подачи КП']) || undefined,
+            chronology: str(row['Хронологии тендеров (дата выхода на площадку)'] ?? row['Хронология']),
+            construction_start_date: parseExcelDate(row['Дата выхода на строительную площадку']) || undefined,
+            site_visit_date: parseExcelDate(row['Дата посещения площадки']) || undefined,
+            site_visit_photo_url: str(row['Фото посещения площадки']),
+            has_tender_package: str(row['Наличие тендерного пакета']),
+            invitation_date: parseExcelDate(row['Когда поступило приглашение']) || parseExcelDate(row['Дата приглашения']) || undefined,
+            status: str(row['Статус']),
+          };
+        });
 
         setParsedData(parsed);
         message.success(`Загружено ${parsed.length} записей из файла`);

@@ -75,15 +75,15 @@ export const TenderDrawer: React.FC<TenderDrawerProps> = ({
       const values = await form.validateFields();
 
       // Конвертировать dayjs объекты в ISO строки для chronology_items
-      const chronologyItems = (values.chronology_items || []).map((item: any) => ({
-        date: item.date?.toISOString() || null,
+      const chronologyItems = (values.chronology_items || []).map((item: { date?: { toISOString?: () => string }; text?: string; type?: string }) => ({
+        date: item.date?.toISOString?.() || null,
         text: item.text,
         type: item.type || 'default',
       }));
 
       // Конвертировать dayjs объекты в ISO строки для tender_package_items
-      const tenderPackageItems = (values.tender_package_items || []).map((item: any) => ({
-        date: item.date?.toISOString() || null,
+      const tenderPackageItems = (values.tender_package_items || []).map((item: { date?: { toISOString?: () => string }; text?: string; link?: string }) => ({
+        date: item.date?.toISOString?.() || null,
         text: item.text,
         link: item.link?.trim() || null,
       }));
@@ -159,10 +159,10 @@ export const TenderDrawer: React.FC<TenderDrawerProps> = ({
               {tender?.area ? `${tender.area.toFixed(2)} м²` : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="Объем строительства">
-              {(tender?.construction_scope as any)?.name || '-'}
+              {(tender?.construction_scope as { name?: string } | null | undefined)?.name || '-'}
             </Descriptions.Item>
             <Descriptions.Item label="Статус">
-              {(tender?.status as any)?.name || '-'}
+              {(tender?.status as { name?: string } | null | undefined)?.name || '-'}
             </Descriptions.Item>
             <Descriptions.Item label="Дата подачи КП">
               {tender?.submission_date

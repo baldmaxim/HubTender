@@ -2,8 +2,12 @@ import { message } from 'antd';
 import { supabase } from '../../../../lib/supabase';
 import { TreeNode } from './useConstructionCost.tsx';
 
+interface CategoryFormValues { name: string; unit?: string; }
+interface DetailFormValues { name: string; unit?: string; location?: string; }
+interface LocationFormValues { unit?: string; location?: string; }
+
 export const useCategoryActions = (loadData: () => Promise<void>) => {
-  const addCategory = async (values: any) => {
+  const addCategory = async (values: CategoryFormValues) => {
     try {
       const { error } = await supabase
         .from('cost_categories')
@@ -26,7 +30,7 @@ export const useCategoryActions = (loadData: () => Promise<void>) => {
     }
   };
 
-  const addDetail = async (values: any, categoryId?: string) => {
+  const addDetail = async (values: DetailFormValues, categoryId?: string) => {
     try {
       const { data: maxOrderData } = await supabase
         .from('detail_cost_categories')
@@ -60,7 +64,7 @@ export const useCategoryActions = (loadData: () => Promise<void>) => {
     }
   };
 
-  const addLocation = async (values: any, detail: TreeNode | null) => {
+  const addLocation = async (values: LocationFormValues, detail: TreeNode | null) => {
     try {
       const { error } = await supabase
         .from('detail_cost_categories')

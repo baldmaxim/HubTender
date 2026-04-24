@@ -1,5 +1,5 @@
 import { TabKey } from '../types';
-import { MarkupSequences as DbMarkupSequences, BaseCosts as DbBaseCosts } from '../../../../lib/supabase/types';
+import type { MarkupSequences as DbMarkupSequences, BaseCosts as DbBaseCosts, MarkupStep } from '../../../../lib/supabase/types';
 
 // Маппинг между английскими (UI) и русскими (DB) ключами
 const EN_TO_RU_KEY_MAP: Record<TabKey, keyof DbMarkupSequences> = {
@@ -21,8 +21,8 @@ const RU_TO_EN_KEY_MAP: Record<keyof DbMarkupSequences, TabKey> = {
 };
 
 // Преобразование sequences из БД (русские ключи) в UI (английские ключи)
-export function convertSequencesFromDb(dbSequences: DbMarkupSequences): Record<TabKey, any[]> {
-  const result: Record<TabKey, any[]> = {
+export function convertSequencesFromDb(dbSequences: DbMarkupSequences): Record<TabKey, MarkupStep[]> {
+  const result: Record<TabKey, MarkupStep[]> = {
     works: [],
     materials: [],
     subcontract_works: [],
@@ -42,7 +42,7 @@ export function convertSequencesFromDb(dbSequences: DbMarkupSequences): Record<T
 }
 
 // Преобразование sequences из UI (английские ключи) в БД (русские ключи)
-export function convertSequencesToDb(uiSequences: Record<TabKey, any[]>): DbMarkupSequences {
+export function convertSequencesToDb(uiSequences: Record<TabKey, MarkupStep[]>): DbMarkupSequences {
   const result: DbMarkupSequences = {
     'раб': [],
     'мат': [],

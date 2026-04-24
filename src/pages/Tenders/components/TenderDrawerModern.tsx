@@ -40,7 +40,7 @@ const getThemeColors = (isDark: boolean) => ({
 
 // РљРѕРјРїРѕРЅРµРЅС‚ РґР»СЏ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ СЌР»РµРјРµРЅС‚Р° С…СЂРѕРЅРѕР»РѕРіРёРё
 interface ChronologyItemEditProps {
-  event: any;
+  event: ChronologyItem;
   index: number;
   onUpdate: (updatedItems: ChronologyItem[]) => Promise<void>;
   allItems: ChronologyItem[];
@@ -80,7 +80,7 @@ const ChronologyItemEdit: React.FC<ChronologyItemEditProps> = ({ event, index, o
   };
 
   const handleDelete = async () => {
-    const updatedItems = allItems.filter((_: any, idx: number) => idx !== index);
+    const updatedItems = allItems.filter((_: unknown, idx: number) => idx !== index);
     await onUpdate(updatedItems);
   };
 
@@ -180,7 +180,7 @@ const ChronologyItemEdit: React.FC<ChronologyItemEditProps> = ({ event, index, o
 
 // РљРѕРјРїРѕРЅРµРЅС‚ РґР»СЏ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ СЌР»РµРјРµРЅС‚Р° С‚РµРЅРґРµСЂРЅРѕРіРѕ РїР°РєРµС‚Р°
 interface PackageItemEditProps {
-  file: any;
+  file: TenderPackageItem;
   index: number;
   onUpdate: (updatedItems: TenderPackageItem[]) => Promise<void>;
   allItems: TenderPackageItem[];
@@ -217,7 +217,7 @@ const PackageItemEdit: React.FC<PackageItemEditProps> = ({ file, index, onUpdate
   };
 
   const handleDelete = async () => {
-    const updatedItems = allItems.filter((_: any, idx: number) => idx !== index);
+    const updatedItems = allItems.filter((_: unknown, idx: number) => idx !== index);
     await onUpdate(updatedItems);
   };
 
@@ -778,7 +778,7 @@ export const TenderDrawerModern: React.FC<TenderDrawerModernProps> = ({
 
   if (!tender) return null;
 
-  const updateField = async (field: string, value: any) => {
+  const updateField = async (field: string, value: unknown) => {
     const { error } = await supabase
       .from('tender_registry')
       .update({ [field]: value })
@@ -809,9 +809,9 @@ export const TenderDrawerModern: React.FC<TenderDrawerModernProps> = ({
     setIsEditingPhoto(false);
   };
 
-  const statusBadge = getStatusBadge((tender.status as any)?.name);
-  const chronologyItems = (tender.chronology_items as any[]) || [];
-  const packageItems = (tender.tender_package_items as any[]) || [];
+  const statusBadge = getStatusBadge((tender.status as { name?: string } | null | undefined)?.name);
+  const chronologyItems = (tender.chronology_items as ChronologyItem[]) || [];
+  const packageItems = (tender.tender_package_items as TenderPackageItem[]) || [];
   return (
     <div
       className="tender-drawer-hidden-scroll"
@@ -881,7 +881,7 @@ export const TenderDrawerModern: React.FC<TenderDrawerModernProps> = ({
                     background: statusBadge.text,
                   }}
                 />
-                {(tender.status as any)?.name || 'РќРµРёР·РІРµСЃС‚РЅРѕ'}
+                {(tender.status as { name?: string } | null | undefined)?.name || 'РќРµРёР·РІРµСЃС‚РЅРѕ'}
               </span>
             </div>
           </div>
@@ -1181,7 +1181,7 @@ export const TenderDrawerModern: React.FC<TenderDrawerModernProps> = ({
         {activeTab === 'timeline' && (
           <div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {chronologyItems.map((event: any, i: number) => (
+              {chronologyItems.map((event, i) => (
                 <ChronologyItemEdit
                   key={i}
                   event={event}
@@ -1217,7 +1217,7 @@ export const TenderDrawerModern: React.FC<TenderDrawerModernProps> = ({
               Р”РѕРєСѓРјРµРЅС‚С‹ С‚РµРЅРґРµСЂРЅРѕРіРѕ РїР°РєРµС‚Р° РѕС‚ Р·Р°РєР°Р·С‡РёРєР°
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {packageItems.map((file: any, i: number) => (
+              {packageItems.map((file, i) => (
                 <PackageItemEdit
                   key={i}
                   file={file}

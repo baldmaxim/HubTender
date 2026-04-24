@@ -230,7 +230,7 @@ export const useCostData = () => {
         worksComp: number;
       }>();
 
-      (boqItems || []).forEach((item: any) => {
+      (boqItems || []).forEach((item) => {
         const catId = item.detail_cost_category_id || 'uncategorized';
 
         if (!costMap.has(catId)) {
@@ -238,7 +238,7 @@ export const useCostData = () => {
         }
 
         const costs = costMap.get(catId)!;
-        const liveAmounts = calculateLiveCommercialAmounts(item as any, calculationContext);
+        const liveAmounts = calculateLiveCommercialAmounts(item as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0], calculationContext);
 
         if (costType === 'base') {
           const amount = liveAmounts.baseAmount;
@@ -304,13 +304,14 @@ export const useCostData = () => {
       // Первый проход: собираем детальные строки и определяем структуру
       const detailRowsByCategory = new Map<string, CostRow[]>();
 
-      (categories || []).forEach((cat: any) => {
+      (categories || []).forEach((cat) => {
         const volume = volumeMap.get(cat.id) || 0;
         const costs = costMap.get(cat.id) || { materials: 0, works: 0, subMaterials: 0, subWorks: 0, materialsComp: 0, worksComp: 0 };
         const totalCost = costs.materials + costs.works + costs.subMaterials + costs.subWorks + costs.materialsComp + costs.worksComp;
         const costPerUnit = volume > 0 ? totalCost / volume : 0;
 
-        const categoryName = cat.cost_categories?.name || '';
+        const cc = Array.isArray(cat.cost_categories) ? cat.cost_categories[0] : cat.cost_categories;
+        const categoryName = cc?.name || '';
         const location = cat.location || '';
 
         const detailRow: CostRow = {

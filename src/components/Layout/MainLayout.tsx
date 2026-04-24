@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Layout, Menu, Avatar, Badge, Switch, theme, Dropdown, List, Typography, Space, Empty, Button, Popover, Input, Tag } from 'antd';
-import type { MenuProps } from 'antd';
+import type { MenuProps, InputRef } from 'antd';
 const { Text } = Typography;
 import {
   DashboardOutlined,
@@ -64,7 +64,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   const [calcValue, setCalcValue] = useState('0');
   const [calcOpen, setCalcOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
-  const calcInputRef = useRef<any>(null);
+  const calcInputRef = useRef<InputRef>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -422,26 +422,32 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   };
 
   // Функция для преобразования пунктов меню в ссылки
-  const renderMenuItem = (item: any) => {
+  type MenuItem = NonNullable<MenuProps['items']>[number];
+  type MenuItemWithKey = Extract<MenuItem, { key?: React.Key }>;
+  const renderMenuItem = (item: MenuItem) => {
+    if (!item || item.type === 'divider') return null;
+    const mi = item as MenuItemWithKey;
     // Если это группа (есть children), не рендерим как ссылку
-    if (item.children) {
-      return item.label;
+    if ('children' in mi && mi.children) {
+      return (mi as { label?: React.ReactNode }).label;
     }
     // Если есть key, рендерим как Link для поддержки открытия в новой вкладке
-    if (item.key && item.key.startsWith('/')) {
-      return <Link to={item.key}>{item.label}</Link>;
+    const key = mi.key != null ? String(mi.key) : undefined;
+    const label = (mi as { label?: React.ReactNode }).label;
+    if (key && key.startsWith('/')) {
+      return <Link to={key}>{label}</Link>;
     }
-    return item.label;
+    return label;
   };
 
   // Преобразуем menuItems, добавляя label как функцию рендеринга
-  const processedMenuItems = menuItems.map((item: any) => {
-    if (item.children) {
+  const processedMenuItems = menuItems.map((item: MenuItem) => {
+    if (item && 'children' in item && item.children) {
       return {
         ...item,
-        children: item.children.map((child: any) => ({
+        children: (item.children as MenuItem[]).map((child: MenuItem) => ({
           ...child,
-          label: child.type === 'divider' ? undefined : renderMenuItem(child),
+          label: child && child.type === 'divider' ? undefined : renderMenuItem(child),
         })),
       };
     }
@@ -456,19 +462,20 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     if (!user) return items;
 
     return items
-      .map((item: any) => {
+      .map((item: MenuItem) => {
         // Если у пункта есть дочерние элементы
-        if (item.children) {
-          const filteredChildren = item.children.filter((child: any) => {
+        if ('children' in item && item.children) {
+          const filteredChildren = (item.children as MenuItem[]).filter((child: MenuItem) => {
             // Пропускаем разделители
-            if (child.type === 'divider') return true;
+            if (child && 'type' in child && child.type === 'divider') return true;
             // Проверяем доступ к дочернему пункту
-            return child.key ? hasPageAccess(user, child.key) : true;
+            const key = child && 'key' in child ? String(child.key) : undefined;
+            return key ? hasPageAccess(user, key) : true;
           });
 
           // Проверяем, есть ли реальные страницы (не только разделители)
           const hasAccessiblePages = filteredChildren.some(
-            (child: any) => child.type !== 'divider'
+            (child: MenuItem) => !(child && 'type' in child && child.type === 'divider')
           );
 
           // Если после фильтрации остались доступные страницы, оставляем родительский пункт
@@ -482,7 +489,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         }
 
         // Для обычных пунктов проверяем доступ
-        return item.key ? (hasPageAccess(user, item.key) ? item : null) : item;
+        const itemKey = 'key' in item && item.key != null ? String(item.key) : undefined;
+        return itemKey ? (hasPageAccess(user, itemKey) ? item : null) : item;
       })
       .filter(Boolean); // Убираем null элементы
   };

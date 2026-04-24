@@ -96,7 +96,7 @@ export const useMarkupTactics = () => {
 
       // Копируем параметры
       if (sourceTactic.markup_parameters && sourceTactic.markup_parameters.length > 0) {
-        const newParameters = sourceTactic.markup_parameters.map((param: any) => ({
+        const newParameters = sourceTactic.markup_parameters.map((param) => ({
           tactic_id: newTactic.id,
           parameter_name: param.parameter_name,
           base_value: param.base_value,

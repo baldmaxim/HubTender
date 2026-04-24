@@ -3,6 +3,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import type { MarkupStep } from '../lib/supabase';
 
 export async function checkMarkupSequences(tenderId?: string) {
   console.log('=== ПРОВЕРКА ПОСЛЕДОВАТЕЛЬНОСТЕЙ НАЦЕНОК ===\n');
@@ -57,7 +58,7 @@ export async function checkMarkupSequences(tenderId?: string) {
 
       console.log(`  Количество шагов: ${sequence.length}`);
 
-      sequence.forEach((step: any, index: number) => {
+      sequence.forEach((step: MarkupStep, index: number) => {
         console.log(`\n  Шаг ${index + 1}:`);
         console.log(`    baseIndex: ${step.baseIndex}`);
         console.log(`    action1: ${step.action1}`);
@@ -110,12 +111,12 @@ export async function checkMarkupSequences(tenderId?: string) {
       const sequence = sequences[type];
       if (!sequence || !Array.isArray(sequence)) continue;
 
-      sequence.forEach((step: any) => {
-        if (step.operand1Type === 'markup') usedParams.add(step.operand1Key);
-        if (step.operand2Type === 'markup') usedParams.add(step.operand2Key);
-        if (step.operand3Type === 'markup') usedParams.add(step.operand3Key);
-        if (step.operand4Type === 'markup') usedParams.add(step.operand4Key);
-        if (step.operand5Type === 'markup') usedParams.add(step.operand5Key);
+      sequence.forEach((step: MarkupStep) => {
+        if (step.operand1Type === 'markup' && step.operand1Key != null) usedParams.add(String(step.operand1Key));
+        if (step.operand2Type === 'markup' && step.operand2Key != null) usedParams.add(String(step.operand2Key));
+        if (step.operand3Type === 'markup' && step.operand3Key != null) usedParams.add(String(step.operand3Key));
+        if (step.operand4Type === 'markup' && step.operand4Key != null) usedParams.add(String(step.operand4Key));
+        if (step.operand5Type === 'markup' && step.operand5Key != null) usedParams.add(String(step.operand5Key));
       });
     }
 
@@ -137,7 +138,7 @@ export async function checkMarkupSequences(tenderId?: string) {
 
 // Экспортируем в window
 if (typeof window !== 'undefined') {
-  (window as any).checkMarkupSequences = checkMarkupSequences;
+  (window as unknown as Record<string, unknown>).checkMarkupSequences = checkMarkupSequences;
   console.log('Для проверки последовательностей выполните:');
   console.log('window.checkMarkupSequences() или window.checkMarkupSequences("ID_ТЕНДЕРА")');
 }

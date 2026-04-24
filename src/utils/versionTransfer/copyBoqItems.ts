@@ -135,7 +135,7 @@ export async function copyBoqItems(
     }
 
     // 4. Восстановить parent_work_item_id
-    const updatePromises: PromiseLike<any>[] = [];
+    const updatePromises: PromiseLike<unknown>[] = [];
 
     for (const oldItem of oldItems) {
       if (oldItem.parent_work_item_id) {

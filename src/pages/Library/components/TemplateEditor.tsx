@@ -25,8 +25,10 @@ interface CostCategoryOption {
   location: string;
 }
 
+import type { FormInstance } from 'antd';
+
 interface TemplateEditorProps {
-  form: any;
+  form: FormInstance;
   templateItems: TemplateItemWithDetails[];
   costCategories: CostCategoryOption[];
   costCategorySearchText: string;
@@ -47,8 +49,8 @@ interface TemplateEditorProps {
   onSaveTemplate: () => void;
   onCancel: () => void;
   loading: boolean;
-  getColumns: any;
-  getRowClassName: any;
+  getColumns: (isEditing: boolean, items: TemplateItemWithDetails[]) => unknown[];
+  getRowClassName: (record: TemplateItemWithDetails) => string;
 }
 
 export const TemplateEditor: React.FC<TemplateEditorProps> = ({
@@ -130,7 +132,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               placeholder="Начните вводить для поиска..."
               value={costCategorySearchText}
               onChange={setCostCategorySearchText}
-              onSelect={(value, option: any) => {
+              onSelect={(value, option: { id?: string }) => {
                 setCostCategorySearchText(value);
                 form.setFieldValue('detail_cost_category_id', option.id);
               }}
@@ -166,9 +168,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               options={workOptions}
               value={workSearchText}
               onChange={setWorkSearchText}
-              onSelect={(value, option: any) => {
+              onSelect={(value, option: { id?: string }) => {
                 setWorkSearchText(value);
-                setSelectedWork(option.id);
+                setSelectedWork(option.id ?? null);
               }}
               placeholder="Введите работу (2+ символа)..."
               filterOption={false}
@@ -189,9 +191,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({
               options={materialOptions}
               value={materialSearchText}
               onChange={setMaterialSearchText}
-              onSelect={(value, option: any) => {
+              onSelect={(value, option: { id?: string }) => {
                 setMaterialSearchText(value);
-                setSelectedMaterial(option.id);
+                setSelectedMaterial(option.id ?? null);
               }}
               placeholder="Введите материал (2+ символа)..."
               filterOption={false}

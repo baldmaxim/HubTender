@@ -82,11 +82,11 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
 
       if (error) throw error;
 
-      const formatted = data?.map((u: any) => ({
+      const formatted = data?.map((u) => ({
         id: u.id,
         full_name: u.full_name,
         role_code: u.role_code,
-        role_name: u.roles?.name
+        role_name: (Array.isArray(u.roles) ? u.roles[0] : u.roles)?.name
       })) || [];
 
       setUsers(formatted);
@@ -113,11 +113,11 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
 
       if (error) throw error;
 
-      const formatted = data?.map((u: any) => ({
+      const formatted = data?.map((u) => ({
         id: u.id,
         full_name: u.full_name,
         role_code: u.role_code,
-        role_name: u.roles?.name,
+        role_name: (Array.isArray(u.roles) ? u.roles[0] : u.roles)?.name,
         tender_deadline_extensions: u.tender_deadline_extensions || []
       })) || [];
 
@@ -291,7 +291,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
       title: 'Название',
       key: 'title',
       sorter: (a: TenderRecord, b: TenderRecord) => a.title.localeCompare(b.title),
-      render: (_: any, record: TenderRecord) => (
+      render: (_: unknown, record: TenderRecord) => (
         <Space>
           <span>{record.title}</span>
           <Tag color="blue">v{record.version}</Tag>
@@ -329,7 +329,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
       key: 'users',
       width: 200,
       align: 'center' as const,
-      render: (_: any, record: TenderRecord) => {
+      render: (_: unknown, record: TenderRecord) => {
         const usersWithAccess = getUsersForTender(record.id);
         if (usersWithAccess.length === 0) {
           return <span style={{ color: '#888' }}>-</span>;
@@ -348,7 +348,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
       key: 'extended_deadlines',
       width: 200,
       align: 'center' as const,
-      render: (_: any, record: TenderRecord) => {
+      render: (_: unknown, record: TenderRecord) => {
         const usersWithAccess = getUsersForTender(record.id);
         if (usersWithAccess.length === 0) {
           return <span style={{ color: '#888' }}>-</span>;
@@ -383,7 +383,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
       key: 'actions',
       width: 100,
       align: 'center' as const,
-      render: (_: any, record: TenderRecord) => {
+      render: (_: unknown, record: TenderRecord) => {
         const usersWithAccess = getUsersForTender(record.id);
         const hasUsers = usersWithAccess.length > 0;
 

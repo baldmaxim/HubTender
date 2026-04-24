@@ -47,8 +47,14 @@ export function useVersionMatching({
     [newPositions]
   );
 
+  interface QueryBuilder {
+    eq(column: string, value: string | boolean): QueryBuilder;
+    order(column: string, opts: { ascending: boolean }): QueryBuilder;
+    range(from: number, to: number): PromiseLike<{ data: ClientPosition[] | null; error: unknown }>;
+  }
+
   const fetchAllClientPositions = useCallback(async (
-    filters: (query: any) => any
+    filters: (query: QueryBuilder) => QueryBuilder
   ) => {
     const items: ClientPosition[] = [];
     let from = 0;
@@ -58,10 +64,10 @@ export function useVersionMatching({
       const query = filters(
         supabase
           .from('client_positions')
-          .select('*')
-      ).range(from, to);
+          .select('*') as unknown as QueryBuilder
+      );
 
-      const { data, error } = await query;
+      const { data, error } = await query.range(from, to);
 
       if (error) {
         throw error;
