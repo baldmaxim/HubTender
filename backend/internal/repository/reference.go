@@ -44,14 +44,15 @@ type WorkNameRow struct {
 type CostCategoryRow struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	Code string `json:"code"`
+	Unit string `json:"unit"`
 }
 
 // DetailCostCategoryRow represents a row from public.detail_cost_categories.
 type DetailCostCategoryRow struct {
 	ID             string `json:"id"`
 	Name           string `json:"name"`
-	Code           string `json:"code"`
+	Unit           string `json:"unit"`
+	Location       string `json:"location"`
 	CostCategoryID string `json:"cost_category_id"`
 }
 
@@ -194,7 +195,7 @@ func (r *ReferenceRepo) GetWorkNames(ctx context.Context) ([]WorkNameRow, error)
 // GetCostCategories returns all rows from public.cost_categories ordered by name.
 func (r *ReferenceRepo) GetCostCategories(ctx context.Context) ([]CostCategoryRow, error) {
 	const q = `
-		SELECT id::text, COALESCE(name,''), COALESCE(code,'')
+		SELECT id::text, COALESCE(name,''), COALESCE(unit,'')
 		FROM public.cost_categories
 		ORDER BY name
 	`
@@ -208,7 +209,7 @@ func (r *ReferenceRepo) GetCostCategories(ctx context.Context) ([]CostCategoryRo
 	var result []CostCategoryRow
 	for rows.Next() {
 		var row CostCategoryRow
-		if err := rows.Scan(&row.ID, &row.Name, &row.Code); err != nil {
+		if err := rows.Scan(&row.ID, &row.Name, &row.Unit); err != nil {
 			return nil, fmt.Errorf("referenceRepo.GetCostCategories: scan: %w", err)
 		}
 		result = append(result, row)
@@ -232,7 +233,7 @@ func (r *ReferenceRepo) GetDetailCostCategories(
 
 	if costCategoryID != "" {
 		q = `
-			SELECT id::text, COALESCE(name,''), COALESCE(code,''), cost_category_id::text
+			SELECT id::text, COALESCE(name,''), COALESCE(unit,''), COALESCE(location,''), cost_category_id::text
 			FROM public.detail_cost_categories
 			WHERE cost_category_id = $1
 			ORDER BY name
@@ -240,7 +241,7 @@ func (r *ReferenceRepo) GetDetailCostCategories(
 		args = []any{costCategoryID}
 	} else {
 		q = `
-			SELECT id::text, COALESCE(name,''), COALESCE(code,''), cost_category_id::text
+			SELECT id::text, COALESCE(name,''), COALESCE(unit,''), COALESCE(location,''), cost_category_id::text
 			FROM public.detail_cost_categories
 			ORDER BY name
 		`
@@ -255,7 +256,7 @@ func (r *ReferenceRepo) GetDetailCostCategories(
 	var result []DetailCostCategoryRow
 	for rows.Next() {
 		var row DetailCostCategoryRow
-		if err := rows.Scan(&row.ID, &row.Name, &row.Code, &row.CostCategoryID); err != nil {
+		if err := rows.Scan(&row.ID, &row.Name, &row.Unit, &row.Location, &row.CostCategoryID); err != nil {
 			return nil, fmt.Errorf("referenceRepo.GetDetailCostCategories: scan: %w", err)
 		}
 		result = append(result, row)
