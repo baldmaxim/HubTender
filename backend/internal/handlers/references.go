@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/rs/zerolog/log"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
@@ -90,6 +91,7 @@ func (h *ReferenceHandler) GetWorkNames(w http.ResponseWriter, r *http.Request) 
 func (h *ReferenceHandler) GetCostCategories(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.GetCostCategories(r.Context())
 	if err != nil {
+		log.Error().Err(err).Msg("references: cost-categories failed")
 		apierr.InternalError("failed to load cost categories").Render(w)
 		return
 	}
@@ -106,6 +108,7 @@ func (h *ReferenceHandler) GetDetailCostCategories(w http.ResponseWriter, r *htt
 
 	rows, err := h.svc.GetDetailCostCategories(r.Context(), costCategoryID)
 	if err != nil {
+		log.Error().Err(err).Msg("references: detail-cost-categories failed")
 		apierr.InternalError("failed to load detail cost categories").Render(w)
 		return
 	}
