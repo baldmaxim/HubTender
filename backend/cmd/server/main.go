@@ -29,6 +29,16 @@ import (
 
 func main() {
 	// -------------------------------------------------------------------------
+	// 0. Healthcheck mode — used by Dockerfile HEALTHCHECK because the
+	//    distroless runtime image has no shell or wget/curl. Invoking the same
+	//    binary keeps the image minimal and the health probe accurate.
+	// -------------------------------------------------------------------------
+	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
+		runHealthcheck()
+		return
+	}
+
+	// -------------------------------------------------------------------------
 	// 1. Config
 	// -------------------------------------------------------------------------
 	cfg, err := config.Load()
@@ -453,6 +463,26 @@ func main() {
 // ---------------------------------------------------------------------------
 // CORS middleware
 // ---------------------------------------------------------------------------
+
+// runHealthcheck performs a single GET against /health on the local server
+// and exits 0 on 2xx / 1 otherwise. Used by the Docker HEALTHCHECK because
+// distroless lacks wget/curl.
+func runHealthcheck() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3005"
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + port + "/health")
+	if err != nil {
+		os.Exit(1)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
 
 // corsMiddleware returns a minimal CORS handler that allows the configured
 // origins. It does not depend on any external library.
