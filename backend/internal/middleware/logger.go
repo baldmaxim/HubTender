@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"bufio"
+	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -30,6 +33,24 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 		rw.wrote = true
 	}
 	return rw.ResponseWriter.Write(b)
+}
+
+// Hijack delegates to the underlying ResponseWriter so WebSocket upgrades work
+// when this wrapper sits in the middleware chain. Returns an error if the
+// underlying writer does not support hijacking.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("underlying ResponseWriter does not support Hijack")
+	}
+	return h.Hijack()
+}
+
+// Flush propagates Flush() so streaming endpoints (SSE etc.) keep working.
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // RequestLogger returns a chi-compatible middleware that logs each request
