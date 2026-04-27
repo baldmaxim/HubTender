@@ -117,6 +117,7 @@ func main() {
 	notificationsRepo := repository.NewNotificationsRepo(pool)
 	tenderRegistryRepo := repository.NewTenderRegistryRepo(pool)
 	costsRepo := repository.NewCostsRepo(pool)
+	nomenclaturesRepo := repository.NewNomenclaturesRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -135,6 +136,7 @@ func main() {
 	notificationsSvc := services.NewNotificationsService(notificationsRepo)
 	tenderRegistrySvc := services.NewTenderRegistryService(tenderRegistryRepo)
 	costsSvc := services.NewCostsService(costsRepo, inMemCache)
+	nomenclaturesSvc := services.NewNomenclaturesService(nomenclaturesRepo, inMemCache)
 
 	healthH := handlers.NewHealthHandler(pool, inMemCache)
 	meH := handlers.NewMeHandler(userSvc)
@@ -158,6 +160,7 @@ func main() {
 	notificationsH := handlers.NewNotificationsHandler(notificationsSvc)
 	tenderRegistryH := handlers.NewTenderRegistryHandler(tenderRegistrySvc)
 	costsH := handlers.NewCostsHandler(costsSvc)
+	nomenclaturesH := handlers.NewNomenclaturesHandler(nomenclaturesSvc)
 	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
@@ -273,6 +276,33 @@ func main() {
 		r.Get("/api/v1/locations", costsH.ListLocations)
 		r.Get("/api/v1/units/active", costsH.ListActiveUnitsFull)
 		r.Post("/api/v1/units/import-batch", costsH.UpsertImportedUnits)
+
+		// Nomenclatures: full CRUD on units / material_names / work_names + remap.
+		r.Get("/api/v1/nomenclatures/units", nomenclaturesH.ListUnits)
+		r.Get("/api/v1/nomenclatures/units/active-list", nomenclaturesH.ListActiveUnitsShort)
+		r.Get("/api/v1/nomenclatures/units/exists", nomenclaturesH.UnitExists)
+		r.Post("/api/v1/nomenclatures/units", nomenclaturesH.CreateUnit)
+		r.Patch("/api/v1/nomenclatures/units/{code}", nomenclaturesH.UpdateUnit)
+		r.Delete("/api/v1/nomenclatures/units/{code}", nomenclaturesH.DeleteUnit)
+
+		r.Get("/api/v1/nomenclatures/material-names", nomenclaturesH.ListMaterialNames)
+		r.Get("/api/v1/nomenclatures/material-names/by-unit", nomenclaturesH.ListMaterialNamesByUnit)
+		r.Post("/api/v1/nomenclatures/material-names", nomenclaturesH.CreateMaterialName)
+		r.Patch("/api/v1/nomenclatures/material-names/{id}", nomenclaturesH.UpdateMaterialName)
+		r.Delete("/api/v1/nomenclatures/material-names/{id}", nomenclaturesH.DeleteMaterialName)
+		r.Post("/api/v1/nomenclatures/material-names/delete-batch", nomenclaturesH.DeleteMaterialNamesIn)
+
+		r.Get("/api/v1/nomenclatures/work-names", nomenclaturesH.ListWorkNames)
+		r.Get("/api/v1/nomenclatures/work-names/by-unit", nomenclaturesH.ListWorkNamesByUnit)
+		r.Post("/api/v1/nomenclatures/work-names", nomenclaturesH.CreateWorkName)
+		r.Patch("/api/v1/nomenclatures/work-names/{id}", nomenclaturesH.UpdateWorkName)
+		r.Delete("/api/v1/nomenclatures/work-names/{id}", nomenclaturesH.DeleteWorkName)
+		r.Post("/api/v1/nomenclatures/work-names/delete-batch", nomenclaturesH.DeleteWorkNamesIn)
+
+		r.Post("/api/v1/nomenclatures/remap/boq-material", nomenclaturesH.RemapBoqMaterial)
+		r.Post("/api/v1/nomenclatures/remap/library-material", nomenclaturesH.RemapLibraryMaterial)
+		r.Post("/api/v1/nomenclatures/remap/boq-work", nomenclaturesH.RemapBoqWork)
+		r.Post("/api/v1/nomenclatures/remap/library-work", nomenclaturesH.RemapLibraryWork)
 	})
 
 	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because

@@ -18,7 +18,8 @@ type ApiDomain =
   | 'redistributions'
   | 'insurance'
   | 'positionFilters'
-  | 'tenderRegistry';
+  | 'tenderRegistry'
+  | 'nomenclatures';
 
 const API_MODE = (import.meta.env.VITE_API_MODE ?? 'supabase') as 'supabase' | 'go' | 'hybrid';
 
