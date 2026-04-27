@@ -1,8 +1,9 @@
 // Admin user/role management helpers consumed by src/pages/Users/Users.tsx.
-// Currently Supabase-only — only the user-self-register flow has a Go BFF
-// endpoint (see src/lib/api/users.ts).
+// Go BFF endpoints land under /api/v1/admin/*; toggle via VITE_API_USERADMIN_ENABLED.
 
 import { supabase } from '../supabase';
+import { apiFetch } from './client';
+import { isGoEnabled } from './featureFlags';
 
 export interface PendingRequestRow {
   id: string;
@@ -45,9 +46,13 @@ export interface TenderListItem {
   version: number;
 }
 
-// ─── Tenders list (used by TenderAccess tab) ────────────────────────────────
+// ─── Tenders for the TenderAccess tab ───────────────────────────────────────
 
 export async function listTendersForUserAccess(): Promise<TenderListItem[]> {
+  if (isGoEnabled('userAdmin')) {
+    const res = await apiFetch<{ data: TenderListItem[] }>('/api/v1/admin/tenders-for-access');
+    return res.data ?? [];
+  }
   const { data, error } = await supabase
     .from('tenders')
     .select('id, tender_number, title, version')
@@ -59,6 +64,10 @@ export async function listTendersForUserAccess(): Promise<TenderListItem[]> {
 // ─── Users ──────────────────────────────────────────────────────────────────
 
 export async function listPendingUsers(): Promise<PendingRequestRow[]> {
+  if (isGoEnabled('userAdmin')) {
+    const res = await apiFetch<{ data: PendingRequestRow[] }>('/api/v1/admin/users/pending');
+    return res.data ?? [];
+  }
   const { data, error } = await supabase
     .from('users')
     .select('id, full_name, email, role_code, registration_date, roles:role_code (name, color)')
@@ -69,6 +78,10 @@ export async function listPendingUsers(): Promise<PendingRequestRow[]> {
 }
 
 export async function listAllUsers(): Promise<UserRow[]> {
+  if (isGoEnabled('userAdmin')) {
+    const res = await apiFetch<{ data: UserRow[] }>('/api/v1/admin/users');
+    return res.data ?? [];
+  }
   const { data, error } = await supabase
     .from('users')
     .select('*, roles:role_code (name, color)')
@@ -83,6 +96,13 @@ export async function approveUser(
   roleCode: string,
   allowedPages: string[],
 ): Promise<void> {
+  if (isGoEnabled('userAdmin')) {
+    await apiFetch<undefined>(`/api/v1/admin/users/${encodeURIComponent(userId)}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ role_code: roleCode, allowed_pages: allowedPages }),
+    });
+    return;
+  }
   const { error } = await supabase
     .from('users')
     .update({
@@ -97,11 +117,24 @@ export async function approveUser(
 }
 
 export async function deleteUser(id: string): Promise<void> {
+  if (isGoEnabled('userAdmin')) {
+    await apiFetch<undefined>(`/api/v1/admin/users/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    return;
+  }
   const { error } = await supabase.from('users').delete().eq('id', id);
   if (error) throw error;
 }
 
 export async function setUserAccessEnabled(id: string, enabled: boolean): Promise<void> {
+  if (isGoEnabled('userAdmin')) {
+    await apiFetch<undefined>(`/api/v1/admin/users/${encodeURIComponent(id)}/access`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    });
+    return;
+  }
   const { error } = await supabase
     .from('users')
     .update({ access_enabled: enabled })
@@ -113,11 +146,25 @@ export async function updateUserProfile(
   id: string,
   patch: { full_name?: string; email?: string; role_code?: string; allowed_pages?: string[] },
 ): Promise<void> {
+  if (isGoEnabled('userAdmin')) {
+    await apiFetch<undefined>(`/api/v1/admin/users/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+    return;
+  }
   const { error } = await supabase.from('users').update(patch).eq('id', id);
   if (error) throw error;
 }
 
 export async function syncUsersAllowedPagesByRole(roleCode: string, allowedPages: string[]): Promise<void> {
+  if (isGoEnabled('userAdmin')) {
+    await apiFetch<undefined>(
+      `/api/v1/admin/users/by-role/${encodeURIComponent(roleCode)}/allowed-pages`,
+      { method: 'PATCH', body: JSON.stringify({ allowed_pages: allowedPages }) },
+    );
+    return;
+  }
   const { error } = await supabase
     .from('users')
     .update({ allowed_pages: allowedPages })
@@ -126,12 +173,19 @@ export async function syncUsersAllowedPagesByRole(roleCode: string, allowedPages
 }
 
 export async function countUsersWithRole(roleCode: string): Promise<number> {
+  if (isGoEnabled('userAdmin')) {
+    const res = await apiFetch<{ count: number }>(
+      `/api/v1/admin/users/count-by-role?role_code=${encodeURIComponent(roleCode)}`,
+    );
+    return res.count ?? 0;
+  }
   const { data, error } = await supabase.from('users').select('id').eq('role_code', roleCode);
   if (error) throw error;
   return data?.length ?? 0;
 }
 
 // ─── Notifications (admin → user notify) ───────────────────────────────────
+// Stays via createSystemNotification — already exposes a Go-aware path.
 
 export async function sendUserNotification(input: {
   userId: string;
@@ -139,25 +193,36 @@ export async function sendUserNotification(input: {
   title: string;
   message: string;
 }): Promise<void> {
-  const { error } = await supabase.from('notifications').insert({
+  // Reuse the dedicated notifications helper to keep the Go branch in one place.
+  const { createSystemNotification } = await import('./notifications');
+  await createSystemNotification({
     user_id: input.userId,
     type: input.type,
     title: input.title,
     message: input.message,
-    is_read: false,
   });
-  if (error) throw error;
 }
 
 // ─── Roles ──────────────────────────────────────────────────────────────────
 
 export async function listRoles(): Promise<RoleRow[]> {
+  if (isGoEnabled('userAdmin')) {
+    const res = await apiFetch<{ data: RoleRow[] }>('/api/v1/admin/roles');
+    return res.data ?? [];
+  }
   const { data, error } = await supabase.from('roles').select('*').order('name');
   if (error) throw error;
   return (data ?? []) as RoleRow[];
 }
 
 export async function updateRoleAllowedPages(code: string, allowedPages: string[]): Promise<void> {
+  if (isGoEnabled('userAdmin')) {
+    await apiFetch<undefined>(
+      `/api/v1/admin/roles/${encodeURIComponent(code)}/allowed-pages`,
+      { method: 'PATCH', body: JSON.stringify({ allowed_pages: allowedPages }) },
+    );
+    return;
+  }
   const { error } = await supabase
     .from('roles')
     .update({ allowed_pages: allowedPages, updated_at: new Date().toISOString() })
@@ -166,23 +231,48 @@ export async function updateRoleAllowedPages(code: string, allowedPages: string[
 }
 
 export async function deleteRole(code: string): Promise<void> {
+  if (isGoEnabled('userAdmin')) {
+    await apiFetch<undefined>(`/api/v1/admin/roles/${encodeURIComponent(code)}`, {
+      method: 'DELETE',
+    });
+    return;
+  }
   const { error } = await supabase.from('roles').delete().eq('code', code);
   if (error) throw error;
 }
 
 export async function findRoleByCode(code: string): Promise<RoleRow | null> {
+  if (isGoEnabled('userAdmin')) {
+    const res = await apiFetch<{ data: RoleRow | null }>(
+      `/api/v1/admin/roles/by-code?code=${encodeURIComponent(code)}`,
+    );
+    return res.data ?? null;
+  }
   const { data, error } = await supabase.from('roles').select('*').eq('code', code).maybeSingle();
   if (error) throw error;
   return (data as RoleRow) ?? null;
 }
 
 export async function findRoleByName(name: string): Promise<RoleRow | null> {
+  if (isGoEnabled('userAdmin')) {
+    const res = await apiFetch<{ data: RoleRow | null }>(
+      `/api/v1/admin/roles/by-name?name=${encodeURIComponent(name)}`,
+    );
+    return res.data ?? null;
+  }
   const { data, error } = await supabase.from('roles').select('*').eq('name', name).maybeSingle();
   if (error) throw error;
   return (data as RoleRow) ?? null;
 }
 
 export async function createRole(input: { code: string; name: string; color: string }): Promise<RoleRow> {
+  if (isGoEnabled('userAdmin')) {
+    const res = await apiFetch<{ data: RoleRow }>('/api/v1/admin/roles', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    return res.data;
+  }
   const { data, error } = await supabase
     .from('roles')
     .insert([{ code: input.code, name: input.name, color: input.color }])

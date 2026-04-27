@@ -120,6 +120,7 @@ func main() {
 	nomenclaturesRepo := repository.NewNomenclaturesRepo(pool)
 	importLogRepo := repository.NewImportLogRepo(pool)
 	projectsRepo := repository.NewProjectsRepo(pool)
+	userAdminRepo := repository.NewUserAdminRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -141,6 +142,7 @@ func main() {
 	nomenclaturesSvc := services.NewNomenclaturesService(nomenclaturesRepo, inMemCache)
 	importLogSvc := services.NewImportLogService(importLogRepo)
 	projectsSvc := services.NewProjectsService(projectsRepo)
+	userAdminSvc := services.NewUserAdminService(userAdminRepo, inMemCache)
 
 	healthH := handlers.NewHealthHandler(pool, inMemCache)
 	meH := handlers.NewMeHandler(userSvc)
@@ -167,6 +169,7 @@ func main() {
 	nomenclaturesH := handlers.NewNomenclaturesHandler(nomenclaturesSvc)
 	importLogH := handlers.NewImportLogHandler(importLogSvc)
 	projectsH := handlers.NewProjectsHandler(projectsSvc)
+	userAdminH := handlers.NewUserAdminHandler(userAdminSvc)
 	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
@@ -330,6 +333,24 @@ func main() {
 
 		r.Post("/api/v1/project-monthly-completion", projectsH.CreateMonthlyCompletion)
 		r.Patch("/api/v1/project-monthly-completion/{id}", projectsH.UpdateMonthlyCompletion)
+
+		// Admin user / role management.
+		r.Get("/api/v1/admin/tenders-for-access", userAdminH.ListTendersForUserAccess)
+		r.Get("/api/v1/admin/users/pending", userAdminH.ListPending)
+		r.Get("/api/v1/admin/users", userAdminH.ListAll)
+		r.Get("/api/v1/admin/users/count-by-role", userAdminH.CountByRole)
+		r.Post("/api/v1/admin/users/{id}/approve", userAdminH.Approve)
+		r.Delete("/api/v1/admin/users/{id}", userAdminH.Delete)
+		r.Patch("/api/v1/admin/users/{id}/access", userAdminH.SetAccess)
+		r.Patch("/api/v1/admin/users/{id}", userAdminH.UpdateProfile)
+		r.Patch("/api/v1/admin/users/by-role/{code}/allowed-pages", userAdminH.SyncPagesByRole)
+
+		r.Get("/api/v1/admin/roles", userAdminH.ListRoles)
+		r.Get("/api/v1/admin/roles/by-code", userAdminH.FindRoleByCode)
+		r.Get("/api/v1/admin/roles/by-name", userAdminH.FindRoleByName)
+		r.Post("/api/v1/admin/roles", userAdminH.CreateRole)
+		r.Patch("/api/v1/admin/roles/{code}/allowed-pages", userAdminH.UpdateRolePages)
+		r.Delete("/api/v1/admin/roles/{code}", userAdminH.DeleteRole)
 	})
 
 	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because

@@ -20,7 +20,8 @@ type ApiDomain =
   | 'positionFilters'
   | 'tenderRegistry'
   | 'nomenclatures'
-  | 'importLog';
+  | 'importLog'
+  | 'userAdmin';
 
 const API_MODE = (import.meta.env.VITE_API_MODE ?? 'supabase') as 'supabase' | 'go' | 'hybrid';
 
