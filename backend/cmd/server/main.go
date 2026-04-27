@@ -121,6 +121,7 @@ func main() {
 	importLogRepo := repository.NewImportLogRepo(pool)
 	projectsRepo := repository.NewProjectsRepo(pool)
 	userAdminRepo := repository.NewUserAdminRepo(pool)
+	markupRepo := repository.NewMarkupRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -143,6 +144,7 @@ func main() {
 	importLogSvc := services.NewImportLogService(importLogRepo)
 	projectsSvc := services.NewProjectsService(projectsRepo)
 	userAdminSvc := services.NewUserAdminService(userAdminRepo, inMemCache)
+	markupSvc := services.NewMarkupService(markupRepo, inMemCache)
 
 	healthH := handlers.NewHealthHandler(pool, inMemCache)
 	meH := handlers.NewMeHandler(userSvc)
@@ -170,6 +172,7 @@ func main() {
 	importLogH := handlers.NewImportLogHandler(importLogSvc)
 	projectsH := handlers.NewProjectsHandler(projectsSvc)
 	userAdminH := handlers.NewUserAdminHandler(userAdminSvc)
+	markupH := handlers.NewMarkupHandler(markupSvc)
 	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
@@ -351,6 +354,36 @@ func main() {
 		r.Post("/api/v1/admin/roles", userAdminH.CreateRole)
 		r.Patch("/api/v1/admin/roles/{code}/allowed-pages", userAdminH.UpdateRolePages)
 		r.Delete("/api/v1/admin/roles/{code}", userAdminH.DeleteRole)
+
+		// Markup tactics + parameters + percentages + pricing + exclusions.
+		r.Get("/api/v1/markup/tactics", markupH.ListTactics)
+		r.Get("/api/v1/markup/tactics/global-by-name", markupH.FindGlobalTactic)
+		r.Get("/api/v1/markup/tactics/{id}", markupH.GetTactic)
+		r.Post("/api/v1/markup/tactics", markupH.CreateTactic)
+		r.Patch("/api/v1/markup/tactics/{id}", markupH.UpdateTactic)
+		r.Patch("/api/v1/markup/tactics/{id}/rename", markupH.RenameTactic)
+		r.Delete("/api/v1/markup/tactics/{id}", markupH.DeleteTactic)
+
+		r.Get("/api/v1/markup/parameters", markupH.ListParameters)
+		r.Post("/api/v1/markup/parameters", markupH.CreateParameter)
+		r.Patch("/api/v1/markup/parameters/{id}", markupH.UpdateParameter)
+		r.Delete("/api/v1/markup/parameters/{id}", markupH.DeleteParameter)
+		r.Patch("/api/v1/markup/parameters/{id}/order-num", markupH.SetParameterOrderNum)
+
+		r.Get("/api/v1/tenders/{id}/markup/tactic-id", markupH.GetTenderTacticID)
+		r.Put("/api/v1/tenders/{id}/markup/tactic-id", markupH.SetTenderTacticID)
+
+		r.Get("/api/v1/tenders/{id}/markup/percentages", markupH.ListTenderMarkupPercentages)
+		r.Put("/api/v1/tenders/{id}/markup/percentages", markupH.ReplaceTenderMarkupPercentages)
+
+		r.Get("/api/v1/tenders/{id}/pricing-distribution", markupH.GetPricingDistribution)
+		r.Post("/api/v1/markup/pricing-distribution", markupH.UpsertPricingDistribution)
+
+		r.Get("/api/v1/tenders/{id}/markup/exclusions", markupH.ListSubcontractExclusions)
+		r.Post("/api/v1/markup/exclusions", markupH.InsertSubcontractExclusion)
+		r.Post("/api/v1/markup/exclusions/batch", markupH.InsertSubcontractExclusionsBatch)
+		r.Delete("/api/v1/markup/exclusions", markupH.DeleteSubcontractExclusion)
+		r.Delete("/api/v1/markup/exclusions/batch", markupH.DeleteSubcontractExclusionsBatch)
 	})
 
 	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because
