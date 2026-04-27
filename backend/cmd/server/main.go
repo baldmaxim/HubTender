@@ -116,6 +116,7 @@ func main() {
 	positionFiltersRepo := repository.NewPositionFiltersRepo(pool)
 	notificationsRepo := repository.NewNotificationsRepo(pool)
 	tenderRegistryRepo := repository.NewTenderRegistryRepo(pool)
+	costsRepo := repository.NewCostsRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -133,6 +134,7 @@ func main() {
 	positionFiltersSvc := services.NewPositionFiltersService(positionFiltersRepo)
 	notificationsSvc := services.NewNotificationsService(notificationsRepo)
 	tenderRegistrySvc := services.NewTenderRegistryService(tenderRegistryRepo)
+	costsSvc := services.NewCostsService(costsRepo, inMemCache)
 
 	healthH := handlers.NewHealthHandler(pool, inMemCache)
 	meH := handlers.NewMeHandler(userSvc)
@@ -155,6 +157,7 @@ func main() {
 	positionFiltersH := handlers.NewPositionFiltersHandler(positionFiltersSvc)
 	notificationsH := handlers.NewNotificationsHandler(notificationsSvc)
 	tenderRegistryH := handlers.NewTenderRegistryHandler(tenderRegistrySvc)
+	costsH := handlers.NewCostsHandler(costsSvc)
 	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
@@ -251,6 +254,25 @@ func main() {
 		r.Patch("/api/v1/tender-registry/{id}", tenderRegistryH.Update)
 		r.Get("/api/v1/tender-statuses", tenderRegistryH.ListTenderStatuses)
 		r.Get("/api/v1/construction-scopes", tenderRegistryH.ListConstructionScopes)
+
+		// Cost categories + detail cost categories CRUD.
+		r.Get("/api/v1/cost-categories", costsH.ListCostCategories)
+		r.Get("/api/v1/cost-categories/find", costsH.FindCostCategory)
+		r.Post("/api/v1/cost-categories", costsH.CreateCostCategory)
+		r.Patch("/api/v1/cost-categories/{id}", costsH.UpdateCostCategory)
+		r.Delete("/api/v1/cost-categories/{id}", costsH.DeleteCostCategory)
+		r.Delete("/api/v1/cost-categories", costsH.DeleteAllCostCategories)
+
+		r.Get("/api/v1/detail-cost-categories", costsH.ListDetailCostCategories)
+		r.Get("/api/v1/detail-cost-categories/max-order-num", costsH.NextDetailOrderNum)
+		r.Post("/api/v1/detail-cost-categories", costsH.CreateDetailCostCategory)
+		r.Patch("/api/v1/detail-cost-categories/{id}", costsH.UpdateDetailCostCategory)
+		r.Delete("/api/v1/detail-cost-categories/{id}", costsH.DeleteDetailCostCategory)
+		r.Delete("/api/v1/detail-cost-categories", costsH.DeleteAllDetailCostCategories)
+
+		r.Get("/api/v1/locations", costsH.ListLocations)
+		r.Get("/api/v1/units/active", costsH.ListActiveUnitsFull)
+		r.Post("/api/v1/units/import-batch", costsH.UpsertImportedUnits)
 	})
 
 	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because
