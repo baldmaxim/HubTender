@@ -19,11 +19,11 @@ function loadDotenv() {
   for (const name of ['.env', '.env.local']) {
     try {
       const raw = readFileSync(join(process.cwd(), name), 'utf8');
-      for (const line of raw.split('\n')) {
+      for (const line of raw.split(/\r?\n/)) {
         const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)=(.*)$/);
         if (!m) continue;
         if (process.env[m[1]] === undefined) {
-          process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+          process.env[m[1]] = m[2].replace(/\r$/, '').replace(/^["']|["']$/g, '');
         }
       }
     } catch { /* absent */ }
