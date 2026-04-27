@@ -119,6 +119,7 @@ func main() {
 	costsRepo := repository.NewCostsRepo(pool)
 	nomenclaturesRepo := repository.NewNomenclaturesRepo(pool)
 	importLogRepo := repository.NewImportLogRepo(pool)
+	projectsRepo := repository.NewProjectsRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -139,6 +140,7 @@ func main() {
 	costsSvc := services.NewCostsService(costsRepo, inMemCache)
 	nomenclaturesSvc := services.NewNomenclaturesService(nomenclaturesRepo, inMemCache)
 	importLogSvc := services.NewImportLogService(importLogRepo)
+	projectsSvc := services.NewProjectsService(projectsRepo)
 
 	healthH := handlers.NewHealthHandler(pool, inMemCache)
 	meH := handlers.NewMeHandler(userSvc)
@@ -164,6 +166,7 @@ func main() {
 	costsH := handlers.NewCostsHandler(costsSvc)
 	nomenclaturesH := handlers.NewNomenclaturesHandler(nomenclaturesSvc)
 	importLogH := handlers.NewImportLogHandler(importLogSvc)
+	projectsH := handlers.NewProjectsHandler(projectsSvc)
 	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
@@ -313,6 +316,20 @@ func main() {
 		r.Get("/api/v1/import-sessions/tenders", importLogH.TendersByIDs)
 		r.Get("/api/v1/import-sessions/all-tenders", importLogH.AllTendersForFilter)
 		r.Post("/api/v1/import-sessions/{id}/cancel", importLogH.Cancel)
+
+		// Projects + agreements + monthly completion.
+		r.Post("/api/v1/projects", projectsH.Create)
+		r.Patch("/api/v1/projects/{id}", projectsH.Update)
+		r.Delete("/api/v1/projects/{id}", projectsH.SoftDelete)
+		r.Get("/api/v1/projects/active-tenders", projectsH.ListActiveTendersForSelect)
+
+		r.Get("/api/v1/projects/{id}/agreements", projectsH.ListAgreements)
+		r.Post("/api/v1/project-agreements", projectsH.CreateAgreement)
+		r.Patch("/api/v1/project-agreements/{id}", projectsH.UpdateAgreement)
+		r.Delete("/api/v1/project-agreements/{id}", projectsH.DeleteAgreement)
+
+		r.Post("/api/v1/project-monthly-completion", projectsH.CreateMonthlyCompletion)
+		r.Patch("/api/v1/project-monthly-completion/{id}", projectsH.UpdateMonthlyCompletion)
 	})
 
 	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because
