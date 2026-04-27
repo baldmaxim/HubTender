@@ -122,6 +122,7 @@ func main() {
 	projectsRepo := repository.NewProjectsRepo(pool)
 	userAdminRepo := repository.NewUserAdminRepo(pool)
 	markupRepo := repository.NewMarkupRepo(pool)
+	fiRepo := repository.NewFIRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -145,6 +146,7 @@ func main() {
 	projectsSvc := services.NewProjectsService(projectsRepo)
 	userAdminSvc := services.NewUserAdminService(userAdminRepo, inMemCache)
 	markupSvc := services.NewMarkupService(markupRepo, inMemCache)
+	fiSvc := services.NewFIService(fiRepo)
 
 	healthH := handlers.NewHealthHandler(pool, inMemCache)
 	meH := handlers.NewMeHandler(userSvc)
@@ -173,6 +175,7 @@ func main() {
 	projectsH := handlers.NewProjectsHandler(projectsSvc)
 	userAdminH := handlers.NewUserAdminHandler(userAdminSvc)
 	markupH := handlers.NewMarkupHandler(markupSvc)
+	fiH := handlers.NewFIHandler(fiSvc)
 	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
@@ -384,6 +387,10 @@ func main() {
 		r.Post("/api/v1/markup/exclusions/batch", markupH.InsertSubcontractExclusionsBatch)
 		r.Delete("/api/v1/markup/exclusions", markupH.DeleteSubcontractExclusion)
 		r.Delete("/api/v1/markup/exclusions/batch", markupH.DeleteSubcontractExclusionsBatch)
+
+		// Financial Indicators heavy aggregate reads.
+		r.Get("/api/v1/tenders/{id}", fiH.GetTenderByID)
+		r.Get("/api/v1/tenders/{id}/boq-items-flat", fiH.ListBoqItemsFlat)
 	})
 
 	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because

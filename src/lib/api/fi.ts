@@ -1,27 +1,25 @@
-// Financial Indicators page helpers — heavy aggregate fetch flow.
-// Currently Supabase-only — Go BFF has no fi-domain endpoints yet.
+// Financial Indicators page helpers with Go BFF / Supabase fallback.
 
 import { supabase } from '../supabase';
 import type { Tender, BoqItem, MarkupTactic } from '../supabase';
+import { apiFetch } from './client';
+import { isGoEnabled } from './featureFlags';
+import { getMarkupTactic } from './markup';
+import { loadTenderInsurance, type InsuranceData } from './insurance';
 
 export type BoqItemWithPosition = BoqItem & {
   client_position: { tender_id: string } | null;
 };
 
-export interface TenderInsuranceRow {
-  judicial_pct: number;
-  total_pct: number;
-  apt_price_m2: number;
-  apt_area: number;
-  parking_price_m2: number;
-  parking_area: number;
-  storage_price_m2: number;
-  storage_area: number;
-}
+export interface TenderInsuranceRow extends InsuranceData {}
 
 const PAGE = 1000;
 
 export async function getTenderById(id: string): Promise<Tender> {
+  if (isGoEnabled('fi')) {
+    const res = await apiFetch<{ data: Tender }>(`/api/v1/tenders/${encodeURIComponent(id)}`);
+    return res.data;
+  }
   const { data, error } = await supabase.from('tenders').select('*').eq('id', id).single();
   if (error) throw error;
   return data as Tender;
@@ -29,22 +27,22 @@ export async function getTenderById(id: string): Promise<Tender> {
 
 export async function tryGetMarkupTactic(id: string | null): Promise<MarkupTactic | null> {
   if (!id) return null;
-  const { data, error } = await supabase.from('markup_tactics').select('*').eq('id', id).single();
-  if (error && error.code !== 'PGRST116') throw error;
-  return (data as MarkupTactic) ?? null;
+  // Reuse the markup api helper — it already handles Go/Supabase + 404.
+  return getMarkupTactic(id);
 }
 
 export async function getTenderInsuranceFI(tenderId: string): Promise<TenderInsuranceRow | null> {
-  const { data, error } = await supabase
-    .from('tender_insurance')
-    .select('judicial_pct, total_pct, apt_price_m2, apt_area, parking_price_m2, parking_area, storage_price_m2, storage_area')
-    .eq('tender_id', tenderId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data as TenderInsuranceRow) ?? null;
+  // Reuse the insurance api helper to keep one Go/Supabase branch.
+  return loadTenderInsurance(tenderId);
 }
 
 export async function listAllBoqItemsForTender(tenderId: string): Promise<BoqItemWithPosition[]> {
+  if (isGoEnabled('fi')) {
+    const res = await apiFetch<{ data: BoqItemWithPosition[] }>(
+      `/api/v1/tenders/${encodeURIComponent(tenderId)}/boq-items-flat`,
+    );
+    return res.data ?? [];
+  }
   const all: BoqItemWithPosition[] = [];
   let from = 0;
   for (;;) {
@@ -70,10 +68,8 @@ export interface SubcontractGrowthExclusionRow {
 export async function listSubcontractGrowthExclusions(
   tenderId: string,
 ): Promise<SubcontractGrowthExclusionRow[]> {
-  const { data, error } = await supabase
-    .from('subcontract_growth_exclusions')
-    .select('detail_cost_category_id, exclusion_type')
-    .eq('tender_id', tenderId);
-  if (error) throw error;
-  return (data ?? []) as SubcontractGrowthExclusionRow[];
+  // Reuse the markup api helper which already has the Go branch.
+  const { listSubcontractGrowthExclusionsForTender } = await import('./markup');
+  const rows = await listSubcontractGrowthExclusionsForTender(tenderId);
+  return rows as SubcontractGrowthExclusionRow[];
 }
