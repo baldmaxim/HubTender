@@ -1,6 +1,12 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { useEffect, useState } from 'react';
 import type { TenderRegistryWithRelations, TenderStatus, ConstructionScope } from '../../../lib/supabase';
+import {
+  fetchTenderRegistryWithRelations,
+  fetchTenderStatuses,
+  fetchConstructionScopes,
+  fetchTenderNumbers,
+  fetchRelatedTendersByNumbers,
+} from '../../../lib/api/tenderRegistry';
 
 const normalizeTenderTitle = (title?: string | null) =>
   (title || '')
@@ -49,42 +55,27 @@ export const useTenderData = () => {
 
   const fetchTenders = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('tender_registry')
-      .select('*, status:status_id(id, name), construction_scope:construction_scope_id(id, name)')
-      .order('sort_order', { ascending: true });
+    try {
+      const data = await fetchTenderRegistryWithRelations();
+      const tendersData = dedupeTenderRegistry(data);
 
-    if (!error && data) {
-      const tendersData = dedupeTenderRegistry(data as TenderRegistryWithRelations[]);
-
-      // Сначала устанавливаем данные без стоимости
       setTenders(tendersData);
       setLoading(false);
 
-      // Затем асинхронно загружаем стоимости для тендеров с tender_number
-      const tendersWithNumbers = tendersData.filter(t => t.tender_number);
-
-      // tender_number → tender_id (максимальная версия)
+      const tendersWithNumbers = tendersData.filter((t) => t.tender_number);
       const tenderIdMap = new Map<string, string>();
-      // tender_id → cached_grand_total (включает страховку от судимостей)
       const grandTotalMap = new Map<string, number>();
 
       if (tendersWithNumbers.length > 0) {
-        const tenderNumbersList = tendersWithNumbers
-          .map(t => t.tender_number)
+        const numbers = tendersWithNumbers
+          .map((t) => t.tender_number)
           .filter((tn): tn is string => tn != null);
+        const relatedTenders = await fetchRelatedTendersByNumbers(numbers);
 
-        const { data: relatedTenders } = await supabase
-          .from('tenders')
-          .select('id, tender_number, version, cached_grand_total')
-          .in('tender_number', tenderNumbersList);
-
-        if (relatedTenders && relatedTenders.length > 0) {
-          // Сортируем по версии убыванием, берём первый (максимальная версия)
-          const sortedTenders = [...relatedTenders].sort((a, b) => (b.version || 0) - (a.version || 0));
-
-          sortedTenders.forEach(rt => {
-            if (!tenderIdMap.has(rt.tender_number)) {
+        if (relatedTenders.length > 0) {
+          const sorted = [...relatedTenders].sort((a, b) => (b.version || 0) - (a.version || 0));
+          sorted.forEach((rt) => {
+            if (rt.tender_number && !tenderIdMap.has(rt.tender_number)) {
               tenderIdMap.set(rt.tender_number, rt.id);
             }
             grandTotalMap.set(rt.id, rt.cached_grand_total || 0);
@@ -92,7 +83,6 @@ export const useTenderData = () => {
         }
       }
 
-      // Берём cached_grand_total из БД (включает страховку от судимостей)
       const updatedTenders = tendersData.map((tender) => {
         if (tender.manual_total_cost != null) {
           return { ...tender, total_cost: tender.manual_total_cost };
@@ -107,36 +97,16 @@ export const useTenderData = () => {
       });
 
       setTenders(updatedTenders);
-    } else {
+    } catch {
       setLoading(false);
     }
   };
 
-  const fetchStatuses = async () => {
-    const { data } = await supabase.from('tender_statuses').select('*').order('name');
-    setStatuses(data || []);
-  };
-
-  const fetchConstructionScopes = async () => {
-    const { data } = await supabase.from('construction_scopes').select('*').order('name');
-    setConstructionScopes(data || []);
-  };
-
-  const fetchTenderNumbers = async () => {
-    const { data } = await supabase
-      .from('tenders')
-      .select('tender_number')
-      .order('created_at', { ascending: false });
-
-    const unique = Array.from(new Set(data?.map(t => t.tender_number) || []));
-    setTenderNumbers(unique);
-  };
-
   useEffect(() => {
     fetchTenders();
-    fetchStatuses();
-    fetchConstructionScopes();
-    fetchTenderNumbers();
+    fetchTenderStatuses().then(setStatuses).catch(() => setStatuses([]));
+    fetchConstructionScopes().then(setConstructionScopes).catch(() => setConstructionScopes([]));
+    fetchTenderNumbers().then(setTenderNumbers).catch(() => setTenderNumbers([]));
   }, []);
 
   return { tenders, statuses, constructionScopes, tenderNumbers, loading, refetch: fetchTenders };

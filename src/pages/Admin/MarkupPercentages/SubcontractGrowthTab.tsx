@@ -11,12 +11,23 @@ import {
   Tag,
 } from 'antd';
 import {
-  supabase,
   DetailCostCategory,
   CostCategory,
   Location,
 } from '../../../lib/supabase';
 import { getErrorMessage } from '../../../utils/errors';
+import {
+  listAllDetailCostCategoriesByOrder,
+  listCostCategoriesByIds,
+  listLocationsByIds,
+} from '../../../lib/api/costs';
+import {
+  listSubcontractGrowthExclusionsForTender,
+  insertSubcontractGrowthExclusion,
+  insertSubcontractGrowthExclusionsBatch,
+  deleteSubcontractGrowthExclusion,
+  deleteSubcontractGrowthExclusionsBatch,
+} from '../../../lib/api/markup';
 
 const { Title, Text } = Typography;
 
@@ -49,30 +60,33 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
     materials: new Set()
   });
 
-  // Загрузка всех категорий затрат
   const fetchCategories = async () => {
     setLoading(true);
     try {
-      const { data: detailCategories, error: detailError } = await supabase
-        .from('detail_cost_categories')
-        .select('*')
-        .order('order_num', { ascending: true });
+      const detailCategories = await listAllDetailCostCategoriesByOrder();
+      const categoryIds = [...new Set(detailCategories.map((d) => d.cost_category_id) as string[])];
+      const locationIds = [
+        ...new Set(
+          detailCategories
+            .map((d) => (d as unknown as { location_id?: string | null }).location_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
 
-      if (detailError) throw detailError;
-
-      const categoryIds = [...new Set(detailCategories?.map(d => d.cost_category_id) || [])];
-      const locationIds = [...new Set(detailCategories?.map(d => d.location_id) || [])];
-
-      const [{ data: costCategories }, { data: locations }] = await Promise.all([
-        supabase.from('cost_categories').select('*').in('id', categoryIds),
-        supabase.from('locations').select('*').in('id', locationIds),
+      const [costCategories, locations] = await Promise.all([
+        listCostCategoriesByIds(categoryIds),
+        listLocationsByIds(locationIds),
       ]);
 
-      const categoriesWithRelations = detailCategories?.map(detail => ({
-        ...detail,
-        cost_category: costCategories?.find(c => c.id === detail.cost_category_id),
-        location: locations?.find(l => l.id === detail.location_id),
-      })) || [];
+      const categoriesWithRelations = detailCategories.map((detail) => ({
+        ...(detail as unknown as DetailCostCategory),
+        cost_category: costCategories.find((c) => c.id === detail.cost_category_id) as
+          | CostCategory
+          | undefined,
+        location: locations.find(
+          (l) => l.id === (detail as unknown as { location_id?: string | null }).location_id,
+        ) as Location | undefined,
+      })) as CostCategoryWithDetails[];
 
       setCategories(categoriesWithRelations);
     } catch (error) {
@@ -83,7 +97,6 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
     }
   };
 
-  // Загрузка исключений для текущего тендера
   const fetchExclusions = async () => {
     if (!tenderId) {
       setExclusions({ works: new Set(), materials: new Set() });
@@ -91,19 +104,14 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
     }
 
     try {
-      const { data, error } = await supabase
-        .from('subcontract_growth_exclusions')
-        .select('detail_cost_category_id, exclusion_type')
-        .eq('tender_id', tenderId);
-
-      if (error) throw error;
+      const data = await listSubcontractGrowthExclusionsForTender(tenderId);
 
       const newExclusions: ExclusionState = {
         works: new Set(),
-        materials: new Set()
+        materials: new Set(),
       };
 
-      data?.forEach(item => {
+      data.forEach((item) => {
         if (item.exclusion_type === 'works') {
           newExclusions.works.add(item.detail_cost_category_id);
         } else if (item.exclusion_type === 'materials') {
@@ -138,16 +146,11 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
     setSaving(true);
     try {
       if (excluded) {
-        // Добавить в исключения
-        const { error } = await supabase
-          .from('subcontract_growth_exclusions')
-          .insert({
-            tender_id: tenderId,
-            detail_cost_category_id: categoryId,
-            exclusion_type: type,
-          });
-
-        if (error) throw error;
+        await insertSubcontractGrowthExclusion({
+          tender_id: tenderId,
+          detail_cost_category_id: categoryId,
+          exclusion_type: type,
+        });
 
         setExclusions(prev => ({
           ...prev,
@@ -157,15 +160,11 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
         const typeLabel = type === 'works' ? 'работ' : 'материалов';
         message.success(`Рост субподряда ${typeLabel} отключён для этой категории`);
       } else {
-        // Удалить из исключений
-        const { error } = await supabase
-          .from('subcontract_growth_exclusions')
-          .delete()
-          .eq('tender_id', tenderId)
-          .eq('detail_cost_category_id', categoryId)
-          .eq('exclusion_type', type);
-
-        if (error) throw error;
+        await deleteSubcontractGrowthExclusion({
+          tender_id: tenderId,
+          detail_cost_category_id: categoryId,
+          exclusion_type: type,
+        });
 
         setExclusions(prev => {
           const newSet = new Set(prev[type]);
@@ -203,18 +202,13 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
       const categoryIds = categoryItems.map(item => item.id);
 
       if (excluded) {
-        // Добавить все элементы группы в исключения
-        const insertData = categoryIds.map(id => ({
-          tender_id: tenderId,
-          detail_cost_category_id: id,
-          exclusion_type: type,
-        }));
-
-        const { error } = await supabase
-          .from('subcontract_growth_exclusions')
-          .insert(insertData);
-
-        if (error) throw error;
+        await insertSubcontractGrowthExclusionsBatch(
+          categoryIds.map((id) => ({
+            tender_id: tenderId,
+            detail_cost_category_id: id,
+            exclusion_type: type,
+          })),
+        );
 
         setExclusions(prev => {
           const newSet = new Set(prev[type]);
@@ -228,15 +222,11 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
         const typeLabel = type === 'works' ? 'работ' : 'материалов';
         message.success(`Рост субподряда ${typeLabel} отключён для всей категории`);
       } else {
-        // Удалить все элементы группы из исключений
-        const { error } = await supabase
-          .from('subcontract_growth_exclusions')
-          .delete()
-          .eq('tender_id', tenderId)
-          .in('detail_cost_category_id', categoryIds)
-          .eq('exclusion_type', type);
-
-        if (error) throw error;
+        await deleteSubcontractGrowthExclusionsBatch({
+          tender_id: tenderId,
+          detail_cost_category_ids: categoryIds,
+          exclusion_type: type,
+        });
 
         setExclusions(prev => {
           const newSet = new Set(prev[type]);

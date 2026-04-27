@@ -17,7 +17,10 @@ import {
 } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { supabase } from '../../../../lib/supabase';
+import {
+  listActiveTendersForProjectSelect,
+  updateProject,
+} from '../../../../lib/api/projects';
 import type { ProjectFull, Tender, ProjectInsert } from '../../../../lib/supabase/types';
 
 const { Text } = Typography;
@@ -55,14 +58,8 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
     const loadTenders = async () => {
       setTendersLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('tenders')
-          .select('id, title, tender_number, client_name')
-          .eq('is_archived', false)
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setTenders((data as Tender[]) || []);
+        const data = await listActiveTendersForProjectSelect();
+        setTenders(data as Tender[]);
       } catch (error) {
         console.error('Error loading tenders:', error);
       } finally {
@@ -102,9 +99,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
         tender_id: values.tender_id || null,
       };
 
-      const { error } = await supabase.from('projects').update(projectData).eq('id', project.id);
-
-      if (error) throw error;
+      await updateProject(project.id, projectData);
 
       message.success('Объект сохранён');
       await onSave();

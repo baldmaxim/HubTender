@@ -15,9 +15,13 @@ import {
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
-import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { ProjectFull, ProjectAgreement } from '../../../lib/supabase/types';
+import {
+  listProjectAgreements,
+  createProjectAgreement,
+  deleteProjectAgreement,
+} from '../../../lib/api/projects';
 
 const { Text, Title } = Typography;
 
@@ -45,25 +49,13 @@ export const AgreementsModal: React.FC<AgreementsModalProps> = ({
   const [addingNew, setAddingNew] = useState(false);
   const [savingNew, setSavingNew] = useState(false);
 
-  // Load agreements
   useEffect(() => {
     const loadAgreements = async () => {
       if (!project) return;
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('project_additional_agreements')
-          .select('*')
-          .eq('project_id', project.id)
-          .order('agreement_date', { ascending: false });
-
-        if (error) throw error;
-        setAgreements(
-          (data || []).map((item) => ({
-            ...item,
-            amount: Number(item.amount),
-          }))
-        );
+        const data = await listProjectAgreements(project.id, 'desc');
+        setAgreements(data.map((item) => ({ ...item, amount: Number(item.amount) })) as ProjectAgreement[]);
       } catch (error) {
         console.error('Error loading agreements:', error);
         message.error('Ошибка загрузки доп. соглашений');
@@ -84,35 +76,20 @@ export const AgreementsModal: React.FC<AgreementsModalProps> = ({
       const values = await form.validateFields();
       setSavingNew(true);
 
-      const { error } = await supabase.from('project_additional_agreements').insert([
-        {
-          project_id: project!.id,
-          agreement_date: values.agreement_date.format('YYYY-MM-DD'),
-          amount: values.amount,
-          description: values.description || null,
-          agreement_number: values.agreement_number || null,
-        },
-      ]);
-
-      if (error) throw error;
+      await createProjectAgreement({
+        project_id: project!.id,
+        agreement_date: values.agreement_date.format('YYYY-MM-DD'),
+        amount: values.amount,
+        description: values.description || null,
+        agreement_number: values.agreement_number || null,
+      });
 
       message.success('Доп. соглашение добавлено');
       form.resetFields();
       setAddingNew(false);
 
-      // Reload agreements
-      const { data } = await supabase
-        .from('project_additional_agreements')
-        .select('*')
-        .eq('project_id', project!.id)
-        .order('agreement_date', { ascending: false });
-
-      setAgreements(
-        (data || []).map((item) => ({
-          ...item,
-          amount: Number(item.amount),
-        }))
-      );
+      const data = await listProjectAgreements(project!.id, 'desc');
+      setAgreements(data.map((item) => ({ ...item, amount: Number(item.amount) })) as ProjectAgreement[]);
 
       await onRefresh();
     } catch (error) {
@@ -125,13 +102,7 @@ export const AgreementsModal: React.FC<AgreementsModalProps> = ({
 
   const handleDelete = async (record: ProjectAgreement) => {
     try {
-      const { error } = await supabase
-        .from('project_additional_agreements')
-        .delete()
-        .eq('id', record.id);
-
-      if (error) throw error;
-
+      await deleteProjectAgreement(record.id);
       message.success('Доп. соглашение удалено');
       setAgreements((prev) => prev.filter((a) => a.id !== record.id));
       await onRefresh();

@@ -18,9 +18,14 @@ import {
 import { PlusOutlined, DeleteOutlined, EditOutlined, SaveOutlined, CloseOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
-import { supabase } from '../../../../lib/supabase';
 import { useTheme } from '../../../../contexts/ThemeContext';
 import type { ProjectFull, ProjectAgreement } from '../../../../lib/supabase/types';
+import {
+  listProjectAgreements,
+  createProjectAgreement,
+  updateProjectAgreement,
+  deleteProjectAgreement,
+} from '../../../../lib/api/projects';
 
 const { Text } = Typography;
 
@@ -77,19 +82,8 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
   const loadAgreements = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('project_additional_agreements')
-        .select('*')
-        .eq('project_id', project.id)
-        .order('agreement_date', { ascending: true });
-
-      if (error) throw error;
-      setAgreements(
-        (data || []).map((item) => ({
-          ...item,
-          amount: Number(item.amount),
-        }))
-      );
+      const data = await listProjectAgreements(project.id, 'asc');
+      setAgreements(data.map((item) => ({ ...item, amount: Number(item.amount) })) as ProjectAgreement[]);
     } catch (error) {
       console.error('Error loading agreements:', error);
       message.error('Ошибка загрузки доп. соглашений');
@@ -107,17 +101,13 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
       const values = await form.validateFields();
       setSavingNew(true);
 
-      const { error } = await supabase.from('project_additional_agreements').insert([
-        {
-          project_id: project.id,
-          agreement_date: values.agreement_date.format('YYYY-MM-DD'),
-          amount: values.amount,
-          description: values.description || null,
-          agreement_number: values.agreement_number || null,
-        },
-      ]);
-
-      if (error) throw error;
+      await createProjectAgreement({
+        project_id: project.id,
+        agreement_date: values.agreement_date.format('YYYY-MM-DD'),
+        amount: values.amount,
+        description: values.description || null,
+        agreement_number: values.agreement_number || null,
+      });
 
       message.success('Доп. соглашение добавлено');
       form.resetFields();
@@ -134,13 +124,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
 
   const handleDelete = async (record: ProjectAgreement) => {
     try {
-      const { error } = await supabase
-        .from('project_additional_agreements')
-        .delete()
-        .eq('id', record.id);
-
-      if (error) throw error;
-
+      await deleteProjectAgreement(record.id);
       message.success('Доп. соглашение удалено');
       setAgreements((prev) => prev.filter((a) => a.id !== record.id));
       await onSave();
@@ -166,17 +150,12 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
     try {
       const values = await editForm.validateFields();
 
-      const { error } = await supabase
-        .from('project_additional_agreements')
-        .update({
-          agreement_number: values.agreement_number || null,
-          agreement_date: values.agreement_date.format('YYYY-MM-DD'),
-          amount: values.amount,
-          description: values.description || null,
-        })
-        .eq('id', editingId);
-
-      if (error) throw error;
+      await updateProjectAgreement(editingId, {
+        agreement_number: values.agreement_number || null,
+        agreement_date: values.agreement_date.format('YYYY-MM-DD'),
+        amount: values.amount,
+        description: values.description || null,
+      });
 
       message.success('Изменения сохранены');
       setEditingId(null);

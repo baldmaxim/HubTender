@@ -16,7 +16,10 @@ import {
 import { SaveOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
-import { supabase } from '../../../../lib/supabase';
+import {
+  createProjectMonthlyCompletion,
+  updateProjectMonthlyCompletion,
+} from '../../../../lib/api/projects';
 import type { ProjectFull, ProjectCompletion } from '../../../../lib/supabase/types';
 
 const { Text } = Typography;
@@ -188,20 +191,13 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
         };
 
         if (row.existingId) {
-          const { error } = await supabase
-            .from('project_monthly_completion')
-            .update({
-              actual_amount: data.actual_amount,
-              forecast_amount: data.forecast_amount,
-              note: data.note,
-            })
-            .eq('id', row.existingId);
-
-          if (error) throw error;
+          await updateProjectMonthlyCompletion(row.existingId, {
+            actual_amount: data.actual_amount,
+            forecast_amount: data.forecast_amount,
+            note: data.note,
+          });
         } else {
-          const { error } = await supabase.from('project_monthly_completion').insert([data]);
-
-          if (error) throw error;
+          await createProjectMonthlyCompletion(data);
         }
       }
 

@@ -2,10 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { Card, Tabs, Table, Button, Space, Tag, Modal, Form, Checkbox, Select, message, Popconfirm, Typography, Alert, Input, Radio, Tooltip, AutoComplete } from 'antd';
 import { CheckOutlined, CloseOutlined, EditOutlined, UserOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { canManageUsers, ALL_PAGES, PAGE_LABELS, PAGES_STRUCTURE, type AccessStatus } from '../../lib/supabase/types';
+import {
+  listTendersForUserAccess,
+  listPendingUsers,
+  listAllUsers,
+  approveUser,
+  deleteUser as apiDeleteUser,
+  setUserAccessEnabled,
+  updateUserProfile,
+  syncUsersAllowedPagesByRole,
+  countUsersWithRole,
+  sendUserNotification,
+  listRoles,
+  updateRoleAllowedPages,
+  deleteRole,
+  findRoleByCode,
+  findRoleByName,
+  createRole,
+  type RoleRow,
+} from '../../lib/api/userAdmin';
+import { getErrorMessage } from '../../utils/errors';
 import dayjs from 'dayjs';
 import TenderAccessTab from './components/TenderAccessTab';
 
@@ -78,131 +97,77 @@ const Users: React.FC = () => {
   // Проверка доступа
   const hasAccess = currentUser && canManageUsers(currentUser.role);
 
-  // Загрузка списка тендеров для поиска
   const loadTendersList = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('id, tender_number, title, version')
-        .order('submission_deadline', { ascending: false });
-
-      if (error) throw error;
-      setTendersList(data || []);
+      const data = await listTendersForUserAccess();
+      setTendersList(data);
     } catch (error) {
       console.error('Ошибка загрузки списка тендеров:', error);
     }
   };
 
-  // Загрузка запросов на регистрацию
   const loadPendingRequests = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select(`
-          id,
-          full_name,
-          email,
-          role_code,
-          registration_date,
-          roles:role_code (
-            name,
-            color
-          )
-        `)
-        .eq('access_status', 'pending')
-        .order('registration_date', { ascending: false });
-
-      if (error) {
-        console.error('Ошибка загрузки запросов:', error);
-        message.error('Не удалось загрузить запросы на регистрацию');
-        return;
-      }
-
-      // Преобразуем данные для удобства использования
-      const requests: PendingRequest[] = (data || []).map((item) => ({
-        id: item.id,
-        full_name: item.full_name,
-        email: item.email,
-        role_code: item.role_code,
-        role_name: (Array.isArray(item.roles) ? item.roles[0] : item.roles)?.name,
-        role_color: (Array.isArray(item.roles) ? item.roles[0] : item.roles)?.color,
-        registration_date: item.registration_date,
-      }));
-
+      const data = await listPendingUsers();
+      const requests: PendingRequest[] = data.map((item) => {
+        const role = Array.isArray(item.roles) ? item.roles[0] : item.roles;
+        return {
+          id: item.id,
+          full_name: item.full_name,
+          email: item.email,
+          role_code: item.role_code,
+          role_name: role?.name,
+          role_color: role?.color ?? undefined,
+          registration_date: item.registration_date,
+        };
+      });
       setPendingRequests(requests);
 
-      // Инициализируем selectedRoles с role_code по умолчанию из запросов
       const initialRoles: Record<string, string> = {};
       requests.forEach((request) => {
         initialRoles[request.id] = request.role_code;
       });
       setSelectedRoles(initialRoles);
     } catch (err) {
-      console.error('Неожиданная ошибка:', err);
-      message.error('Произошла ошибка при загрузке данных');
+      console.error('Ошибка загрузки запросов:', err);
+      message.error('Не удалось загрузить запросы на регистрацию');
     } finally {
       setLoading(false);
     }
   };
 
-  // Загрузка всех пользователей
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select(`
-          *,
-          roles:role_code (
-            name,
-            color
-          )
-        `)
-        .order('registration_date', { ascending: false });
-
-      if (error) {
-        console.error('Ошибка загрузки пользователей:', error);
-        message.error('Не удалось загрузить пользователей');
-        return;
-      }
-
-      // Преобразуем данные для удобства использования
-      const usersData: UserRecord[] = (data || []).map((item) => ({
-        ...item,
-        role_name: (Array.isArray(item.roles) ? item.roles[0] : item.roles)?.name,
-        role_color: (Array.isArray(item.roles) ? item.roles[0] : item.roles)?.color,
-        roles: undefined, // Удаляем вложенный объект
-      }));
-
+      const data = await listAllUsers();
+      const usersData: UserRecord[] = data.map((item) => {
+        const role = Array.isArray(item.roles) ? item.roles[0] : item.roles;
+        const rest = { ...item };
+        delete rest.roles;
+        return {
+          ...rest,
+          role_name: role?.name,
+          role_color: role?.color ?? undefined,
+        } as UserRecord;
+      });
       setUsers(usersData);
     } catch (err) {
-      console.error('Неожиданная ошибка:', err);
-      message.error('Произошла ошибка при загрузке данных');
+      console.error('Ошибка загрузки пользователей:', err);
+      message.error('Не удалось загрузить пользователей');
     } finally {
       setLoading(false);
     }
   };
 
-  // Загрузка ролей
   const loadRoles = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('roles')
-        .select('*')
-        .order('name');
-
-      if (error) {
-        console.error('Ошибка загрузки ролей:', error);
-        message.error('Не удалось загрузить роли');
-        return;
-      }
-
-      setRoles(data || []);
+      const data = await listRoles();
+      setRoles(data);
     } catch (err) {
-      console.error('Неожиданная ошибка:', err);
-      message.error('Произошла ошибка при загрузке ролей');
+      console.error('Ошибка загрузки ролей:', err);
+      message.error('Не удалось загрузить роли');
     } finally {
       setLoading(false);
     }
@@ -227,33 +192,22 @@ const Users: React.FC = () => {
         return;
       }
 
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          access_status: 'approved',
-          approved_by: currentUser.id,
-          approved_at: new Date().toISOString(),
-          role_code: selectedRoleCode,
-          allowed_pages: role.allowed_pages || [],
-        })
-        .eq('id', request.id);
-
-      if (updateError) {
+      try {
+        await approveUser(request.id, currentUser.id, selectedRoleCode, role.allowed_pages || []);
+      } catch (updateError) {
         console.error('Ошибка одобрения:', updateError);
         message.error('Не удалось одобрить запрос');
         return;
       }
 
-      // Отправляем уведомление пользователю
-      const { error: notificationError } = await supabase.from('notifications').insert({
-        user_id: request.id,
-        type: 'success',
-        title: 'Регистрация одобрена',
-        message: `Ваш запрос на регистрацию одобрен. Роль: ${role.name}`,
-        is_read: false,
-      });
-
-      if (notificationError) {
+      try {
+        await sendUserNotification({
+          userId: request.id,
+          type: 'success',
+          title: 'Регистрация одобрена',
+          message: `Ваш запрос на регистрацию одобрен. Роль: ${role.name}`,
+        });
+      } catch (notificationError) {
         console.error('Ошибка отправки уведомления:', notificationError);
       }
 
@@ -266,78 +220,42 @@ const Users: React.FC = () => {
     }
   };
 
-  // Отклонение запроса
   const rejectRequest = async (request: PendingRequest) => {
     try {
-      // Удаляем пользователя из public.users
-      const { error: deleteError } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', request.id);
-
-      if (deleteError) {
-        console.error('Ошибка отклонения:', deleteError);
-        message.error('Не удалось отклонить запрос');
-        return;
-      }
-
-      // auth.users удалится автоматически через FK constraint ON DELETE CASCADE
+      await apiDeleteUser(request.id);
       message.success(`Запрос от ${request.full_name} отклонен`);
       loadPendingRequests();
     } catch (err) {
-      console.error('Неожиданная ошибка:', err);
-      message.error('Произошла ошибка при отклонении');
+      console.error('Ошибка отклонения:', err);
+      message.error('Не удалось отклонить запрос');
     }
   };
 
-  // Удаление пользователя
   const deleteUser = async (user: UserRecord) => {
     try {
-      // Удаление из public.users автоматически удалит из auth.users через FK constraint ON DELETE CASCADE
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', user.id);
-
-      if (error) {
-        console.error('Ошибка удаления:', error);
-        message.error('Не удалось удалить пользователя');
-        return;
-      }
-
+      await apiDeleteUser(user.id);
       message.success(`Пользователь ${user.full_name} удален`);
       loadUsers();
     } catch (err) {
-      console.error('Неожиданная ошибка:', err);
-      message.error('Произошла ошибка при удалении');
+      console.error('Ошибка удаления:', err);
+      message.error('Не удалось удалить пользователя');
     }
   };
 
-  // Переключение доступа пользователя
   const toggleAccess = async (user: UserRecord) => {
     const newAccessValue = !user.access_enabled;
 
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ access_enabled: newAccessValue })
-        .eq('id', user.id);
-
-      if (error) {
-        console.error('Ошибка переключения доступа:', error);
-        message.error('Не удалось изменить доступ');
-        return;
-      }
-
+      await setUserAccessEnabled(user.id, newAccessValue);
       message.success(
         newAccessValue
           ? `Доступ для ${user.full_name} открыт`
-          : `Доступ для ${user.full_name} закрыт`
+          : `Доступ для ${user.full_name} закрыт`,
       );
       loadUsers();
     } catch (err) {
-      console.error('Неожиданная ошибка:', err);
-      message.error('Произошла ошибка при изменении доступа');
+      console.error('Ошибка переключения доступа:', err);
+      message.error('Не удалось изменить доступ');
     }
   };
 
@@ -375,20 +293,14 @@ const Users: React.FC = () => {
 
       const allowedPages = role.allowed_pages || [];
 
-      // Формируем объект обновления
-      const updateData: Record<string, unknown> = {
-        full_name: values.full_name,
-        email: values.email,
-        role_code: values.role_code,
-        allowed_pages: allowedPages,
-      };
-
-      const { error } = await supabase
-        .from('users')
-        .update(updateData)
-        .eq('id', editingUser.id);
-
-      if (error) {
+      try {
+        await updateUserProfile(editingUser.id, {
+          full_name: values.full_name,
+          email: values.email,
+          role_code: values.role_code,
+          allowed_pages: allowedPages,
+        });
+      } catch (error) {
         console.error('Ошибка обновления:', error);
         message.error('Не удалось обновить пользователя');
         return;
@@ -428,15 +340,9 @@ const Users: React.FC = () => {
     try {
       const values = await roleForm.validateFields();
 
-      const { error } = await supabase
-        .from('roles')
-        .update({
-          allowed_pages: values.allowed_pages || [],
-          updated_at: new Date().toISOString(),
-        })
-        .eq('code', editingRole.code);
-
-      if (error) {
+      try {
+        await updateRoleAllowedPages(editingRole.code, values.allowed_pages || []);
+      } catch (error) {
         console.error('Ошибка обновления роли:', error);
         message.error('Не удалось обновить роль');
         return;
@@ -457,57 +363,40 @@ const Users: React.FC = () => {
     }
   };
 
-  // Синхронизация allowed_pages пользователей с ролью
   const syncUsersPagesFromRole = async (roleCode: string, allowedPages: string[]) => {
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ allowed_pages: allowedPages })
-        .eq('role_code', roleCode);
-
-      if (error) {
-        console.error('Ошибка синхронизации прав пользователей:', error);
-      }
+      await syncUsersAllowedPagesByRole(roleCode, allowedPages);
     } catch (err) {
-      console.error('Неожиданная ошибка при синхронизации:', err);
+      console.error('Ошибка синхронизации прав пользователей:', err);
     }
   };
 
-  // Удаление роли
   const handleDeleteRole = async (role: RoleRecord) => {
     try {
-      // Проверяем, нет ли пользователей с этой ролью
-      const { data: usersWithRole, error: checkError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('role_code', role.code);
-
-      if (checkError) {
+      let usersCount: number;
+      try {
+        usersCount = await countUsersWithRole(role.code);
+      } catch (checkError) {
         console.error('Ошибка проверки пользователей:', checkError);
         message.error('Не удалось проверить роль');
         return;
       }
 
-      if (usersWithRole && usersWithRole.length > 0) {
-        message.error(`Невозможно удалить роль "${role.name}": есть пользователи с этой ролью (${usersWithRole.length})`);
+      if (usersCount > 0) {
+        message.error(`Невозможно удалить роль "${role.name}": есть пользователи с этой ролью (${usersCount})`);
         return;
       }
 
-      // Системные роли нельзя удалять
       if (role.is_system_role) {
         message.error('Системные роли нельзя удалять');
         return;
       }
 
-      // Удаляем роль
-      const { error: deleteError } = await supabase
-        .from('roles')
-        .delete()
-        .eq('code', role.code);
-
-      if (deleteError) {
+      try {
+        await deleteRole(role.code);
+      } catch (deleteError) {
         console.error('Ошибка удаления роли:', deleteError);
-        message.error(`Не удалось удалить роль: ${deleteError.message}`);
+        message.error(`Не удалось удалить роль: ${getErrorMessage(deleteError)}`);
         return;
       }
 
@@ -567,57 +456,42 @@ const Users: React.FC = () => {
       const values = await createRoleForm.validateFields();
       const roleCode = generateRoleCode(values.name);
 
-      // Проверяем, не существует ли роль с таким кодом или названием
-      const { data: existingByCode, error: checkCodeError } = await supabase
-        .from('roles')
-        .select('code')
-        .eq('code', roleCode);
-
-      if (checkCodeError) {
+      let existingByCode: RoleRow | null;
+      try {
+        existingByCode = await findRoleByCode(roleCode);
+      } catch (checkCodeError) {
         console.error('Ошибка проверки кода роли:', checkCodeError);
         message.error('Ошибка проверки роли');
         return;
       }
 
-      if (existingByCode && existingByCode.length > 0) {
+      if (existingByCode) {
         message.error('Роль с таким названием уже существует');
         return;
       }
 
-      // Проверяем по имени
-      const { data: existingByName, error: checkNameError } = await supabase
-        .from('roles')
-        .select('code')
-        .eq('name', values.name);
-
-      if (checkNameError) {
+      let existingByName: RoleRow | null;
+      try {
+        existingByName = await findRoleByName(values.name);
+      } catch (checkNameError) {
         console.error('Ошибка проверки имени роли:', checkNameError);
         message.error('Ошибка проверки роли');
         return;
       }
 
-      if (existingByName && existingByName.length > 0) {
+      if (existingByName) {
         message.error('Роль с таким именем уже существует');
         return;
       }
 
-      // Генерируем случайный цвет для новой роли
       const randomColor = generateRandomColor();
 
-      // Создаем новую роль (не передаем allowed_pages и is_system_role - используем значения по умолчанию)
-      const { data: newRole, error } = await supabase
-        .from('roles')
-        .insert([{
-          code: roleCode,
-          name: values.name,
-          color: randomColor,
-        }])
-        .select()
-        .single();
-
-      if (error) {
+      let newRole: RoleRow;
+      try {
+        newRole = await createRole({ code: roleCode, name: values.name, color: randomColor });
+      } catch (error) {
         console.error('Ошибка создания роли:', error);
-        message.error(`Не удалось создать роль: ${error.message}`);
+        message.error(`Не удалось создать роль: ${getErrorMessage(error)}`);
         return;
       }
 
@@ -626,7 +500,6 @@ const Users: React.FC = () => {
       createRoleForm.resetFields();
       await loadRoles();
 
-      // Открываем модальное окно редактирования прав для новой роли
       if (newRole) {
         openRoleModal(newRole as RoleRecord);
       }

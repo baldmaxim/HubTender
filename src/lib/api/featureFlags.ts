@@ -15,7 +15,10 @@ type ApiDomain =
   | 'projects'
   | 'notifications'
   | 'users'
-  | 'redistributions';
+  | 'redistributions'
+  | 'insurance'
+  | 'positionFilters'
+  | 'tenderRegistry';
 
 const API_MODE = (import.meta.env.VITE_API_MODE ?? 'supabase') as 'supabase' | 'go' | 'hybrid';
 
@@ -29,8 +32,16 @@ export function isGoEnabled(domain: ApiDomain): boolean {
   return API_MODE === 'go';
 }
 
-export const API_BASE_URL =
-  import.meta.env.VITE_API_URL ?? 'http://localhost:3005';
+function resolveApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_URL as string | undefined;
+  if (envUrl) return envUrl;
+  if (import.meta.env.PROD) {
+    throw new Error('VITE_API_URL is required in production builds.');
+  }
+  return 'http://localhost:3005';
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 // Realtime: true → use native WS hub (Go BFF). Falsy → supabase.channel() direct.
 export function isRealtimeEnabled(): boolean {

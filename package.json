@@ -6,8 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
+    "test": "playwright test",
+    "test:go": "cd backend && go test ./...",
+    "smoke": "node scripts/smoke/go-bff.mjs",
     "gen:types": "supabase gen types typescript --project-id ocauafggjrqvopxjihas > src/lib/supabase/database.types.ts",
     "gen:schema": "supabase db dump --project-ref ocauafggjrqvopxjihas --schema public > supabase/schemas/prod.sql"
   },
@@ -27,6 +31,7 @@
     "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@typescript-eslint/eslint-plugin": "^7.13.1",

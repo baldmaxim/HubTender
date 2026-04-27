@@ -39,32 +39,37 @@ func Load() (*Config, error) {
 	v := viper.New()
 	v.AutomaticEnv()
 
-	// Set defaults.
 	v.SetDefault("PORT", "3005")
 	v.SetDefault("LOG_LEVEL", "info")
-	v.SetDefault(
-		"SUPABASE_JWKS_URL",
-		"https://ocauafggjrqvopxjihas.supabase.co/auth/v1/.well-known/jwks.json",
-	)
-	v.SetDefault(
-		"SUPABASE_JWT_ISSUER",
-		"https://ocauafggjrqvopxjihas.supabase.co/auth/v1",
-	)
-	v.SetDefault("CORS_ORIGINS", "http://localhost:5185")
 
-	// DATABASE_URL is required — fail fast if absent.
 	dbURL := v.GetString("DATABASE_URL")
 	if dbURL == "" {
 		return nil, fmt.Errorf("config: DATABASE_URL is required but not set")
 	}
 
+	jwksURL := v.GetString("SUPABASE_JWKS_URL")
+	if jwksURL == "" {
+		return nil, fmt.Errorf("config: SUPABASE_JWKS_URL is required but not set")
+	}
+
+	jwtIssuer := v.GetString("SUPABASE_JWT_ISSUER")
+	if jwtIssuer == "" {
+		return nil, fmt.Errorf("config: SUPABASE_JWT_ISSUER is required but not set")
+	}
+
 	rawOrigins := v.GetString("CORS_ORIGINS")
+	if rawOrigins == "" {
+		return nil, fmt.Errorf("config: CORS_ORIGINS is required but not set")
+	}
 	origins := parseCORSOrigins(rawOrigins)
+	if len(origins) == 0 {
+		return nil, fmt.Errorf("config: CORS_ORIGINS must contain at least one origin")
+	}
 
 	cfg := &Config{
 		DatabaseURL:         dbURL,
-		SupabaseJWKSURL:     v.GetString("SUPABASE_JWKS_URL"),
-		SupabaseJWTIssuer:   v.GetString("SUPABASE_JWT_ISSUER"),
+		SupabaseJWKSURL:     jwksURL,
+		SupabaseJWTIssuer:   jwtIssuer,
 		Port:                v.GetString("PORT"),
 		LogLevel:            v.GetString("LOG_LEVEL"),
 		CORSOrigins:         origins,

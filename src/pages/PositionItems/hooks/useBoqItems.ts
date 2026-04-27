@@ -12,6 +12,7 @@ import {
 } from '../../../lib/supabase';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 import { getErrorMessage } from '../../../utils/errors';
+import { getRow as getCachedPositionRow } from '../../../lib/cache/positionRowCache';
 
 interface CostCategoryOption {
   value: string;
@@ -476,17 +477,31 @@ export const useBoqItems = (positionId: string | undefined) => {
   };
 
   useEffect(() => {
-    if (positionId) {
-      fetchPositionData();
-      fetchItems();
-      fetchWorks();
-      fetchMaterials();
-      fetchTemplates();
-      fetchCostCategories();
-      fetchWorkNames();
-      fetchMaterialNames();
-      fetchUnits();
+    if (!positionId) return;
+
+    // Hydrate header instantly from the row cache populated on the parent
+    // ClientPositions tab. fetchPositionData below still runs to refresh and
+    // load currency rates from the joined tenders row.
+    const cached = getCachedPositionRow(positionId);
+    if (cached) {
+      setPosition(cached);
+      setGpVolume(cached.manual_volume || 0);
+      setGpNote(cached.manual_note || '');
+      if (cached.is_additional) {
+        setWorkName(cached.work_name || '');
+        setUnitCode(cached.unit_code || '');
+      }
     }
+
+    fetchPositionData();
+    fetchItems();
+    fetchWorks();
+    fetchMaterials();
+    fetchTemplates();
+    fetchCostCategories();
+    fetchWorkNames();
+    fetchMaterialNames();
+    fetchUnits();
     // fetch functions are stable; intentionally excluded to avoid refetch loop on positionId change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positionId]);

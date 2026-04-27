@@ -15,8 +15,7 @@ import {
   Typography,
   theme,
 } from 'antd';
-import { supabase } from '../../../lib/supabase';
-import { respondTenderIteration } from '../../../lib/api/timeline';
+import { respondTenderIteration, createTenderIteration } from '../../../lib/api/timeline';
 import type { ApprovalStatus, TenderIterationWithRelations } from '../../../lib/supabase/types';
 import { useTenderIterations } from '../hooks/useTenderIterations';
 import type { TimelineGroupItem } from '../hooks/useTenderGroups';
@@ -138,17 +137,13 @@ const UserTimeline: React.FC<UserTimelineProps> = ({
       const nextIterationNumber =
         iterations.reduce((maxValue, iteration) => Math.max(maxValue, iteration.iteration_number), 0) + 1;
 
-      const { error: insertError } = await supabase.from('tender_iterations').insert({
+      await createTenderIteration({
         group_id: group.id,
         user_id: currentUserId,
         iteration_number: nextIterationNumber,
         user_comment: values.user_comment.trim(),
         user_amount: values.user_amount ?? null,
       });
-
-      if (insertError) {
-        throw insertError;
-      }
 
       message.success('Данные добавлены');
       setCreateModalOpen(false);

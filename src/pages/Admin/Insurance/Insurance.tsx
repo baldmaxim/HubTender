@@ -4,8 +4,14 @@ import {
   Row, Col, message, Button, Tag,
 } from 'antd';
 import { SafetyCertificateOutlined, ArrowLeftOutlined } from '@ant-design/icons';
-import { supabase } from '../../../lib/supabase';
 import type { Tender } from '../../../lib/supabase';
+import {
+  fetchInsuranceTenders,
+  loadTenderInsurance,
+  upsertTenderInsurance,
+  type InsuranceData,
+} from '../../../lib/api/insurance';
+import { getErrorMessage } from '../../../utils/errors';
 import { getVersionColorByTitle } from '../../../utils/versionColor';
 import { useAuth } from '../../../contexts/AuthContext';
 
@@ -68,32 +74,14 @@ export default function Insurance() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    supabase
-      .from('tenders')
-      .select('id, title, tender_number, client_name, version, is_archived')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setTenders((data || []) as Tender[]));
+    fetchInsuranceTenders().then(setTenders).catch(() => setTenders([]));
   }, []);
 
   const loadInsurance = useCallback(async (tenderId: string) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('tender_insurance')
-        .select('*')
-        .eq('tender_id', tenderId)
-        .maybeSingle();
-      if (error) throw error;
-      setFormData(data ? {
-        judicial_pct: Number(data.judicial_pct) || 0,
-        total_pct: Number(data.total_pct) || 0,
-        apt_price_m2: Number(data.apt_price_m2) || 0,
-        apt_area: Number(data.apt_area) || 0,
-        parking_price_m2: Number(data.parking_price_m2) || 0,
-        parking_area: Number(data.parking_area) || 0,
-        storage_price_m2: Number(data.storage_price_m2) || 0,
-        storage_area: Number(data.storage_area) || 0,
-      } : { ...DEFAULT_DATA });
+      const data = await loadTenderInsurance(tenderId);
+      setFormData(data ?? { ...DEFAULT_DATA });
     } catch {
       message.error('Ошибка загрузки данных страхования');
     } finally {
@@ -101,11 +89,12 @@ export default function Insurance() {
     }
   }, []);
 
-  const persistSave = useCallback(async (tenderId: string, data: InsuranceFormData) => {
-    const { error } = await supabase
-      .from('tender_insurance')
-      .upsert({ tender_id: tenderId, ...data }, { onConflict: 'tender_id' });
-    if (error) message.error('Ошибка сохранения: ' + error.message);
+  const persistSave = useCallback(async (tenderId: string, data: InsuranceData) => {
+    try {
+      await upsertTenderInsurance(tenderId, data);
+    } catch (error) {
+      message.error('Ошибка сохранения: ' + getErrorMessage(error));
+    }
   }, []);
 
   const handleChange = (field: keyof InsuranceFormData, value: number | null) => {

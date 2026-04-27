@@ -3,7 +3,12 @@ import { Upload, Button, message, Modal } from 'antd';
 import { UploadOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload';
 import * as XLSX from 'xlsx';
-import { supabase } from '../../../../lib/supabase';
+import {
+  upsertImportedUnits,
+  findCostCategoryByNameAndUnit,
+  createCostCategory,
+  createDetailCostCategory,
+} from '../../../../lib/api/costs';
 import { getErrorMessage } from '../../../../utils/errors';
 
 const { confirm } = Modal;
@@ -134,14 +139,10 @@ export const ImportExcel: React.FC<ImportExcelProps> = ({
                     name_short: unit,
                     category: 'импортированная',
                     sort_order: 150 + (index * 10),
-                    is_active: true
+                    is_active: true,
                   }));
 
-                  const { error } = await supabase
-                    .from('units')
-                    .upsert(unitsToInsert, { onConflict: 'code' });
-
-                  if (error) throw error;
+                  await upsertImportedUnits(unitsToInsert);
 
                   message.success(`Добавлено ${newUnits.length} новых единиц измерения`);
                   await loadUnits();
@@ -198,30 +199,16 @@ ORDER BY sort_order;`;
           const saveErrors: string[] = [];
 
           for (const [key, category] of categoriesMap.entries()) {
-            const { data: existingCategory } = await supabase
-              .from('cost_categories')
-              .select('id')
-              .eq('name', category.name)
-              .eq('unit', category.unit)
-              .maybeSingle();
-
-            if (existingCategory) {
-              categoryIdMap.set(key, existingCategory.id);
-            } else {
-              const { data: newCategory, error } = await supabase
-                .from('cost_categories')
-                .insert({
-                  name: category.name,
-                  unit: category.unit,
-                })
-                .select()
-                .single();
-
-              if (error) {
-                saveErrors.push(`Ошибка создания категории "${category.name}": ${error.message}`);
-              } else if (newCategory) {
-                categoryIdMap.set(key, newCategory.id);
+            try {
+              const existing = await findCostCategoryByNameAndUnit(category.name, category.unit);
+              if (existing) {
+                categoryIdMap.set(key, existing.id);
+              } else {
+                const created = await createCostCategory({ name: category.name, unit: category.unit });
+                categoryIdMap.set(key, created.id);
               }
+            } catch (err) {
+              saveErrors.push(`Ошибка создания категории "${category.name}": ${getErrorMessage(err)}`);
             }
           }
 
@@ -229,20 +216,17 @@ ORDER BY sort_order;`;
           for (const detail of detailsList) {
             const categoryId = categoryIdMap.get(detail.categoryKey);
             if (categoryId) {
-              const { error } = await supabase
-                .from('detail_cost_categories')
-                .insert({
+              try {
+                await createDetailCostCategory({
                   cost_category_id: categoryId,
                   order_num: detail.orderNum,
                   name: detail.name,
                   unit: detail.unit,
                   location: detail.location,
                 });
-
-              if (error) {
-                saveErrors.push(`Строка ${detail.rowNum}: ${error.message}`);
-              } else {
                 successCount++;
+              } catch (err) {
+                saveErrors.push(`Строка ${detail.rowNum}: ${getErrorMessage(err)}`);
               }
             }
           }

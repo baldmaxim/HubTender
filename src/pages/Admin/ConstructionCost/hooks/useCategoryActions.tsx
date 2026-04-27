@@ -1,5 +1,9 @@
 import { message } from 'antd';
-import { supabase } from '../../../../lib/supabase';
+import {
+  createCostCategory,
+  createDetailCostCategory,
+  getMaxDetailCostCategoryOrderNum,
+} from '../../../../lib/api/costs';
 import { TreeNode } from './useConstructionCost.tsx';
 
 interface CategoryFormValues { name: string; unit?: string; }
@@ -9,17 +13,7 @@ interface LocationFormValues { unit?: string; location?: string; }
 export const useCategoryActions = (loadData: () => Promise<void>) => {
   const addCategory = async (values: CategoryFormValues) => {
     try {
-      const { error } = await supabase
-        .from('cost_categories')
-        .insert({
-          name: values.name,
-          unit: values.unit,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
+      await createCostCategory({ name: values.name, unit: values.unit });
       message.success('Категория успешно добавлена');
       await loadData();
       return true;
@@ -32,27 +26,14 @@ export const useCategoryActions = (loadData: () => Promise<void>) => {
 
   const addDetail = async (values: DetailFormValues, categoryId?: string) => {
     try {
-      const { data: maxOrderData } = await supabase
-        .from('detail_cost_categories')
-        .select('order_num')
-        .order('order_num', { ascending: false })
-        .limit(1);
-
-      const nextOrderNum = maxOrderData && maxOrderData.length > 0
-        ? (maxOrderData[0].order_num + 1)
-        : 1;
-
-      const { error } = await supabase
-        .from('detail_cost_categories')
-        .insert({
-          cost_category_id: categoryId,
-          name: values.name,
-          unit: values.unit,
-          location: values.location,
-          order_num: nextOrderNum,
-        });
-
-      if (error) throw error;
+      const maxOrderNum = await getMaxDetailCostCategoryOrderNum();
+      await createDetailCostCategory({
+        cost_category_id: categoryId,
+        name: values.name,
+        unit: values.unit,
+        location: values.location,
+        order_num: maxOrderNum + 1,
+      });
 
       message.success('Детализация успешно добавлена');
       await loadData();
@@ -66,17 +47,13 @@ export const useCategoryActions = (loadData: () => Promise<void>) => {
 
   const addLocation = async (values: LocationFormValues, detail: TreeNode | null) => {
     try {
-      const { error } = await supabase
-        .from('detail_cost_categories')
-        .insert({
-          cost_category_id: detail?.categoryId,
-          name: detail?.structure,
-          unit: detail?.unit || values.unit,
-          location: values.location,
-          order_num: detail?.orderNum || 999,
-        });
-
-      if (error) throw error;
+      await createDetailCostCategory({
+        cost_category_id: detail?.categoryId,
+        name: detail?.structure,
+        unit: detail?.unit || values.unit,
+        location: values.location,
+        order_num: detail?.orderNum || 999,
+      });
 
       message.success('Локализация успешно добавлена');
       await loadData();

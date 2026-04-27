@@ -1,8 +1,18 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
-import { supabase } from '../../../../lib/supabase';
 import { getErrorMessage } from '../../../../utils/errors';
+import {
+  listWorkNames,
+  listWorkNamesByUnit,
+  createWorkName,
+  updateWorkName,
+  deleteWorkName,
+  deleteWorkNamesIn,
+  remapBoqWorkName,
+  remapWorksLibraryWorkName,
+  unitExists,
+} from '../../../../lib/api/nomenclatures';
 
 const { confirm } = Modal;
 
@@ -35,31 +45,8 @@ export const useWorks = () => {
   const loadWorks = async () => {
     setLoading(true);
     try {
-      // Загружаем данные батчами, так как Supabase ограничивает 1000 строк за запрос
-      let allWorks: WorkRecord[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('work_names')
-          .select('*')
-          .order('name')
-          .range(from, from + batchSize - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allWorks = [...allWorks, ...data];
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
-
-      const formattedData: WorkRecord[] = allWorks.map((item) => ({
+      const data = await listWorkNames();
+      const formattedData: WorkRecord[] = data.map((item) => ({
         key: item.id,
         id: item.id,
         name: item.name,
@@ -80,58 +67,18 @@ export const useWorks = () => {
   const saveWork = async (values: { name: string; unit: string }, editingWorkId?: string) => {
     try {
       if (editingWorkId) {
-        // Валидация: проверить что unit существует в справочнике
-        const { data: unitExists, error: unitCheckError } = await supabase
-          .from('units')
-          .select('code')
-          .eq('code', values.unit)
-          .maybeSingle();
-
-        if (unitCheckError) {
-          console.error('Ошибка проверки единицы измерения:', unitCheckError);
-          throw new Error('Ошибка проверки единицы измерения');
-        }
-
-        if (!unitExists) {
+        const exists = await unitExists(values.unit);
+        if (!exists) {
           message.error(`Единица измерения "${values.unit}" не существует в справочнике`);
           return false;
         }
 
-        // UPDATE без ручного updated_at (триггер установит автоматически)
-        const { error } = await supabase
-          .from('work_names')
-          .update({
-            name: values.name,
-            unit: values.unit,
-          })
-          .eq('id', editingWorkId)
-          .select();
-
-        if (error) {
-          console.error('[NOMENCLATURE UPDATE ERROR]', {
-            table: 'work_names',
-            id: editingWorkId,
-            values: values,
-            error: error,
-            code: error.code,
-            message: error.message,
-          });
-          throw error;
-        }
-
+        await updateWorkName(editingWorkId, values);
         message.success('Работа обновлена');
       } else {
-        // Проверка на дубликат перед вставкой
         const normalizedInputName = normalizeName(values.name);
-        const { data: existingWorks, error: checkError } = await supabase
-          .from('work_names')
-          .select('name, unit')
-          .eq('unit', values.unit);
-
-        if (checkError) throw checkError;
-
-        // Проверяем нормализованные имена
-        const duplicate = existingWorks?.find(
+        const existingWorks = await listWorkNamesByUnit(values.unit);
+        const duplicate = existingWorks.find(
           (work) => normalizeName(work.name) === normalizedInputName
         );
 
@@ -140,14 +87,7 @@ export const useWorks = () => {
           return false;
         }
 
-        const { error } = await supabase
-          .from('work_names')
-          .insert([{
-            name: values.name,
-            unit: values.unit,
-          }]);
-
-        if (error) throw error;
+        await createWorkName(values);
         message.success('Работа добавлена');
       }
 
@@ -173,13 +113,7 @@ export const useWorks = () => {
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
         try {
-          const { error } = await supabase
-            .from('work_names')
-            .delete()
-            .eq('id', record.id);
-
-          if (error) throw error;
-
+          await deleteWorkName(record.id);
           message.success('Работа удалена');
           await loadWorks();
         } catch (error) {
@@ -249,28 +183,12 @@ export const useWorks = () => {
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
         try {
-          // Перепривязываем все ссылки на дубли → на оригинал
           for (const { duplicateId, keeperId } of remapPairs) {
-            const { error: boqError } = await supabase
-              .from('boq_items')
-              .update({ work_name_id: keeperId })
-              .eq('work_name_id', duplicateId);
-            if (boqError) throw boqError;
-
-            const { error: libError } = await supabase
-              .from('works_library')
-              .update({ work_name_id: keeperId })
-              .eq('work_name_id', duplicateId);
-            if (libError) throw libError;
+            await remapBoqWorkName(duplicateId, keeperId);
+            await remapWorksLibraryWorkName(duplicateId, keeperId);
           }
 
-          // Удаляем освободившиеся дубли
-          const toDeleteIds = remapPairs.map((p) => p.duplicateId);
-          const { error: deleteError } = await supabase
-            .from('work_names')
-            .delete()
-            .in('id', toDeleteIds);
-          if (deleteError) throw deleteError;
+          await deleteWorkNamesIn(remapPairs.map((p) => p.duplicateId));
 
           message.success(`Удалено ${remapPairs.length} дублей`);
           await loadWorks();

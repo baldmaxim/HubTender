@@ -1,9 +1,9 @@
 import { useCallback } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
-import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { ProjectInsert, ProjectFull } from '../../../lib/supabase/types';
+import { createProject, updateProject, softDeleteProject } from '../../../lib/api/projects';
 
 const { confirm } = Modal;
 
@@ -14,38 +14,27 @@ export const useProjectActions = (fetchProjects: () => Promise<void>) => {
     async (values: ProjectInsert, editingId?: string): Promise<boolean> => {
       try {
         if (editingId) {
-          // Update existing project
-          const { error } = await supabase
-            .from('projects')
-            .update({
-              name: values.name,
-              client_name: values.client_name,
-              contract_cost: values.contract_cost,
-              area: values.area || null,
-              contract_date: values.contract_date || null,
-              construction_end_date: values.construction_end_date || null,
-              tender_id: values.tender_id || null,
-            })
-            .eq('id', editingId);
-
-          if (error) throw error;
+          await updateProject(editingId, {
+            name: values.name,
+            client_name: values.client_name,
+            contract_cost: values.contract_cost,
+            area: values.area || null,
+            contract_date: values.contract_date || null,
+            construction_end_date: values.construction_end_date || null,
+            tender_id: values.tender_id || null,
+          });
           message.success('Объект успешно обновлён');
         } else {
-          // Create new project
-          const { error } = await supabase.from('projects').insert([
-            {
-              name: values.name,
-              client_name: values.client_name,
-              contract_cost: values.contract_cost,
-              area: values.area || null,
-              contract_date: values.contract_date || null,
-              construction_end_date: values.construction_end_date || null,
-              tender_id: values.tender_id || null,
-              is_active: true,
-            },
-          ]);
-
-          if (error) throw error;
+          await createProject({
+            name: values.name,
+            client_name: values.client_name,
+            contract_cost: values.contract_cost,
+            area: values.area || null,
+            contract_date: values.contract_date || null,
+            construction_end_date: values.construction_end_date || null,
+            tender_id: values.tender_id || null,
+            is_active: true,
+          });
           message.success('Объект успешно создан');
         }
 
@@ -57,7 +46,7 @@ export const useProjectActions = (fetchProjects: () => Promise<void>) => {
         return false;
       }
     },
-    [fetchProjects]
+    [fetchProjects],
   );
 
   const handleDelete = useCallback(
@@ -77,14 +66,7 @@ export const useProjectActions = (fetchProjects: () => Promise<void>) => {
         className: theme === 'dark' ? 'dark-modal' : '',
         onOk: async () => {
           try {
-            // Soft delete - just set is_active to false
-            const { error } = await supabase
-              .from('projects')
-              .update({ is_active: false })
-              .eq('id', record.id);
-
-            if (error) throw error;
-
+            await softDeleteProject(record.id);
             message.success('Объект удалён');
             await fetchProjects();
           } catch (error) {
@@ -94,7 +76,7 @@ export const useProjectActions = (fetchProjects: () => Promise<void>) => {
         },
       });
     },
-    [fetchProjects, theme]
+    [fetchProjects, theme],
   );
 
   return { handleSave, handleDelete };

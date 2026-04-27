@@ -118,6 +118,14 @@ async function main() {
 
   await get('/api/v1/tenders?limit=5', jwt, b => (Array.isArray(b.data) ? null : 'no data array'));
 
+  // Phase 6: insurance, position-filters, tender-registry endpoints.
+  await get('/api/v1/tender-registry', jwt, b => (Array.isArray(b.data) ? null : 'no data array'));
+  await get('/api/v1/tender-statuses', jwt, b => (Array.isArray(b.data) ? null : 'no data array'));
+  await get('/api/v1/construction-scopes', jwt, b => (Array.isArray(b.data) ? null : 'no data array'));
+  await get('/api/v1/tender-registry/next-sort-order', jwt, b => (typeof b.next_sort_order === 'number' ? null : 'no next_sort_order'));
+  await get('/api/v1/tender-registry/autocomplete', jwt, b => (Array.isArray(b.data) ? null : 'no data array'));
+  await get('/api/v1/tender-registry/tender-numbers', jwt, b => (Array.isArray(b.data) ? null : 'no data array'));
+
   console.log('');
   const failed = results.filter(r => !r.ok);
   if (failed.length === 0) {

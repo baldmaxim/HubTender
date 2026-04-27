@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { message } from 'antd';
 import {
   supabase,
@@ -9,6 +9,12 @@ import {
 } from '../../../lib/supabase';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import { getErrorMessage } from '../../../utils/errors';
+import {
+  readCache as readPositionsCache,
+  writeCache as writePositionsCache,
+  dropCache as dropPositionsCache,
+} from '../../../lib/cache/clientPositionsCache';
+import { setRows as setRowCacheRows } from '../../../lib/cache/positionRowCache';
 
 type PositionCountMap = Record<string, { works: number; materials: number; total: number }>;
 
@@ -249,18 +255,11 @@ export const useClientPositions = () => {
     return leafIds;
   };
 
-  const fetchClientPositions = useCallback(async (tenderId: string) => {
-    setLoading(true);
-
-    try {
-      const [positions, boqItems, tender] = await Promise.all([
-        loadAllPositions(tenderId),
-        loadAllBoqItems(tenderId),
-        loadTenderById(tenderId),
-      ]);
-
+  const applyAggregate = useCallback(
+    (positions: ClientPosition[], boqItems: RawBoqItem[], tender: Tender | null) => {
       setClientPositions(positions);
       setLeafPositionIndices(computeLeafPositions(positions));
+      setRowCacheRows(positions);
 
       if (tender) {
         setSelectedTender(tender);
@@ -269,18 +268,59 @@ export const useClientPositions = () => {
       const { counts, totalSum: nextTotalSum } = buildPositionStats(boqItems, tender);
       setPositionCounts(counts);
       setTotalSum(nextTotalSum);
-    } catch (error) {
-      message.error('Ошибка загрузки позиций: ' + getErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
+
+  // Tracks the timestamp of the last successful fetch per tenderId so that
+  // refetches triggered by mutations (within RECENT_FETCH_MS) bypass the SWR
+  // cache and avoid a stale-flash. First mount or revisits after the window
+  // still benefit from instant cached render.
+  const recentlyFetchedRef = useRef<Map<string, number>>(new Map());
+  const RECENT_FETCH_MS = 30_000;
+
+  const fetchClientPositions = useCallback(
+    async (tenderId: string) => {
+      const recentTs = recentlyFetchedRef.current.get(tenderId);
+      const fetchedRecently = recentTs !== undefined && Date.now() - recentTs < RECENT_FETCH_MS;
+
+      if (fetchedRecently) {
+        dropPositionsCache(tenderId);
+        setLoading(true);
+      } else {
+        const cached = readPositionsCache<ClientPosition[], RawBoqItem[], Tender | null>(tenderId);
+        if (cached) {
+          applyAggregate(cached.positions, cached.boqItems, cached.tender);
+        } else {
+          setLoading(true);
+        }
+      }
+
+      try {
+        const [positions, boqItems, tender] = await Promise.all([
+          loadAllPositions(tenderId),
+          loadAllBoqItems(tenderId),
+          loadTenderById(tenderId),
+        ]);
+
+        applyAggregate(positions, boqItems, tender);
+        writePositionsCache(tenderId, positions, boqItems, tender);
+        recentlyFetchedRef.current.set(tenderId, Date.now());
+      } catch (error) {
+        message.error('Ошибка загрузки позиций: ' + getErrorMessage(error));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyAggregate],
+  );
 
   // Native WS hub (Go BFF) path.
   const wsActive = useRealtimeTopic(
     selectedTender?.id ? `tender:${selectedTender.id}` : null,
     () => {
       if (selectedTender?.id) {
+        dropPositionsCache(selectedTender.id);
         void fetchTenders();
         void fetchClientPositions(selectedTender.id);
       }
@@ -304,6 +344,7 @@ export const useClientPositions = () => {
           filter: `id=eq.${selectedTender.id}`,
         },
         () => {
+          dropPositionsCache(selectedTender.id);
           void fetchTenders();
           void fetchClientPositions(selectedTender.id);
         }

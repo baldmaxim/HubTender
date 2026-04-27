@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Form, Input, InputNumber, AutoComplete, Select, DatePicker, Row, Col, Button, message, theme } from 'antd';
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
-import { supabase } from '../../../lib/supabase';
 import type {
   TenderStatus,
   ConstructionScope,
   TenderRegistryInsert,
 } from '../../../lib/supabase';
+import {
+  fetchTenderRegistryAutocomplete,
+  getNextTenderRegistrySortOrder,
+  createTenderRegistry,
+} from '../../../lib/api/tenderRegistry';
 import { ChronologyList, TenderPackageList } from './DynamicList';
 import { getDashboardStatusByStatusName } from '../utils/tenderMonitor';
 
@@ -33,37 +37,22 @@ export const TenderAddForm: React.FC<TenderAddFormProps> = ({
   const [titles, setTitles] = useState<string[]>([]);
 
   useEffect(() => {
-    const fetchAutocompleteData = async () => {
-      const { data } = await supabase
-        .from('tender_registry')
-        .select('title, client_name')
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (!data) {
-        return;
+    void (async () => {
+      try {
+        const { titles: t, clientNames: c } = await fetchTenderRegistryAutocomplete();
+        setTitles(t);
+        setClientNames(c);
+      } catch {
+        // ignore — fallback to empty autocomplete options
       }
-
-      const uniqueTitles = Array.from(new Set(data.map((item) => item.title).filter(Boolean)));
-      const uniqueClients = Array.from(new Set(data.map((item) => item.client_name).filter(Boolean)));
-      setTitles(uniqueTitles);
-      setClientNames(uniqueClients);
-    };
-
-    void fetchAutocompleteData();
+    })();
   }, []);
 
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
 
-      const { data: maxData } = await supabase
-        .from('tender_registry')
-        .select('sort_order')
-        .order('sort_order', { ascending: false })
-        .limit(1);
-
-      const nextSortOrder = maxData?.[0]?.sort_order ? maxData[0].sort_order + 1 : 1;
+      const nextSortOrder = await getNextTenderRegistrySortOrder();
 
       const chronologyItems = (values.chronology_items || []).map((item: { date?: { toISOString?: () => string }; text?: string; type?: string }) => ({
         date: item.date?.toISOString?.() || null,
@@ -101,9 +90,9 @@ export const TenderAddForm: React.FC<TenderAddFormProps> = ({
         invitation_date: values.invitation_date?.toISOString() || null,
       };
 
-      const { error } = await supabase.from('tender_registry').insert(payload);
-
-      if (error) {
+      try {
+        await createTenderRegistry(payload);
+      } catch {
         message.error('Ошибка добавления тендера');
         return;
       }

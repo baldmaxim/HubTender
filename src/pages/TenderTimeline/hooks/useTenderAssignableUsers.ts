@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
 import type { TimelineUserRef } from '../../../lib/supabase/types';
+import { listTimelineAssignableUsers } from '../../../lib/api/timeline';
 import { DEFAULT_TENDER_TEAMS, normalizeFullName } from '../utils/timeline.utils';
 
 interface UseTenderAssignableUsersResult {
@@ -21,20 +21,11 @@ export function useTenderAssignableUsers(): UseTenderAssignableUsersResult {
 
     try {
       const configuredNames = new Set(
-        DEFAULT_TENDER_TEAMS.flatMap((team) => team.members).map((fullName) => normalizeFullName(fullName))
+        DEFAULT_TENDER_TEAMS.flatMap((team) => team.members).map((fullName) => normalizeFullName(fullName)),
       );
 
-      const { data, error: fetchError } = await supabase.from('users').select(`
-          id,
-          full_name,
-          role_code
-        `);
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
-      const matchedUsers = ((data || []) as TimelineUserRef[])
+      const data = await listTimelineAssignableUsers();
+      const matchedUsers = data
         .filter((user) => configuredNames.has(normalizeFullName(user.full_name)))
         .sort((left, right) => left.full_name.localeCompare(right.full_name, 'ru-RU'));
 

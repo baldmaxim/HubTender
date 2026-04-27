@@ -17,9 +17,17 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
-import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getErrorMessage } from '../../../utils/errors';
+import {
+  fetchImportSessions,
+  fetchImportLogUsers,
+  fetchImportLogTenders,
+  fetchAllTendersForFilter,
+  deleteBoqItemsForImportSession,
+  restoreClientPositionFromSnapshot,
+  markImportSessionCancelled,
+} from '../../../lib/api/importLog';
 
 const { Text } = Typography;
 
@@ -60,53 +68,22 @@ const ImportLog: React.FC = () => {
   const fetchSessions = useCallback(async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('import_sessions')
-        .select('id, user_id, tender_id, file_name, items_count, imported_at, cancelled_at, cancelled_by, positions_snapshot')
-        .order('imported_at', { ascending: false })
-        .limit(200);
+      const rawSessions = await fetchImportSessions(tenderFilter);
 
-      if (tenderFilter) {
-        query = query.eq('tender_id', tenderFilter);
-      }
-
-      const { data: sessionsData, error } = await query;
-      if (error) throw error;
-
-      const rawSessions = sessionsData || [];
-
-      // Собираем уникальные user_id для загрузки имён
       const userIds = [...new Set([
-        ...rawSessions.map(s => s.user_id),
-        ...rawSessions.map(s => s.cancelled_by),
-      ].filter(Boolean))];
+        ...rawSessions.map((s) => s.user_id),
+        ...rawSessions.map((s) => s.cancelled_by),
+      ].filter(Boolean) as string[])];
 
-      // Собираем уникальные tender_id
-      const tenderIds = [...new Set(rawSessions.map(s => s.tender_id).filter(Boolean))];
+      const tenderIds = [...new Set(rawSessions.map((s) => s.tender_id).filter(Boolean) as string[])];
 
-      // Параллельная загрузка пользователей и тендеров
-      const [usersRes, tendersRes] = await Promise.all([
-        userIds.length > 0
-          ? supabase
-            .from('users')
-            .select(`
-              id,
-              full_name,
-              role_code,
-              roles:role_code (
-                name,
-                color
-              )
-            `)
-            .in('id', userIds)
-          : Promise.resolve({ data: [] }),
-        tenderIds.length > 0
-          ? supabase.from('tenders').select('id, title, tender_number').in('id', tenderIds)
-          : Promise.resolve({ data: [] }),
+      const [users, tendersData] = await Promise.all([
+        fetchImportLogUsers(userIds),
+        fetchImportLogTenders(tenderIds),
       ]);
 
-      const usersMap = new Map((usersRes.data || []).map((u) => [u.id, u]));
-      const tendersMap = new Map((tendersRes.data || []).map((t) => [t.id, t]));
+      const usersMap = new Map(users.map((u) => [u.id, u]));
+      const tendersMap = new Map(tendersData.map((t) => [t.id, t]));
 
       const rows: ImportSessionRow[] = rawSessions.map((s) => ({
         id: s.id,
@@ -138,11 +115,12 @@ const ImportLog: React.FC = () => {
   }, [tenderFilter]);
 
   const fetchTenders = async () => {
-    const { data } = await supabase
-      .from('tenders')
-      .select('id, title, tender_number')
-      .order('title');
-    setTenders(data || []);
+    try {
+      const data = await fetchAllTendersForFilter();
+      setTenders(data);
+    } catch {
+      setTenders([]);
+    }
   };
 
   useEffect(() => {
@@ -184,37 +162,15 @@ const ImportLog: React.FC = () => {
     if (!user?.id) return;
     setCancelling(session.id);
     try {
-      // 1. Удаляем все boq_items этой сессии
-      const { error: deleteError } = await supabase
-        .from('boq_items')
-        .delete()
-        .eq('import_session_id', session.id);
+      await deleteBoqItemsForImportSession(session.id);
 
-      if (deleteError) throw deleteError;
-
-      // 2. Восстанавливаем данные ГП позиций из snapshot
       if (session.positions_snapshot && session.positions_snapshot.length > 0) {
         for (const snap of session.positions_snapshot) {
-          await supabase
-            .from('client_positions')
-            .update({
-              manual_volume: snap.manual_volume,
-              manual_note: snap.manual_note,
-            })
-            .eq('id', snap.id);
+          await restoreClientPositionFromSnapshot(snap);
         }
       }
 
-      // 3. Помечаем сессию как отменённую
-      const { error: updateError } = await supabase
-        .from('import_sessions')
-        .update({
-          cancelled_at: new Date().toISOString(),
-          cancelled_by: user.id,
-        })
-        .eq('id', session.id);
-
-      if (updateError) throw updateError;
+      await markImportSessionCancelled(session.id, user.id);
 
       message.success(`Импорт отменён. Удалено ${session.items_count} элементов BOQ.`);
       fetchSessions();

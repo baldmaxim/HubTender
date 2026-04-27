@@ -1,19 +1,16 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '../../../lib/supabase';
 import type { Tender } from '../../../lib/supabase';
+import { fetchTenders } from '../../../lib/api/tenders';
+import { createSystemNotification } from '../../../lib/api/notifications';
+import { getErrorMessage } from '../../../utils/errors';
 
 const addNotification = async (
   title: string,
   message: string,
-  type: 'success' | 'info' | 'warning' | 'pending' = 'warning'
+  type: 'success' | 'info' | 'warning' | 'pending' = 'warning',
 ) => {
   try {
-    await supabase.from('notifications').insert({
-      title,
-      message,
-      type,
-      is_read: false,
-    });
+    await createSystemNotification({ title, message, type });
   } catch (error) {
     console.error('Ошибка создания уведомления:', error);
   }
@@ -26,21 +23,14 @@ export const useTendersData = () => {
   const loadTenders = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: tendersData, error } = await supabase
-        .from('tenders')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        await addNotification(
-          'Ошибка загрузки списка тендеров',
-          `Не удалось загрузить список тендеров: ${error.message}`,
-          'warning'
-        );
-        throw error;
-      }
-      setTenders(tendersData || []);
+      const tendersData = await fetchTenders();
+      setTenders(tendersData);
     } catch (error) {
+      await addNotification(
+        'Ошибка загрузки списка тендеров',
+        `Не удалось загрузить список тендеров: ${getErrorMessage(error)}`,
+        'warning',
+      );
       console.error('Ошибка загрузки тендеров:', error);
     } finally {
       setLoading(false);

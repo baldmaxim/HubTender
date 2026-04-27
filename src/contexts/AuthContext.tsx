@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { AuthUser, UserRole } from '../lib/supabase/types';
+import { invalidateApiCache } from '../lib/api/client';
+import { dropAll as dropAllPositionsCache } from '../lib/cache/clientPositionsCache';
+import { invalidateAll as dropAllPositionRows } from '../lib/cache/positionRowCache';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -77,6 +80,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await supabase.auth.signOut();
       setUser(null);
+      invalidateApiCache();
+      dropAllPositionsCache();
+      dropAllPositionRows();
     } catch (error) {
       console.error('[AuthContext] Ошибка при выходе:', error);
     }

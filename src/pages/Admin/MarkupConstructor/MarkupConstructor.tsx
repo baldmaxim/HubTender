@@ -23,7 +23,27 @@ import {
   Table
 } from 'antd';
 import { SaveOutlined, ReloadOutlined, PlusOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, EditOutlined, CloseOutlined, ArrowLeftOutlined, CheckOutlined, CopyOutlined } from '@ant-design/icons';
-import { supabase, Tender, MarkupParameter, MarkupTactic, MarkupStep, PricingDistribution, PricingDistributionInsert, DistributionTarget } from '../../../lib/supabase';
+import { Tender, MarkupParameter, MarkupTactic, MarkupStep, PricingDistribution, PricingDistributionInsert, DistributionTarget } from '../../../lib/supabase';
+import { fetchTenders as apiFetchTenders } from '../../../lib/api/tenders';
+import {
+  listMarkupTactics,
+  getMarkupTactic,
+  findGlobalMarkupTacticByName,
+  createMarkupTactic,
+  updateMarkupTactic,
+  renameMarkupTactic,
+  deleteMarkupTactic,
+  listActiveMarkupParameters,
+  createMarkupParameter,
+  updateMarkupParameter,
+  deleteMarkupParameter,
+  setMarkupParameterOrderNum,
+  getTenderMarkupTacticId,
+  setTenderMarkupTacticId,
+  listTenderMarkupPercentages,
+  getTenderPricingDistribution,
+  upsertTenderPricingDistribution,
+} from '../../../lib/api/markup';
 import { formatNumberWithSpaces, parseNumberWithSpaces, parseNumberInput, formatNumberInput } from '../../../utils/numberFormat';
 import dayjs from 'dayjs';
 import './MarkupConstructor.css';
@@ -397,36 +417,22 @@ const MarkupConstructor: React.FC = () => {
     try {
       let tacticId: string | null = null;
 
-      // Если указан тендер, пытаемся получить его тактику
       if (tenderId) {
-        const { data: tenderData, error: tenderError } = await supabase
-          .from('tenders')
-          .select('markup_tactic_id')
-          .eq('id', tenderId)
-          .single();
-
-        if (tenderError) {
-          console.error('Ошибка загрузки тендера:', tenderError);
-        } else if (tenderData?.markup_tactic_id) {
-          tacticId = tenderData.markup_tactic_id;
+        try {
+          tacticId = await getTenderMarkupTacticId(tenderId);
+        } catch (error) {
+          console.error('Ошибка загрузки тендера:', error);
         }
       }
 
-      // Если не нашли тактику для тендера, загружаем глобальную "Текущая тактика"
       if (!tacticId) {
-        const { data: globalTactic, error: globalError } = await supabase
-          .from('markup_tactics')
-          .select('id')
-          .eq('name', 'Текущая тактика')
-          .eq('is_global', true)
-          .single();
-
-        if (globalError) {
-          console.error('Ошибка загрузки глобальной тактики:', globalError);
+        try {
+          const globalTactic = await findGlobalMarkupTacticByName('Текущая тактика');
+          tacticId = globalTactic?.id || null;
+        } catch (error) {
+          console.error('Ошибка загрузки глобальной тактики:', error);
           return null;
         }
-
-        tacticId = globalTactic?.id || null;
       }
 
       if (!tacticId) {
@@ -434,14 +440,10 @@ const MarkupConstructor: React.FC = () => {
         return null;
       }
 
-      // Загружаем тактику по ID
-      const { data, error } = await supabase
-        .from('markup_tactics')
-        .select('*')
-        .eq('id', tacticId)
-        .single();
-
-      if (error) {
+      let data: MarkupTactic | null;
+      try {
+        data = await getMarkupTactic(tacticId);
+      } catch (error) {
         console.error('Ошибка загрузки тактики из Supabase:', error);
         return null;
       }
@@ -480,34 +482,22 @@ const MarkupConstructor: React.FC = () => {
     }
   };
 
-  // Загрузка параметров наценок из БД
   const fetchMarkupParameters = async () => {
     setLoadingParameters(true);
     try {
-      const { data, error } = await supabase
-        .from('markup_parameters')
-        .select('*')
-        .eq('is_active', true)
-        .order('order_num', { ascending: true });
+      const data = await listActiveMarkupParameters();
+      console.log('=== Загружены параметры из БД ===');
+      setMarkupParameters(data);
 
-      if (error) throw error;
+      const initialValues: Record<string, number> = {};
+      data.forEach((param) => {
+        initialValues[param.key] = param.default_value || 0;
+        console.log(`  ${param.label} (${param.key}): ${param.default_value}`);
+      });
+      basePercentagesForm.setFieldsValue(initialValues);
+      console.log('================================');
 
-      if (data) {
-        console.log('=== Загружены параметры из БД ===');
-        setMarkupParameters(data);
-
-        // Инициализируем форму базовых процентов значениями из default_value
-        const initialValues: Record<string, number> = {};
-        data.forEach((param) => {
-          initialValues[param.key] = param.default_value || 0;
-          console.log(`  ${param.label} (${param.key}): ${param.default_value}`);
-        });
-        basePercentagesForm.setFieldsValue(initialValues);
-        console.log('================================');
-
-        // Также инициализируем основную форму базовыми значениями (для расчётов)
-        form.setFieldsValue(initialValues);
-      }
+      form.setFieldsValue(initialValues);
     } catch (error) {
       console.error('Ошибка загрузки параметров наценок:', error);
       message.error('Не удалось загрузить параметры наценок');
@@ -526,23 +516,10 @@ const MarkupConstructor: React.FC = () => {
       console.log('=== Сохранение базовых процентов ===');
       console.log('Значения формы:', values);
 
-      // Обновляем default_value для каждого параметра
       const updatePromises = markupParameters.map(async (param) => {
         const newValue = values[param.key] ?? param.default_value ?? 0;
         console.log(`  ${param.label} (${param.key}): ${param.default_value} -> ${newValue}`);
-
-        const { error } = await supabase
-          .from('markup_parameters')
-          .update({
-            default_value: newValue,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', param.id);
-
-        if (error) {
-          console.error(`Ошибка обновления ${param.key}:`, error);
-          throw error;
-        }
+        await updateMarkupParameter(param.id, { default_value: newValue });
       });
 
       await Promise.all(updatePromises);
@@ -638,13 +615,8 @@ const MarkupConstructor: React.FC = () => {
 
   const fetchTenders = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setTenders(data || []);
+      const data = await apiFetchTenders();
+      setTenders(data);
     } catch (error) {
       console.error('Ошибка загрузки тендеров:', error);
       message.error('Не удалось загрузить список тендеров');
@@ -654,13 +626,8 @@ const MarkupConstructor: React.FC = () => {
   const fetchTactics = async () => {
     setLoadingTactics(true);
     try {
-      const { data, error } = await supabase
-        .from('markup_tactics')
-        .select('*')
-        .order('created_at', { ascending: false});
-
-      if (error) throw error;
-      setTactics(data || []);
+      const data = await listMarkupTactics();
+      setTactics(data);
     } catch (error) {
       console.error('Ошибка загрузки тактик:', error);
       message.error('Не удалось загрузить список тактик');
@@ -669,17 +636,10 @@ const MarkupConstructor: React.FC = () => {
     }
   };
 
-  // Загрузка настроек распределения затрат для тендера
   const fetchPricingDistribution = async (tenderId: string) => {
     setLoadingPricing(true);
     try {
-      const { data, error } = await supabase
-        .from('tender_pricing_distribution')
-        .select('*')
-        .eq('tender_id', tenderId)
-        .maybeSingle();
-
-      if (error) throw error;
+      const data = await getTenderPricingDistribution(tenderId);
       setPricingDistribution(data);
     } catch (error) {
       console.error('Ошибка загрузки настроек ценообразования:', error);
@@ -739,16 +699,7 @@ const MarkupConstructor: React.FC = () => {
         component_work_markup_target: pricingDistribution?.component_work_markup_target || 'work',
       };
 
-      const { data, error } = await supabase
-        .from('tender_pricing_distribution')
-        .upsert(dataToSave, {
-          onConflict: 'tender_id,markup_tactic_id',
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
+      const data = await upsertTenderPricingDistribution(dataToSave);
       setPricingDistribution(data);
       message.success('Настройки ценообразования успешно сохранены');
     } catch (error) {
@@ -786,31 +737,20 @@ const MarkupConstructor: React.FC = () => {
     message.info('Настройки сброшены к значениям по умолчанию');
   };
 
-  // Загрузка данных наценок для выбранного тендера
   const fetchMarkupData = async (tenderId: string) => {
     setLoading(true);
     try {
-      // Загружаем все записи наценок для тендера с JOIN на markup_parameters
-      const { data, error } = await supabase
-        .from('tender_markup_percentage')
-        .select('*, markup_parameter:markup_parameters(*)')
-        .eq('tender_id', tenderId);
+      const data = await listTenderMarkupPercentages(tenderId);
 
-      if (error) throw error;
-
-      // Инициализируем объект с базовыми значениями для всех параметров
       const markupValues: Record<string, number> = {};
       markupParameters.forEach((param) => {
         markupValues[param.key] = param.default_value || 0;
       });
 
-      if (data && data.length > 0) {
-        // Заполняем значения из загруженных записей
+      if (data.length > 0) {
         data.forEach((record) => {
-          const mp = record.markup_parameter;
-          const p = Array.isArray(mp) ? mp[0] : mp;
-          if (p) {
-            markupValues[p.key] = record.value || 0;
+          if (record.markup_parameter) {
+            markupValues[record.markup_parameter.key] = record.value || 0;
           }
         });
         setCurrentMarkupId(tenderId);
@@ -818,7 +758,6 @@ const MarkupConstructor: React.FC = () => {
         setCurrentMarkupId(null);
       }
 
-      // Устанавливаем значения в форму
       form.setFieldsValue({
         tender_id: tenderId,
         ...markupValues,
@@ -854,15 +793,8 @@ const MarkupConstructor: React.FC = () => {
   const handleTacticChange = async (tacticId: string) => {
     setSelectedTacticId(tacticId);
 
-    // Загружаем выбранную тактику
     try {
-      const { data, error } = await supabase
-        .from('markup_tactics')
-        .select('*')
-        .eq('id', tacticId)
-        .single();
-
-      if (error) throw error;
+      const data = await getMarkupTactic(tacticId);
 
       if (data) {
         setCurrentTacticId(data.id);
@@ -922,12 +854,7 @@ const MarkupConstructor: React.FC = () => {
 
     if (currentTacticId) {
       try {
-        const { error } = await supabase
-          .from('markup_tactics')
-          .update({ name: editingName })
-          .eq('id', currentTacticId);
-
-        if (error) throw error;
+        await renameMarkupTactic(currentTacticId, editingName);
 
         setCurrentTacticName(editingName);
         setIsEditingName(false);
@@ -967,19 +894,12 @@ const MarkupConstructor: React.FC = () => {
         ? Math.max(...markupParameters.map(p => p.order_num || 0))
         : 0;
 
-      // Добавляем параметр в БД
-      const { error } = await supabase
-        .from('markup_parameters')
-        .insert({
-          key: parameterKey,
-          label: parameterLabel,
-          is_active: true,
-          order_num: maxOrderNum + 1
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
+      await createMarkupParameter({
+        key: parameterKey,
+        label: parameterLabel,
+        is_active: true,
+        order_num: maxOrderNum + 1,
+      });
 
       message.success(`Параметр "${parameterLabel}" успешно добавлен!`);
 
@@ -1008,15 +928,7 @@ const MarkupConstructor: React.FC = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('markup_parameters')
-        .update({
-          label: editingParameterLabel,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', parameterId);
-
-      if (error) throw error;
+      await updateMarkupParameter(parameterId, { label: editingParameterLabel });
 
       message.success('Параметр успешно обновлен!');
       await fetchMarkupParameters();
@@ -1044,16 +956,8 @@ const MarkupConstructor: React.FC = () => {
       cancelText: 'Отмена',
       onOk: async () => {
         try {
-          const { error } = await supabase
-            .from('markup_parameters')
-            .delete()
-            .eq('id', parameter.id);
-
-          if (error) throw error;
-
+          await deleteMarkupParameter(parameter.id);
           message.success(`Параметр "${parameter.label}" удален`);
-
-          // Обновляем список параметров
           await fetchMarkupParameters();
         } catch (error) {
           console.error('Ошибка удаления параметра:', error);
@@ -1072,16 +976,8 @@ const MarkupConstructor: React.FC = () => {
     const prevParameter = markupParameters[currentIndex - 1];
 
     try {
-      // Меняем местами order_num
-      await supabase
-        .from('markup_parameters')
-        .update({ order_num: prevParameter.order_num })
-        .eq('id', parameter.id);
-
-      await supabase
-        .from('markup_parameters')
-        .update({ order_num: parameter.order_num })
-        .eq('id', prevParameter.id);
+      await setMarkupParameterOrderNum(parameter.id, prevParameter.order_num ?? 0);
+      await setMarkupParameterOrderNum(prevParameter.id, parameter.order_num ?? 0);
 
       message.success('Порядок изменен');
       await fetchMarkupParameters();
@@ -1099,16 +995,8 @@ const MarkupConstructor: React.FC = () => {
     const nextParameter = markupParameters[currentIndex + 1];
 
     try {
-      // Меняем местами order_num
-      await supabase
-        .from('markup_parameters')
-        .update({ order_num: nextParameter.order_num })
-        .eq('id', parameter.id);
-
-      await supabase
-        .from('markup_parameters')
-        .update({ order_num: parameter.order_num })
-        .eq('id', nextParameter.id);
+      await setMarkupParameterOrderNum(parameter.id, nextParameter.order_num ?? 0);
+      await setMarkupParameterOrderNum(nextParameter.id, parameter.order_num ?? 0);
 
       message.success('Порядок изменен');
       await fetchMarkupParameters();
@@ -1158,79 +1046,54 @@ const MarkupConstructor: React.FC = () => {
         'мат-комп.': baseCosts.material_comp,
       };
 
-      // Сохранение в Supabase (RLS отключен до внедрения аутентификации)
       if (currentTacticId) {
-        // Обновляем существующую запись
-        const { data, error } = await supabase
-          .from('markup_tactics')
-          .update({
+        try {
+          const data = await updateMarkupTactic(currentTacticId, {
             name: currentTacticName || 'Без названия',
             sequences: sequencesRu,
             base_costs: baseCostsRu,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', currentTacticId)
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Ошибка обновления в Supabase:', error);
-          message.warning('Порядок расчета сохранен локально, но не удалось обновить в базе данных');
-        } else {
+          });
           console.log('Порядок расчета обновлен в Supabase:', data);
 
-          // Если выбран тендер, обновляем его markup_tactic_id
           if (selectedTenderId) {
-            const { error: tenderError } = await supabase
-              .from('tenders')
-              .update({ markup_tactic_id: currentTacticId })
-              .eq('id', selectedTenderId);
-
-            if (tenderError) {
+            try {
+              await setTenderMarkupTacticId(selectedTenderId, currentTacticId);
+            } catch (tenderError) {
               console.error('Ошибка обновления тендера:', tenderError);
             }
           }
 
-          // Обновляем список тактик
           await fetchTactics();
           message.success('Порядок расчета успешно обновлен');
+        } catch (error) {
+          console.error('Ошибка обновления в Supabase:', error);
+          message.warning('Порядок расчета сохранен локально, но не удалось обновить в базе данных');
         }
       } else {
-        // Создаем новую запись
-        const { data, error } = await supabase
-          .from('markup_tactics')
-          .insert({
+        try {
+          const data = await createMarkupTactic({
             name: currentTacticName || 'Новый порядок расчета',
             sequences: sequencesRu,
             base_costs: baseCostsRu,
             is_global: false,
-          })
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Ошибка сохранения в Supabase:', error);
-          message.warning('Порядок расчета сохранен локально, но не удалось сохранить в базу данных');
-        } else {
+          });
           console.log('Порядок расчета сохранен в Supabase:', data);
-          setCurrentTacticId(data.id); // Сохраняем ID для последующих обновлений
-          setSelectedTacticId(data.id); // Устанавливаем в селекте
+          setCurrentTacticId(data.id);
+          setSelectedTacticId(data.id);
 
-          // Если выбран тендер, обновляем его markup_tactic_id
           if (selectedTenderId) {
-            const { error: tenderError } = await supabase
-              .from('tenders')
-              .update({ markup_tactic_id: data.id })
-              .eq('id', selectedTenderId);
-
-            if (tenderError) {
+            try {
+              await setTenderMarkupTacticId(selectedTenderId, data.id);
+            } catch (tenderError) {
               console.error('Ошибка обновления тендера:', tenderError);
             }
           }
 
-          // Обновляем список тактик
           await fetchTactics();
           message.success('Порядок расчета успешно создан');
+        } catch (error) {
+          console.error('Ошибка сохранения в Supabase:', error);
+          message.warning('Порядок расчета сохранен локально, но не удалось сохранить в базу данных');
         }
       }
     } catch (error) {
@@ -1258,12 +1121,7 @@ const MarkupConstructor: React.FC = () => {
       cancelText: 'Отмена',
       onOk: async () => {
         try {
-          const { error } = await supabase
-            .from('markup_tactics')
-            .delete()
-            .eq('id', currentTacticId);
-
-          if (error) throw error;
+          await deleteMarkupTactic(currentTacticId);
 
           message.success(`Порядок расчета "${tacticName}" удален`);
 
@@ -1368,14 +1226,14 @@ const MarkupConstructor: React.FC = () => {
         try {
           message.loading('Создание копии...', 0);
 
-          // Получаем актуальные данные схемы из БД
-          const { data: tacticToCopy, error: fetchError } = await supabase
-            .from('markup_tactics')
-            .select('*')
-            .eq('id', currentTacticId)
-            .single();
+          let tacticToCopy: MarkupTactic | null;
+          try {
+            tacticToCopy = await getMarkupTactic(currentTacticId);
+          } catch {
+            tacticToCopy = null;
+          }
 
-          if (fetchError || !tacticToCopy) {
+          if (!tacticToCopy) {
             message.destroy();
             message.error('Схема не найдена');
             return;
@@ -1383,8 +1241,8 @@ const MarkupConstructor: React.FC = () => {
 
           // Подготавливаем данные для копирования
           // Используем текущие данные из состояния или данные из БД
-          let sequencesToCopy: Record<string, MarkupStep[]>;
-          let baseCostsToCopy: Record<string, number>;
+          let sequencesToCopy: Record<string, MarkupStep[]> | MarkupTactic['sequences'];
+          let baseCostsToCopy: Record<string, number> | MarkupTactic['base_costs'];
 
           if (currentTacticId && isDataLoaded) {
             // Если схема активна и загружена, используем текущие данные из состояния
@@ -1427,23 +1285,14 @@ const MarkupConstructor: React.FC = () => {
             };
           }
 
-          const dataToCopy = {
+          const newTactic = await createMarkupTactic({
             name: newName.trim(),
-            is_global: false, // Копии никогда не глобальные
-            sequences: sequencesToCopy,
-            base_costs: baseCostsToCopy,
-          };
-
-          // Создаем копию тактики
-          const { data: newTactic, error: tacticError } = await supabase
-            .from('markup_tactics')
-            .insert(dataToCopy)
-            .select()
-            .single();
+            is_global: false,
+            sequences: sequencesToCopy as Record<string, unknown>,
+            base_costs: baseCostsToCopy as Record<string, number>,
+          });
 
           message.destroy();
-
-          if (tacticError) throw tacticError;
 
           message.success(`Создана копия схемы: ${newName.trim()}`);
 

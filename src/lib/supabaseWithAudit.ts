@@ -182,14 +182,3 @@ export async function deleteBoqItemWithAudit(
   return { data: result, error: null };
 }
 
-/**
- * @deprecated Старый метод executeWithAudit больше не работает из-за connection pooling
- * Используйте вместо этого: insertBoqItemWithAudit, updateBoqItemWithAudit, deleteBoqItemWithAudit
- */
-export async function executeWithAudit<T>(
-  userId: string | undefined,
-  operation: () => Promise<T>,
-): Promise<T> {
-  console.warn('[executeWithAudit] DEPRECATED: используйте RPC wrapper функции вместо executeWithAudit');
-  return operation();
-}

@@ -1,11 +1,17 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '../../../lib/supabase';
-import type { BoqItem, MarkupStep } from '../../../lib/supabase';
+import type { MarkupStep } from '../../../lib/supabase';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
-
-type BoqItemWithPosition = BoqItem & {
-  client_position: { tender_id: string } | null;
-};
+import {
+  getTenderById,
+  tryGetMarkupTactic,
+  getTenderInsuranceFI,
+  listAllBoqItemsForTender,
+  listSubcontractGrowthExclusions,
+  type BoqItemWithPosition,
+} from '../../../lib/api/fi';
+import { listTenderMarkupPercentages } from '../../../lib/api/markup';
+import { createSystemNotification } from '../../../lib/api/notifications';
+import { getErrorMessage } from '../../../utils/errors';
 
 export interface IndicatorRow {
   key: string;
@@ -29,15 +35,10 @@ export interface IndicatorRow {
 const addNotification = async (
   title: string,
   message: string,
-  type: 'success' | 'info' | 'warning' | 'pending' = 'warning'
+  type: 'success' | 'info' | 'warning' | 'pending' = 'warning',
 ) => {
   try {
-    await supabase.from('notifications').insert({
-      title,
-      message,
-      type,
-      is_read: false,
-    });
+    await createSystemNotification({ title, message, type });
   } catch (error) {
     console.error('Ошибка создания уведомления:', error);
   }
@@ -56,32 +57,26 @@ export const useFinancialCalculations = () => {
 
     setLoading(true);
     try {
-      const { data: tender, error: tenderError } = await supabase
-        .from('tenders')
-        .select('*')
-        .eq('id', selectedTenderId)
-        .single();
-
-      if (tenderError) {
+      let tender;
+      try {
+        tender = await getTenderById(selectedTenderId);
+      } catch (tenderError) {
         await addNotification(
           'Ошибка загрузки тендера',
-          `Не удалось загрузить данные тендера: ${tenderError.message}`,
-          'warning'
+          `Не удалось загрузить данные тендера: ${getErrorMessage(tenderError)}`,
+          'warning',
         );
         throw tenderError;
       }
 
-      const { data: tactic, error: tacticError } = await supabase
-        .from('markup_tactics')
-        .select('*')
-        .eq('id', tender.markup_tactic_id)
-        .single();
-
-      if (tacticError && tacticError.code !== 'PGRST116') {
+      let tactic = null;
+      try {
+        tactic = await tryGetMarkupTactic(tender.markup_tactic_id);
+      } catch (tacticError) {
         await addNotification(
           'Ошибка загрузки тактики наценок',
-          `Не удалось загрузить тактику наценок: ${tacticError.message}`,
-          'warning'
+          `Не удалось загрузить тактику наценок: ${getErrorMessage(tacticError)}`,
+          'warning',
         );
       }
 
@@ -116,28 +111,23 @@ export const useFinancialCalculations = () => {
         console.log('Числовые значения в sequences:', Array.from(sequenceNumberValues));
       }
 
-      const { data: tenderMarkupPercentages, error: percentagesError } = await supabase
-        .from('tender_markup_percentage')
-        .select(`
-          *,
-          markup_parameter:markup_parameters(*)
-        `)
-        .eq('tender_id', selectedTenderId);
-
-      if (percentagesError) {
+      let tenderMarkupPercentages: Awaited<ReturnType<typeof listTenderMarkupPercentages>> | null = null;
+      try {
+        tenderMarkupPercentages = await listTenderMarkupPercentages(selectedTenderId);
+      } catch (percentagesError) {
         await addNotification(
           'Ошибка загрузки процентов наценок',
-          `Не удалось загрузить проценты наценок: ${percentagesError.message}`,
-          'warning'
+          `Не удалось загрузить проценты наценок: ${getErrorMessage(percentagesError)}`,
+          'warning',
         );
       }
 
-      // Загружаем данные страхования от судимостей
-      const { data: insuranceData } = await supabase
-        .from('tender_insurance')
-        .select('judicial_pct, total_pct, apt_price_m2, apt_area, parking_price_m2, parking_area, storage_price_m2, storage_area')
-        .eq('tender_id', selectedTenderId)
-        .maybeSingle();
+      let insuranceData = null;
+      try {
+        insuranceData = await getTenderInsuranceFI(selectedTenderId);
+      } catch {
+        // ignore — fallback to zero insurance cost
+      }
 
       const insuranceCost = (() => {
         if (!insuranceData) return 0;
@@ -147,38 +137,14 @@ export const useFinancialCalculations = () => {
         return (apt + park + stor) * ((insuranceData.judicial_pct || 0) / 100) * ((insuranceData.total_pct || 0) / 100);
       })();
 
-      // Загружаем ВСЕ BOQ элементы с батчингом (Supabase лимит 1000 строк)
-      let boqItems: BoqItemWithPosition[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
+      const boqItems: BoqItemWithPosition[] = await listAllBoqItemsForTender(selectedTenderId);
 
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('boq_items')
-          .select(`
-            *,
-            client_position:client_positions!inner(tender_id)
-          `)
-          .eq('client_position.tender_id', selectedTenderId)
-          .range(from, from + batchSize - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          boqItems = [...boqItems, ...data];
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
-        }
+      let exclusions: Awaited<ReturnType<typeof listSubcontractGrowthExclusions>> = [];
+      try {
+        exclusions = await listSubcontractGrowthExclusions(selectedTenderId);
+      } catch {
+        exclusions = [];
       }
-
-      // Загрузка исключений роста субподряда для текущего тендера
-      const { data: exclusions } = await supabase
-        .from('subcontract_growth_exclusions')
-        .select('detail_cost_category_id, exclusion_type')
-        .eq('tender_id', selectedTenderId);
 
       const excludedWorksCategories = new Set(
         exclusions?.filter(e => e.exclusion_type === 'works').map(e => e.detail_cost_category_id) || []

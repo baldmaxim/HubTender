@@ -1,25 +1,22 @@
 import { Modal, message } from 'antd';
-import { supabase } from '../../../lib/supabase';
 import type { TenderRegistry, TenderRegistryWithRelations } from '../../../lib/supabase';
+import {
+  archiveTenderRegistry,
+  swapTenderRegistrySortOrder,
+} from '../../../lib/api/tenderRegistry';
 
 export const useTenderCRUD = (tenders: TenderRegistryWithRelations[], refetch: () => void) => {
   const handleMoveUp = async (tender: TenderRegistry) => {
     const currentIndex = tenders.findIndex(t => t.id === tender.id);
     if (currentIndex <= 0) return;
-
-    const prevTender = tenders[currentIndex - 1];
-    await supabase.from('tender_registry').update({ sort_order: prevTender.sort_order }).eq('id', tender.id);
-    await supabase.from('tender_registry').update({ sort_order: tender.sort_order }).eq('id', prevTender.id);
+    await swapTenderRegistrySortOrder(tender, tenders[currentIndex - 1]);
     refetch();
   };
 
   const handleMoveDown = async (tender: TenderRegistry) => {
     const currentIndex = tenders.findIndex(t => t.id === tender.id);
     if (currentIndex >= tenders.length - 1) return;
-
-    const nextTender = tenders[currentIndex + 1];
-    await supabase.from('tender_registry').update({ sort_order: nextTender.sort_order }).eq('id', tender.id);
-    await supabase.from('tender_registry').update({ sort_order: tender.sort_order }).eq('id', nextTender.id);
+    await swapTenderRegistrySortOrder(tender, tenders[currentIndex + 1]);
     refetch();
   };
 
@@ -33,15 +30,11 @@ export const useTenderCRUD = (tenders: TenderRegistryWithRelations[], refetch: (
       cancelText: 'Отмена',
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
-        const { error } = await supabase
-          .from('tender_registry')
-          .update({ is_archived: true })
-          .eq('id', tender.id);
-
-        if (!error) {
+        try {
+          await archiveTenderRegistry(tender.id);
           message.success('Тендер перемещен в архив');
           refetch();
-        } else {
+        } catch {
           message.error('Ошибка архивации');
         }
       },

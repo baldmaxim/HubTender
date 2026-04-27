@@ -1,8 +1,15 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
-import { supabase } from '../../../../lib/supabase';
 import { getErrorMessage } from '../../../../utils/errors';
+import {
+  listUnits,
+  listActiveUnits,
+  createUnit,
+  updateUnit,
+  deleteUnit as apiDeleteUnit,
+  type UnitInput,
+} from '../../../../lib/api/nomenclatures';
 
 const { confirm } = Modal;
 
@@ -24,14 +31,8 @@ export const useUnits = () => {
   const loadUnits = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('units')
-        .select('*')
-        .order('sort_order');
-
-      if (error) throw error;
-
-      const formattedData: UnitRecord[] = data?.map((item) => ({
+      const data = await listUnits();
+      const formattedData: UnitRecord[] = data.map((item) => ({
         key: item.code,
         code: item.code,
         name: item.name,
@@ -39,7 +40,7 @@ export const useUnits = () => {
         sort_order: item.sort_order || 0,
         is_active: item.is_active !== false,
         created_at: new Date(item.created_at).toLocaleDateString('ru-RU'),
-      })) || [];
+      }));
 
       setUnitsData(formattedData);
     } catch (error) {
@@ -52,55 +53,22 @@ export const useUnits = () => {
 
   const loadUnitsList = async () => {
     try {
-      const { data, error } = await supabase
-        .from('units')
-        .select('code, name')
-        .eq('is_active', true)
-        .order('sort_order');
-
-      if (error) throw error;
-
-      const unitOptions = data?.map((item) => ({
-        code: item.code,
-        name: item.name,
-      })) || [];
-
-      setUnitsList(unitOptions);
+      const data = await listActiveUnits();
+      setUnitsList(data.map((item) => ({ code: item.code, name: item.name })));
     } catch (error) {
       console.error('Ошибка загрузки списка единиц:', error);
     }
   };
 
-  const saveUnit = async (values: { code?: string; name: string; category?: string; sort_order?: number; is_active?: boolean }, editingUnitCode?: string) => {
+  const saveUnit = async (values: UnitInput, editingUnitCode?: string) => {
     try {
       if (editingUnitCode) {
-        const { error } = await supabase
-          .from('units')
-          .update({
-            name: values.name,
-            category: values.category,
-            sort_order: values.sort_order,
-            is_active: values.is_active,
-          })
-          .eq('code', editingUnitCode);
-
-        if (error) throw error;
+        await updateUnit(editingUnitCode, values);
         message.success('Единица измерения обновлена');
       } else {
-        const { error } = await supabase
-          .from('units')
-          .insert({
-            code: values.code,
-            name: values.name,
-            category: values.category,
-            sort_order: values.sort_order,
-            is_active: values.is_active,
-          });
-
-        if (error) throw error;
+        await createUnit(values);
         message.success('Единица измерения добавлена');
       }
-
       await loadUnits();
       return true;
     } catch (error) {
@@ -123,13 +91,7 @@ export const useUnits = () => {
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
         try {
-          const { error } = await supabase
-            .from('units')
-            .delete()
-            .eq('code', record.code);
-
-          if (error) throw error;
-
+          await apiDeleteUnit(record.code);
           message.success('Единица измерения удалена');
           await loadUnits();
         } catch (error) {

@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
-import { supabase } from '../../../../lib/supabase';
+import {
+  listCostCategories,
+  listDetailCostCategoriesWithCategory,
+  deleteCostCategory,
+  updateCostCategory,
+  deleteDetailCostCategory,
+  updateDetailCostCategory,
+  deleteAllCostCategories,
+  deleteAllDetailCostCategories,
+} from '../../../../lib/api/costs';
 
 const { confirm } = Modal;
 
@@ -26,19 +35,8 @@ export const useConstructionCost = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data: categories, error: catError } = await supabase
-        .from('cost_categories')
-        .select('*')
-        .order('name');
-
-      if (catError) throw catError;
-
-      const { data: details, error: detError } = await supabase
-        .from('detail_cost_categories')
-        .select('*, cost_categories(*)')
-        .order('order_num');
-
-      if (detError) throw detError;
+      const categories = await listCostCategories();
+      const details = await listDetailCostCategoriesWithCategory();
 
       const treeData: TreeNode[] = [];
       const categoryMap = new Map<string, TreeNode>();
@@ -148,19 +146,9 @@ export const useConstructionCost = () => {
       onOk: async () => {
         try {
           if (record.type === 'category' && record.categoryId) {
-            const { error } = await supabase
-              .from('cost_categories')
-              .delete()
-              .eq('id', record.categoryId);
-
-            if (error) throw error;
+            await deleteCostCategory(record.categoryId);
           } else if (record.type === 'detail' && record.detailId) {
-            const { error } = await supabase
-              .from('detail_cost_categories')
-              .delete()
-              .eq('id', record.detailId);
-
-            if (error) throw error;
+            await deleteDetailCostCategory(record.detailId);
           }
 
           message.success('Запись успешно удалена');
@@ -176,26 +164,16 @@ export const useConstructionCost = () => {
   const saveEdit = async (values: { name?: string; unit?: string; location?: string }, editingItem: TreeNode | null) => {
     try {
       if (editingItem?.type === 'category' && editingItem.categoryId) {
-        const { error } = await supabase
-          .from('cost_categories')
-          .update({
-            name: values.name,
-            unit: values.unit,
-          })
-          .eq('id', editingItem.categoryId);
-
-        if (error) throw error;
+        await updateCostCategory(editingItem.categoryId, {
+          name: values.name,
+          unit: values.unit,
+        });
       } else if (editingItem?.type === 'detail' && editingItem.detailId) {
-        const { error } = await supabase
-          .from('detail_cost_categories')
-          .update({
-            name: values.name,
-            unit: values.unit,
-            location: values.location,
-          })
-          .eq('id', editingItem.detailId);
-
-        if (error) throw error;
+        await updateDetailCostCategory(editingItem.detailId, {
+          name: values.name,
+          unit: values.unit,
+          location: values.location,
+        });
       }
 
       message.success('Изменения сохранены');
@@ -210,19 +188,8 @@ export const useConstructionCost = () => {
 
   const deleteAll = async () => {
     try {
-      const { error: detailError } = await supabase
-        .from('detail_cost_categories')
-        .delete()
-        .not('id', 'is', null);
-
-      if (detailError) throw detailError;
-
-      const { error: categoryError } = await supabase
-        .from('cost_categories')
-        .delete()
-        .not('id', 'is', null);
-
-      if (categoryError) throw categoryError;
+      await deleteAllDetailCostCategories();
+      await deleteAllCostCategories();
 
       message.success('Все затраты успешно удалены');
       await loadData();

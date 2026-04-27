@@ -46,7 +46,8 @@ export interface PositionWithCostsRow {
 export async function fetchPositionsWithCosts(tenderId: string): Promise<PositionWithCostsRow[]> {
   if (isGoEnabled('positions')) {
     const res = await apiFetch<{ data: PositionWithCostsRow[] }>(
-      `/api/v1/tenders/${encodeURIComponent(tenderId)}/positions/with-costs`
+      `/api/v1/tenders/${encodeURIComponent(tenderId)}/positions/with-costs`,
+      { cacheKey: `positions:${tenderId}` }
     );
     return res.data ?? [];
   }

@@ -10,7 +10,8 @@ import {
   FileExcelOutlined,
 } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
-import { supabase } from '../../../lib/supabase';
+import { createUnit } from '../../../lib/api/nomenclatures';
+import { getErrorMessage } from '../../../utils/errors';
 import { useBoqUpload } from './hooks/useBoqUpload';
 import { UploadStep } from './components/UploadStep';
 import { MappingStep } from './components/MappingStep';
@@ -82,30 +83,21 @@ const UploadBOQModal: React.FC<UploadBOQModalProps> = ({
     onCancel();
   };
 
-  // Создание новой единицы измерения
   const handleCreateUnit = async (originalCode: string, values: { name: string; description?: string }) => {
     try {
-      const { error } = await supabase
-        .from('units')
-        .insert([{
-          code: originalCode,
-          name: values.name || originalCode,
-          description: values.description || null,
-          is_active: true,
-          sort_order: 999
-        }]);
-
-      if (error) {
-        console.error('Ошибка создания единицы:', error);
-        message.error(`Ошибка при создании единицы: ${error.message}`);
-      } else {
-        message.success(`Единица "${originalCode}" успешно создана`);
-        await fetchExistingUnits();
-        handleMappingChange(originalCode, originalCode, 'map');
-      }
+      await createUnit({
+        code: originalCode,
+        name: values.name || originalCode,
+        description: values.description || null,
+        is_active: true,
+        sort_order: 999,
+      });
+      message.success(`Единица "${originalCode}" успешно создана`);
+      await fetchExistingUnits();
+      handleMappingChange(originalCode, originalCode, 'map');
     } catch (error) {
       console.error('Ошибка при создании единицы:', error);
-      message.error('Ошибка при создании единицы');
+      message.error(`Ошибка при создании единицы: ${getErrorMessage(error)}`);
     }
   };
 
