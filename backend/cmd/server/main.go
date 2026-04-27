@@ -118,6 +118,7 @@ func main() {
 	tenderRegistryRepo := repository.NewTenderRegistryRepo(pool)
 	costsRepo := repository.NewCostsRepo(pool)
 	nomenclaturesRepo := repository.NewNomenclaturesRepo(pool)
+	importLogRepo := repository.NewImportLogRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -137,6 +138,7 @@ func main() {
 	tenderRegistrySvc := services.NewTenderRegistryService(tenderRegistryRepo)
 	costsSvc := services.NewCostsService(costsRepo, inMemCache)
 	nomenclaturesSvc := services.NewNomenclaturesService(nomenclaturesRepo, inMemCache)
+	importLogSvc := services.NewImportLogService(importLogRepo)
 
 	healthH := handlers.NewHealthHandler(pool, inMemCache)
 	meH := handlers.NewMeHandler(userSvc)
@@ -161,6 +163,7 @@ func main() {
 	tenderRegistryH := handlers.NewTenderRegistryHandler(tenderRegistrySvc)
 	costsH := handlers.NewCostsHandler(costsSvc)
 	nomenclaturesH := handlers.NewNomenclaturesHandler(nomenclaturesSvc)
+	importLogH := handlers.NewImportLogHandler(importLogSvc)
 	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
@@ -303,6 +306,13 @@ func main() {
 		r.Post("/api/v1/nomenclatures/remap/library-material", nomenclaturesH.RemapLibraryMaterial)
 		r.Post("/api/v1/nomenclatures/remap/boq-work", nomenclaturesH.RemapBoqWork)
 		r.Post("/api/v1/nomenclatures/remap/library-work", nomenclaturesH.RemapLibraryWork)
+
+		// Import log: read sessions + atomic cancel.
+		r.Get("/api/v1/import-sessions", importLogH.ListSessions)
+		r.Get("/api/v1/import-sessions/users", importLogH.UsersByIDs)
+		r.Get("/api/v1/import-sessions/tenders", importLogH.TendersByIDs)
+		r.Get("/api/v1/import-sessions/all-tenders", importLogH.AllTendersForFilter)
+		r.Post("/api/v1/import-sessions/{id}/cancel", importLogH.Cancel)
 	})
 
 	// Phase 4 — WebSocket endpoint. Registered OUTSIDE the authMW group because

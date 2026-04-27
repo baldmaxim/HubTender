@@ -24,9 +24,7 @@ import {
   fetchImportLogUsers,
   fetchImportLogTenders,
   fetchAllTendersForFilter,
-  deleteBoqItemsForImportSession,
-  restoreClientPositionFromSnapshot,
-  markImportSessionCancelled,
+  cancelImportSession,
 } from '../../../lib/api/importLog';
 
 const { Text } = Typography;
@@ -162,16 +160,7 @@ const ImportLog: React.FC = () => {
     if (!user?.id) return;
     setCancelling(session.id);
     try {
-      await deleteBoqItemsForImportSession(session.id);
-
-      if (session.positions_snapshot && session.positions_snapshot.length > 0) {
-        for (const snap of session.positions_snapshot) {
-          await restoreClientPositionFromSnapshot(snap);
-        }
-      }
-
-      await markImportSessionCancelled(session.id, user.id);
-
+      await cancelImportSession(session, user.id);
       message.success(`Импорт отменён. Удалено ${session.items_count} элементов BOQ.`);
       fetchSessions();
     } catch (err) {
