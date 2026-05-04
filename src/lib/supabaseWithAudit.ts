@@ -150,7 +150,8 @@ export async function updateBoqItemWithAudit(
 
 /**
  * Wrapper для DELETE операций с автоматическим audit логированием.
- * Go path: GET (для ETag) → DELETE with If-Match. При 412 — один retry.
+ * Go path: DELETE с If-Match: * — удаляет если строка существует. ETag-проверка
+ * не нужна, т.к. delete идемпотентен и не теряет чужих изменений.
  */
 export async function deleteBoqItemWithAudit(
   userId: string | undefined,
@@ -161,14 +162,9 @@ export async function deleteBoqItemWithAudit(
   }
 
   if (isGoEnabled('boq')) {
-    let etag = await fetchItemETag(itemId);
-    let res = await deleteItemOnce(itemId, etag);
+    const res = await deleteItemOnce(itemId, '*');
     if (res.conflict) {
-      etag = await fetchItemETag(itemId);
-      res = await deleteItemOnce(itemId, etag);
-      if (res.conflict) {
-        throw new Error('Item was modified concurrently by another user. Please reload.');
-      }
+      throw new Error('Не удалось удалить строку: сервер отклонил DELETE.');
     }
     return { data: null, error: null };
   }

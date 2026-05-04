@@ -23,10 +23,15 @@ func computeResourceETag(id string, updatedAt time.Time) string {
 
 // checkIfMatch compares the request's If-Match header to the ETag computed
 // from id + updatedAt. Returns true when they match (request may proceed).
+// Per RFC 7232 §3.1, If-Match: * matches any existing resource — used by
+// DELETE callers that don't need lost-update protection (idempotent action).
 func checkIfMatch(r *http.Request, id string, updatedAt time.Time) bool {
 	ifMatch := strings.TrimSpace(r.Header.Get("If-Match"))
 	if ifMatch == "" {
 		return false
+	}
+	if ifMatch == "*" {
+		return true
 	}
 	want := computeResourceETag(id, updatedAt)
 	// Strip surrounding quotes from the client value for a lenient comparison.
