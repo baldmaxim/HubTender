@@ -111,7 +111,9 @@ export async function insertBoqItemWithAudit(
 
 /**
  * Wrapper для UPDATE операций с автоматическим audit логированием.
- * Go path: GET (для ETag) → PATCH with If-Match. При 412 — один retry.
+ * Go path: GET (для ETag) → PATCH with If-Match. До 5 retry при 412 — на странице
+ * BoQ часто рядом крутятся фоновые пересчёты commercial cost, которые гонятся
+ * за ту же строку и сбивают ETag.
  */
 export async function updateBoqItemWithAudit(
   userId: string | undefined,
@@ -124,18 +126,21 @@ export async function updateBoqItemWithAudit(
 
   if (isGoEnabled('boq')) {
     const body = data as Record<string, unknown>;
-    // Attempt 1.
-    let etag = await fetchItemETag(itemId);
-    let res = await patchItemOnce(itemId, body, etag);
-    if (res.conflict) {
-      // Attempt 2 with fresh ETag ("last-write-wins" semantic like the RPC).
-      etag = await fetchItemETag(itemId);
+    const maxAttempts = 5;
+    let res: Awaited<ReturnType<typeof patchItemOnce>> = { data: null, conflict: true };
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const etag = await fetchItemETag(itemId);
       res = await patchItemOnce(itemId, body, etag);
-      if (res.conflict) {
-        throw new Error('Item was modified concurrently by another user. Please reload.');
+      if (!res.conflict) {
+        return { data: res.data, error: null };
+      }
+      if (attempt < maxAttempts) {
+        // Лёгкая экспоненциальная задержка: 50/100/200/400 мс. Даёт фоновому
+        // пересчёту шанс закрыть свой апдейт прежде чем мы ретраимся.
+        await new Promise((r) => setTimeout(r, 50 * 2 ** (attempt - 1)));
       }
     }
-    return { data: res.data, error: null };
+    throw new Error('Item was modified concurrently by another user. Please reload.');
   }
 
   const { data: result, error } = await supabase.rpc('update_boq_item_with_audit', {
