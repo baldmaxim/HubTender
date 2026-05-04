@@ -508,6 +508,10 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 						"Access-Control-Allow-Methods",
 						"GET, POST, PUT, PATCH, DELETE, OPTIONS",
 					)
+					w.Header().Set(
+						"Access-Control-Expose-Headers",
+						"ETag, Location",
+					)
 				}
 			}
 
