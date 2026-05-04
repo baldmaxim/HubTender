@@ -110,6 +110,12 @@ func (h *MeHandler) GetPermissions(w http.ResponseWriter, r *http.Request) {
 // If-None-Match conditional requests (returning 304 when the tag matches).
 // Sets Content-Type: application/json and Cache-Control: private, max-age=60
 // on all 200 responses.
+//
+// If the caller already wrote an ETag header (e.g. row-level resources via
+// setResourceETag), it is preserved — otherwise the body-hash ETag is used.
+// This keeps the If-Match flow consistent: clients echo back exactly what
+// the server sent, and the PATCH/DELETE handler compares against the same
+// resource ETag it computed at GET time.
 func renderJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
@@ -117,7 +123,10 @@ func renderJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 		return
 	}
 
-	etag := computeETag(body)
+	etag := w.Header().Get("ETag")
+	if etag == "" {
+		etag = computeETag(body)
+	}
 
 	if match := r.Header.Get("If-None-Match"); match == etag {
 		w.Header().Set("ETag", etag)
