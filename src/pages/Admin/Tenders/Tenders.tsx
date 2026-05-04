@@ -45,11 +45,13 @@ const Tenders: React.FC = () => {
   };
 
   const handleCopy = useCallback((record: TenderRecord) => {
+    const theme = localStorage.getItem('tenderHub_theme') || 'light';
     Modal.confirm({
       title: 'Дублировать тендер?',
       content: `Будет создана новая версия "${record.tender}" со всеми позициями, работами, материалами и настройками текущей версии (v${record.version}).`,
       okText: 'Дублировать',
       cancelText: 'Отмена',
+      rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
         const hide = message.loading('Дублируется тендер…', 0);
         try {

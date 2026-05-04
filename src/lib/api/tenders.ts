@@ -33,7 +33,7 @@ async function fetchAllFromGo(params?: ListTendersParams): Promise<Tender[]> {
     if (params?.housingClass) qs.set('housing_class', params.housingClass);
     if (params?.search) qs.set('search', params.search);
 
-    const res = await apiFetch<GoListResponse>(`/api/v1/tenders?${qs.toString()}`);
+    const res = await apiFetch<GoListResponse>(`/api/v1/tenders?${qs.toString()}`, { cache: 'no-store' });
     all.push(...res.data);
     if (!res.next_cursor) return all;
     cursor = res.next_cursor;
