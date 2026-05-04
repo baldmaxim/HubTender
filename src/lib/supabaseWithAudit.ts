@@ -5,12 +5,17 @@ import { isGoEnabled, API_BASE_URL } from './api/featureFlags';
 
 // ─── Go path helpers ────────────────────────────────────────────────────────
 // Reads the ETag header from a plain fetch (apiFetch discards headers).
+// cache: 'no-store' — иначе браузер на retry отдаёт закэшированный ETag,
+// сервер видит свежий updated_at и стабильно возвращает 412.
 async function fetchItemETag(itemId: string): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   const res = await fetch(
     `${API_BASE_URL}/api/v1/items/${encodeURIComponent(itemId)}`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    {
+      cache: 'no-store',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
   );
   if (!res.ok) {
     const body = await res.text().catch(() => '');
