@@ -115,7 +115,6 @@ type AdminUserRow struct {
 	RegistrationDate *string  `json:"registration_date,omitempty"`
 	ApprovedBy       *string  `json:"approved_by,omitempty"`
 	ApprovedAt       *string  `json:"approved_at,omitempty"`
-	Password         *string  `json:"password,omitempty"`
 	AccessEnabled    bool     `json:"access_enabled"`
 	Roles            *struct {
 		Name  string  `json:"name"`
@@ -130,7 +129,6 @@ func (r *UserAdminRepo) ListAllUsers(ctx context.Context) ([]AdminUserRow, error
 		       to_char(u.registration_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		       u.approved_by::text,
 		       to_char(u.approved_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-		       u.password,
 		       u.access_enabled,
 		       r.name, r.color
 		FROM public.users u
@@ -152,7 +150,7 @@ func (r *UserAdminRepo) ListAllUsers(ctx context.Context) ([]AdminUserRow, error
 		if err := rows.Scan(&rec.ID, &rec.FullName, &rec.Email, &rec.RoleCode,
 			&rec.AccessStatus, &pagesRaw,
 			&rec.RegistrationDate, &rec.ApprovedBy, &rec.ApprovedAt,
-			&rec.Password, &rec.AccessEnabled,
+			&rec.AccessEnabled,
 			&roleName, &roleColor); err != nil {
 			return nil, fmt.Errorf("userAdminRepo.ListAllUsers scan: %w", err)
 		}
