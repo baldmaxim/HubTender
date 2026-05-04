@@ -46,10 +46,11 @@ type TransferResult struct {
 	ManualTransferred      int    `json:"manualTransferred"`
 	BoqItemsCopied         int    `json:"boqItemsCopied"`
 	ParentLinksRestored    int    `json:"parentLinksRestored"`
-	CostVolumesCopied      int    `json:"costVolumesCopied"`
-	InsuranceRowsCopied    int    `json:"insuranceRowsCopied"`
-	AdditionalWorksCopied  int    `json:"additionalWorksCopied"`
-	AdditionalWorksSkipped int    `json:"additionalWorksSkipped"`
+	CostVolumesCopied            int `json:"costVolumesCopied"`
+	InsuranceRowsCopied          int `json:"insuranceRowsCopied"`
+	SubcontractExclusionsCopied  int `json:"subcontractExclusionsCopied"`
+	AdditionalWorksCopied        int `json:"additionalWorksCopied"`
+	AdditionalWorksSkipped       int `json:"additionalWorksSkipped"`
 }
 
 // ErrVersionTransfer is a typed error carrying an HTTP status so the handler
@@ -396,22 +397,38 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		return nil, fmt.Errorf("transferRepo: copy tender insurance: %w", err)
 	}
 
+	// Step 13b: Copy subcontract_growth_exclusions (per-tender selections from
+	// "Рост субподряда" tab in markup percentages page).
+	subcontractExclusionsTag, err := tx.Exec(ctx, `
+		INSERT INTO public.subcontract_growth_exclusions (
+			tender_id, detail_cost_category_id, exclusion_type
+		)
+		SELECT $1::uuid, detail_cost_category_id, exclusion_type
+		FROM public.subcontract_growth_exclusions
+		WHERE tender_id = $2::uuid
+		ON CONFLICT (tender_id, detail_cost_category_id, exclusion_type) DO NOTHING
+	`, newTenderID, in.SourceTenderID)
+	if err != nil {
+		return nil, fmt.Errorf("transferRepo: copy subcontract growth exclusions: %w", err)
+	}
+
 	// Step 14: Commit.
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: commit: %w", err)
 	}
 
 	return &TransferResult{
-		TenderID:               newTenderID,
-		Version:                newVersion,
-		PositionsInserted:      positionsInserted,
-		ManualTransferred:      manualTransferred,
-		BoqItemsCopied:         boqItemsCopied,
-		ParentLinksRestored:    parentLinksRestored,
-		CostVolumesCopied:      int(costVolumesTag.RowsAffected()),
-		InsuranceRowsCopied:    int(insuranceTag.RowsAffected()),
-		AdditionalWorksCopied:  addCopied,
-		AdditionalWorksSkipped: addSkipped,
+		TenderID:                    newTenderID,
+		Version:                     newVersion,
+		PositionsInserted:           positionsInserted,
+		ManualTransferred:           manualTransferred,
+		BoqItemsCopied:              boqItemsCopied,
+		ParentLinksRestored:         parentLinksRestored,
+		CostVolumesCopied:           int(costVolumesTag.RowsAffected()),
+		InsuranceRowsCopied:         int(insuranceTag.RowsAffected()),
+		SubcontractExclusionsCopied: int(subcontractExclusionsTag.RowsAffected()),
+		AdditionalWorksCopied:       addCopied,
+		AdditionalWorksSkipped:      addSkipped,
 	}, nil
 }
 

@@ -96,8 +96,14 @@ export function applyPricingDistribution(
   materialTypeField: string | null | undefined,
   distribution: PricingDistribution | null
 ): { materialCost: number; workCost: number } {
-  // Если настроек нет, используем старую логику
+  // Если настроек нет, используем дефолты, согласованные с MarkupConstructor:
+  // для суб-мат основн. база → материалы КП, наценки → работа КП. Иначе —
+  // материалы целиком в материалы, работы целиком в работы.
   if (!distribution) {
+    if (boqItemType === 'суб-мат' && materialTypeField !== 'вспомогат.') {
+      const markup = commercialCost - baseAmount;
+      return { materialCost: baseAmount, workCost: markup };
+    }
     const isMaterial = ['мат', 'суб-мат', 'мат-комп.'].includes(boqItemType);
     return {
       materialCost: isMaterial ? commercialCost : 0,
