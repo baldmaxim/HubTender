@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/rs/zerolog/log"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
@@ -72,6 +73,7 @@ func (h *UserAdminHandler) ListPending(w http.ResponseWriter, r *http.Request) {
 func (h *UserAdminHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListAllUsers(r.Context())
 	if err != nil {
+		log.Error().Err(err).Msg("user_admin: list-all failed")
 		apierr.InternalError("failed to list users").Render(w)
 		return
 	}
