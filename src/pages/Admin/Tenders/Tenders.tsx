@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Table, Tabs, message } from 'antd';
+import { Table, Tabs, Modal, message } from 'antd';
 import TenderModal from './TenderModal';
 import UploadBOQModal from './UploadBOQModal';
 import { VersionMatchModal } from './VersionMatch';
@@ -8,6 +8,7 @@ import { useTenderActions } from './hooks/useTenderActions';
 import { getTendersTableColumns } from './components/TendersTableColumns';
 import { getTendersActionMenu } from './components/TendersActionMenu';
 import { TendersToolbar } from './components/TendersToolbar';
+import { cloneTenderAsNewVersion } from '../../../utils/versionTransfer/cloneTenderAsNewVersion';
 import type { Tender } from '../../../lib/supabase';
 import './Tenders.css';
 
@@ -43,9 +44,27 @@ const Tenders: React.FC = () => {
     message.success('Экспорт всех тендеров начат');
   };
 
-  const handleCopy = (record: TenderRecord) => {
-    message.success(`Тендер скопирован: ${record.tender}`);
-  };
+  const handleCopy = useCallback((record: TenderRecord) => {
+    Modal.confirm({
+      title: 'Дублировать тендер?',
+      content: `Будет создана новая версия "${record.tender}" со всеми позициями, работами, материалами и настройками текущей версии (v${record.version}).`,
+      okText: 'Дублировать',
+      cancelText: 'Отмена',
+      onOk: async () => {
+        const hide = message.loading('Дублируется тендер…', 0);
+        try {
+          const result = await cloneTenderAsNewVersion(record.id);
+          hide();
+          message.success(`Создана версия v${result.version}: ${result.positionsCopied} позиций, ${result.boqItemsCopied} строк BoQ`);
+          fetchTenders();
+        } catch (err) {
+          hide();
+          const msg = err instanceof Error ? err.message : 'Неизвестная ошибка';
+          message.error(msg);
+        }
+      },
+    });
+  }, [fetchTenders]);
 
   const handleArchive = useCallback((record: TenderRecord) => {
     actions.handleArchive(record);
@@ -76,7 +95,7 @@ const Tenders: React.FC = () => {
       onExport: handleExport,
       isArchived: record.is_archived || false,
     });
-  }, [actions.handleEdit, actions.handleDelete, handleNewVersion, handleArchive, handleUnarchive]);
+  }, [actions.handleEdit, actions.handleDelete, handleCopy, handleNewVersion, handleArchive, handleUnarchive]);
 
   const columns = useMemo(() => getTendersTableColumns({
     onOpenUploadBOQ: handleOpenUploadBOQ,

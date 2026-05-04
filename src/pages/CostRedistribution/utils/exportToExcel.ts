@@ -89,27 +89,17 @@ export function exportRedistributionToExcel(data: ExportData): void {
     let totalRedistribution = 0;
 
     for (const [boqItemId, boqItem] of positionBoqItems) {
-      // Материалы - учитываем стоимость материалов
-      const materialCost = boqItem.total_commercial_material_cost || 0;
-      if (materialCost > 0) {
-        totalMaterials += materialCost;
-      }
+      totalMaterials += boqItem.total_commercial_material_cost || 0;
 
-      // Работы - учитываем стоимость работ из ВСЕХ элементов, которые имеют work_cost > 0
-      // BOQ элемент может иметь ОДНОВРЕМЕННО и material_cost и work_cost
       const workCost = boqItem.total_commercial_work_cost || 0;
-      if (workCost > 0) {
-        const result = resultsMap.get(boqItemId);
-        if (result) {
-          // Работа участвовала в перераспределении
-          totalWorksBefore += result.original_work_cost;
-          totalWorksAfter += result.final_work_cost;
-          totalRedistribution += result.added_amount - result.deducted_amount;
-        } else {
-          // Работа НЕ участвовала в перераспределении - берем оригинальную стоимость
-          totalWorksBefore += workCost;
-          totalWorksAfter += workCost;
-        }
+      const result = resultsMap.get(boqItemId);
+      if (result) {
+        totalWorksBefore += result.original_work_cost;
+        totalWorksAfter += result.final_work_cost;
+        totalRedistribution += result.added_amount - result.deducted_amount;
+      } else {
+        totalWorksBefore += workCost;
+        totalWorksAfter += workCost;
       }
     }
 

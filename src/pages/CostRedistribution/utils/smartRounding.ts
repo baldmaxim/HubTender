@@ -8,7 +8,7 @@ import type { ResultRow } from '../components/Results/ResultsTableColumns';
  * Округляет число до ближайшего кратного 5
  */
 export function roundTo5(value: number): number {
-  if (value < 2.5) return 0;
+  if (Math.abs(value) < 2.5) return 0;
   return Math.round(value / 5) * 5;
 }
 
@@ -71,7 +71,7 @@ export function smartRoundResults(results: ResultRow[]): ResultRow[] {
   // Собираем данные для округления
   results.forEach((row, index) => {
     // Материалы
-    if (row.total_materials > 0 && row.quantity > 0) {
+    if (row.total_materials !== 0 && row.quantity > 0) {
       const originalPrice = row.material_unit_price;
       const roundedPrice = roundTo5(originalPrice);
       const fractionalPart = originalPrice - Math.floor(originalPrice);
@@ -88,7 +88,7 @@ export function smartRoundResults(results: ResultRow[]): ResultRow[] {
     }
 
     // Работы
-    if (row.total_works_after > 0 && row.quantity > 0) {
+    if (row.total_works_after !== 0 && row.quantity > 0) {
       const originalPrice = row.work_unit_price_after;
       const roundedPrice = roundTo5(originalPrice);
       const fractionalPart = originalPrice - Math.floor(originalPrice);
@@ -118,7 +118,7 @@ export function smartRoundResults(results: ResultRow[]): ResultRow[] {
     const result = { ...row };
 
     // Округляем материалы
-    if (row.total_materials > 0 && row.quantity > 0) {
+    if (row.total_materials !== 0 && row.quantity > 0) {
       const roundedPrice = materialAdjustments.get(index) ?? roundTo5(row.material_unit_price);
       result.rounded_material_unit_price = roundedPrice;
       result.rounded_total_materials = roundedPrice * row.quantity;
@@ -128,7 +128,7 @@ export function smartRoundResults(results: ResultRow[]): ResultRow[] {
     }
 
     // Округляем работы
-    if (row.total_works_after > 0 && row.quantity > 0) {
+    if (row.total_works_after !== 0 && row.quantity > 0) {
       const roundedPrice = workAdjustments.get(index) ?? roundTo5(row.work_unit_price_after);
       result.rounded_work_unit_price_after = roundedPrice;
       result.rounded_total_works = roundedPrice * row.quantity;

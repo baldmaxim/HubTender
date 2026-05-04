@@ -53,16 +53,9 @@ export function buildResultRows(
     let totalRedistribution = 0;
 
     for (const boqItem of positionBoqItems) {
-      const materialCost = boqItem.total_commercial_material_cost || 0;
-      if (materialCost > 0) {
-        totalMaterials += materialCost;
-      }
+      totalMaterials += boqItem.total_commercial_material_cost || 0;
 
       const workCost = boqItem.total_commercial_work_cost || 0;
-      if (workCost <= 0) {
-        continue;
-      }
-
       const result = resultsMap.get(boqItem.id);
       if (result) {
         totalWorksBefore += result.original_work_cost;
