@@ -44,6 +44,24 @@ func NewBroker(hub *Hub, debounceDuration time.Duration, logger zerolog.Logger) 
 	}
 }
 
+// Close cancels every pending debounce timer and clears pending payloads,
+// so no more publishes happen after this point. Safe to call once during
+// graceful shutdown.
+func (b *Broker) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for topic, t := range b.timers {
+		t.Stop()
+		delete(b.timers, topic)
+	}
+	for topic := range b.pending {
+		delete(b.pending, topic)
+	}
+
+	b.logger.Debug().Msg("broker closed; pending timers cancelled")
+}
+
 // Send implements EventSink. It is called by the Listener for each received
 // pg_notify payload and dispatches the event to the appropriate topics.
 func (b *Broker) Send(e Event) {

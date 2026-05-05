@@ -283,7 +283,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
           style={{ width: '100%' }}
           placeholder="—"
           formatter={(v) => (v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '')}
-          parser={(v) => (v ? parseNumber(v) : null)}
+          parser={(v) => (v ? (parseNumber(v) ?? 0) : 0)}
           onChange={(v) => handleCellChange(record.key, 'forecast_amount', v)}
           status={record.isModified ? 'warning' : undefined}
           controls={false}
@@ -306,9 +306,10 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
     },
   ];
 
-  const remainingAmount = project.final_contract_cost - totals.actualTotal;
-  const progressPercent = project.final_contract_cost > 0
-    ? Math.round((totals.actualTotal / project.final_contract_cost) * 100)
+  const finalContractCost = project.final_contract_cost ?? 0;
+  const remainingAmount = finalContractCost - totals.actualTotal;
+  const progressPercent = finalContractCost > 0
+    ? Math.round((totals.actualTotal / finalContractCost) * 100)
     : 0;
 
   return (
@@ -319,8 +320,8 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
           <Card size="small">
             <Statistic
               title="Итого договор"
-              value={project.final_contract_cost}
-              formatter={() => formatMoney(project.final_contract_cost)}
+              value={finalContractCost}
+              formatter={() => formatMoney(finalContractCost)}
               valueStyle={{ color: '#1890ff', fontSize: 16 }}
               suffix="₽"
             />

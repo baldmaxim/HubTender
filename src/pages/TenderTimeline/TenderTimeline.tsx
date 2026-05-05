@@ -212,10 +212,10 @@ const TenderTimeline: React.FC = () => {
     const expectedNames = new Set(autoExpectedGroups.map((group) => group.name));
     const matchingGroups = groups
       .filter((group) => expectedNames.has(group.name))
-      .sort((left, right) => left.sort_order - right.sort_order);
+      .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0));
 
     const sortedGroups =
-      matchingGroups.length > 0 ? matchingGroups : [...groups].sort((left, right) => left.sort_order - right.sort_order);
+      matchingGroups.length > 0 ? matchingGroups : [...groups].sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0));
 
     if (!restrictGroupsToCurrentUser || !user?.id) {
       return sortedGroups;

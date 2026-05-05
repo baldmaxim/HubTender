@@ -154,7 +154,7 @@ export const ProjectsTable: React.FC<ProjectsTableProps> = ({
       key: 'completion',
       width: 200,
       render: (_, record) => {
-        const percent = Math.min(Math.round(record.completion_percentage), 100);
+        const percent = Math.min(Math.round(record.completion_percentage ?? 0), 100);
         return (
           <div>
             <Progress
@@ -164,7 +164,7 @@ export const ProjectsTable: React.FC<ProjectsTableProps> = ({
               strokeColor={percent >= 100 ? '#52c41a' : '#1890ff'}
             />
             <Text type="secondary" style={{ fontSize: 11 }}>
-              {formatMoney(record.total_completion)}
+              {formatMoney(record.total_completion ?? 0)}
             </Text>
           </div>
         );

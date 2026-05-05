@@ -182,7 +182,7 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
                 </Tooltip>
               )}
               <Tooltip title="Скопировать примечание ГП" {...tooltipColor}>
-                <Tag color="purple" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onCopyNote(record.id, record.manual_note, e); }}>
+                <Tag color="purple" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onCopyNote(record.id, record.manual_note ?? null, e); }}>
                   <FileTextOutlined />
                 </Tag>
               </Tooltip>

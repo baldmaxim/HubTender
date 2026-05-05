@@ -114,7 +114,7 @@ export const ScheduleChart: React.FC<ScheduleChartProps> = ({
             const endDate = dayjs(project.construction_end_date);
             if (month.isBefore(endDate) || month.isSame(endDate, 'month')) {
               // Calculate remaining amount and distribute evenly
-              const remainingAmount = project.final_contract_cost - project.total_completion;
+              const remainingAmount = (project.final_contract_cost ?? 0) - (project.total_completion ?? 0);
               const monthsRemaining = Math.max(1, endDate.diff(currentMonth, 'month') + 1);
               const plannedMonthly = remainingAmount / monthsRemaining;
 
@@ -150,11 +150,11 @@ export const ScheduleChart: React.FC<ScheduleChartProps> = ({
   // Calculate totals for selected projects
   const totals = useMemo(() => {
     const totalContract = filteredProjects.reduce(
-      (sum, p) => sum + p.final_contract_cost,
+      (sum, p) => sum + (p.final_contract_cost ?? 0),
       0
     );
     const totalCompletion = filteredProjects.reduce(
-      (sum, p) => sum + p.total_completion,
+      (sum, p) => sum + (p.total_completion ?? 0),
       0
     );
     const avgPercentage =

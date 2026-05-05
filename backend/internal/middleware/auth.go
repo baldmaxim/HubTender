@@ -4,12 +4,28 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/rs/zerolog/log"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
+
+// jwtLeeway returns the clock-skew tolerance for JWT exp/iat checks. Read from
+// JWT_CLOCK_SKEW_SECONDS env var; defaults to 0 (strict). Use only in dev when
+// the local machine clock cannot be corrected.
+func jwtLeeway() time.Duration {
+	if v := os.Getenv("JWT_CLOCK_SKEW_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return time.Duration(n) * time.Second
+		}
+	}
+	return 0
+}
 
 // ctxKey is the unexported type used for context values to avoid collisions.
 type ctxKey string
@@ -47,14 +63,15 @@ type supabaseClaims struct {
 // query-parameter token (browser WebSocket API cannot set headers).
 func VerifyToken(kf keyfunc.Keyfunc, expectedIssuer, raw string) (*AuthUser, error) {
 	claims := &supabaseClaims{}
-	token, err := jwt.ParseWithClaims(
-		raw,
-		claims,
-		kf.Keyfunc,
+	parseOpts := []jwt.ParserOption{
 		jwt.WithExpirationRequired(),
 		jwt.WithIssuedAt(),
 		jwt.WithIssuer(expectedIssuer),
-	)
+	}
+	if leeway := jwtLeeway(); leeway > 0 {
+		parseOpts = append(parseOpts, jwt.WithLeeway(leeway))
+	}
+	token, err := jwt.ParseWithClaims(raw, claims, kf.Keyfunc, parseOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -88,6 +105,7 @@ func JWTAuth(kf keyfunc.Keyfunc, expectedIssuer string) func(http.Handler) http.
 
 			authUser, err := VerifyToken(kf, expectedIssuer, tokenStr)
 			if err != nil {
+				log.Warn().Err(err).Str("path", r.URL.Path).Msg("JWT verification failed")
 				apierr.Unauthorized("invalid or expired token").Render(w)
 				return
 			}

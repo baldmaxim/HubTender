@@ -63,6 +63,7 @@ func (h *WsHandler) Serve(w http.ResponseWriter, r *http.Request) {
 
 	authed, err := middleware.VerifyToken(h.kf, h.issuer, raw)
 	if err != nil {
+		h.logger.Warn().Err(err).Msg("JWT verification failed")
 		apierr.Unauthorized("invalid or expired token").Render(w)
 		return
 	}

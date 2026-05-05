@@ -17,8 +17,8 @@ interface MaterialFormData {
   unit_code: string | null;
   parent_work_item_id: string | null;
   consumption_coefficient: number;
-  conversion_coefficient: number;
-  base_quantity: number;
+  conversion_coefficient: number | null;
+  base_quantity: number | null;
   quantity: number;
   unit_rate: number;
   currency_type: CurrencyType;
@@ -91,8 +91,8 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
   const [formData, setFormData] = useState<MaterialFormData>({
     boq_item_type: record.boq_item_type,
     material_type: record.material_type || 'основн.',
-    material_name_id: record.material_name_id,
-    unit_code: record.unit_code,
+    material_name_id: record.material_name_id ?? null,
+    unit_code: record.unit_code ?? null,
     parent_work_item_id: record.parent_work_item_id || null,
     consumption_coefficient: record.consumption_coefficient || 1,
     conversion_coefficient: record.conversion_coefficient || 1,
@@ -102,7 +102,7 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
     currency_type: record.currency_type || 'RUB',
     delivery_price_type: record.delivery_price_type || 'в цене',
     delivery_amount: record.delivery_amount || 0,
-    detail_cost_category_id: record.detail_cost_category_id,
+    detail_cost_category_id: record.detail_cost_category_id ?? null,
     quote_link: record.quote_link || '',
     description: record.description || '',
   });
@@ -142,7 +142,7 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
       // Материал привязан к работе
       const parentWork = workItems.find((w) => w.id === formData.parent_work_item_id);
       if (parentWork && parentWork.quantity) {
-        return parentWork.quantity * formData.conversion_coefficient * formData.consumption_coefficient;
+        return parentWork.quantity * (formData.conversion_coefficient ?? 1) * formData.consumption_coefficient;
       }
       return 0;
     } else {

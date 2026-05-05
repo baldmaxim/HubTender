@@ -7,7 +7,41 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/su10/hubtender/backend/internal/calc"
 )
+
+// loadTenderRates fetches the three currency multipliers from public.tenders
+// inside an open transaction. Used by CreateBoqItem / UpdateBoqItem to drive
+// the same total_amount calculation that the frontend used to do.
+func loadTenderRates(ctx context.Context, tx pgx.Tx, tenderID string) (calc.CurrencyRates, error) {
+	const q = `SELECT usd_rate, eur_rate, cny_rate FROM public.tenders WHERE id = $1`
+	var rates calc.CurrencyRates
+	if err := tx.QueryRow(ctx, q, tenderID).Scan(&rates.USDRate, &rates.EURRate, &rates.CNYRate); err != nil {
+		return calc.CurrencyRates{}, fmt.Errorf("loadTenderRates: %w", err)
+	}
+	return rates, nil
+}
+
+// boqAmountInputFromRow projects a stored BoqItemRow into the calc input shape.
+func boqAmountInputFromRow(b *BoqItemRow) calc.BoqItemAmountInput {
+	in := calc.BoqItemAmountInput{
+		BoqItemType:            b.BoqItemType,
+		Quantity:               b.Quantity,
+		UnitRate:               b.UnitRate,
+		DeliveryAmount:         b.DeliveryAmount,
+		ConsumptionCoefficient: b.ConsumptionCoefficient,
+		ParentWorkItemID:       b.ParentWorkItemID,
+		TotalAmount:            b.TotalAmount,
+	}
+	if b.CurrencyType != nil {
+		in.CurrencyType = *b.CurrencyType
+	}
+	if b.DeliveryPriceType != nil {
+		in.DeliveryPriceType = *b.DeliveryPriceType
+	}
+	return in
+}
 
 // ---------------------------------------------------------------------------
 // Write input types
@@ -15,42 +49,44 @@ import (
 
 // CreateBoqItemInput holds validated fields for inserting a boq_item.
 type CreateBoqItemInput struct {
-	ClientPositionID     string
-	TenderID             string
-	BoqItemType          string
-	MaterialType         *string
-	Description          *string
-	UnitCode             *string
-	Quantity             *float64
-	UnitRate             *float64
-	CurrencyType         *string
-	DeliveryPriceType    *string
-	DeliveryAmount       *float64
-	DetailCostCategoryID *string
-	MaterialNameID       *string
-	WorkNameID           *string
-	ParentWorkItemID     *string
-	SortNumber           *int
-	CreatedBy            string // auth.users UUID for audit
+	ClientPositionID       string
+	TenderID               string
+	BoqItemType            string
+	MaterialType           *string
+	Description            *string
+	UnitCode               *string
+	Quantity               *float64
+	UnitRate               *float64
+	CurrencyType           *string
+	DeliveryPriceType      *string
+	DeliveryAmount         *float64
+	ConsumptionCoefficient *float64
+	DetailCostCategoryID   *string
+	MaterialNameID         *string
+	WorkNameID             *string
+	ParentWorkItemID       *string
+	SortNumber             *int
+	CreatedBy              string // auth.users UUID for audit
 }
 
 // UpdateBoqItemInput holds validated patch fields for a boq_item.
 type UpdateBoqItemInput struct {
-	BoqItemType          *string
-	MaterialType         *string
-	Description          *string
-	UnitCode             *string
-	Quantity             *float64
-	UnitRate             *float64
-	CurrencyType         *string
-	DeliveryPriceType    *string
-	DeliveryAmount       *float64
-	DetailCostCategoryID *string
-	MaterialNameID       *string
-	WorkNameID           *string
-	ParentWorkItemID     *string
-	SortNumber           *int
-	ChangedBy            string // auth.users UUID for audit
+	BoqItemType            *string
+	MaterialType           *string
+	Description            *string
+	UnitCode               *string
+	Quantity               *float64
+	UnitRate               *float64
+	CurrencyType           *string
+	DeliveryPriceType      *string
+	DeliveryAmount         *float64
+	ConsumptionCoefficient *float64
+	DetailCostCategoryID   *string
+	MaterialNameID         *string
+	WorkNameID             *string
+	ParentWorkItemID       *string
+	SortNumber             *int
+	ChangedBy              string // auth.users UUID for audit
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +98,7 @@ const boqScanCols = `
 	boq_item_type::text, material_type::text, description,
 	unit_code, quantity, unit_rate,
 	currency_type::text, delivery_price_type::text, delivery_amount,
-	total_amount, sort_number,
+	consumption_coefficient, total_amount, sort_number,
 	detail_cost_category_id::text, parent_work_item_id::text,
 	material_name_id::text, work_name_id::text,
 	COALESCE(created_at,NOW()), COALESCE(updated_at,NOW())
@@ -86,7 +122,7 @@ func scanBoqItemRow(row interface{ Scan(...any) error }) (*BoqItemRow, error) {
 		&b.BoqItemType, &b.MaterialType, &b.Description,
 		&b.UnitCode, &b.Quantity, &b.UnitRate,
 		&b.CurrencyType, &b.DeliveryPriceType, &b.DeliveryAmount,
-		&b.TotalAmount, &b.SortNumber,
+		&b.ConsumptionCoefficient, &b.TotalAmount, &b.SortNumber,
 		&b.DetailCostCategoryID, &b.ParentWorkItemID,
 		&b.MaterialNameID, &b.WorkNameID,
 		&b.CreatedAt, &b.UpdatedAt,
@@ -118,6 +154,7 @@ func changedFields(old, new *BoqItemRow) []string {
 		{"currency_type", old.CurrencyType, new.CurrencyType},
 		{"delivery_price_type", old.DeliveryPriceType, new.DeliveryPriceType},
 		{"delivery_amount", old.DeliveryAmount, new.DeliveryAmount},
+		{"consumption_coefficient", old.ConsumptionCoefficient, new.ConsumptionCoefficient},
 		{"total_amount", old.TotalAmount, new.TotalAmount},
 		{"sort_number", old.SortNumber, new.SortNumber},
 		{"detail_cost_category_id", old.DetailCostCategoryID, new.DetailCostCategoryID},
@@ -169,7 +206,9 @@ func insertAudit(
 }
 
 // CreateBoqItem inserts a new boq_item and writes an INSERT audit row, all in
-// one transaction.
+// one transaction. total_amount is computed server-side via calc on the same
+// inputs the frontend used to compute it from, so the row is never written
+// without a price.
 func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*BoqItemRow, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -182,20 +221,43 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		sortNum = *in.SortNumber
 	}
 
+	rates, err := loadTenderRates(ctx, tx, in.TenderID)
+	if err != nil {
+		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
+	}
+
+	calcIn := calc.BoqItemAmountInput{
+		BoqItemType:            in.BoqItemType,
+		Quantity:               in.Quantity,
+		UnitRate:               in.UnitRate,
+		DeliveryAmount:         in.DeliveryAmount,
+		ConsumptionCoefficient: in.ConsumptionCoefficient,
+		ParentWorkItemID:       in.ParentWorkItemID,
+	}
+	if in.CurrencyType != nil {
+		calcIn.CurrencyType = *in.CurrencyType
+	}
+	if in.DeliveryPriceType != nil {
+		calcIn.DeliveryPriceType = *in.DeliveryPriceType
+	}
+	totalAmount := calc.CalculateBoqItemTotalAmount(calcIn, rates)
+
 	q := `
 		INSERT INTO public.boq_items
 		    (client_position_id, tender_id, boq_item_type, material_type, description,
 		     unit_code, quantity, unit_rate, currency_type, delivery_price_type,
-		     delivery_amount, detail_cost_category_id, material_name_id, work_name_id,
+		     delivery_amount, consumption_coefficient, total_amount,
+		     detail_cost_category_id, material_name_id, work_name_id,
 		     parent_work_item_id, sort_number, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		RETURNING ` + boqScanCols
 	row := tx.QueryRow(ctx, q,
 		in.ClientPositionID, in.TenderID, in.BoqItemType,
 		in.MaterialType, in.Description,
 		in.UnitCode, in.Quantity, in.UnitRate,
 		in.CurrencyType, in.DeliveryPriceType,
-		in.DeliveryAmount, in.DetailCostCategoryID,
+		in.DeliveryAmount, in.ConsumptionCoefficient, totalAmount,
+		in.DetailCostCategoryID,
 		in.MaterialNameID, in.WorkNameID,
 		in.ParentWorkItemID, sortNum, in.CreatedBy,
 	)

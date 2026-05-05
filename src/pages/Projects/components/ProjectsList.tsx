@@ -102,7 +102,7 @@ export const ProjectsList: React.FC<ProjectsListProps> = ({ data, loading, agree
       itemLayout="horizontal"
       dataSource={data}
       renderItem={(project) => {
-        const completionPercent = Math.min(Math.round(project.completion_percentage), 100);
+        const completionPercent = Math.min(Math.round(project.completion_percentage ?? 0), 100);
         const endDate = project.construction_end_date
           ? dayjs(project.construction_end_date)
           : null;
@@ -148,7 +148,7 @@ export const ProjectsList: React.FC<ProjectsListProps> = ({ data, loading, agree
                     Договор
                   </Text>
                   <Text strong style={{ color: '#1890ff' }}>
-                    {formatMoney(project.final_contract_cost)}
+                    {formatMoney(project.final_contract_cost ?? 0)}
                   </Text>
                 </div>
               </Tooltip>
@@ -157,7 +157,7 @@ export const ProjectsList: React.FC<ProjectsListProps> = ({ data, loading, agree
               <div style={{ width: 130, textAlign: 'right' }}>
                 <Text strong>
                   {project.area && project.area > 0
-                    ? `${Math.round(project.final_contract_cost / project.area).toLocaleString('ru-RU')} Руб/м²`
+                    ? `${Math.round((project.final_contract_cost ?? 0) / project.area).toLocaleString('ru-RU')} Руб/м²`
                     : '—'}
                 </Text>
               </div>

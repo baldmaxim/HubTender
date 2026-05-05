@@ -2,6 +2,7 @@ package realtime
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/rs/zerolog"
 )
@@ -22,6 +23,10 @@ type Client struct {
 
 	// topics is the set of topic strings this client is subscribed to.
 	topics map[string]struct{}
+
+	// closeOnce guards the close(send) call: graceful shutdown can race
+	// with the per-handler defer Unregister, and double-close panics.
+	closeOnce sync.Once
 
 	mu sync.Mutex
 }
@@ -52,6 +57,10 @@ type Hub struct {
 	clients map[*Client]struct{}
 	cmu     sync.Mutex
 
+	// closed flips to true once Close has been called. Register checks this
+	// to immediately tear down any client that races in during shutdown.
+	closed atomic.Bool
+
 	logger zerolog.Logger
 }
 
@@ -67,6 +76,13 @@ func NewHub(logger zerolog.Logger) *Hub {
 // Register adds a client to the hub's tracking set.
 // It does not subscribe the client to any topic; call Subscribe for that.
 func (h *Hub) Register(c *Client) {
+	if h.closed.Load() {
+		// Hub is shutting down — close the client immediately so its writer
+		// goroutine exits at once instead of leaking until the deadline.
+		c.closeOnce.Do(func() { close(c.send) })
+		return
+	}
+
 	h.cmu.Lock()
 	h.clients[c] = struct{}{}
 	h.cmu.Unlock()
@@ -98,9 +114,33 @@ func (h *Hub) Unregister(c *Client) {
 	h.cmu.Unlock()
 
 	// Close the send channel so the WS writer goroutine drains and exits.
-	close(c.send)
+	// Guarded by sync.Once because Hub.Close races with the per-handler defer.
+	c.closeOnce.Do(func() { close(c.send) })
 
 	h.logger.Debug().Str("client_id", c.ID).Msg("client unregistered")
+}
+
+// Close marks the hub as shut down and unregisters every active client,
+// closing their send channels so the WS writer goroutines exit promptly.
+// After Close returns, Register is a no-op (the new client gets closed at
+// once) and any in-flight Publish becomes a noop drop.
+func (h *Hub) Close() {
+	if !h.closed.CompareAndSwap(false, true) {
+		return
+	}
+
+	h.cmu.Lock()
+	clients := make([]*Client, 0, len(h.clients))
+	for c := range h.clients {
+		clients = append(clients, c)
+	}
+	h.cmu.Unlock()
+
+	for _, c := range clients {
+		h.Unregister(c)
+	}
+
+	h.logger.Info().Int("clients", len(clients)).Msg("hub closed; all clients unregistered")
 }
 
 // Subscribe adds the client to the given topic.

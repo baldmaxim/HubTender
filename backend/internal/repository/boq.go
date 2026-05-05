@@ -14,26 +14,27 @@ import (
 
 // BoqItemRow mirrors the columns returned by ListBoqItems.
 type BoqItemRow struct {
-	ID                   string    `json:"id"`
-	ClientPositionID     string    `json:"client_position_id"`
-	TenderID             string    `json:"tender_id"`
-	BoqItemType          string    `json:"boq_item_type"`
-	MaterialType         *string   `json:"material_type"`
-	Description          *string   `json:"description"`
-	UnitCode             *string   `json:"unit_code"`
-	Quantity             *float64  `json:"quantity"`
-	UnitRate             *float64  `json:"unit_rate"`
-	CurrencyType         *string   `json:"currency_type"`
-	DeliveryPriceType    *string   `json:"delivery_price_type"`
-	DeliveryAmount       *float64  `json:"delivery_amount"`
-	TotalAmount          *float64  `json:"total_amount"`
-	SortNumber           int       `json:"sort_number"`
-	DetailCostCategoryID *string   `json:"detail_cost_category_id"`
-	ParentWorkItemID     *string   `json:"parent_work_item_id"`
-	MaterialNameID       *string   `json:"material_name_id"`
-	WorkNameID           *string   `json:"work_name_id"`
-	CreatedAt            time.Time `json:"created_at"`
-	UpdatedAt            time.Time `json:"updated_at"`
+	ID                     string    `json:"id"`
+	ClientPositionID       string    `json:"client_position_id"`
+	TenderID               string    `json:"tender_id"`
+	BoqItemType            string    `json:"boq_item_type"`
+	MaterialType           *string   `json:"material_type"`
+	Description            *string   `json:"description"`
+	UnitCode               *string   `json:"unit_code"`
+	Quantity               *float64  `json:"quantity"`
+	UnitRate               *float64  `json:"unit_rate"`
+	CurrencyType           *string   `json:"currency_type"`
+	DeliveryPriceType      *string   `json:"delivery_price_type"`
+	DeliveryAmount         *float64  `json:"delivery_amount"`
+	ConsumptionCoefficient *float64  `json:"consumption_coefficient"`
+	TotalAmount            *float64  `json:"total_amount"`
+	SortNumber             int       `json:"sort_number"`
+	DetailCostCategoryID   *string   `json:"detail_cost_category_id"`
+	ParentWorkItemID       *string   `json:"parent_work_item_id"`
+	MaterialNameID         *string   `json:"material_name_id"`
+	WorkNameID             *string   `json:"work_name_id"`
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +68,7 @@ func (r *BoqRepo) ListBoqItems(ctx context.Context, tenderID, positionID string)
 		    currency_type::text,
 		    delivery_price_type::text,
 		    delivery_amount,
+		    consumption_coefficient,
 		    total_amount,
 		    sort_number,
 		    detail_cost_category_id::text,
@@ -95,7 +97,7 @@ func (r *BoqRepo) ListBoqItems(ctx context.Context, tenderID, positionID string)
 			&row.BoqItemType, &row.MaterialType, &row.Description,
 			&row.UnitCode, &row.Quantity, &row.UnitRate,
 			&row.CurrencyType, &row.DeliveryPriceType, &row.DeliveryAmount,
-			&row.TotalAmount, &row.SortNumber,
+			&row.ConsumptionCoefficient, &row.TotalAmount, &row.SortNumber,
 			&row.DetailCostCategoryID, &row.ParentWorkItemID,
 			&row.MaterialNameID, &row.WorkNameID,
 			&row.CreatedAt, &row.UpdatedAt,

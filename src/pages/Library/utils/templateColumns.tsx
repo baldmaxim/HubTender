@@ -6,6 +6,7 @@ import {
   Button,
   Popconfirm,
 } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import {
   LinkOutlined,
   DeleteOutlined,
@@ -36,7 +37,7 @@ export const createTemplateColumns = (
     setEditingItems: (items: TemplateItemWithDetails[]) => void;
     setLoadedTemplateItems: (fn: (prev: Record<string, TemplateItemWithDetails[]>) => Record<string, TemplateItemWithDetails[]>) => void;
   }
-) => {
+): ColumnsType<TemplateItemWithDetails> => {
   const workItemsForSelect = currentItems.filter((item) => item.kind === 'work');
 
   return [
@@ -110,7 +111,6 @@ export const createTemplateColumns = (
       key: 'name',
       width: 220,
       align: 'center' as const,
-      editable: true,
       render: (record: TemplateItemWithDetails) => {
         if (isCreating || isEditing || isAddingItems) {
           return (
@@ -163,7 +163,6 @@ export const createTemplateColumns = (
       key: 'conversation_coeff',
       width: 100,
       align: 'center' as const,
-      editable: true,
       render: (record: TemplateItemWithDetails) => {
         if (record.kind === 'work') return '-';
 
@@ -248,7 +247,6 @@ export const createTemplateColumns = (
       key: 'detail_cost_category',
       width: 200,
       align: 'center' as const,
-      editable: true,
       render: (record: TemplateItemWithDetails) => {
         if (isCreating || isEditing || isAddingItems) {
           const currentSearchText = record.detail_cost_category_full || '';
@@ -370,7 +368,7 @@ export const createTemplateColumns = (
         return null;
       },
     },
-  ];
+  ] as ColumnsType<TemplateItemWithDetails>;
 };
 
 export const getRowClassName = (record: TemplateItemWithDetails) => {

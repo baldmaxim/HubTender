@@ -39,7 +39,7 @@ export const useUnits = () => {
         category: item.category || 'общая',
         sort_order: item.sort_order || 0,
         is_active: item.is_active !== false,
-        created_at: new Date(item.created_at).toLocaleDateString('ru-RU'),
+        created_at: item.created_at ? new Date(item.created_at).toLocaleDateString('ru-RU') : '',
       }));
 
       setUnitsData(formattedData);

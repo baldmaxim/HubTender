@@ -1398,11 +1398,11 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               const dataArr1 = chart.data.datasets[0].data as number[];
               const total = dataArr1.reduce((a: number, b: number) => a + b, 0);
               (chart.data.labels as string[]).forEach((label: string, i: number) => {
-                const value = dataArr1[i];
+                const value = dataArr1[i] ?? 0;
                 const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
                 labels.push({
                   text: `${label} (${percentage}%)`,
-                  fillStyle: chart.data.datasets[0].backgroundColor[i],
+                  fillStyle: (chart.data.datasets[0]!.backgroundColor as string[])[i],
                   hidden: false,
                   index: i,
                   fontColor: currentTheme === 'dark' ? '#ffffff' : '#000000',
@@ -1431,11 +1431,11 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               const dataArr2 = chart.data.datasets[0].data as number[];
               const totalMarkups = dataArr2.reduce((a: number, b: number) => a + b, 0);
               (chart.data.labels as string[]).forEach((label: string, i: number) => {
-                const value = dataArr2[i];
+                const value = dataArr2[i] ?? 0;
                 const percentage = totalMarkups > 0 ? ((value / totalMarkups) * 100).toFixed(1) : '0.0';
                 labels.push({
                   text: `${label} (${percentage}%)`,
-                  fillStyle: chart.data.datasets[0].backgroundColor[i],
+                  fillStyle: (chart.data.datasets[0]!.backgroundColor as string[])[i],
                   hidden: false,
                   index: i,
                   fontColor: currentTheme === 'dark' ? '#ffffff' : '#000000',
@@ -1449,11 +1449,11 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
             const dataArr3 = chart.data.datasets[0].data as number[];
             const total = dataArr3.reduce((a: number, b: number) => a + b, 0);
             return (chart.data.labels as string[]).map((label: string, i: number) => {
-              const value = dataArr3[i];
+              const value = dataArr3[i] ?? 0;
               const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
               return {
                 text: `${label} (${percentage}%)`,
-                fillStyle: chart.data.datasets[0].backgroundColor[i],
+                fillStyle: (chart.data.datasets[0]!.backgroundColor as string[])[i],
                 hidden: false,
                 index: i,
                 fontColor: currentTheme === 'dark' ? '#ffffff' : '#000000',
@@ -1464,7 +1464,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         maxWidth: 200,
         onClick: function(e: ChartEvent, legendItem: ChartLegendItem, legend: LegendElement<'doughnut'>) {
           // Игнорируем клики на заголовки и разделители
-          if (legendItem.index < 0) return;
+          if (legendItem.index == null || legendItem.index < 0) return;
 
           // Стандартное поведение для остальных элементов
           const index = legendItem.index;
@@ -1679,7 +1679,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           maxRotation: currentLevel.type === 'indicator' && breakdownData.length > 0 ? 0 : 0,
           minRotation: 0,
           autoSkip: false,
-          callback: function(value: number) {
+          callback: function(this: { getLabelForValue: (v: number) => string }, value: number): string | string[] {
             const label = this.getLabelForValue(value);
             const maxLen = currentLevel.type === 'markups' ? 14 : 20;
             // Разбиваем длинные метки на несколько строк
@@ -1895,7 +1895,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
             </div>
             {getAreaBarData() && (
               <div style={{ height: 350 }}>
-                <Bar data={getAreaBarData()!} options={barOptions} />
+                <Bar data={getAreaBarData()!} options={barOptions as never} />
               </div>
             )}
           </Card>

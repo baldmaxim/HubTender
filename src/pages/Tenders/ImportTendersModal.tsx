@@ -75,7 +75,7 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
         // Отладка: показываем первую строку для проверки названий колонок
         if (jsonData.length > 0) {
           console.log('Первая строка Excel:', jsonData[0]);
-          console.log('Найденные колонки:', Object.keys(jsonData[0]));
+          console.log('Найденные колонки:', Object.keys(jsonData[0] as object));
         }
 
         const parsed: ParsedTender[] = (jsonData as Record<string, unknown>[]).map((row) => {

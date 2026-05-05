@@ -1,5 +1,6 @@
 import { forwardRef, useImperativeHandle, useState, useEffect } from 'react';
 import { Table, Form, Button, Dropdown, message, Input, Modal, Space, Tooltip, Popconfirm } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import {
   FolderOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
   AppstoreOutlined, FileOutlined,
@@ -284,7 +285,7 @@ const WorksTab = forwardRef<WorksTabHandle, WorksTabProps>((props, ref) => {
             }),
           }}
           dataSource={tableData}
-          columns={finalColumns}
+          columns={finalColumns as ColumnsType<WorkLibraryFull | FolderRow>}
           rowClassName={getRowClassName}
           onRow={(record: TableRow) => ({
             onClick: () => {

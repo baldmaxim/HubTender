@@ -67,7 +67,11 @@ func main() {
 	// -------------------------------------------------------------------------
 	// 4. Database pool
 	// -------------------------------------------------------------------------
-	pool, err := infradb.NewPool(rootCtx, cfg.DatabaseURL, infradb.DefaultPoolConfig())
+	pool, err := infradb.NewPool(rootCtx, cfg.DatabaseURL, infradb.PoolConfig{
+		MaxConns:        cfg.DBMaxConns,
+		MinConns:        cfg.DBMinConns,
+		MaxConnIdleTime: cfg.DBMaxConnIdleTime,
+	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to connect to database")
 	}
@@ -412,7 +416,7 @@ func main() {
 	// 10. HTTP server with graceful shutdown
 	// -------------------------------------------------------------------------
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
+		Addr:         cfg.BindHost + ":" + cfg.Port,
 		Handler:      r,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -439,11 +443,21 @@ func main() {
 		log.Fatal().Err(err).Msg("server error")
 	}
 
-	// Cancel the root context first so the listener goroutine exits its LISTEN
-	// loop before we close the dedicated connection.
+	// Step 1. Stop accepting new realtime events and cancel pending debounced
+	// publishes so no goroutine tries to push to a closing client.
+	broker.Close()
+
+	// Step 2. Close the WebSocket hub: every connected client's send channel
+	// is closed, which unblocks the writer goroutines and makes them send a
+	// normal close-frame to the browser. Done BEFORE srv.Shutdown because
+	// hijacked WebSocket connections are NOT tracked by http.Server and
+	// would otherwise leak past the shutdown deadline.
+	hub.Close()
+
+	// Step 3. Cancel root context — listener goroutine exits its LISTEN loop.
 	rootCancel()
 
-	// Graceful shutdown — allow up to 15 s for in-flight requests to complete.
+	// Step 4. Graceful HTTP shutdown — wait up to 15 s for in-flight requests.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
 
@@ -454,8 +468,8 @@ func main() {
 		log.Info().Msg("server shutdown complete")
 	}
 
-	// Close the dedicated listener connection after the HTTP server has drained.
-	// By this point the listener goroutine has already exited (rootCtx cancelled).
+	// Step 5. Close the dedicated listener connection after the HTTP server
+	// has drained. The listener goroutine has already exited (rootCtx cancelled).
 	_ = listenerConn.Close(context.Background())
 	log.Info().Msg("listener connection closed")
 }

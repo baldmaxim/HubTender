@@ -162,8 +162,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
 
   // Calculate totals across all visible projects
   const totals = useMemo(() => {
-    const totalContract = visibleProjects.reduce((sum, p) => sum + p.final_contract_cost, 0);
-    const totalCompletion = visibleProjects.reduce((sum, p) => sum + p.total_completion, 0);
+    const totalContract = visibleProjects.reduce((sum, p) => sum + (p.final_contract_cost ?? 0), 0);
+    const totalCompletion = visibleProjects.reduce((sum, p) => sum + (p.total_completion ?? 0), 0);
     const totalRemaining = totalContract - totalCompletion;
     const completionPercent = totalContract > 0 ? (totalCompletion / totalContract) * 100 : 0;
     return { totalContract, totalCompletion, totalRemaining, completionPercent };
@@ -1078,14 +1078,14 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
               </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
               <Progress
-                percent={Math.min(Math.round(project.completion_percentage), 100)}
+                percent={Math.min(Math.round(project.completion_percentage ?? 0), 100)}
                 size="small"
                 showInfo={false}
                 strokeColor={COLORS[index % COLORS.length]}
                 style={{ width: 80, margin: 0 }}
               />
               <Text type="secondary" style={{ fontSize: 11 }}>
-                {Math.round(project.completion_percentage)}%
+                {Math.round(project.completion_percentage ?? 0)}%
               </Text>
             </div>
           </div>
@@ -1471,7 +1471,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
             {(() => {
               const fullData = getFullProjectChartData(chartModalProject.project, chartModalProject.colorIndex);
               return fullData ? (
-                <Line data={fullData} options={fullChartOptions} />
+                <Line data={fullData} options={fullChartOptions as never} />
               ) : (
                 <Empty description="Нет данных для отображения" />
               );
@@ -1492,7 +1492,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       >
         {summaryChartData && (
           <div style={{ height: 700 }}>
-            <Line data={summaryChartData} options={summaryChartOptions} />
+            <Line data={summaryChartData} options={summaryChartOptions as never} />
           </div>
         )}
       </Modal>

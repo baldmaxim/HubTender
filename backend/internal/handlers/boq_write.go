@@ -36,38 +36,40 @@ func NewBoqWriteHandler(svc boqWriteServicer) *BoqWriteHandler {
 
 // createBoqItemReq is the request body for POST /api/v1/positions/:posId/items.
 type createBoqItemReq struct {
-	BoqItemType          string   `json:"boq_item_type" validate:"required"`
-	MaterialType         *string  `json:"material_type"`
-	Description          *string  `json:"description"`
-	UnitCode             *string  `json:"unit_code"`
-	Quantity             *float64 `json:"quantity" validate:"omitempty,gte=0"`
-	UnitRate             *float64 `json:"unit_rate" validate:"omitempty,gte=0"`
-	CurrencyType         *string  `json:"currency_type"`
-	DeliveryPriceType    *string  `json:"delivery_price_type"`
-	DeliveryAmount       *float64 `json:"delivery_amount" validate:"omitempty,gte=0"`
-	DetailCostCategoryID *string  `json:"detail_cost_category_id" validate:"omitempty,uuid"`
-	MaterialNameID       *string  `json:"material_name_id" validate:"omitempty,uuid"`
-	WorkNameID           *string  `json:"work_name_id" validate:"omitempty,uuid"`
-	ParentWorkItemID     *string  `json:"parent_work_item_id" validate:"omitempty,uuid"`
-	SortNumber           *int     `json:"sort_number" validate:"omitempty,gte=0"`
+	BoqItemType            string   `json:"boq_item_type" validate:"required"`
+	MaterialType           *string  `json:"material_type"`
+	Description            *string  `json:"description"`
+	UnitCode               *string  `json:"unit_code"`
+	Quantity               *float64 `json:"quantity" validate:"omitempty,gte=0"`
+	UnitRate               *float64 `json:"unit_rate" validate:"omitempty,gte=0"`
+	CurrencyType           *string  `json:"currency_type"`
+	DeliveryPriceType      *string  `json:"delivery_price_type"`
+	DeliveryAmount         *float64 `json:"delivery_amount" validate:"omitempty,gte=0"`
+	ConsumptionCoefficient *float64 `json:"consumption_coefficient" validate:"omitempty,gt=0"`
+	DetailCostCategoryID   *string  `json:"detail_cost_category_id" validate:"omitempty,uuid"`
+	MaterialNameID         *string  `json:"material_name_id" validate:"omitempty,uuid"`
+	WorkNameID             *string  `json:"work_name_id" validate:"omitempty,uuid"`
+	ParentWorkItemID       *string  `json:"parent_work_item_id" validate:"omitempty,uuid"`
+	SortNumber             *int     `json:"sort_number" validate:"omitempty,gte=0"`
 }
 
 // updateBoqItemReq is the request body for PATCH /api/v1/items/:id.
 type updateBoqItemReq struct {
-	BoqItemType          *string  `json:"boq_item_type"`
-	MaterialType         *string  `json:"material_type"`
-	Description          *string  `json:"description"`
-	UnitCode             *string  `json:"unit_code"`
-	Quantity             *float64 `json:"quantity" validate:"omitempty,gte=0"`
-	UnitRate             *float64 `json:"unit_rate" validate:"omitempty,gte=0"`
-	CurrencyType         *string  `json:"currency_type"`
-	DeliveryPriceType    *string  `json:"delivery_price_type"`
-	DeliveryAmount       *float64 `json:"delivery_amount" validate:"omitempty,gte=0"`
-	DetailCostCategoryID *string  `json:"detail_cost_category_id" validate:"omitempty,uuid"`
-	MaterialNameID       *string  `json:"material_name_id" validate:"omitempty,uuid"`
-	WorkNameID           *string  `json:"work_name_id" validate:"omitempty,uuid"`
-	ParentWorkItemID     *string  `json:"parent_work_item_id" validate:"omitempty,uuid"`
-	SortNumber           *int     `json:"sort_number" validate:"omitempty,gte=0"`
+	BoqItemType            *string  `json:"boq_item_type"`
+	MaterialType           *string  `json:"material_type"`
+	Description            *string  `json:"description"`
+	UnitCode               *string  `json:"unit_code"`
+	Quantity               *float64 `json:"quantity" validate:"omitempty,gte=0"`
+	UnitRate               *float64 `json:"unit_rate" validate:"omitempty,gte=0"`
+	CurrencyType           *string  `json:"currency_type"`
+	DeliveryPriceType      *string  `json:"delivery_price_type"`
+	DeliveryAmount         *float64 `json:"delivery_amount" validate:"omitempty,gte=0"`
+	ConsumptionCoefficient *float64 `json:"consumption_coefficient" validate:"omitempty,gt=0"`
+	DetailCostCategoryID   *string  `json:"detail_cost_category_id" validate:"omitempty,uuid"`
+	MaterialNameID         *string  `json:"material_name_id" validate:"omitempty,uuid"`
+	WorkNameID             *string  `json:"work_name_id" validate:"omitempty,uuid"`
+	ParentWorkItemID       *string  `json:"parent_work_item_id" validate:"omitempty,uuid"`
+	SortNumber             *int     `json:"sort_number" validate:"omitempty,gte=0"`
 }
 
 // CreateBoqItem handles POST /api/v1/positions/:posId/items.
@@ -97,23 +99,24 @@ func (h *BoqWriteHandler) CreateBoqItem(w http.ResponseWriter, r *http.Request) 
 	}
 
 	in := repository.CreateBoqItemInput{
-		ClientPositionID:     posID,
-		TenderID:             tenderID,
-		BoqItemType:          req.BoqItemType,
-		MaterialType:         req.MaterialType,
-		Description:          req.Description,
-		UnitCode:             req.UnitCode,
-		Quantity:             req.Quantity,
-		UnitRate:             req.UnitRate,
-		CurrencyType:         req.CurrencyType,
-		DeliveryPriceType:    req.DeliveryPriceType,
-		DeliveryAmount:       req.DeliveryAmount,
-		DetailCostCategoryID: req.DetailCostCategoryID,
-		MaterialNameID:       req.MaterialNameID,
-		WorkNameID:           req.WorkNameID,
-		ParentWorkItemID:     req.ParentWorkItemID,
-		SortNumber:           req.SortNumber,
-		CreatedBy:            authUser.ID,
+		ClientPositionID:       posID,
+		TenderID:               tenderID,
+		BoqItemType:            req.BoqItemType,
+		MaterialType:           req.MaterialType,
+		Description:            req.Description,
+		UnitCode:               req.UnitCode,
+		Quantity:               req.Quantity,
+		UnitRate:               req.UnitRate,
+		CurrencyType:           req.CurrencyType,
+		DeliveryPriceType:      req.DeliveryPriceType,
+		DeliveryAmount:         req.DeliveryAmount,
+		ConsumptionCoefficient: req.ConsumptionCoefficient,
+		DetailCostCategoryID:   req.DetailCostCategoryID,
+		MaterialNameID:         req.MaterialNameID,
+		WorkNameID:             req.WorkNameID,
+		ParentWorkItemID:       req.ParentWorkItemID,
+		SortNumber:             req.SortNumber,
+		CreatedBy:              authUser.ID,
 	}
 
 	item, err := h.svc.CreateBoqItem(r.Context(), in)
@@ -174,21 +177,22 @@ func (h *BoqWriteHandler) UpdateBoqItem(w http.ResponseWriter, r *http.Request) 
 	}
 
 	in := repository.UpdateBoqItemInput{
-		BoqItemType:          req.BoqItemType,
-		MaterialType:         req.MaterialType,
-		Description:          req.Description,
-		UnitCode:             req.UnitCode,
-		Quantity:             req.Quantity,
-		UnitRate:             req.UnitRate,
-		CurrencyType:         req.CurrencyType,
-		DeliveryPriceType:    req.DeliveryPriceType,
-		DeliveryAmount:       req.DeliveryAmount,
-		DetailCostCategoryID: req.DetailCostCategoryID,
-		MaterialNameID:       req.MaterialNameID,
-		WorkNameID:           req.WorkNameID,
-		ParentWorkItemID:     req.ParentWorkItemID,
-		SortNumber:           req.SortNumber,
-		ChangedBy:            authUser.ID,
+		BoqItemType:            req.BoqItemType,
+		MaterialType:           req.MaterialType,
+		Description:            req.Description,
+		UnitCode:               req.UnitCode,
+		Quantity:               req.Quantity,
+		UnitRate:               req.UnitRate,
+		CurrencyType:           req.CurrencyType,
+		DeliveryPriceType:      req.DeliveryPriceType,
+		DeliveryAmount:         req.DeliveryAmount,
+		ConsumptionCoefficient: req.ConsumptionCoefficient,
+		DetailCostCategoryID:   req.DetailCostCategoryID,
+		MaterialNameID:         req.MaterialNameID,
+		WorkNameID:             req.WorkNameID,
+		ParentWorkItemID:       req.ParentWorkItemID,
+		SortNumber:             req.SortNumber,
+		ChangedBy:              authUser.ID,
 	}
 
 	updated, err := h.svc.UpdateBoqItem(r.Context(), itemID, in)

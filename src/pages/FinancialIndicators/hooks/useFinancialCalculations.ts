@@ -71,7 +71,7 @@ export const useFinancialCalculations = () => {
 
       let tactic = null;
       try {
-        tactic = await tryGetMarkupTactic(tender.markup_tactic_id);
+        tactic = await tryGetMarkupTactic(tender.markup_tactic_id ?? null);
       } catch (tacticError) {
         await addNotification(
           'Ошибка загрузки тактики наценок',
@@ -230,7 +230,7 @@ export const useFinancialCalculations = () => {
 
       const markupParams = (tenderMarkupPercentages || [])
         .map(tmp => tmp.markup_parameter)
-        .filter(Boolean);
+        .filter((p): p is NonNullable<typeof p> => p != null);
 
       const percentagesMap = new Map<string, number>();
       tenderMarkupPercentages?.forEach(tmp => {

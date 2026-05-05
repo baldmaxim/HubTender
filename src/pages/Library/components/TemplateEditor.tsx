@@ -14,6 +14,7 @@ import {
   SaveOutlined,
   CloseOutlined,
 } from '@ant-design/icons';
+import type { ColumnsType } from 'antd/es/table';
 import { TemplateItemsTable } from './TemplateItemsTable';
 import type { TemplateItemWithDetails } from '../hooks/useTemplateItems';
 import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
@@ -49,7 +50,7 @@ interface TemplateEditorProps {
   onSaveTemplate: () => void;
   onCancel: () => void;
   loading: boolean;
-  getColumns: (isEditing: boolean, items: TemplateItemWithDetails[]) => unknown[];
+  getColumns: (isEditing: boolean, items: TemplateItemWithDetails[]) => ColumnsType<TemplateItemWithDetails>;
   getRowClassName: (record: TemplateItemWithDetails) => string;
 }
 

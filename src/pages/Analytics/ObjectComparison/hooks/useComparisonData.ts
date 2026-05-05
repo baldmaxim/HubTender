@@ -157,8 +157,9 @@ function addItemToRow(row: ComparisonRow, item: BoqItemForComparison, tenderIdx:
     t.total += mat + work;
   } else {
     const amount = item.total_amount || 0;
-    if (MATERIAL_TYPES.includes(item.boq_item_type)) t.materials += amount;
-    if (WORK_TYPES.includes(item.boq_item_type)) t.works += amount;
+    const itemType = item.boq_item_type ?? '';
+    if (MATERIAL_TYPES.includes(itemType)) t.materials += amount;
+    if (WORK_TYPES.includes(itemType)) t.works += amount;
     t.total += amount;
   }
 }

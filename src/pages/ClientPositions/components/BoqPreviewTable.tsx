@@ -98,7 +98,7 @@ export const BoqPreviewTable: React.FC<BoqPreviewTableProps> = ({
           key: `ex-${item.id}`,
           isGroupHeader: false,
           name,
-          itemType: item.boq_item_type,
+          itemType: item.boq_item_type ?? undefined,
           quantity: item.quantity,
           amount: item.total_amount,
           status: 'existing',

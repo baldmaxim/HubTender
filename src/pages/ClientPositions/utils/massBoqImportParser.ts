@@ -161,8 +161,9 @@ export const parseExcelData = (rows: unknown[]): ParseExcelResult => {
 
   // Логирование первых 5 строк — полный дамп ячеек для диагностики
   console.log('[MassBoqImport] Первые 5 строк (все ячейки):');
-  rows.slice(0, 5).forEach((row: unknown[], idx: number) => {
-    const dump = row.map((c, i: number) => `[${i}]=${c}`).join(', ');
+  rows.slice(0, 5).forEach((row, idx: number) => {
+    const cells = Array.isArray(row) ? row : [];
+    const dump = cells.map((c, i: number) => `[${i}]=${c}`).join(', ');
     console.log(`  Строка ${idx + 2}: ${dump}`);
   });
 

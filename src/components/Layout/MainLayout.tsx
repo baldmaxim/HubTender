@@ -460,22 +460,25 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   // Фильтруем меню на основе прав доступа пользователя
   const filterMenuByAccess = (items: MenuProps['items']): MenuProps['items'] => {
     if (!user) return items;
+    if (!items) return items;
 
     return items
-      .map((item: MenuItem) => {
+      .map((item) => {
+        if (!item) return null;
         // Если у пункта есть дочерние элементы
         if ('children' in item && item.children) {
-          const filteredChildren = (item.children as MenuItem[]).filter((child: MenuItem) => {
+          const filteredChildren = (item.children as MenuItem[]).filter((child) => {
+            if (!child) return false;
             // Пропускаем разделители
-            if (child && 'type' in child && child.type === 'divider') return true;
+            if ('type' in child && child.type === 'divider') return true;
             // Проверяем доступ к дочернему пункту
-            const key = child && 'key' in child ? String(child.key) : undefined;
+            const key = 'key' in child ? String(child.key) : undefined;
             return key ? hasPageAccess(user, key) : true;
           });
 
           // Проверяем, есть ли реальные страницы (не только разделители)
           const hasAccessiblePages = filteredChildren.some(
-            (child: MenuItem) => !(child && 'type' in child && child.type === 'divider')
+            (child) => !(child && 'type' in child && child.type === 'divider')
           );
 
           // Если после фильтрации остались доступные страницы, оставляем родительский пункт
@@ -492,10 +495,10 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         const itemKey = 'key' in item && item.key != null ? String(item.key) : undefined;
         return itemKey ? (hasPageAccess(user, itemKey) ? item : null) : item;
       })
-      .filter(Boolean); // Убираем null элементы
+      .filter((item): item is NonNullable<typeof item> => item != null);
   };
 
-  const filteredMenuItems = filterMenuByAccess(processedMenuItems);
+  const filteredMenuItems = filterMenuByAccess(processedMenuItems as MenuProps['items']);
 
   return (
     <Layout style={{ minHeight: '100vh', height: '100vh' }}>

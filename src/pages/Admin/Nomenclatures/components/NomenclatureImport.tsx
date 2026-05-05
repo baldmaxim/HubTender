@@ -158,7 +158,7 @@ export const NomenclatureImport: React.FC<NomenclatureImportProps> = ({ open, mo
                         if (action === 'create') {
                           handleMappingChange(mapping.originalCode, mapping.originalCode, 'create');
                         } else {
-                          handleMappingChange(mapping.originalCode, null, 'map');
+                          handleMappingChange(mapping.originalCode, '', 'map');
                         }
                       }}
                     >

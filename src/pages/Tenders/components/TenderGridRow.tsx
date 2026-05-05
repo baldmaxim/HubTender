@@ -180,7 +180,7 @@ export const TenderGridRow: React.FC<TenderGridRowProps> = ({
           fontFamily: "'DM Mono', monospace",
         }}
       >
-        {formatArea(tender.area)}
+        {formatArea(tender.area ?? null)}
       </div>
 
       {/* Дата выхода на площадку */}

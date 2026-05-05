@@ -43,9 +43,10 @@ export const useConstructionCost = () => {
       const categoryMinOrderNum = new Map<string, number>();
 
       details?.forEach(detail => {
+        const orderNum = detail.order_num ?? 0;
         const currentMin = categoryMinOrderNum.get(detail.cost_category_id);
-        if (currentMin === undefined || detail.order_num < currentMin) {
-          categoryMinOrderNum.set(detail.cost_category_id, detail.order_num);
+        if (currentMin === undefined || orderNum < currentMin) {
+          categoryMinOrderNum.set(detail.cost_category_id, orderNum);
         }
       });
 
@@ -80,13 +81,13 @@ export const useConstructionCost = () => {
               unit: detail.unit,
               description: 'Нет описания',
               categoryId: detail.cost_category_id,
-              orderNum: detail.order_num,
+              orderNum: detail.order_num ?? undefined,
               children: [],
             };
             categoryNode.children.push(detailNode);
           }
 
-          if (detailNode.children) {
+          if (detailNode && detailNode.children) {
             detailNode.children.push({
               key: `location_${detail.id}`,
               structure: `📍 ${detail.location}`,
@@ -96,7 +97,7 @@ export const useConstructionCost = () => {
               detailId: detail.id,
               categoryId: detail.cost_category_id,
               location: detail.location,
-              orderNum: detail.order_num,
+              orderNum: detail.order_num ?? undefined,
             });
           }
         }

@@ -135,7 +135,8 @@ function displayTactic(tactic: MarkupTactic) {
   }
 }
 
-function getOperationDescription(action: string, operandType: string, operandKey: string | number | undefined): string {
+function getOperationDescription(action: string | undefined, operandType: string | undefined, operandKey: string | number | undefined): string {
+  if (!action || !operandType) return '';
   const actionMap: { [key: string]: string } = {
     'multiply': 'умножить на',
     'divide': 'разделить на',
@@ -182,7 +183,8 @@ function buildFormula(sequence: MarkupStep[]): string {
   return formula;
 }
 
-function getOperatorSymbol(action: string): string {
+function getOperatorSymbol(action: string | undefined): string {
+  if (!action) return '';
   const symbols: { [key: string]: string } = {
     'multiply': '*',
     'divide': '/',
@@ -192,7 +194,8 @@ function getOperatorSymbol(action: string): string {
   return symbols[action] || action;
 }
 
-function getOperandDisplay(type: string, key: string | number | undefined): string {
+function getOperandDisplay(type: string | undefined, key: string | number | undefined): string {
+  if (!type) return '';
   if (type === 'number') {
     return String(key);
   } else if (type === 'markup') {

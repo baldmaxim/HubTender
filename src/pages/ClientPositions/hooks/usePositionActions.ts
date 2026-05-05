@@ -133,7 +133,7 @@ export const usePositionActions = (
       await exportPositionsToExcel(
         selectedTender.id,
         selectedTender.title,
-        selectedTender.version,
+        selectedTender.version ?? 1,
         filteredPositionIds
       );
       hideLoading();

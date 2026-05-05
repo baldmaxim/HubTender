@@ -69,7 +69,7 @@ interface TemplatesListProps {
   materials: MaterialLibraryFull[];
   onAddWorkToTemplate: (templateId: string) => void;
   onAddMaterialToTemplate: (templateId: string) => void;
-  getColumns: (isEditing: boolean, items: TemplateItemWithDetails[], templateId?: string, isEditingTemplate?: boolean, isEditingItems?: boolean) => unknown[];
+  getColumns: (isEditing: boolean, items: TemplateItemWithDetails[], templateId?: string, isEditingTemplate?: boolean, isEditingItems?: boolean) => ColumnsType<TemplateItemWithDetails>;
   getRowClassName: (record: TemplateItemWithDetails) => string;
   folders?: LibraryFolder[];
   onMoveTemplate?: (templateId: string, folderId: string | null) => void;

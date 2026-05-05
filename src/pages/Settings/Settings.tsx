@@ -251,7 +251,7 @@ const Settings: React.FC = () => {
                       min={10}
                       max={20}
                       value={fontSettings.fontSize}
-                      onChange={(value) => updateFontSettings('fontSize', value)}
+                      onChange={(value) => value != null && updateFontSettings('fontSize', value)}
                       formatter={(value) => `${value}px`}
                       parser={(value) => parseInt(value?.replace('px', '') || '14')}
                       style={{ width: 80 }}
@@ -294,7 +294,7 @@ const Settings: React.FC = () => {
                       max={2}
                       step={0.05}
                       value={fontSettings.lineHeight}
-                      onChange={(value) => updateFontSettings('lineHeight', value)}
+                      onChange={(value) => value != null && updateFontSettings('lineHeight', value)}
                       style={{ width: 80 }}
                     />
                   </Col>
@@ -336,7 +336,7 @@ const Settings: React.FC = () => {
                       max={2}
                       step={0.1}
                       value={fontSettings.letterSpacing}
-                      onChange={(value) => updateFontSettings('letterSpacing', value)}
+                      onChange={(value) => value != null && updateFontSettings('letterSpacing', value)}
                       formatter={(value) => `${value}px`}
                       parser={(value) => parseFloat(value?.replace('px', '') || '0')}
                       style={{ width: 80 }}

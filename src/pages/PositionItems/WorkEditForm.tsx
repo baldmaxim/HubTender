@@ -65,12 +65,12 @@ const WorkEditForm: React.FC<WorkEditFormProps> = ({
 }) => {
   const [formData, setFormData] = useState<WorkFormData>({
     boq_item_type: record.boq_item_type,
-    work_name_id: record.work_name_id,
-    unit_code: record.unit_code,
+    work_name_id: record.work_name_id ?? null,
+    unit_code: record.unit_code ?? null,
     quantity: record.quantity || 0,
     unit_rate: record.unit_rate || 0,
     currency_type: record.currency_type || 'RUB',
-    detail_cost_category_id: record.detail_cost_category_id,
+    detail_cost_category_id: record.detail_cost_category_id ?? null,
     quote_link: record.quote_link || '',
     description: record.description || '',
   });

@@ -149,7 +149,7 @@ const TenderModal: React.FC<TenderModalProps> = ({
             options={tenderTitles.map(t => ({ value: t }))}
             placeholder="Выберите или введите наименование"
             filterOption={(input, option) =>
-              option?.value.toLowerCase().includes(input.toLowerCase())
+              option?.value.toLowerCase().includes(input.toLowerCase()) ?? false
             }
           />
         </Form.Item>
@@ -163,7 +163,7 @@ const TenderModal: React.FC<TenderModalProps> = ({
             options={clientNames.map(c => ({ value: c }))}
             placeholder="Выберите или введите заказчика"
             filterOption={(input, option) =>
-              option?.value.toLowerCase().includes(input.toLowerCase())
+              option?.value.toLowerCase().includes(input.toLowerCase()) ?? false
             }
           />
         </Form.Item>
@@ -173,7 +173,7 @@ const TenderModal: React.FC<TenderModalProps> = ({
             options={areas.map(a => ({ value: a.toString() }))}
             placeholder="Выберите или введите площадь"
             filterOption={(input, option) =>
-              option?.value.includes(input)
+              option?.value.includes(input) ?? false
             }
           />
         </Form.Item>

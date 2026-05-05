@@ -57,7 +57,7 @@ export const ProjectCards: React.FC<ProjectCardsProps> = ({ data, loading }) => 
     <Row gutter={[16, 16]}>
       {data.map((project, index) => {
         const color = COLORS[index % COLORS.length];
-        const completionPercent = Math.min(Math.round(project.completion_percentage), 100);
+        const completionPercent = Math.min(Math.round(project.completion_percentage ?? 0), 100);
         const endDate = project.construction_end_date
           ? dayjs(project.construction_end_date)
           : null;
@@ -132,7 +132,7 @@ export const ProjectCards: React.FC<ProjectCardsProps> = ({ data, loading }) => 
                   </Text>
                   <div>
                     <Text strong style={{ fontSize: 16, color }}>
-                      {formatMoney(project.final_contract_cost)}
+                      {formatMoney(project.final_contract_cost ?? 0)}
                     </Text>
                   </div>
                 </div>
@@ -161,8 +161,8 @@ export const ProjectCards: React.FC<ProjectCardsProps> = ({ data, loading }) => 
                     size="small"
                   />
                   <Text type="secondary" style={{ fontSize: 10 }}>
-                    {formatMoney(project.total_completion)} из{' '}
-                    {formatMoney(project.final_contract_cost)}
+                    {formatMoney(project.total_completion ?? 0)} из{' '}
+                    {formatMoney(project.final_contract_cost ?? 0)}
                   </Text>
                 </div>
 

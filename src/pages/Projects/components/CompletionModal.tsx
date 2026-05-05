@@ -172,7 +172,7 @@ export const CompletionModal: React.FC<CompletionModalProps> = ({
 
   // Calculate remaining amount
   const remainingAmount = project
-    ? project.final_contract_cost - project.total_completion
+    ? (project.final_contract_cost ?? 0) - (project.total_completion ?? 0)
     : 0;
 
   return (
@@ -192,11 +192,11 @@ export const CompletionModal: React.FC<CompletionModalProps> = ({
           <Space direction="vertical" style={{ width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <Text type="secondary">Итого договор:</Text>
-              <Text strong>{formatMoney(project.final_contract_cost)}</Text>
+              <Text strong>{formatMoney(project.final_contract_cost ?? 0)}</Text>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <Text type="secondary">Закрыто:</Text>
-              <Text>{formatMoney(project.total_completion)}</Text>
+              <Text>{formatMoney(project.total_completion ?? 0)}</Text>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <Text type="secondary">Осталось:</Text>

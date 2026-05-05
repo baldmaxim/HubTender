@@ -128,7 +128,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
     }
   };
 
-  const completionPercent = Math.min(Math.round(project.completion_percentage), 100);
+  const completionPercent = Math.min(Math.round(project.completion_percentage ?? 0), 100);
 
   return (
     <div>
@@ -149,8 +149,8 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
           <Card size="small">
             <Statistic
               title="Итого с доп. соглашениями"
-              value={project.final_contract_cost}
-              formatter={() => formatMoney(project.final_contract_cost)}
+              value={project.final_contract_cost ?? 0}
+              formatter={() => formatMoney(project.final_contract_cost ?? 0)}
               valueStyle={{ color: '#722ed1', fontSize: 16 }}
               suffix="₽"
             />
@@ -160,8 +160,8 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
           <Card size="small">
             <Statistic
               title="Закрыто выполнения"
-              value={project.total_completion}
-              formatter={() => formatMoney(project.total_completion)}
+              value={project.total_completion ?? 0}
+              formatter={() => formatMoney(project.total_completion ?? 0)}
               valueStyle={{ color: '#52c41a', fontSize: 16 }}
               suffix="₽"
             />

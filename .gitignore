@@ -167,3 +167,8 @@ backend;*
 !docs/archive/temp_*.txt
 
 backups/
+
+# Скомпилированные бинарники Go BFF
+backend/*.exe
+backend/hubtender-bff
+backend/hubtender-bff.exe

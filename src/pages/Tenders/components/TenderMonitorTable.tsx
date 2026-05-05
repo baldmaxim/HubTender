@@ -80,8 +80,8 @@ function parseCoordinates(value?: string | null): { lat: number; lon: number } |
     return null;
   }
 
-  const lat = Number(parts[0].replace(',', '.'));
-  const lon = Number(parts[1].replace(',', '.'));
+  const lat = Number(parts[0]!.replace(',', '.'));
+  const lon = Number(parts[1]!.replace(',', '.'));
 
   if (Number.isNaN(lat) || Number.isNaN(lon)) {
     return null;

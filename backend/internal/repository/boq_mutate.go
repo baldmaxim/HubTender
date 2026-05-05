@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/su10/hubtender/backend/internal/calc"
 )
 
 // UpdateBoqItem applies non-nil fields from in, writes an UPDATE audit row,
@@ -63,6 +65,9 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItem
 	if in.DeliveryAmount != nil {
 		set("delivery_amount", *in.DeliveryAmount)
 	}
+	if in.ConsumptionCoefficient != nil {
+		set("consumption_coefficient", *in.ConsumptionCoefficient)
+	}
 	if in.DetailCostCategoryID != nil {
 		set("detail_cost_category_id", *in.DetailCostCategoryID)
 	}
@@ -90,6 +95,23 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItem
 		newItem, err = scanBoqItemRow(tx.QueryRow(ctx, updQ, args...))
 		if err != nil {
 			return nil, fmt.Errorf("boqRepo.UpdateBoqItem: update scan: %w", err)
+		}
+	}
+
+	// Recompute total_amount on every patch that touched a price input.
+	// Skip when no setClauses ran (newItem == oldItem) — total stays correct.
+	if setClauses != "" {
+		rates, err := loadTenderRates(ctx, tx, newItem.TenderID)
+		if err != nil {
+			return nil, fmt.Errorf("boqRepo.UpdateBoqItem: %w", err)
+		}
+		newTotal := calc.CalculateBoqItemTotalAmount(boqAmountInputFromRow(newItem), rates)
+		if newItem.TotalAmount == nil || *newItem.TotalAmount != newTotal {
+			const totQ = "UPDATE public.boq_items SET total_amount = $1 WHERE id = $2 RETURNING " + boqScanCols
+			newItem, err = scanBoqItemRow(tx.QueryRow(ctx, totQ, newTotal, id))
+			if err != nil {
+				return nil, fmt.Errorf("boqRepo.UpdateBoqItem: total_amount scan: %w", err)
+			}
 		}
 	}
 

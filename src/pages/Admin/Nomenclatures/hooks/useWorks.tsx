@@ -51,7 +51,7 @@ export const useWorks = () => {
         id: item.id,
         name: item.name,
         unit: item.unit,
-        created_at: new Date(item.created_at).toLocaleDateString('ru-RU'),
+        created_at: item.created_at ? new Date(item.created_at).toLocaleDateString('ru-RU') : '',
       }));
 
       console.log(`[Nomenclatures/Works] Loaded ${formattedData.length} works`);

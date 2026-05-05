@@ -239,9 +239,9 @@ const Bsm: React.FC = () => {
             total_amount: item.total_amount || 0,
             usage_count: 1,
             quote_link: item.quote_link || '',
-            work_name_id: item.work_name_id,
-            material_name_id: item.material_name_id,
-            detail_cost_category_id: item.detail_cost_category_id,
+            work_name_id: item.work_name_id ?? undefined,
+            material_name_id: item.material_name_id ?? undefined,
+            detail_cost_category_id: item.detail_cost_category_id ?? undefined,
             expense_label: expenseLabel,
           });
         }

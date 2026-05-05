@@ -19,7 +19,8 @@ type Config struct {
 	SupabaseJWTIssuer string
 
 	// HTTP server settings.
-	Port string
+	BindHost string
+	Port     string
 
 	// Log level: trace, debug, info, warn, error.
 	LogLevel string
@@ -31,6 +32,12 @@ type Config struct {
 	// JWKSRefreshInterval controls how often keyfunc refreshes the JWKS.
 	// Hardcoded to 1 hour; not user-configurable.
 	JWKSRefreshInterval time.Duration
+
+	// DB pool tuning. Defaults are production-safe but can be overridden via
+	// DB_MAX_CONNS, DB_MIN_CONNS, DB_MAX_CONN_IDLE_TIME (Go duration string).
+	DBMaxConns        int32
+	DBMinConns        int32
+	DBMaxConnIdleTime time.Duration
 }
 
 // Load reads configuration from environment variables via Viper.
@@ -40,7 +47,11 @@ func Load() (*Config, error) {
 	v.AutomaticEnv()
 
 	v.SetDefault("PORT", "3005")
+	v.SetDefault("BIND_HOST", "0.0.0.0")
 	v.SetDefault("LOG_LEVEL", "info")
+	v.SetDefault("DB_MAX_CONNS", 20)
+	v.SetDefault("DB_MIN_CONNS", 2)
+	v.SetDefault("DB_MAX_CONN_IDLE_TIME", "5m")
 
 	dbURL := v.GetString("DATABASE_URL")
 	if dbURL == "" {
@@ -66,14 +77,31 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: CORS_ORIGINS must contain at least one origin")
 	}
 
+	maxConns := v.GetInt32("DB_MAX_CONNS")
+	if maxConns < 1 {
+		return nil, fmt.Errorf("config: DB_MAX_CONNS must be >= 1, got %d", maxConns)
+	}
+	minConns := v.GetInt32("DB_MIN_CONNS")
+	if minConns < 0 || minConns > maxConns {
+		return nil, fmt.Errorf("config: DB_MIN_CONNS must be in [0, DB_MAX_CONNS=%d], got %d", maxConns, minConns)
+	}
+	maxIdle, err := time.ParseDuration(v.GetString("DB_MAX_CONN_IDLE_TIME"))
+	if err != nil {
+		return nil, fmt.Errorf("config: DB_MAX_CONN_IDLE_TIME parse: %w", err)
+	}
+
 	cfg := &Config{
 		DatabaseURL:         dbURL,
 		SupabaseJWKSURL:     jwksURL,
 		SupabaseJWTIssuer:   jwtIssuer,
+		BindHost:            v.GetString("BIND_HOST"),
 		Port:                v.GetString("PORT"),
 		LogLevel:            v.GetString("LOG_LEVEL"),
 		CORSOrigins:         origins,
 		JWKSRefreshInterval: time.Hour,
+		DBMaxConns:          maxConns,
+		DBMinConns:          minConns,
+		DBMaxConnIdleTime:   maxIdle,
 	}
 
 	return cfg, nil

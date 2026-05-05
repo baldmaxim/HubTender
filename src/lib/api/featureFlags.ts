@@ -8,7 +8,6 @@ type ApiDomain =
   | 'positions'
   | 'boq'
   | 'markup'
-  | 'commerce'
   | 'costs'
   | 'fi'
   | 'timeline'
