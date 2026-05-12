@@ -13,7 +13,19 @@
     "test:go": "cd backend && go test ./...",
     "smoke": "node scripts/smoke/go-bff.mjs",
     "gen:types": "supabase gen types typescript --project-id ocauafggjrqvopxjihas > src/lib/supabase/database.types.ts",
-    "gen:schema": "supabase db dump --project-ref ocauafggjrqvopxjihas --schema public > supabase/schemas/prod.sql"
+    "gen:schema": "supabase db dump --project-ref ocauafggjrqvopxjihas --schema public > supabase/schemas/prod.sql",
+    "old-to-prod:check": "node scripts/old-to-prod/00_check_connections.mjs",
+    "old-to-prod:introspect-old": "node scripts/old-to-prod/01_introspect_old.mjs",
+    "old-to-prod:introspect-prod": "node scripts/old-to-prod/02_introspect_prod.mjs",
+    "old-to-prod:compare": "node scripts/old-to-prod/03_compare_schemas.mjs",
+    "old-to-prod:export": "node scripts/old-to-prod/04_export_old.mjs",
+    "old-to-prod:prepare": "node scripts/old-to-prod/05_prepare_prod.mjs",
+    "old-to-prod:import": "node scripts/old-to-prod/06_import_prod.mjs",
+    "old-to-prod:verify": "node scripts/old-to-prod/07_verify.mjs",
+    "old-to-prod:verify-auth": "node scripts/old-to-prod/08_verify_auth.mjs",
+    "old-to-prod:smoke": "node scripts/old-to-prod/09_smoke_go_bff.mjs",
+    "old-to-prod:verify-go": "node scripts/old-to-prod/09_smoke_go_bff.mjs",
+    "old-to-prod:migrate": "node scripts/old-to-prod/migrate.mjs"
   },
   "dependencies": {
     "@ant-design/charts": "^2.6.7",
@@ -41,6 +53,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.7",
+    "pg": "^8.13.0",
     "typescript": "^5.2.2",
     "vite": "^5.3.1"
   }
