@@ -17,7 +17,7 @@ import {
 } from './_lib.mjs';
 import { readNdjson } from './_copy.mjs';
 import { compareEncryptedPasswords } from './_checksums.mjs';
-import { smokeLogin, callGoBffMe, collectAuthStats } from './_auth.mjs';
+import { smokeLogin, callGoBffMe, collectAuthStats, listInsertableColumns } from './_auth.mjs';
 
 loadDotenv();
 
@@ -64,6 +64,38 @@ async function main() {
   const forceConfirmEmails = process.env.FORCE_CONFIRM_EMAILS === 'true';
 
   try {
+    // ---- Generated-column audit on auth.identities ----
+    //
+    // Supabase Auth ≥2023.5 marks `auth.identities.email` as
+    // GENERATED ALWAYS AS (lower(identity_data->>'email')) STORED. After
+    // import we verify that every row's email column equals the computed
+    // expression (PG enforces this by construction; this check just surfaces
+    // schema drift if Supabase changes the generation expression).
+    try {
+      const identCols = await listInsertableColumns(client, 'auth', 'identities');
+      const generatedEmail = identCols.skipped.find((s) => s.name === 'email' && s.reason === 'GENERATED ALWAYS');
+      report.identities_generated_columns = {
+        email_is_generated: !!generatedEmail,
+        skipped_at_import: identCols.skipped,
+      };
+      if (generatedEmail) {
+        // PG enforces equality, but a sanity probe: any row where email
+        // disagrees with lower(identity_data->>'email') means schema drift.
+        const { rows: [d] } = await client.query(`
+          SELECT COUNT(*)::int AS n
+            FROM auth.identities
+           WHERE email IS DISTINCT FROM lower(identity_data->>'email')
+        `);
+        report.identities_generated_columns.email_drift_count = d.n;
+        console.log(
+          `${tag('PROD')} auth.identities.email is GENERATED ALWAYS; drift count=${d.n} ` +
+          `${d.n === 0 ? '✓' : '✗'}`,
+        );
+      }
+    } catch (e) {
+      report.warnings.push(`generated-column audit failed: ${e.message}`);
+    }
+
     // ---- Clean-auth context (read-only echo from import_state) ----
     if (importState.clean_auth) {
       report.clean_auth_context = {
@@ -264,8 +296,12 @@ async function main() {
     const confirmOk = !report.confirm_audit || report.confirm_audit.unexpectedly_changed === 0;
     const loginPresent = report.smoke_login != null;
     const loginOk = !loginPresent || report.smoke_login.ok;
+    // Generated-column audit: drift > 0 is FAIL (schema mismatch with our
+    // assumption that auth.identities.email = lower(identity_data->>'email')).
+    const genOk = !report.identities_generated_columns?.email_is_generated
+      || (report.identities_generated_columns.email_drift_count ?? 0) === 0;
 
-    if (!countOk || !setsOk || !pwOk || !pwUserAuditOk || !oauthOk || !bootstrapOk || !confirmOk || !loginOk) {
+    if (!countOk || !setsOk || !pwOk || !pwUserAuditOk || !oauthOk || !bootstrapOk || !confirmOk || !loginOk || !genOk) {
       report.status = 'AUTH_VERIFY_FAILED';
     } else if (!loginPresent || report.warnings.length > 0) {
       report.status = 'AUTH_VERIFY_OK_WITH_WARNINGS';
@@ -560,6 +596,22 @@ function writeReport(report) {
           ? `- users whose email_confirmed_at was forced to now(): **${report.confirm_audit.forced_count}**`
           : `- unexpectedly changed email_confirmed_at: **${report.confirm_audit.unexpectedly_changed}** (must be 0 when FORCE_CONFIRM_EMAILS=false)`)
       : 'Not run.',
+    '',
+    '## Generated columns in auth.identities',
+    '',
+    report.identities_generated_columns
+      ? (report.identities_generated_columns.email_is_generated
+          ? `- \`auth.identities.email\` on PROD is **GENERATED ALWAYS** (Supabase Auth ≥2023.5).\n` +
+            `- Import skipped this column; PostgreSQL computes it from \`identity_data->>'email'\`.\n` +
+            `- Drift count (\`email\` ≠ \`lower(identity_data->>'email')\`): **${report.identities_generated_columns.email_drift_count ?? 'n/a'}**` +
+            (report.identities_generated_columns.email_drift_count === 0
+              ? ' ✓'
+              : ' ✗ (schema drift — investigate)') +
+            (report.identities_generated_columns.skipped_at_import?.length
+              ? `\n- Other generated/identity columns skipped at import: ${report.identities_generated_columns.skipped_at_import.filter((s) => s.name !== 'email').map((s) => '`' + s.name + '` (' + s.reason + ')').join(', ') || '_none_'}`
+              : '')
+          : '_PROD does not flag `auth.identities.email` as GENERATED. Import wrote it explicitly._')
+      : '_Audit not run._',
     '',
     '## Clean-auth context (echo from import_state.clean_auth)',
     '',

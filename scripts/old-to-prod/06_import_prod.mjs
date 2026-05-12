@@ -31,7 +31,9 @@ import { readNdjson, batchInsert, withTempDisabledTriggers, countRows } from './
 import {
   bootstrapMissingIdentities, getEnabledProviders,
   loadAuthFkGraph, listAuthTables, planAuthCleanup, cleanAuthTarget,
+  listInsertableColumns,
 } from './_auth.mjs';
+import { renameSync } from 'node:fs';
 
 loadDotenv();
 
@@ -137,16 +139,32 @@ async function main() {
   }`);
 
   // ---- Load/init state ----
+  //
+  // Archive policy:
+  //  - --resume + state exists → reuse it (per spec)
+  //  - NO --resume + state exists → archive prior file as
+  //    `import_state.failed.<ISO>.json` (auditable history; never silently
+  //    overwrite a failed-run's diagnostic) and start fresh.
+  //  - NO --resume + no state → fresh start, no archival needed.
   const statePath = join(exportDir, 'import_state.json');
-  const state = (values.resume && existsSync(statePath))
-    ? JSON.parse(readFileSync(statePath, 'utf8'))
-    : {
-        started_at: new Date().toISOString(),
-        completed: [],
-        errors: [],
-        forced_confirm_emails: [],
-        disabled_triggers: [],
-      };
+  let state;
+  if (values.resume && existsSync(statePath)) {
+    state = JSON.parse(readFileSync(statePath, 'utf8'));
+  } else {
+    if (existsSync(statePath)) {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const archivedPath = join(exportDir, `import_state.failed.${ts}.json`);
+      renameSync(statePath, archivedPath);
+      console.log(`${tag('PROD')} archived previous import_state → ${archivedPath} (no --resume → fresh state)`);
+    }
+    state = {
+      started_at: new Date().toISOString(),
+      completed: [],
+      errors: [],
+      forced_confirm_emails: [],
+      disabled_triggers: [],
+    };
+  }
 
   // ---- Connect to PROD ----
   console.log(`${tag('PROD')} connecting${dryRun ? ' (dry-run)' : ''}…`);
@@ -246,6 +264,12 @@ async function main() {
     }
 
     report.finished_at = new Date().toISOString();
+    // Snapshot state details that the .md writer wants to surface (skipped
+    // generated columns from auth.identities, etc.). Avoid leaking the whole
+    // state — it contains user ids and is verbose.
+    report.state_snapshot = {
+      auth_identities_skipped_columns: state.auth_identities_skipped_columns ?? [],
+    };
     writeImportReportMd(report);
   } finally {
     await client.end().catch(() => {});
@@ -378,10 +402,27 @@ async function flushAuthUsersBuffer(client, rows, dryRun) {
 }
 
 async function importAuthIdentities(client, path, state, dryRun, batchSize) {
-  const columns = [
+  // Live introspection: Supabase Auth ≥2023.5 marks `auth.identities.email` as
+  // GENERATED ALWAYS. Any version may add more generated columns later. We
+  // intersect the "exported columns" from OLD NDJSON with INSERTable target
+  // columns on PROD, and persist what we skip into import_state for the report.
+  const exportedColumns = [
     'id', 'provider_id', 'user_id', 'identity_data', 'provider',
     'last_sign_in_at', 'created_at', 'updated_at', 'email',
   ];
+  const colInfo = dryRun
+    ? { insertable: exportedColumns, skipped: [] }
+    : await listInsertableColumns(client, 'auth', 'identities');
+  const insertableSet = new Set(colInfo.insertable);
+  const columns = exportedColumns.filter((c) => insertableSet.has(c));
+  const skippedFromExport = colInfo.skipped.filter((s) => exportedColumns.includes(s.name));
+  if (skippedFromExport.length > 0) {
+    state.auth_identities_skipped_columns = skippedFromExport;
+    console.log(
+      `${tag('PROD')} auth.identities: skipping non-insertable column(s): ` +
+      skippedFromExport.map((s) => `${s.name}(${s.reason})`).join(', '),
+    );
+  }
   let inserted = 0, skipped = 0, skipped_identical = 0;
   let buffer = [];
   // auth.identities: AUTH_FAIL_BY_DEFAULT (default) or AUTH_RESUME_IF_IDENTICAL_ONLY
@@ -563,6 +604,18 @@ function writeImportReportMd(report) {
     report.auth
       ? '```json\n' + JSON.stringify(report.auth, null, 2) + '\n```'
       : 'Skipped (--public-only or ALLOW_AUTH_IMPORT=false).',
+    '',
+    '### Generated/identity columns skipped during auth.identities INSERT',
+    '',
+    (report.state_snapshot?.auth_identities_skipped_columns?.length ?? 0) > 0
+      ? [
+          '| Column | Reason |',
+          '|---|---|',
+          ...report.state_snapshot.auth_identities_skipped_columns.map((s) => `| \`${s.name}\` | ${s.reason} |`),
+          '',
+          '> These columns are computed by PostgreSQL (e.g. `auth.identities.email` = `lower(identity_data->>\'email\')`). They are intentionally omitted from the INSERT column list; PG will populate them automatically.',
+        ].join('\n')
+      : '_None — all exported columns were insertable on PROD._',
     '',
     '## Public tables',
     '',

@@ -78,6 +78,21 @@ export async function bootstrapMissingIdentities(client, { enabledProviders } = 
   `);
   const candidates = c.n;
 
+  // Defense in depth: introspect auth.identities to verify we're not about to
+  // INSERT a value into a GENERATED ALWAYS column (e.g. `email` since Supabase
+  // Auth ≥2023.5). The hardcoded column list below MUST be a subset of
+  // insertable columns; assert it before issuing the INSERT.
+  const colInfo = await listInsertableColumns(client, 'auth', 'identities');
+  const insertableSet = new Set(colInfo.insertable);
+  const wantedCols = ['id', 'provider_id', 'user_id', 'identity_data', 'provider', 'last_sign_in_at', 'created_at', 'updated_at'];
+  const missing = wantedCols.filter((c) => !insertableSet.has(c));
+  if (missing.length > 0) {
+    throw new Error(
+      `bootstrapMissingIdentities: target column(s) not insertable on PROD: ${missing.join(', ')}. ` +
+      `Skipped due to: ${JSON.stringify(colInfo.skipped)}. Aborting to prevent silent data loss.`,
+    );
+  }
+
   const { rows: created } = await client.query(`
     INSERT INTO auth.identities (id, provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
     SELECT
@@ -318,6 +333,47 @@ export async function loadAuthFkGraph(client) {
     constraint_name: r.constraint_name,
     ord: r.ord,
   }));
+}
+
+/**
+ * Introspect a target table's columns and split into insertable vs
+ * non-insertable (GENERATED ALWAYS / IDENTITY ALWAYS).
+ *
+ * Why: Supabase Auth ≥2023.5 changed `auth.identities.email` to
+ * `GENERATED ALWAYS AS (lower(identity_data->>'email')) STORED`. INSERT'ing
+ * a value into a generated column raises `cannot insert a non-DEFAULT value
+ * into column "<col>"`. Other Supabase managed schemas may add more generated
+ * columns over time — hardcoding a denylist would rot. This helper does live
+ * introspection so the importer adapts automatically.
+ *
+ * @returns {Promise<{
+ *   all: string[],
+ *   insertable: string[],
+ *   skipped: Array<{name: string, reason: 'GENERATED ALWAYS' | 'IDENTITY ALWAYS'}>,
+ * }>}
+ */
+export async function listInsertableColumns(client, schema, table) {
+  const { rows } = await client.query(
+    `SELECT column_name, is_generated, is_identity
+       FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = $2
+      ORDER BY ordinal_position`,
+    [schema, table],
+  );
+  const skipped = [];
+  const insertable = [];
+  const all = [];
+  for (const r of rows) {
+    all.push(r.column_name);
+    if (r.is_generated === 'ALWAYS') {
+      skipped.push({ name: r.column_name, reason: 'GENERATED ALWAYS' });
+    } else if (r.is_identity === 'ALWAYS') {
+      skipped.push({ name: r.column_name, reason: 'IDENTITY ALWAYS' });
+    } else {
+      insertable.push(r.column_name);
+    }
+  }
+  return { all, insertable, skipped };
 }
 
 /**

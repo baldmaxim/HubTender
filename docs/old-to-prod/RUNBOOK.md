@@ -287,6 +287,30 @@ npm run old-to-prod:migrate -- --use-mcp-preflight --clean-auth --auth-only
 
 Это правильное поведение: голый clean-auth + auth-import оставит public.users-данные ссылающимися на не-существующих auth.users → FK violation при следующем INSERT/UPDATE.
 
+### Generated columns в auth.identities
+
+С версии Supabase Auth ≥2023.5 колонка `auth.identities.email` помечена как `GENERATED ALWAYS AS (lower(identity_data->>'email')) STORED`. В этот столбец **запрещено** вставлять значения — PostgreSQL отдаёт ошибку `cannot insert a non-DEFAULT value into column "email"`.
+
+`importAuthIdentities()` ([06_import_prod.mjs](../../scripts/old-to-prod/06_import_prod.mjs)) во время выполнения вызывает `listInsertableColumns('auth','identities')` из [_auth.mjs](../../scripts/old-to-prod/_auth.mjs):
+- получает список колонок через `information_schema.columns`,
+- исключает `is_generated='ALWAYS'` и `is_identity='ALWAYS'`,
+- INSERT использует пересечение «exported NDJSON columns ∩ insertable PROD columns»,
+- skipped колонки логируются + попадают в `IMPORT_REPORT.md` раздел «Generated/identity columns skipped during auth.identities INSERT».
+
+После import:
+- `08_verify_auth.mjs` дополнительно проверяет, что `auth.identities.email = lower(identity_data->>'email')` для всех строк (drift > 0 → FAIL).
+- Отдельный раздел в `AUTH_VERIFY_RESULT.md` подтверждает «email_is_generated: true, drift_count: 0 ✓».
+
+Тот же подход применяется в `bootstrapMissingIdentities()` — defense in depth.
+
+### Re-run after a failed import
+
+Если предыдущий запуск упал, `import_state.json` остался от него. При повторном запуске **без `--resume`**:
+- `06_import_prod.mjs` автоматически переименует существующий файл в `import_state.failed.<ISO>.json` (auditable history) и стартует с чистого состояния,
+- логирует в stdout: `archived previous import_state → …`.
+
+`--resume` использовать только если вы **уверены**, что failed run прошёл далеко (например, упал на одной таблице в середине public phase) и хотите продолжить. После root-cause-фикса схемы или политики `--resume` обычно НЕ применим — нужен полный clean-prod + clean-auth.
+
 ### Безопасность
 
 - `assertCleanAuthAllowed` — three-key guard: CLI флаг + `ALLOW_CLEAN_AUTH=true` + `ALLOW_AUTH_IMPORT=true`.
