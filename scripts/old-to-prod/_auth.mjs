@@ -251,6 +251,264 @@ export async function smokeLogin({ url, anonKey, email, password }) {
 }
 
 /**
+ * Minimum baseline of canonical Supabase auth tables that clean-auth will
+ * include even if no FK to auth.users/auth.identities exists (some installs
+ * may have stale tables left over from old GoTrue versions). Order is
+ * informational; the actual execution order is computed by topo-sort.
+ *
+ * Tables MUST already exist on PROD — non-existent tables are silently
+ * skipped. Tables outside this list are added by FK discovery.
+ */
+export const AUTH_CLEAN_BASELINE = Object.freeze([
+  'refresh_tokens',
+  'sessions',
+  'identities',
+  'users',
+]);
+
+/**
+ * Query the FK graph involving the auth schema. Returns one row per (FK, column)
+ * pair (multi-column FKs surface multiple rows; sort by `ord` to reconstruct).
+ *
+ * Each FK is included if EITHER side touches schema=auth — so:
+ *  - public.X → auth.Y (e.g. password_reset_tokens.user_id → auth_users.id)
+ *  - auth.X → auth.Y (intra-auth dependency, the bulk of the graph)
+ *  - auth.X → public.Y (rare; surfaces drift if present)
+ *
+ * Field key:
+ *   delete_action / update_action: 'a'=NO ACTION, 'r'=RESTRICT, 'c'=CASCADE,
+ *                                  'n'=SET NULL, 'd'=SET DEFAULT.
+ */
+export async function loadAuthFkGraph(client) {
+  const { rows } = await client.query(`
+    SELECT
+      ns_from.nspname AS from_schema,
+      cls_from.relname AS from_table,
+      att_from.attname AS from_column,
+      ns_to.nspname   AS to_schema,
+      cls_to.relname  AS to_table,
+      att_to.attname  AS to_column,
+      con.confupdtype AS update_action,
+      con.confdeltype AS delete_action,
+      con.conname     AS constraint_name,
+      k.ord           AS ord
+    FROM pg_constraint con
+    JOIN pg_class cls_from   ON cls_from.oid = con.conrelid
+    JOIN pg_namespace ns_from ON ns_from.oid = cls_from.relnamespace
+    JOIN pg_class cls_to     ON cls_to.oid = con.confrelid
+    JOIN pg_namespace ns_to   ON ns_to.oid = cls_to.relnamespace
+    JOIN unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(from_attnum, to_attnum, ord) ON TRUE
+    JOIN pg_attribute att_from ON att_from.attrelid = con.conrelid  AND att_from.attnum = k.from_attnum
+    JOIN pg_attribute att_to   ON att_to.attrelid   = con.confrelid AND att_to.attnum   = k.to_attnum
+    WHERE con.contype = 'f'
+      AND (ns_from.nspname = 'auth' OR ns_to.nspname = 'auth')
+    ORDER BY from_schema, from_table, from_column, k.ord;
+  `);
+  // Decode action codes for readability in reports.
+  const decode = (c) => ({ a: 'NO ACTION', r: 'RESTRICT', c: 'CASCADE', n: 'SET NULL', d: 'SET DEFAULT' }[c] || c);
+  return rows.map((r) => ({
+    from_schema: r.from_schema,
+    from_table: r.from_table,
+    from_column: r.from_column,
+    to_schema: r.to_schema,
+    to_table: r.to_table,
+    to_column: r.to_column,
+    update_rule: decode(r.update_action),
+    delete_rule: decode(r.delete_action),
+    constraint_name: r.constraint_name,
+    ord: r.ord,
+  }));
+}
+
+/**
+ * List existing tables in the auth schema. We need this to (a) silently skip
+ * non-existent baseline tables and (b) bound topological sort to real tables.
+ */
+export async function listAuthTables(client) {
+  const { rows } = await client.query(`
+    SELECT table_name FROM information_schema.tables
+     WHERE table_schema = 'auth' AND table_type = 'BASE TABLE'
+     ORDER BY table_name
+  `);
+  return rows.map((r) => r.table_name);
+}
+
+/**
+ * Build the clean-auth scope and deletion order from a live FK graph.
+ *
+ * Scope = (every auth.* table transitively connected to auth.users / auth.identities
+ *          via FKs INSIDE the auth schema) ∪ (AUTH_CLEAN_BASELINE that exist).
+ *
+ * Order = Kahn topological sort on the reverse-dependency graph (leaves first).
+ *         Tables with no inbound auth-internal FKs are deleted first; auth.users
+ *         is always last. NEVER uses CASCADE.
+ *
+ * Returns:
+ *   {
+ *     order: [{schema, table}],                  // deletion order
+ *     public_referrers: [...FK rows],            // public.* → auth.*; must be empty or --clean-prod required
+ *     audit_log_note: string|null,               // explanation if auth.audit_log_entries handled specially
+ *     skipped_tables: string[],                  // auth.* tables NOT in scope (left alone)
+ *   }
+ *
+ * Throws on FK cycle (shouldn't happen in Supabase auth) — caller fails the run.
+ */
+export function planAuthCleanup(fkGraph, existingAuthTables) {
+  const existing = new Set(existingAuthTables);
+  const authIntFks = fkGraph.filter((fk) => fk.from_schema === 'auth' && fk.to_schema === 'auth');
+  const publicReferrers = fkGraph.filter((fk) => fk.from_schema === 'public' && fk.to_schema === 'auth');
+
+  // Transitive scope from {users, identities}.
+  const scope = new Set();
+  for (const root of ['users', 'identities']) if (existing.has(root)) scope.add(root);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const fk of authIntFks) {
+      if (scope.has(fk.to_table) && existing.has(fk.from_table) && !scope.has(fk.from_table)) {
+        scope.add(fk.from_table);
+        added = true;
+      }
+    }
+  }
+  // Baseline merge.
+  for (const t of AUTH_CLEAN_BASELINE) if (existing.has(t)) scope.add(t);
+
+  // Special-case audit_log_entries: include only if it's connected through FK.
+  let auditLogNote = null;
+  if (existing.has('audit_log_entries')) {
+    const audIntFks = authIntFks.filter(
+      (fk) => fk.from_table === 'audit_log_entries' || fk.to_table === 'audit_log_entries',
+    );
+    if (audIntFks.length === 0) {
+      // No FK relation to other auth tables — leave it alone (history retention).
+      scope.delete('audit_log_entries');
+      auditLogNote = 'auth.audit_log_entries kept (no FK relation to auth.users/identities).';
+    } else if (!scope.has('audit_log_entries')) {
+      scope.add('audit_log_entries');
+      auditLogNote = 'auth.audit_log_entries included (it has FK dependency on auth.users/identities).';
+    }
+  }
+
+  const scopeArr = [...scope];
+
+  // Build inbound-edge map for Kahn sort (edge A→B means B has FK to A, so to
+  // delete A safely we must delete B first; "leaves" = no inbound edges).
+  const inbound = new Map(scopeArr.map((t) => [t, new Set()]));
+  for (const fk of authIntFks) {
+    if (!scope.has(fk.from_table) || !scope.has(fk.to_table)) continue;
+    if (fk.from_table === fk.to_table) continue; // self-FK (e.g. parent_id) — doesn't block sort
+    inbound.get(fk.to_table).add(fk.from_table);
+  }
+
+  // Kahn sort: pick tables with empty inbound, output them, remove from others'.
+  const order = [];
+  const ready = scopeArr.filter((t) => inbound.get(t).size === 0).sort();
+  while (ready.length > 0) {
+    const t = ready.shift();
+    order.push(t);
+    for (const [other, edges] of inbound) {
+      if (edges.delete(t) && edges.size === 0 && !order.includes(other) && !ready.includes(other)) {
+        ready.push(other);
+        ready.sort();
+      }
+    }
+  }
+  if (order.length !== scopeArr.length) {
+    const stuck = scopeArr.filter((t) => !order.includes(t));
+    throw new Error(`Cycle in auth FK graph; cannot topologically sort. Stuck: ${stuck.join(', ')}`);
+  }
+
+  const skipped = existingAuthTables.filter((t) => !scope.has(t));
+
+  return {
+    order: order.map((t) => ({ schema: 'auth', table: t })),
+    public_referrers: publicReferrers,
+    audit_log_note: auditLogNote,
+    skipped_tables: skipped,
+  };
+}
+
+/**
+ * Execute clean-auth on PROD according to a previously-built plan.
+ *
+ * Safety guarantees encoded here:
+ *  - Never uses `TRUNCATE … CASCADE` or any `CASCADE` clause.
+ *  - Never sets `session_replication_role` (would require superuser and would
+ *    silently bypass system triggers — disallowed).
+ *  - Never disables system/internal triggers.
+ *  - Pure `DELETE FROM "auth"."<table>"` per table, in dependency order.
+ *  - All sql identifiers are validated against /^[a-zA-Z_][a-zA-Z0-9_]*$/.
+ *  - Verifies COUNT(*) = 0 for every cleaned table afterwards.
+ *
+ * Logging: prints per-table row counts only — no PII, no encrypted_password,
+ * no tokens. Emails never leave the database.
+ *
+ * Caller MUST have validated:
+ *  - assertCleanAuthAllowed() passed.
+ *  - If plan.public_referrers.length > 0 → caller has confirmed --clean-prod
+ *    --confirm AND ALLOW_CLEAN_PROD=true AND public clean has already run in
+ *    this same import.
+ *
+ * @param {object} client       - pg.Client connected to PROD with sufficient privs
+ * @param {object} plan         - return value of planAuthCleanup()
+ * @param {{dryRun: boolean}} opts
+ * @returns {Promise<object>}   - report block ready for IMPORT_REPORT.md
+ */
+export async function cleanAuthTarget(client, plan, { dryRun = false } = {}) {
+  const safeIdent = (s) => {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(s)) throw new Error(`unsafe identifier: ${s}`);
+    return `"${s}"`;
+  };
+  const result = {
+    executed: false,
+    dry_run: dryRun,
+    plan: {
+      order: plan.order.map((t) => `${t.schema}.${t.table}`),
+      public_referrers: plan.public_referrers.map((fk) => ({
+        from: `${fk.from_schema}.${fk.from_table}.${fk.from_column}`,
+        to: `${fk.to_schema}.${fk.to_table}.${fk.to_column}`,
+        delete_rule: fk.delete_rule,
+      })),
+      skipped_tables: plan.skipped_tables.map((t) => `auth.${t}`),
+      audit_log_note: plan.audit_log_note,
+    },
+    before_counts: {},
+    deleted: {},
+    after_counts: {},
+    notes: [
+      'Migration policy: auth.sessions and auth.refresh_tokens are NOT re-imported from OLD.',
+      'All existing OLD Supabase sessions will be invalidated by clean-auth (users must re-login).',
+      'After clean-auth + re-import, password hashes are re-uploaded from OLD; users keep their OLD password.',
+    ],
+  };
+
+  // Capture before-counts even in dry-run for planning context.
+  for (const t of plan.order) {
+    const { rows: [c] } = await client.query(`SELECT COUNT(*)::int AS n FROM ${safeIdent(t.schema)}.${safeIdent(t.table)}`);
+    result.before_counts[`${t.schema}.${t.table}`] = c.n;
+  }
+  if (dryRun) return result;
+
+  // Execute DELETEs in order. Single statement per table; no CASCADE.
+  for (const t of plan.order) {
+    const sql = `DELETE FROM ${safeIdent(t.schema)}.${safeIdent(t.table)}`;
+    const r = await client.query(sql);
+    result.deleted[`${t.schema}.${t.table}`] = r.rowCount ?? 0;
+  }
+  // Post-clean assertion: count must be 0 for every cleaned table.
+  for (const t of plan.order) {
+    const { rows: [c] } = await client.query(`SELECT COUNT(*)::int AS n FROM ${safeIdent(t.schema)}.${safeIdent(t.table)}`);
+    result.after_counts[`${t.schema}.${t.table}`] = c.n;
+    if (c.n !== 0) {
+      throw new Error(`clean-auth post-assert failed: ${t.schema}.${t.table} still has ${c.n} rows. Manual investigation required.`);
+    }
+  }
+  result.executed = true;
+  return result;
+}
+
+/**
  * Call Go BFF /api/v1/me with a bearer token. Returns parsed body; throws on
  * non-2xx. Token is passed in Authorization header only, never logged.
  */

@@ -204,6 +204,105 @@ npm run old-to-prod:import -- --resume
 
 > Артефакт: `docs/old-to-prod/IMPORT_REPORT.md` (перезаписывается каждый запуск).
 
+## 12.A Clean-auth strategy для OLD-as-truth-of-record
+
+### Когда нужен `--clean-auth`
+
+Когда PROD `auth.users` / `auth.identities` уже содержат частично импортированные строки **с теми же id, что и на OLD**, но из-за активности пользователей на OLD данные разошлись:
+
+- кто-то сменил пароль → `encrypted_password` различается (`PASSWORD_HASH_DRIFT`).
+- кто-то обновил профиль → `raw_user_meta_data` / `raw_app_meta_data` различается (`USER_META_DRIFT`).
+- появились новые OLD-пользователи, которых нет на PROD.
+
+В этом сценарии `--resume` (`AUTH_RESUME_IF_IDENTICAL_ONLY`) **не пройдёт** — он требует byte-identical PROD-строку. `ALLOW_PROD_OVERWRITE` к auth-таблицам **не применяется** (по дизайну — overwrite пароля молча недопустим). Остаётся вариант: «снести auth на PROD и заново импортировать из OLD» — это и есть `--clean-auth`.
+
+Решение запускать clean-auth должно быть подтверждено через MCP-анализ коллизий: `node` скрипт пишет `.old-to-prod-export/auth_collision_analysis.json` с `recommendation ∈ {clean-prod, clean-auth}`. Без этого файла `assertCleanAuthAllowed` откажется проходить.
+
+### Почему ручной `DELETE FROM auth.users` опасен
+
+- В Supabase `public.users.id → auth.users.id` обычно сидит FK c `ON DELETE CASCADE` — ручной DELETE незаметно сотрёт связанные `public.users`. Скрипт строит FK-граф через `pg_constraint` и **отказывается** работать в этой конфигурации без явного `--clean-prod --confirm` в том же запуске.
+- Auth-таблицы (`auth.refresh_tokens`, `auth.sessions`, `auth.identities`, `auth.mfa_*`, …) имеют свою FK-цепочку. Голый `DELETE FROM auth.users` либо упадёт на RESTRICT, либо триггерит каскад. `cleanAuthTarget()` выполняет DELETE в топологически отсортированном порядке (листья → корень), без `CASCADE`.
+- Никто не записывает в `IMPORT_REPORT.md`, что и сколько было удалено вручную. После cleanAuthTarget — точные before/after counts, причины пропуска, FK-связи с public — всё в отчёте.
+
+### Почему adopt-existing не подходит при password hash drift
+
+`AUTH_RESUME_IF_IDENTICAL_ONLY` сравнивает byte-identical signature (включая `sha256(encrypted_password)`). Любой различающийся пользователь → fail с masked diagnostic. Так задумано: нельзя «принять» PROD-строку, не зная, какой из двух паролей актуален. OLD — truth-of-record (живой prod), значит PROD-пароль может быть устаревшим.
+
+### Почему `auth.sessions` / `refresh_tokens` не мигрируются
+
+- Это технологические токены конкретного Supabase-instance. JWT signing key и issuer URL отличаются между OLD и PROD проектами — токены OLD на PROD ничего не значат.
+- При `--clean-auth` они стираются вместе с остальным auth-target'ом.
+- Импорт `04_export_old.mjs` их **не выгружает** — только `auth.users` + `auth.identities`.
+
+### Что произойдёт с пользователями после cutover
+
+- Все OLD-сессии **немедленно недействительны** (auth.sessions/refresh_tokens сброшены).
+- При следующем входе пользователь логинится **тем же паролем** (хэш скопирован из OLD).
+- Frontend получает 401 на старой сессии в `localStorage` → форсирует логин-флоу.
+
+### Команды
+
+#### dry-run (никаких записей в PROD)
+
+```powershell
+$env:ALLOW_AUTH_IMPORT="true"
+$env:ALLOW_DISABLE_IMPORT_TRIGGERS="true"
+$env:ALLOW_CLEAN_AUTH="true"
+$env:ALLOW_CLEAN_PROD="true"
+npm run old-to-prod:migrate -- --dry-run --use-mcp-preflight --clean-auth --clean-prod --confirm
+```
+
+Выведет план: какие auth-таблицы попадают в scope, в каком порядке будут DELETE'нуты, какие public→auth FK обнаружены, before counts. Никаких записей не выполняется. Артефакты: `PREPARE_REPORT.md` с секцией «Clean-auth plan», `IMPORT_REPORT.md` с разделом «Clean-auth phase» (с `executed: NO (dry-run only)`).
+
+#### Реальный rehearsal (PROD пишется)
+
+```powershell
+$env:ALLOW_AUTH_IMPORT="true"
+$env:ALLOW_DISABLE_IMPORT_TRIGGERS="true"
+$env:ALLOW_CLEAN_AUTH="true"
+$env:ALLOW_CLEAN_PROD="true"
+npm run old-to-prod:migrate -- --use-mcp-preflight --clean-auth --clean-prod --confirm
+```
+
+После выполнения проверьте:
+
+- `docs/old-to-prod/IMPORT_REPORT.md` → раздел «Clean-auth phase»: `executed: YES`, before/after counts, public→auth FK list.
+- `docs/old-to-prod/VERIFY_RESULT.md` → `VERIFY_OK`.
+- `docs/old-to-prod/AUTH_VERIFY_RESULT.md` → `AUTH_VERIFY_OK` + раздел «Clean-auth context» с подтверждением.
+
+#### Только auth (без trogания public, ТОЛЬКО если нет public→auth FK)
+
+```powershell
+$env:ALLOW_AUTH_IMPORT="true"
+$env:ALLOW_DISABLE_IMPORT_TRIGGERS="true"
+$env:ALLOW_CLEAN_AUTH="true"
+npm run old-to-prod:migrate -- --use-mcp-preflight --clean-auth --auth-only
+```
+
+Если в реальности есть `public.users → auth.users` (типичный Supabase setup) — скрипт **откажется** запускаться. Сообщение:
+
+```
+✗ Cannot clean auth.users while public.users still references auth.users. Use --clean-prod --confirm or resolve manually.
+```
+
+Это правильное поведение: голый clean-auth + auth-import оставит public.users-данные ссылающимися на не-существующих auth.users → FK violation при следующем INSERT/UPDATE.
+
+### Безопасность
+
+- `assertCleanAuthAllowed` — three-key guard: CLI флаг + `ALLOW_CLEAN_AUTH=true` + `ALLOW_AUTH_IMPORT=true`.
+- Дополнительные preflight'ы: `schema_diff.blockers` пустой, `MCP_PREFLIGHT` не FAILED, `auth_collision_analysis.json` присутствует и `recommendation ∈ {clean-prod, clean-auth}`, PROD-only users == 0, identity_provider_collisions == 0.
+- FK-граф строится во время выполнения через `pg_constraint` — никакого хардкода под конкретные версии GoTrue.
+- DELETE выполняется без `CASCADE`. `session_replication_role` не трогается. Системные/internal-триггеры не отключаются.
+- Post-clean assert: `COUNT(*) = 0` для каждой таблицы из плана. При первом нарушении — throw.
+
+### Rollback
+
+После запуска `--clean-auth` сделать rollback **нельзя** — DELETE необратим. Если что-то пошло не так:
+
+1. OLD остаётся нетронутым (read-only).
+2. На PROD: повторный `npm run old-to-prod:import -- --use-mcp-preflight --auth-only` ре-импортирует `auth.users` + `auth.identities` из локального NDJSON. Bootstrap идентичностей повторно покроет OLD users без identities.
+3. Если NDJSON-export'а нет — пересоздать через `npm run old-to-prod:export -- --use-mcp-preflight` (OLD read-only).
+
 ## 13. Verify (counts + FK + checksums + duplicates)
 
 ```bash

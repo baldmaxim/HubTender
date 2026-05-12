@@ -91,11 +91,16 @@ export function redactEmail(email) {
  */
 export async function getClient(url) {
   const { default: pg } = await import('pg');
+  // 60s default is too tight for streaming exports through the Supabase Session
+  // Pooler (large jsonb tables can take >60s per 5000-row SELECT). Migration is
+  // a one-shot operation; trade strict timeout for completion. Env override:
+  //   PG_QUERY_TIMEOUT_MS — milliseconds; default 300_000 (5 minutes).
+  const timeoutMs = parseInt(process.env.PG_QUERY_TIMEOUT_MS || '300000', 10);
   const client = new pg.Client({
     connectionString: url,
     ssl: { rejectUnauthorized: false },
-    statement_timeout: 60_000,
-    query_timeout: 60_000,
+    statement_timeout: timeoutMs,
+    query_timeout: timeoutMs,
   });
   await client.connect();
   return client;
@@ -244,6 +249,246 @@ export function twoKeyGuard({ cliFlag, envVar, label }) {
       `Refusing to proceed for safety.`
     );
   }
+}
+
+/**
+ * Load schema_diff.json and report whether it was produced by the MCP live
+ * preflight (source === 'mcp', with blockers/risks/info arrays).
+ *
+ * Returns { data, sourceIsMcp, status }. Exits(2) on missing/corrupt file.
+ */
+export function loadSchemaDiff(exportDir) {
+  const path = join(exportDir, 'schema_diff.json');
+  if (!existsSync(path)) {
+    console.error(`✗ schema_diff.json not found in ${exportDir}.`);
+    console.error(`  Either run :introspect/:compare, or generate the MCP preflight (docs/old-to-prod/MCP_PREFLIGHT.md).`);
+    process.exit(2);
+  }
+  let data;
+  try {
+    data = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (e) {
+    console.error(`✗ ${path} is not valid JSON: ${e.message}`);
+    process.exit(2);
+  }
+  const sourceIsMcp = data?.source === 'mcp'
+    && Array.isArray(data?.blockers)
+    && Array.isArray(data?.risks)
+    && Array.isArray(data?.info);
+  const status = typeof data?.status === 'string' ? data.status : null;
+  return { data, sourceIsMcp, status };
+}
+
+/**
+ * Read docs/old-to-prod/MCP_PREFLIGHT.md and extract the recorded final status
+ * line (one of MCP_PREFLIGHT_OK / MCP_PREFLIGHT_OK_WITH_WARNINGS / MCP_PREFLIGHT_FAILED).
+ * Returns { found, status }; status is null if the file exists but no marker
+ * is present.
+ */
+export function loadMcpPreflightStatus() {
+  const path = join('docs', 'old-to-prod', 'MCP_PREFLIGHT.md');
+  if (!existsSync(path)) return { found: false, status: null, path };
+  let raw;
+  try { raw = readFileSync(path, 'utf8'); } catch { return { found: false, status: null, path }; }
+  const m = raw.match(/MCP_PREFLIGHT_(OK_WITH_WARNINGS|OK|FAILED)/);
+  return { found: true, status: m ? `MCP_PREFLIGHT_${m[1]}` : null, path };
+}
+
+/**
+ * Validate that the current run is allowed to consume an MCP-sourced
+ * schema_diff.json. Exits with a friendly message on policy violation.
+ *
+ * Rules:
+ *  - schema_diff.json must be source === 'mcp'.
+ *  - schema_diff.blockers must be empty.
+ *  - docs/old-to-prod/MCP_PREFLIGHT.md must NOT report MCP_PREFLIGHT_FAILED.
+ *  - For real (non-dry-run) import: requires ALLOW_AUTH_IMPORT=true and
+ *    ALLOW_DISABLE_IMPORT_TRIGGERS=true.
+ *  - Emits a non-fatal warning when status is MCP_PREFLIGHT_OK_WITH_WARNINGS.
+ *
+ * Returns { status } on success.
+ *
+ * @param {{exportDir: string, dryRun: boolean, enforceImportGates: boolean}} opts
+ */
+export function assertMcpPreflightOk({ exportDir, dryRun, enforceImportGates }) {
+  const diff = loadSchemaDiff(exportDir);
+  if (!diff.sourceIsMcp) {
+    console.error(`✗ --use-mcp-preflight requires schema_diff.json with "source":"mcp" (current source: ${diff.data?.source ?? 'unknown'}).`);
+    console.error(`  Generate the MCP preflight first, or drop --use-mcp-preflight to fall back to file-based compare.`);
+    process.exit(2);
+  }
+  const blockers = diff.data.blockers ?? [];
+  if (blockers.length > 0) {
+    console.error(`✗ MCP schema_diff.json has ${blockers.length} blocker(s); cannot proceed.`);
+    for (const b of blockers.slice(0, 5)) console.error(`    [${b.code}] ${b.msg ?? b.title ?? ''}`);
+    if (blockers.length > 5) console.error(`    ... and ${blockers.length - 5} more (see .old-to-prod-export/schema_diff.md)`);
+    process.exit(3);
+  }
+
+  const mcp = loadMcpPreflightStatus();
+  if (!mcp.found) {
+    console.error(`✗ --use-mcp-preflight requires docs/old-to-prod/MCP_PREFLIGHT.md but the file is missing.`);
+    console.error(`  Run the MCP live preflight first to generate it.`);
+    process.exit(2);
+  }
+  if (mcp.status === 'MCP_PREFLIGHT_FAILED') {
+    console.error(`✗ ${mcp.path} reports MCP_PREFLIGHT_FAILED. Refusing to proceed.`);
+    console.error(`  Resolve blockers and re-run the MCP preflight before retrying.`);
+    process.exit(3);
+  }
+  if (!mcp.status) {
+    console.error(`✗ ${mcp.path} exists but contains no MCP_PREFLIGHT_* status marker.`);
+    console.error(`  Re-generate it so it ends with the canonical status line.`);
+    process.exit(3);
+  }
+
+  if (enforceImportGates && !dryRun) {
+    const missing = [];
+    if (process.env.ALLOW_AUTH_IMPORT !== 'true') missing.push('ALLOW_AUTH_IMPORT=true');
+    if (process.env.ALLOW_DISABLE_IMPORT_TRIGGERS !== 'true') missing.push('ALLOW_DISABLE_IMPORT_TRIGGERS=true');
+    if (missing.length > 0) {
+      console.error(`✗ Real import via --use-mcp-preflight requires these env flags in scripts/old-to-prod/.env.old-to-prod:`);
+      for (const m of missing) console.error(`    - ${m}`);
+      console.error(`  Add them and re-run, or pass --dry-run for a planning-only execution.`);
+      process.exit(7);
+    }
+  }
+
+  if (mcp.status === 'MCP_PREFLIGHT_OK_WITH_WARNINGS' && !dryRun && enforceImportGates) {
+    const risks = (diff.data.risks ?? []).length;
+    console.error(`⚠ MCP preflight: MCP_PREFLIGHT_OK_WITH_WARNINGS (${risks} risk(s)).`);
+    console.error(`⚠ Proceeding with REAL import — review .old-to-prod-export/schema_diff.md before non-reversible writes.`);
+  }
+  return { status: mcp.status, schemaDiff: diff.data };
+}
+
+/**
+ * Load .old-to-prod-export/auth_collision_analysis.json if present.
+ *
+ * Returns { found, data, recommendation } — recommendation is the canonical
+ * tag from MCP analysis: 'adopt-identical-existing' / 'clean-prod' / 'clean-auth' / 'manual-resolve'.
+ * Never exits on missing file (callers decide; assertCleanAuthAllowed does).
+ */
+export function loadAuthCollisionAnalysis(exportDir) {
+  const path = join(exportDir, 'auth_collision_analysis.json');
+  if (!existsSync(path)) return { found: false, data: null, recommendation: null, path };
+  let data;
+  try {
+    data = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (e) {
+    console.error(`✗ ${path} is not valid JSON: ${e.message}`);
+    process.exit(2);
+  }
+  return {
+    found: true,
+    data,
+    recommendation: typeof data?.recommendation === 'string' ? data.recommendation : null,
+    path,
+  };
+}
+
+/**
+ * Three-key safety gate for --clean-auth. Exits with friendly errors otherwise.
+ *
+ * Required for the gate to pass:
+ *  - CLI flag `--clean-auth` (caller supplies `opts.cliFlag`)
+ *  - env ALLOW_CLEAN_AUTH=true
+ *  - env ALLOW_AUTH_IMPORT=true
+ *  - schema_diff.json: source=mcp, blockers empty, MCP_PREFLIGHT not FAILED
+ *  - auth_collision_analysis.json present
+ *  - auth_collision_analysis.recommendation ∈ {clean-prod, clean-auth}
+ *
+ * Additionally returns `publicReferrersPresent` (boolean) — the caller (05/06)
+ * receives this and decides whether to enforce `--clean-prod --confirm` based
+ * on the FK graph (which they query at runtime).
+ *
+ * @param {{exportDir: string, cliFlag: boolean, dryRun: boolean}} opts
+ * @returns {{collision: object, status: string}}
+ */
+export function assertCleanAuthAllowed({ exportDir, cliFlag, dryRun }) {
+  if (!cliFlag) {
+    // Not requested — nothing to check. Caller should not reach this with cliFlag=false.
+    throw new Error('assertCleanAuthAllowed called without cliFlag=true; this is a programmer error.');
+  }
+
+  // Three-key guard: CLI flag + env ALLOW_CLEAN_AUTH + env ALLOW_AUTH_IMPORT.
+  const envCleanAuth = process.env.ALLOW_CLEAN_AUTH === 'true';
+  const envAuthImport = process.env.ALLOW_AUTH_IMPORT === 'true';
+  if (!envCleanAuth || !envAuthImport) {
+    const missing = [];
+    if (!envCleanAuth) missing.push('ALLOW_CLEAN_AUTH=true');
+    if (!envAuthImport) missing.push('ALLOW_AUTH_IMPORT=true');
+    console.error(`✗ --clean-auth refused. Missing env flag(s) in scripts/old-to-prod/.env.old-to-prod:`);
+    for (const m of missing) console.error(`    - ${m}`);
+    console.error(`  --clean-auth is destructive. It needs CLI flag AND both env flags simultaneously.`);
+    process.exit(7);
+  }
+
+  // MCP preflight must be OK (or OK_WITH_WARNINGS). FAILED → refuse.
+  // We piggy-back on the same helper that 05/06/migrate use; enforceImportGates
+  // is FALSE here because the caller is expected to call assertMcpPreflightOk
+  // separately with the right enforceImportGates setting for their context.
+  const diff = loadSchemaDiff(exportDir);
+  if (!diff.sourceIsMcp) {
+    console.error(`✗ --clean-auth requires schema_diff.json with source=mcp (current: ${diff.data?.source ?? 'unknown'}).`);
+    console.error(`  Generate the MCP live preflight first.`);
+    process.exit(2);
+  }
+  const blockers = diff.data.blockers ?? [];
+  if (blockers.length > 0) {
+    console.error(`✗ --clean-auth refused: schema_diff.json has ${blockers.length} blocker(s).`);
+    for (const b of blockers.slice(0, 5)) console.error(`    [${b.code}] ${b.msg ?? b.title ?? ''}`);
+    process.exit(3);
+  }
+  const mcp = loadMcpPreflightStatus();
+  if (!mcp.found) {
+    console.error(`✗ --clean-auth requires docs/old-to-prod/MCP_PREFLIGHT.md but the file is missing.`);
+    process.exit(2);
+  }
+  if (mcp.status === 'MCP_PREFLIGHT_FAILED') {
+    console.error(`✗ --clean-auth refused: ${mcp.path} reports MCP_PREFLIGHT_FAILED.`);
+    process.exit(3);
+  }
+
+  // auth_collision_analysis.json is mandatory for --clean-auth.
+  const collision = loadAuthCollisionAnalysis(exportDir);
+  if (!collision.found) {
+    console.error(`✗ --clean-auth requires .old-to-prod-export/auth_collision_analysis.json but it's missing.`);
+    console.error(`  Generate it via the MCP cross-DB collision analysis before running clean-auth.`);
+    process.exit(2);
+  }
+  const allowedRecs = new Set(['clean-prod', 'clean-auth']);
+  if (!allowedRecs.has(collision.recommendation)) {
+    console.error(`✗ --clean-auth refused. auth_collision_analysis.recommendation=${collision.recommendation ?? 'null'}; expected one of: ${[...allowedRecs].join(', ')}.`);
+    console.error(`  If the recommendation is 'adopt-identical-existing', use --resume instead.`);
+    console.error(`  If 'manual-resolve', clean-auth is unsafe — resolve the listed collisions first.`);
+    process.exit(3);
+  }
+
+  // Sanity: PROD must not have auth users absent on OLD (would be data loss
+  // via DELETE FROM auth.users). Analysis tracks this.
+  const prodOnly = collision.data?.prod_only_users ?? 0;
+  if (prodOnly > 0) {
+    console.error(`✗ --clean-auth refused: ${prodOnly} auth.user(s) exist on PROD but NOT on OLD. Clean-auth would lose them irreversibly.`);
+    console.error(`  Resolve via manual investigation, then re-run the MCP collision analysis.`);
+    process.exit(3);
+  }
+
+  // Sanity: identity provider/provider_id collisions that point to different
+  // user_ids are not resolvable by clean-auth alone (after re-import they'd
+  // still collide on the FK to the imported users).
+  const identityCollisions = collision.data?.identity_provider_collisions ?? 0;
+  if (identityCollisions > 0) {
+    console.error(`✗ --clean-auth refused: ${identityCollisions} auth.identities (provider, provider_id) collision(s) point to different user_ids on OLD vs PROD.`);
+    console.error(`  Clean-auth re-imports OLD identities; collisions would reappear. Resolve manually.`);
+    process.exit(3);
+  }
+
+  if (mcp.status === 'MCP_PREFLIGHT_OK_WITH_WARNINGS' && !dryRun) {
+    console.error(`⚠ MCP preflight: MCP_PREFLIGHT_OK_WITH_WARNINGS — proceeding with --clean-auth in REAL mode. Review schema_diff.md.`);
+  }
+
+  return { collision: collision.data, status: mcp.status };
 }
 
 /**

@@ -31,6 +31,7 @@ const { values } = parseCliArgs({
     'dry-run':    { type: 'boolean', default: false, describe: 'Probe + counts only; do not write NDJSON' },
     'batch-size': { type: 'string',  default: '1000', describe: 'Page size for streaming SELECT' },
     'export-dir': { type: 'string',  default: '',     describe: 'Override EXPORT_DIR env' },
+    'use-mcp-preflight': { type: 'boolean', default: false, describe: 'No-op for export; accepted so users can pass the flag uniformly across all stages' },
   },
 });
 

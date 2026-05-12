@@ -17,10 +17,14 @@ import { join } from 'node:path';
 
 import {
   loadDotenv, requireEnv, getClient, getExportDir, tag, writeJson, parseCliArgs,
-  requireExportFiles, ensureNoBlockers, fatal,
+  requireExportFiles, ensureNoBlockers, fatal, assertMcpPreflightOk,
+  assertCleanAuthAllowed,
 } from './_lib.mjs';
 import { IMPORT_ORDER, REQUIRES_TRIGGER_DISABLE } from './_tables.mjs';
-import { getEnabledProviders, validateProvidersAgainstOld } from './_auth.mjs';
+import {
+  getEnabledProviders, validateProvidersAgainstOld,
+  loadAuthFkGraph, listAuthTables, planAuthCleanup,
+} from './_auth.mjs';
 import { readNdjson } from './_copy.mjs';
 import { compareEncryptedPasswords } from './_checksums.mjs';
 import { redactEmail } from './_lib.mjs';
@@ -31,13 +35,21 @@ const { values } = parseCliArgs({
   name: '05_prepare_prod.mjs',
   description: 'Verify PROD Supabase is ready to receive OLD import.',
   options: {
-    'dry-run':    { type: 'boolean', default: false, describe: 'Probe only; do not write status file' },
-    'export-dir': { type: 'string',  default: '',    describe: 'Override EXPORT_DIR env' },
+    'dry-run':            { type: 'boolean', default: false, describe: 'Probe only; do not write status file' },
+    'export-dir':         { type: 'string',  default: '',    describe: 'Override EXPORT_DIR env' },
+    'use-mcp-preflight':  { type: 'boolean', default: false, describe: 'Trust .old-to-prod-export/schema_diff.json (source=mcp) instead of old_schema/prod_schema files' },
+    'clean-auth':         { type: 'boolean', default: false, describe: 'Plan DELETE of PROD auth schema before auth import (3-key guard, see RUNBOOK)' },
+    'clean-prod':         { type: 'boolean', default: false, describe: 'Plan TRUNCATE of PROD public schema (forwarded to :import)' },
+    'confirm':            { type: 'boolean', default: false, describe: 'Required with --clean-prod' },
   },
 });
 
 const exportDir = values['export-dir'] || process.env.EXPORT_DIR || './.old-to-prod-export';
 const dryRun = values['dry-run'];
+const useMcpPreflight = values['use-mcp-preflight'];
+const cleanAuthCli = values['clean-auth'];
+const cleanProdCli = values['clean-prod'];
+const cleanProdConfirm = values['confirm'];
 
 // Blockers we know about and intentionally accept (PROD-only objects).
 const BLOCKER_WHITELIST = []; // currently empty; PROD-only items are info-class
@@ -52,19 +64,41 @@ const REQUIRED_FUNCTIONS = [
 ];
 
 async function main() {
-  requireExportFiles(exportDir, [
-    'old_schema.json',
-    'prod_schema.json',
-    'schema_diff.json',
-    'schema_diff.md',
-    'manifest.json',
-    'auth_stats.json',
-  ], 'Run: npm run old-to-prod:introspect-old → :introspect-prod → :compare → :export');
+  // Surface the 3-key gate BEFORE file requirements: env mistakes are the most
+  // common operator error and should fail loudly before "manifest.json not
+  // found" obscures the real cause. Only validate scope-relevant pieces here
+  // (full env+collision+MCP check); the same helper is called again at runtime
+  // in 06_import_prod for defense-in-depth.
+  let cleanAuthCtx = null;
+  if (cleanAuthCli) {
+    cleanAuthCtx = assertCleanAuthAllowed({ exportDir, cliFlag: true, dryRun });
+  }
+
+  // File requirements differ when consuming an MCP live preflight: the
+  // old_schema/prod_schema introspect dumps are not produced in MCP mode.
+  const requiredFiles = useMcpPreflight
+    ? ['schema_diff.json', 'schema_diff.md', 'manifest.json', 'auth_stats.json']
+    : ['old_schema.json', 'prod_schema.json', 'schema_diff.json', 'schema_diff.md', 'manifest.json', 'auth_stats.json'];
+  const hint = useMcpPreflight
+    ? 'Run: MCP live preflight + npm run old-to-prod:export'
+    : 'Run: npm run old-to-prod:introspect-old → :introspect-prod → :compare → :export';
+  requireExportFiles(exportDir, requiredFiles, hint);
 
   const prodUrl = requireEnv('PROD_SUPABASE_DB_URL');
 
-  const schemaDiff = JSON.parse(readFileSync(join(exportDir, 'schema_diff.json'), 'utf8'));
-  ensureNoBlockers(schemaDiff, BLOCKER_WHITELIST);
+  let schemaDiff;
+  if (useMcpPreflight) {
+    // Validates source=mcp, blockers empty, MCP_PREFLIGHT.md not FAILED. Prepare
+    // is read-only by design, so we do NOT enforce ALLOW_* env gates here —
+    // those belong to 06_import_prod.mjs (which calls the same helper with
+    // enforceImportGates=true).
+    const mcp = assertMcpPreflightOk({ exportDir, dryRun, enforceImportGates: false });
+    schemaDiff = mcp.schemaDiff;
+    console.log(`${tag('PROD')} MCP preflight: ${mcp.status}`);
+  } else {
+    schemaDiff = JSON.parse(readFileSync(join(exportDir, 'schema_diff.json'), 'utf8'));
+    ensureNoBlockers(schemaDiff, BLOCKER_WHITELIST);
+  }
 
   const manifest = JSON.parse(readFileSync(join(exportDir, 'manifest.json'), 'utf8'));
   const oldAuthStats = JSON.parse(readFileSync(join(exportDir, 'auth_stats.json'), 'utf8'));
@@ -179,12 +213,19 @@ async function main() {
     const authCollisions = await runAuthCollisionPreflight(client, exportDir);
     const hasCollisions = authCollisions.length > 0;
     report.auth_collisions = authCollisions;
+    // When --clean-auth is set AND the public-dependency gate has already
+    // passed (= clean-auth will run before auth import and wipe the auth target),
+    // collisions are EXPECTED — they're exactly the data that clean-auth
+    // resolves. Downgrade to an informational pass.
+    const cleanAuthResolvesIt = cleanAuthCli;
     report.checks.push({
       code: 'auth_preflight_collisions',
-      ok: !hasCollisions,
-      detail: hasCollisions
-        ? `${authCollisions.length} auth collision(s) — see prepare report for masked details`
-        : 'no auth.users / auth.identities collisions detected',
+      ok: !hasCollisions || cleanAuthResolvesIt,
+      detail: !hasCollisions
+        ? 'no auth.users / auth.identities collisions detected'
+        : cleanAuthResolvesIt
+          ? `${authCollisions.length} auth collision(s) — will be resolved by --clean-auth (DELETE then re-import)`
+          : `${authCollisions.length} auth collision(s) — see prepare report for masked details`,
     });
 
     // Check 7: manifest sanity — every entry must have ndjson_path (or rows=0)
@@ -196,6 +237,74 @@ async function main() {
       ok: badManifest.length === 0,
       detail: badManifest.length === 0 ? null : `${badManifest.length} tables missing ndjson_path`,
     });
+
+    // Check 8: clean-auth plan (only when --clean-auth is requested).
+    //
+    // We build the plan here (read-only) so 06_import_prod can either consume
+    // it OR rebuild it fresh — having it surfaced in PREPARE_REPORT.md gives
+    // the operator a chance to inspect what tables would be touched BEFORE any
+    // destructive write occurs.
+    if (cleanAuthCli) {
+      // Gate already validated at top of main(); reuse the context object.
+      // (If a previous early-exit slipped past — defense in depth.)
+      if (!cleanAuthCtx) cleanAuthCtx = assertCleanAuthAllowed({ exportDir, cliFlag: true, dryRun });
+
+      // Build the FK-driven plan against live PROD.
+      const fkGraph = await loadAuthFkGraph(client);
+      const authTables = await listAuthTables(client);
+      let plan;
+      try {
+        plan = planAuthCleanup(fkGraph, authTables);
+      } catch (e) {
+        report.checks.push({
+          code: 'clean_auth_fk_plan',
+          ok: false,
+          detail: e.message,
+        });
+        throw e;
+      }
+      report.clean_auth_plan = {
+        recommendation: cleanAuthCtx.collision.recommendation,
+        mcp_status: cleanAuthCtx.status,
+        order: plan.order.map((t) => `${t.schema}.${t.table}`),
+        skipped_tables: plan.skipped_tables.map((t) => `auth.${t}`),
+        public_referrers: plan.public_referrers.map((fk) => ({
+          from: `${fk.from_schema}.${fk.from_table}.${fk.from_column}`,
+          to: `${fk.to_schema}.${fk.to_table}.${fk.to_column}`,
+          delete_rule: fk.delete_rule,
+        })),
+        audit_log_note: plan.audit_log_note,
+        requires_clean_prod: plan.public_referrers.length > 0,
+      };
+
+      // Gate: if any public table references auth.users / auth.identities,
+      // --clean-prod --confirm + ALLOW_CLEAN_PROD=true MUST also be set.
+      const allowCleanProd = process.env.ALLOW_CLEAN_PROD === 'true';
+      const publicChainOk =
+        plan.public_referrers.length === 0 ||
+        (cleanProdCli && cleanProdConfirm && allowCleanProd);
+      report.checks.push({
+        code: 'clean_auth_public_dependency_gate',
+        ok: publicChainOk,
+        detail: plan.public_referrers.length === 0
+          ? 'no public→auth FK; standalone --clean-auth is safe'
+          : publicChainOk
+            ? `${plan.public_referrers.length} public→auth FK(s) — --clean-prod --confirm + ALLOW_CLEAN_PROD=true present, OK`
+            : 'Cannot clean auth.users while public.users still references auth.users. Use --clean-prod --confirm or resolve manually.',
+        public_referrers: report.clean_auth_plan.public_referrers,
+      });
+      report.checks.push({
+        code: 'clean_auth_fk_plan',
+        ok: true,
+        detail: `${plan.order.length} table(s) would be DELETE'd in order: ${plan.order.map((t) => t.table).join(' → ')}`,
+      });
+
+      console.log(`${tag('PROD')} clean-auth plan: ${plan.order.length} table(s) — ${plan.order.map((t) => t.table).join(' → ')}`);
+      if (plan.public_referrers.length > 0) {
+        console.log(`${tag('PROD')} ⚠ ${plan.public_referrers.length} public→auth FK(s) — --clean-prod --confirm REQUIRED in import phase.`);
+      }
+      if (plan.audit_log_note) console.log(`${tag('PROD')} ${plan.audit_log_note}`);
+    }
 
     // Summarize
     const failed = report.checks.filter((c) => !c.ok);
@@ -214,12 +323,13 @@ async function main() {
     }
     console.log(`${tag('PROD')} status: ${report.status}`);
 
-    // Write artifacts
-    if (!dryRun) {
-      writeJson(join(exportDir, 'prepare_status.json'), report);
-      writePrepareReportMd(report);
-      console.log(`✓ wrote ${join(exportDir, 'prepare_status.json')}`);
-    }
+    // Write artifacts. Even in --dry-run we persist the status file (with
+    // dry_run:true preserved in the report) so downstream stages of a
+    // dry-run pipeline can read it. 06_import_prod refuses to do real writes
+    // when prepare_status.dry_run=true (defense in depth).
+    writeJson(join(exportDir, 'prepare_status.json'), report);
+    writePrepareReportMd(report);
+    console.log(`✓ wrote ${join(exportDir, 'prepare_status.json')}${dryRun ? ' (dry-run flagged)' : ''}`);
 
     if (report.status === 'BLOCKED') {
       // Pick an exit code based on first failure category.
@@ -389,6 +499,34 @@ function writePrepareReportMd(report) {
   for (const c of report.checks) {
     const detail = (c.detail ?? '').replace(/\|/g, '\\|');
     lines.push(`| \`${c.code}\` | ${c.ok ? '✓' : '✗'} | ${detail} |`);
+  }
+  if (report.clean_auth_plan) {
+    const p = report.clean_auth_plan;
+    lines.push('');
+    lines.push('## Clean-auth plan');
+    lines.push('');
+    lines.push(`- collision-analysis recommendation: \`${p.recommendation}\``);
+    lines.push(`- MCP preflight status: \`${p.mcp_status}\``);
+    lines.push(`- requires \`--clean-prod --confirm\`: **${p.requires_clean_prod ? 'YES' : 'no'}**`);
+    if (p.audit_log_note) lines.push(`- audit-log note: ${p.audit_log_note}`);
+    lines.push('');
+    lines.push('### Deletion order (leaves first; auth.users last; no CASCADE)');
+    lines.push('');
+    for (const t of p.order) lines.push(`- \`${t}\``);
+    if (p.skipped_tables.length > 0) {
+      lines.push('');
+      lines.push('### Auth tables left alone');
+      lines.push('');
+      for (const t of p.skipped_tables) lines.push(`- \`${t}\``);
+    }
+    if (p.public_referrers.length > 0) {
+      lines.push('');
+      lines.push('### public → auth FKs (block standalone clean-auth)');
+      lines.push('');
+      lines.push('| FK | ON DELETE |');
+      lines.push('|---|---|');
+      for (const r of p.public_referrers) lines.push(`| \`${r.from}\` → \`${r.to}\` | ${r.delete_rule} |`);
+    }
   }
   if (report.status !== 'READY') {
     lines.push('');

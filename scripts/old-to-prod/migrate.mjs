@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 
-import { loadDotenv, parseCliArgs, tag, fatal } from './_lib.mjs';
+import { loadDotenv, parseCliArgs, tag, fatal, assertMcpPreflightOk } from './_lib.mjs';
 
 loadDotenv();
 
@@ -31,16 +31,21 @@ const { values } = parseCliArgs({
     'public-only':              { type: 'boolean', default: false, describe: 'Skip auth schema entirely' },
     'resume':                   { type: 'boolean', default: false },
     'clean-prod':               { type: 'boolean', default: false },
+    'clean-auth':               { type: 'boolean', default: false, describe: 'DELETE rows from PROD auth schema before auth import (3-key guard: requires ALLOW_CLEAN_AUTH=true + ALLOW_AUTH_IMPORT=true + this flag)' },
+    'confirm':                  { type: 'boolean', default: false, describe: 'Required when --clean-prod is set (forwarded to :import)' },
     'allow-overwrite':          { type: 'boolean', default: false, describe: 'Pass --allow-overwrite to import step (requires ALLOW_PROD_OVERWRITE=true)' },
     'overwrite':                { type: 'boolean', default: false, describe: 'Alias for --allow-overwrite' },
     'batch-size':               { type: 'string',  default: '1000' },
     'export-dir':               { type: 'string',  default: '' },
     'skip-smoke':               { type: 'boolean', default: false, describe: 'Skip 09_smoke_go_bff' },
     'allow-write-smoke-tests':  { type: 'boolean', default: false },
+    'use-mcp-preflight':        { type: 'boolean', default: false, describe: 'Trust .old-to-prod-export/schema_diff.json (source=mcp); skip introspect/compare stages and forward flag to :prepare/:import' },
   },
 });
 
 const exportDir = values['export-dir'] || process.env.EXPORT_DIR || './.old-to-prod-export';
+const useMcpPreflight = values['use-mcp-preflight'];
+const dryRun = values['dry-run'];
 
 // Build the pipeline based on flags.
 function buildPipeline() {
@@ -50,8 +55,8 @@ function buildPipeline() {
     { script: '02_introspect_prod.mjs',   name: 'introspect-prod', forward: ['export-dir'] },
     { script: '03_compare_schemas.mjs',   name: 'compare',         forward: ['export-dir'] },
     { script: '04_export_old.mjs',        name: 'export',          forward: ['dry-run', 'batch-size', 'export-dir'] },
-    { script: '05_prepare_prod.mjs',      name: 'prepare',         forward: ['dry-run', 'export-dir'] },
-    { script: '06_import_prod.mjs',       name: 'import',          forward: ['dry-run', 'auth-only', 'public-only', 'resume', 'clean-prod', 'allow-overwrite', 'overwrite', 'batch-size', 'export-dir'] },
+    { script: '05_prepare_prod.mjs',      name: 'prepare',         forward: ['dry-run', 'export-dir', 'use-mcp-preflight', 'clean-auth', 'clean-prod', 'confirm'] },
+    { script: '06_import_prod.mjs',       name: 'import',          forward: ['dry-run', 'auth-only', 'public-only', 'resume', 'clean-prod', 'clean-auth', 'confirm', 'allow-overwrite', 'overwrite', 'batch-size', 'export-dir', 'use-mcp-preflight'] },
     { script: '07_verify.mjs',            name: 'verify',          forward: ['dry-run', 'export-dir'] },
     { script: '08_verify_auth.mjs',       name: 'verify-auth',     forward: ['dry-run', 'export-dir'] },
     { script: '09_smoke_go_bff.mjs',      name: 'smoke',           forward: ['dry-run', 'allow-write-smoke-tests'] },
@@ -61,14 +66,23 @@ function buildPipeline() {
   if (values['import-only']) return all.filter((s) => ['prepare', 'import'].includes(s.name));
   if (values['verify-only']) return all.filter((s) => ['verify', 'verify-auth'].includes(s.name));
 
-  // Skip introspection if schema_diff.json is fresher than 1 hour.
   let pipeline = all;
-  const schemaDiff = join(exportDir, 'schema_diff.json');
-  if (existsSync(schemaDiff)) {
-    const ageMs = Date.now() - statSync(schemaDiff).mtimeMs;
-    if (ageMs < 60 * 60 * 1000) {
-      pipeline = pipeline.filter((s) => !['introspect-old', 'introspect-prod', 'compare'].includes(s.name));
-      console.log(`${tag('ORCH')} schema_diff.json < 1h old → skipping introspect/compare`);
+
+  if (useMcpPreflight) {
+    // MCP-first mode: the live MCP preflight produced schema_diff.json already;
+    // introspect/compare stages would only duplicate that work AND require
+    // direct OLD/PROD pg connectivity from this host. Drop them unconditionally.
+    pipeline = pipeline.filter((s) => !['introspect-old', 'introspect-prod', 'compare'].includes(s.name));
+    console.log(`${tag('ORCH')} --use-mcp-preflight → skipping introspect-old / introspect-prod / compare`);
+  } else {
+    // Skip introspection if schema_diff.json is fresher than 1 hour (legacy behavior).
+    const schemaDiff = join(exportDir, 'schema_diff.json');
+    if (existsSync(schemaDiff)) {
+      const ageMs = Date.now() - statSync(schemaDiff).mtimeMs;
+      if (ageMs < 60 * 60 * 1000) {
+        pipeline = pipeline.filter((s) => !['introspect-old', 'introspect-prod', 'compare'].includes(s.name));
+        console.log(`${tag('ORCH')} schema_diff.json < 1h old → skipping introspect/compare`);
+      }
     }
   }
 
@@ -115,9 +129,20 @@ function runStep(step) {
 }
 
 async function main() {
+  // Orchestrator-level MCP gate. The same helper runs again inside 05 (no
+  // import gates) and 06 (with import gates) — child processes can be invoked
+  // directly, so each stage validates for itself. Doing it here too gives a
+  // fast, friendly error before any child is spawned.
+  if (useMcpPreflight) {
+    // enforceImportGates=true means: real (non-dry-run) runs require
+    // ALLOW_AUTH_IMPORT=true and ALLOW_DISABLE_IMPORT_TRIGGERS=true.
+    assertMcpPreflightOk({ exportDir, dryRun, enforceImportGates: true });
+  }
+
   const pipeline = buildPipeline();
   console.log(`${tag('ORCH')} pipeline: ${pipeline.map((s) => s.name).join(' → ')}`);
-  console.log(`${tag('ORCH')} dry-run: ${values['dry-run'] ? 'YES' : 'no'}`);
+  console.log(`${tag('ORCH')} dry-run: ${dryRun ? 'YES' : 'no'}`);
+  if (useMcpPreflight) console.log(`${tag('ORCH')} preflight source: MCP (.old-to-prod-export/schema_diff.json)`);
   console.log('');
 
   for (const step of pipeline) {

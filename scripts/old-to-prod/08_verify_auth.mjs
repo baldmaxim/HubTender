@@ -49,6 +49,7 @@ async function main() {
     oauth_only_audit: null,
     bootstrap_audit: null,
     confirm_audit: null,
+    clean_auth_context: null,
     smoke_login: null,
     go_bff_me: null,
     warnings: [],
@@ -63,6 +64,22 @@ async function main() {
   const forceConfirmEmails = process.env.FORCE_CONFIRM_EMAILS === 'true';
 
   try {
+    // ---- Clean-auth context (read-only echo from import_state) ----
+    if (importState.clean_auth) {
+      report.clean_auth_context = {
+        executed: !!importState.clean_auth.executed,
+        dry_run: !!importState.clean_auth.dry_run,
+        order: importState.clean_auth.order ?? [],
+        deleted_total: importState.clean_auth.deleted_total ?? 0,
+      };
+      console.log(
+        `${tag('PROD')} clean-auth context: executed=${report.clean_auth_context.executed} ` +
+        `dry_run=${report.clean_auth_context.dry_run} ` +
+        `tables=${report.clean_auth_context.order.length} ` +
+        `deleted_total=${report.clean_auth_context.deleted_total}`,
+      );
+    }
+
     // ---- Counts (strict equality, accounting for documented bootstrap) ----
     //
     // auth.users          : PROD count MUST EQUAL OLD count. Extra PROD rows
@@ -543,6 +560,18 @@ function writeReport(report) {
           ? `- users whose email_confirmed_at was forced to now(): **${report.confirm_audit.forced_count}**`
           : `- unexpectedly changed email_confirmed_at: **${report.confirm_audit.unexpectedly_changed}** (must be 0 when FORCE_CONFIRM_EMAILS=false)`)
       : 'Not run.',
+    '',
+    '## Clean-auth context (echo from import_state.clean_auth)',
+    '',
+    report.clean_auth_context
+      ? `- executed: **${report.clean_auth_context.executed ? 'YES' : 'NO (dry-run)'}**\n` +
+        `- tables cleaned (deletion order): ${report.clean_auth_context.order.map((t) => '`' + t + '`').join(' → ') || '_none_'}\n` +
+        `- total rows deleted: **${report.clean_auth_context.deleted_total}**\n\n` +
+        `> Auth-cutover semantics:\n` +
+        `> - auth.sessions / auth.refresh_tokens were NOT re-imported from OLD.\n` +
+        `> - All OLD Supabase sessions are invalidated; users must log in again.\n` +
+        `> - Password hashes were re-uploaded from OLD; users keep their OLD password.`
+      : '_clean-auth was not requested for this import._',
     '',
     '## Smoke login',
     '',
