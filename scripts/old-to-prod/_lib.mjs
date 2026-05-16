@@ -89,21 +89,39 @@ export function redactEmail(email) {
  * (Supabase rotates intermediates and Yandex root CAs differ). Migration is a
  * one-shot operation, so we trade strict pinning for portability.
  */
-export async function getClient(url) {
+export async function getClient(url, opts = {}) {
   const { default: pg } = await import('pg');
   // 60s default is too tight for streaming exports through the Supabase Session
   // Pooler (large jsonb tables can take >60s per 5000-row SELECT). Migration is
   // a one-shot operation; trade strict timeout for completion. Env override:
   //   PG_QUERY_TIMEOUT_MS — milliseconds; default 300_000 (5 minutes).
-  const timeoutMs = parseInt(process.env.PG_QUERY_TIMEOUT_MS || '300000', 10);
+  // Per-call override: opts.timeoutMs (preferred for short-lived export clients).
+  const defaultTimeoutMs = parseInt(process.env.PG_QUERY_TIMEOUT_MS || '300000', 10);
+  const timeoutMs = Number.isFinite(opts.timeoutMs) ? opts.timeoutMs : defaultTimeoutMs;
   const client = new pg.Client({
     connectionString: url,
     ssl: { rejectUnauthorized: false },
     statement_timeout: timeoutMs,
     query_timeout: timeoutMs,
+    application_name: opts.applicationName || 'old-to-prod',
   });
   await client.connect();
   return client;
+}
+
+/**
+ * Classify a connection URL as direct / pooler / unknown WITHOUT exposing the
+ * URL itself. Supabase URLs:
+ *   - `aws-0-<region>.pooler.supabase.com:5432` → 'pooler' (Supavisor/PgBouncer)
+ *   - `db.<ref>.supabase.co:5432`               → 'direct' (IPv6 only on free)
+ *   - anything else                              → 'unknown'
+ * Use only for log messages — NEVER pass the original URL into logs.
+ */
+export function redactHostType(url) {
+  if (!url || typeof url !== 'string') return 'unknown';
+  if (/pooler\.supabase\.com/i.test(url)) return 'pooler';
+  if (/\.supabase\.co/i.test(url)) return 'direct';
+  return 'unknown';
 }
 
 /** Write JSON with stable formatting and trailing newline. */

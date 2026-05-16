@@ -99,6 +99,163 @@ npm run old-to-prod:export
 
 > `auth.sessions` и `auth.refresh_tokens` не экспортируются (они привязаны к instance_id OLD-проекта).
 
+## 10.A Snapshot-strategy для export (REPEATABLE READ + keyset pagination)
+
+С коммита `6878434+` `04_export_old.mjs` всегда работает внутри транзакции:
+
+```sql
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+-- все SELECT'ы (counts, table dumps, sql_checksum, auth_stats,
+-- tender_registry duplicates) выполняются на одном connection
+COMMIT;  -- либо ROLLBACK при ошибке
+```
+
+### Почему это критично
+
+`LIMIT/OFFSET`-пагинация на **живой** таблице, в которую идут писатели, неизбежно даёт **drift**:
+- новая строка вставляется во время export'а;
+- она получает UUID, который сортируется *выше* текущего offset → ранее видимая строка сдвигается на одну позицию;
+- следующий `SELECT ... LIMIT N OFFSET M` снова возвращает её → в NDJSON попадает дубликат.
+
+Симптом, который мы поймали в первом rehearsal: `public.boq_items_audit.ndjson` содержал 338 100 строк, но только 337 988 уникальных id. 112 дубликатов привели к `Duplicate key` на import. На другие таблицы drift не сработал просто потому, что rate-of-change был низкий.
+
+### Что даёт REPEATABLE READ snapshot
+
+- Все SELECT внутри транзакции видят одну и ту же фиксированную версию данных, сделанную в момент первого statement'а.
+- Записи других транзакций, committed-нутые **после** начала export'а, **не видны** этому export'у.
+- На сторону OLD никаких блокировок не накладывается — другие пользователи продолжают писать, мы их writes просто игнорируем.
+- На стороне нашего export'а это значит: row-count, NDJSON-row-count и server-side md5-checksum считаются над **одинаковым** набором строк.
+
+### Что даёт keyset pagination
+
+Дополнительная защита. Вместо `LIMIT N OFFSET M`:
+
+```sql
+SELECT * FROM "schema"."table"
+ WHERE "pk" > $last_pk
+ ORDER BY "pk"
+ LIMIT $batch_size;
+```
+
+Это:
+- O(B·log N) cost per batch (vs OFFSET's O((N/B)·N)) — на больших таблицах в разы быстрее;
+- работает корректно даже без snapshot;
+- инвариант: каждая запись попадает в выдачу **ровно один раз**.
+
+### Post-export validation
+
+После каждого NDJSON-файла запускается `validateNdjsonPks(path, pkColumn)`:
+- считает total lines, distinct PK count, duplicate PK count;
+- сэмплит первые 5 дублирующихся PK (с маскированием — `pk.slice(0,12)+'…'`);
+- результат пишется в `manifest.tables[].duplicate_pk_count` + отдельный файл `export_validation.json`.
+
+**Если `validation.duplicate_pk_total > 0`** → export завершается **`exit 8`** + текстом «Export validation FAILED». `npm run old-to-prod:import` после этого работать не будет (manifest содержит `duplicate_pk_count > 0`, но мы решили не блокировать import формально — failure surfaces через 06's per-table dedup throw).
+
+### Что snapshot НЕ решает
+
+- **Записи, появившиеся после snapshot start, не попадут в PROD**. Это значит, для финального cutover OLD всё равно лучше переводить в maintenance/freeze (раздел 16) — иначе у вас в PROD будет «фотография» OLD на момент начала export'а, а не на момент cutover.
+- **Snapshot держится только в пределах одного процесса/connection**. Если export разнесён по нескольким Node-процессам (например, отдельный auth-export), они увидят разные snapshot'ы. Сейчас всё в одном процессе → OK.
+- **Long-running snapshot** может конфликтовать с aggressive VACUUM на OLD — но для нашего размера (минуты, не часы) проблемы нет.
+
+### Что делать если validation failed
+
+```
+✗ Export validation FAILED: 112 duplicate PK(s) across 1 table(s).
+    - public.boq_items_audit: 112 duplicate PK(s) detected in NDJSON — export inconsistent.
+```
+
+1. Снэпшот должен был защитить — если не сработал, проверить:
+   - все ли SELECT'ы идут на одном `client` (single connection);
+   - не используется ли pgBouncer transaction-mode (тогда снэпшот рвётся между запросами; на Supabase Session Pooler этого не происходит);
+   - не пишет ли что-то параллельно из самого скрипта (не должно).
+2. Re-export после фикса.
+3. **Не запускать import** пока `export_validation.json.duplicate_pk_total = 0`.
+
+### Emergency rehearsal mode
+
+`ALLOW_IMPORT_DEDUP_FOR_REHEARSAL=true` + CLI `--allow-import-dedup-for-rehearsal` позволяют 06_import_prod продолжить import при duplicate PK в NDJSON, дедуплицируя по PK во время чтения. Это «emergency escape» только для rehearsal — VERIFY-статус автоматически downgrade'ится до `VERIFY_OK_WITH_WARNINGS`. **Для production cutover** этот режим НЕ использовать — нужно перевыгрузить OLD корректно.
+
+## 10.B Pool-safe export mode for Supabase OLD
+
+### Когда использовать `--pool-safe-export`
+
+Когда OLD-connection-strings указывает на **Supabase Session Pooler** (`aws-0-<region>.pooler.supabase.com:5432`), и пул разделён с live frontend-traffic'ом. В этой конфигурации **глобальный REPEATABLE READ snapshot** (раздел 10.A) держит pool-slot на ~25-30 минут, и любой connection-error превращается в длинную зомби-сессию, которая блокирует pool до `idle_in_transaction_session_timeout` server-side. Если три или четыре export-ов подряд упадут — pool полностью saturated, MCP перестаёт отвечать.
+
+Pool-safe режим **не открывает длинную транзакцию**. Каждая таблица получает свой fresh-client + COUNT + keyset stream + checksum (если позволено) + close, без `BEGIN`/`COMMIT` снаружи.
+
+Команда:
+
+```powershell
+npm run old-to-prod:export -- --use-mcp-preflight --pool-safe-export --batch-size=2500
+```
+
+### Почему не используем глобальный snapshot через Session Pool
+
+Supabase Session Pooler (Supavisor) держит лизинг на back-end-connection пока pg-node не вызовет `client.end()`. Если внутри лизинга открыта REPEATABLE READ-транзакция, любые ошибки протокола (timeout, network blip) оставляют back-end-сессию в `idle in transaction (aborted)`, и pool-slot не освобождается до server-side `idle_in_transaction_session_timeout` (30 минут на free-tier, может больше). Несколько таких aborted-snapshot-сессий быстро исчерпывают доступные слоты.
+
+В **direct-connection** режиме (`db.<ref>.supabase.co`) каждое подключение — отдельный back-end-процесс, не shared с пулером. Длинный snapshot там безопаснее. Для direct можно установить `OLD_SUPABASE_EXPORT_DB_URL` (см. ниже) и оставить дефолтный snapshot-режим.
+
+### Как обеспечивается consistency без snapshot'а
+
+`--pool-safe-export` пишет в `manifest.json`:
+
+```json
+"consistency_mode": "operator_no_writes_pool_safe",
+"pool_safe_export": true,
+"transaction_snapshot": false,
+"operator_confirmed_no_writes_required": true
+```
+
+И в `export_validation.json` — warning:
+
+> Pool-safe export skips REPEATABLE READ snapshot. Cross-table consistency relies on operator-confirmed write-freeze of OLD. Production cutover MUST NOT use this mode without explicit freeze.
+
+Cross-table consistency обеспечивается оператором — пока pool-safe export идёт, никто не должен писать в OLD. Без freeze'а возможны:
+- новые тендеры/строки появляются после COUNT, но до stream → manifest row_count < NDJSON line count;
+- audit-rows вставляются в `boq_items_audit` параллельно с export'ом → duplicate-PK detection поймает (или нет, если rate низкий).
+
+**Для production cutover** `--pool-safe-export` использовать **запрещено** без явного OLD write-freeze (frontend maintenance banner + 503 на write-path). Только для rehearsal на operator-confirmed quiet OLD.
+
+### Почему нельзя запускать много export-attempt подряд
+
+Каждый aborted run = ещё одна зомби-сессия в Supavisor (плюс ещё одна в back-end). С каждым ретраем pool сжимается. Когда осталось <5 свободных слотов:
+- live front-end теряет latency;
+- MCP отдаёт `Connection terminated due to connection timeout`;
+- npm-скрипты получают `ECHECKOUTTIMEOUT in Session mode`.
+
+Восстановление = **подождать 20-30 минут** server-side `idle_in_transaction_session_timeout`. Перезапуск Supabase проекта тоже сбросит зомби, но дисраптит live users.
+
+### Что делать при `ECHECKOUTTIMEOUT`
+
+1. **НЕ перезапускать export** немедленно — каждый attempt усугубляет saturation.
+2. Подождать ~30 мин. Перепроверить через `npm run old-to-prod:check`:
+   - если PROD проходит а OLD — `XX000` / connection timeout, pool ещё не вылечился.
+   - повторять с интервалом 5-10 мин, **не чаще**.
+3. Когда `npm run old-to-prod:check` отвечает быстро (<10 сек), **только тогда** запускать export.
+4. Сразу с `--pool-safe-export` — не возвращайтесь к long snapshot mode, пока root-cause не пофикшен (например, switching to direct connection).
+
+### Direct connection как предпочтительный путь
+
+Если у OLD доступна direct connection (`db.<ref>.supabase.co:5432`), используйте её для export'а:
+
+```bash
+# Supabase Dashboard → Settings → Database → Connection string → URI (direct)
+# Скопировать в .env.old-to-prod как OLD_SUPABASE_EXPORT_DB_URL
+OLD_SUPABASE_EXPORT_DB_URL=postgresql://postgres:...@db.<ref>.supabase.co:5432/postgres
+```
+
+`04_export_old.mjs` подхватит этот URL только для export, не трогая `OLD_SUPABASE_DB_URL` (который остаётся пуловым для check/connection-сanity). Логи покажут `host type: direct`.
+
+С direct connection можно вернуться к default (snapshot) режиму — без `--pool-safe-export` — потому что back-end-connection не делится с frontend-traffic'ом.
+
+> ⚠ Supabase free-tier не предоставляет IPv4-direct (только IPv6). На Windows без IPv6-поддержки direct не сработает — fallback на pool-safe через Session Pooler.
+
+### Real import всё равно запрещён без backup/restore point
+
+Pool-safe export — только этап подготовки данных. Перед `--clean-prod --clean-auth` import'ом всё равно обязательны:
+- Supabase Dashboard restore point на PROD (или `pg_dump` через docker — см. раздел 12.A "Backup PROD");
+- актуальные `prepare_status.json` (status: READY) и `auth_collision_analysis.json` (recommendation ∈ {clean-prod, clean-auth}).
+
 ## 11. Prepare PROD
 
 ```bash

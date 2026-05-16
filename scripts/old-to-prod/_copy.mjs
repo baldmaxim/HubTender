@@ -67,6 +67,51 @@ export async function* readNdjson(path) {
 }
 
 /**
+ * PostgreSQL Bind-message parameter-count safety cap.
+ *
+ * PG protocol Int16-encodes the parameter list length; pg-node treats it as
+ * signed (max 32767) and will throw or get OOPS-ed by the server with
+ * `bind message has N parameter formats but 0 parameters` when this is
+ * exceeded. Even when pg-node accepts higher values, the server may still
+ * misbehave above 32767.
+ *
+ * We cap to 30000 to leave a safety margin. Sub-batching is automatic in
+ * `batchInsert`: if `rows * columns > 30000`, we split the rows into chunks
+ * of size `floor(30000 / columns)` and INSERT each chunk separately.
+ *
+ * For a 23-column table (e.g. public.client_positions) this caps to ~1304
+ * rows per Bind message — well below 32767 even at peak.
+ */
+const PG_BIND_PARAM_CAP = 30000;
+
+/**
+ * Per-table column-type cache. Keys: `schema.table`. Values: Map<colName, {data_type, udt_name}>.
+ *
+ * Why: pg-node's auto-inference treats JS arrays as PostgreSQL array literals
+ * (`{...}`). For a `jsonb` target column, PG then refuses the value
+ * (`invalid input syntax for type json`). For a real `text[]` target column,
+ * pg-node's default IS correct. So we must dispatch per column type.
+ *
+ * Lookup is performed lazily, cached for the lifetime of the import (the
+ * import-script process runs once per migration).
+ */
+const __columnTypeCache = new Map();
+async function getColumnTypes(client, schema, table) {
+  const key = `${schema}.${table}`;
+  if (__columnTypeCache.has(key)) return __columnTypeCache.get(key);
+  const { rows } = await client.query(
+    `SELECT column_name, data_type, udt_name
+       FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = $2`,
+    [schema, table],
+  );
+  const m = new Map();
+  for (const r of rows) m.set(r.column_name, { data_type: r.data_type, udt_name: r.udt_name });
+  __columnTypeCache.set(key, m);
+  return m;
+}
+
+/**
  * Insert a batch of rows into PROD according to a conflict policy.
  *
  * Modes (selected by `opts.policy`):
@@ -121,6 +166,23 @@ export async function batchInsert(client, { schema, table, columns, rows, policy
     throw new Error(`batchInsert: policy ${policy} requires SELECT-first path on ${schema}.${table}`);
   }
 
+  // Sub-batch if rows * columns exceeds the PG Bind parameter cap. This is
+  // independent of the caller's batchSize: a wide table (e.g. 23-col
+  // client_positions) at batch=5000 produces 115k params, which violates the
+  // PG Int16 limit. We split internally and aggregate the result counts.
+  const maxRowsPerInsert = Math.max(1, Math.floor(PG_BIND_PARAM_CAP / Math.max(1, columns.length)));
+  if (rows.length > maxRowsPerInsert) {
+    let agg = { inserted: 0, skipped_identical: 0, overwritten: 0 };
+    for (let i = 0; i < rows.length; i += maxRowsPerInsert) {
+      const slice = rows.slice(i, i + maxRowsPerInsert);
+      const r = await batchInsert(client, { schema, table, columns, rows: slice, policy });
+      agg.inserted += r.inserted ?? 0;
+      agg.skipped_identical += r.skipped_identical ?? 0;
+      agg.overwritten += r.overwritten ?? 0;
+    }
+    return agg;
+  }
+
   const cols = columns.map((c) => `"${c}"`).join(', ');
   const valuesSql = rows
     .map((_, rowIdx) =>
@@ -132,10 +194,13 @@ export async function batchInsert(client, { schema, table, columns, rows, policy
     )
     .join(', ');
 
+  // Look up target column types once per batch — needed to decide
+  // jsonb-array vs text[]-array serialization (see normalizeForPg).
+  const colTypes = await getColumnTypes(client, schema, table);
   const params = [];
   for (const row of rows) {
     for (const c of columns) {
-      params.push(normalizeForPg(row[c]));
+      params.push(normalizeForPg(row[c], colTypes.get(c)));
     }
   }
 
@@ -183,10 +248,11 @@ async function batchInsertSkipIfIdentical(client, { schema, table, columns, rows
   let skipped = 0;
   const toInsert = [];
 
+  const colTypes = await getColumnTypes(client, schema, table);
   for (const row of rows) {
     const whereSql = pkColumns.map((c, i) => `"${c}" = $${i + 1}`).join(' AND ');
     const cols = columns.map((c) => `"${c}"`).join(', ');
-    const params = pkColumns.map((c) => normalizeForPg(row[c]));
+    const params = pkColumns.map((c) => normalizeForPg(row[c], colTypes.get(c)));
     const { rows: existing } = await client.query(
       `SELECT ${cols} FROM "${schema}"."${table}" WHERE ${whereSql} LIMIT 1`,
       params,
@@ -233,6 +299,17 @@ async function batchInsertSkipIfIdentical(client, { schema, table, columns, rows
  * tokens, or full emails (emails are masked through redactEmail).
  */
 async function batchInsertAuthFailFast(client, { schema, table, columns, rows }) {
+  // Sub-batch if exceeding PG Bind param cap (same logic as batchInsert).
+  const maxRowsPerInsert = Math.max(1, Math.floor(PG_BIND_PARAM_CAP / Math.max(1, columns.length)));
+  if (rows.length > maxRowsPerInsert) {
+    let agg = { inserted: 0, skipped_identical: 0, overwritten: 0 };
+    for (let i = 0; i < rows.length; i += maxRowsPerInsert) {
+      const slice = rows.slice(i, i + maxRowsPerInsert);
+      const r = await batchInsertAuthFailFast(client, { schema, table, columns, rows: slice });
+      agg.inserted += r.inserted ?? 0;
+    }
+    return agg;
+  }
   const cols = columns.map((c) => `"${c}"`).join(', ');
   const valuesSql = rows
     .map((_, rowIdx) =>
@@ -241,9 +318,10 @@ async function batchInsertAuthFailFast(client, { schema, table, columns, rows })
       ')'
     )
     .join(', ');
+  const colTypes = await getColumnTypes(client, schema, table);
   const params = [];
   for (const row of rows) {
-    for (const c of columns) params.push(normalizeForPg(row[c]));
+    for (const c of columns) params.push(normalizeForPg(row[c], colTypes.get(c)));
   }
   const sql = `INSERT INTO "${schema}"."${table}" (${cols}) VALUES ${valuesSql}`;
   try {
@@ -282,10 +360,11 @@ async function batchInsertAuthResumeIfIdentical(client, { schema, table, columns
   let skipped = 0;
   const toInsert = [];
 
+  const colTypes = await getColumnTypes(client, schema, table);
   for (const row of rows) {
     const whereSql = pkColumns.map((c, i) => `"${c}" = $${i + 1}`).join(' AND ');
     const colsSql = columns.map((c) => `"${c}"`).join(', ');
-    const params = pkColumns.map((c) => normalizeForPg(row[c]));
+    const params = pkColumns.map((c) => normalizeForPg(row[c], colTypes.get(c)));
     const { rows: existing } = await client.query(
       `SELECT ${colsSql} FROM "${schema}"."${table}" WHERE ${whereSql} LIMIT 1`,
       params,
@@ -342,23 +421,43 @@ function redactKeyValue(v) {
 
 /**
  * Some NDJSON values arrive as plain JS values from JSON.parse but pg expects
- * specific shapes:
- *   - undefined → null
- *   - Date strings → leave as string (pg coerces to timestamp)
- *   - objects/arrays → JSON.stringify for jsonb columns
+ * specific shapes. The right shape depends on the TARGET column type:
  *
- * pg-node handles primitives fine; the JSONB case is the gotcha.
+ *   jsonb / json column:
+ *     - JS object → JSON.stringify (text) → PG casts to jsonb
+ *     - JS array  → JSON.stringify (text) → PG casts to jsonb (arrays are
+ *       valid jsonb). DO NOT pass JS array as-is — pg-node would serialize
+ *       it as PG array literal `{...}` which is NOT valid jsonb syntax and
+ *       PG rejects with `invalid input syntax for type json`.
+ *
+ *   ARRAY column (text[], int[]):
+ *     - JS array → pass as-is. pg-node serializes to PG array literal `{...}`
+ *       which PG correctly parses as an array.
+ *     - JSON.stringify here would BREAK text[] (PG sees a literal string
+ *       `"[\"a\",\"b\"]"` and refuses to cast to text[]).
+ *
+ *   Everything else: pass through (PG handles primitives fine).
+ *
+ * @param {unknown} v - JS value from NDJSON
+ * @param {{data_type?: string, udt_name?: string}|undefined} colType
+ *   Type info from information_schema.columns. May be undefined when caller
+ *   doesn't have it (e.g. auth-schema helpers); in that case we fall back to
+ *   "stringify only objects" which is the safe minimum.
  */
-function normalizeForPg(v) {
+function normalizeForPg(v, colType) {
   if (v === undefined) return null;
-  if (v !== null && typeof v === 'object' && !(v instanceof Date) && !Array.isArray(v)) {
-    return JSON.stringify(v);
-  }
-  if (Array.isArray(v)) {
-    // Arrays could be jsonb or text[]; we let pg's parameter inference handle
-    // both. For jsonb columns, pg accepts a JS array directly. For text[], it
-    // also works. If we hit a type-cast failure in import, we'll add an
-    // explicit cast at call site.
+  if (v === null) return null;
+
+  const isJsonb = colType?.data_type === 'jsonb' || colType?.data_type === 'json';
+  const isPgArray = colType?.data_type === 'ARRAY';
+
+  if (typeof v === 'object' && !(v instanceof Date)) {
+    if (isJsonb) return JSON.stringify(v);
+    if (isPgArray && Array.isArray(v)) return v;
+    // Fallback when caller didn't introspect: serialize objects (the historical
+    // behavior); leave arrays alone so text[] columns continue to work even
+    // without colType context (auth.* paths).
+    if (!Array.isArray(v)) return JSON.stringify(v);
     return v;
   }
   return v;
@@ -408,8 +507,80 @@ export async function withTempDisabledTriggers(client, { schema, table, triggerN
 }
 
 /**
+ * Topologically sort rows by a self-referencing FK so parents appear before
+ * children. Used for tables in SELF_FK_TABLES (e.g. client_positions:
+ * parent_position_id → id). FK violation during INSERT would otherwise fail
+ * the import when a child precedes its parent in NDJSON order.
+ *
+ * Algorithm (Kahn-style, two-phase):
+ *   1. Emit all rows with parent IS NULL or parent NOT in row-set (roots /
+ *      dangling — dangling means parent points outside this batch; those FKs
+ *      will still fail at INSERT but at least we won't artificially block
+ *      them on row-order).
+ *   2. Repeat: emit rows whose parent is already emitted. Stop when no
+ *      progress (cycle) — emit remaining in source order (cycles surface as
+ *      FK violations, which is the correct outcome).
+ *
+ * Stable: rows with no parent dependency preserve their input order.
+ *
+ * @param {object[]} rows
+ * @param {string} idCol
+ * @param {string} parentCol
+ * @returns {object[]} sorted rows (same length, same elements, no copies)
+ */
+export function topoSortBySelfFK(rows, idCol, parentCol) {
+  if (rows.length <= 1) return rows.slice();
+  const allIds = new Set(rows.map((r) => r[idCol]));
+  const emitted = new Set();
+  const out = [];
+  const remaining = rows.slice();
+
+  // Pass 1: roots (parent is null OR parent points outside this batch).
+  const next = [];
+  for (const r of remaining) {
+    const p = r[parentCol];
+    if (p == null || !allIds.has(p)) {
+      out.push(r);
+      emitted.add(r[idCol]);
+    } else {
+      next.push(r);
+    }
+  }
+
+  // Subsequent passes: parent already emitted.
+  let pool = next;
+  while (pool.length > 0) {
+    const carry = [];
+    let added = 0;
+    for (const r of pool) {
+      if (emitted.has(r[parentCol])) {
+        out.push(r);
+        emitted.add(r[idCol]);
+        added++;
+      } else {
+        carry.push(r);
+      }
+    }
+    if (added === 0) {
+      // Cycle (or all remaining depend on each other) — emit in input order;
+      // any FK violation will be surfaced by PG.
+      out.push(...carry);
+      break;
+    }
+    pool = carry;
+  }
+  return out;
+}
+
+/**
  * SELECT * FROM a public-schema table in stable order, yielding rows in batches.
  * Used by 04_export_old.mjs for full-table dumps.
+ *
+ * ⚠ Uses LIMIT/OFFSET, which is NOT safe on a live table — concurrent inserts
+ * can cause row drift between pages (same row in two batches OR missed rows).
+ * Prefer `streamTableKeyset` for reliable exports. Kept here for backward
+ * compatibility with callers that pass a multi-column `orderBy` we can't
+ * trivially translate to keyset.
  */
 export async function* streamTable(client, { schema, table, orderBy = 'id', batchSize = 1000 }) {
   // Sanitize orderBy column name.
@@ -427,6 +598,69 @@ export async function* streamTable(client, { schema, table, orderBy = 'id', batc
     if (rows.length < batchSize) return;
     offset += batchSize;
   }
+}
+
+/**
+ * Keyset-paginated streaming SELECT. Safer than OFFSET on live tables (no
+ * window shift) and faster on big tables (O(B·log N) cost vs OFFSET's
+ * O((N/B)·N)).
+ *
+ * Works for any sortable PK type — UUID, integer, text — provided the column
+ * has unique non-null values and an ORDER-BY-compatible operator class.
+ *
+ * Inside a `REPEATABLE READ READ ONLY` transaction (which 04_export_old now
+ * opens), keyset and OFFSET both produce a consistent snapshot; we choose
+ * keyset for the additional speed and to make the dump independent of the
+ * snapshot-isolation level (defence in depth).
+ */
+export async function* streamTableKeyset(client, { schema, table, pkColumn = 'id', batchSize = 1000 }) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(pkColumn)) {
+    throw new Error(`unsafe pkColumn: ${pkColumn}`);
+  }
+  let lastPk = null;
+  while (true) {
+    const sql = lastPk === null
+      ? `SELECT * FROM "${schema}"."${table}" ORDER BY "${pkColumn}" LIMIT $1`
+      : `SELECT * FROM "${schema}"."${table}" WHERE "${pkColumn}" > $2 ORDER BY "${pkColumn}" LIMIT $1`;
+    const params = lastPk === null ? [batchSize] : [batchSize, lastPk];
+    const { rows } = await client.query(sql, params);
+    if (rows.length === 0) return;
+    for (const r of rows) yield r;
+    if (rows.length < batchSize) return;
+    lastPk = rows[rows.length - 1][pkColumn];
+  }
+}
+
+/**
+ * Validate NDJSON file for duplicate primary-key values. Returns
+ * `{ total, distinct, duplicates, sample_duplicate_pks }`. Used by
+ * 04_export_old as a post-export sanity check — duplicates ALWAYS indicate
+ * a bug (pagination drift or trigger-induced row duplication on OLD).
+ *
+ * Memory: O(distinct PKs). For 350k UUIDs ≈ 12 MB Set overhead. Acceptable.
+ */
+export async function validateNdjsonPks(path, pkColumn = 'id') {
+  const seen = new Set();
+  let total = 0, duplicates = 0;
+  const sample = [];
+  const rl = createInterface({
+    input: createReadStream(path, { encoding: 'utf8' }),
+    crlfDelay: Infinity,
+  });
+  for await (const line of rl) {
+    if (line.trim() === '') continue;
+    total++;
+    let pk;
+    try { pk = JSON.parse(line)[pkColumn]; } catch { continue; }
+    if (pk == null) continue;
+    if (seen.has(pk)) {
+      duplicates++;
+      if (sample.length < 5) sample.push(String(pk).slice(0, 12) + '…');
+    } else {
+      seen.add(pk);
+    }
+  }
+  return { total, distinct: seen.size, duplicates, sample_duplicate_pks: sample };
 }
 
 /**

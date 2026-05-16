@@ -275,6 +275,24 @@ export const STRICT_BUSINESS_TABLES = [
  * Excludes auth.users — its password column is sensitive; 08_verify_auth
  * verifies passwords row-by-row via sha256 without printing the hashes.
  */
+/**
+ * Tables whose server-side `md5(string_agg(t::text, ',' ORDER BY pk))` checksum
+ * is too expensive to compute via a Session Pooler connection — a single
+ * aggregate over 100k+ wide rows can pin a pool slot for >5 minutes and is
+ * the primary cause of pool saturation we hit in earlier export runs. In
+ * pool-safe mode these tables are validated via:
+ *   - exact row count (per snapshot or per-statement)
+ *   - file-level sha256 of NDJSON
+ *   - post-export duplicate-PK scan (validateNdjsonPks)
+ *
+ * Tables not in this set OR with row_count > 100_000 are also skipped by the
+ * runtime threshold in 04_export_old.mjs (`isHeavyForChecksum`).
+ */
+export const HEAVY_CHECKSUM_SKIP = new Set([
+  'boq_items',
+  'boq_items_audit',
+]);
+
 export const CHECKSUM_TABLES = [
   'users',
   'roles',
@@ -282,7 +300,14 @@ export const CHECKSUM_TABLES = [
   'tender_registry',
   'client_positions',
   'boq_items',
-  'boq_items_audit',
+  // 'boq_items_audit' — DELIBERATELY EXCLUDED. Server-side md5 over
+  // string_agg(...::text) on 300k+ rows with two large jsonb columns
+  // (old_data, new_data) routinely exceeds 10 minutes and pegs CPU on the
+  // OLD instance. Integrity for this table is verified via per-row count
+  // equality + file sha256 + post-export duplicate-PK scan, which is
+  // sufficient for an append-only audit log. Adding the checksum back
+  // would require a smarter source-side aggregation (e.g., chunked md5)
+  // or running it OUTSIDE the export snapshot.
   'import_sessions',
   'notifications',
   'cost_redistribution_results',

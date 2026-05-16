@@ -43,6 +43,17 @@ async function main() {
   const prodUrl = requireEnv('PROD_SUPABASE_DB_URL');
   const manifest = JSON.parse(readFileSync(join(exportDir, 'manifest.json'), 'utf8'));
 
+  // Read import_state to surface in-import PK de-duplication, which is a
+  // status-affecting condition (hard FAIL unless the rehearsal 2-key guard
+  // is set in 06_import_prod).
+  const importStatePath = join(exportDir, 'import_state.json');
+  const importState = existsSync(importStatePath)
+    ? JSON.parse(readFileSync(importStatePath, 'utf8'))
+    : {};
+  const droppedDuplicates = importState.dropped_duplicates ?? {};
+  const droppedTotal = Object.values(droppedDuplicates).reduce((a, b) => a + b, 0);
+  const allowImportDedupEnv = process.env.ALLOW_IMPORT_DEDUP_FOR_REHEARSAL === 'true';
+
   console.log(`${tag('PROD')} connecting${dryRun ? ' (dry-run)' : ''}…`);
   const client = await getClient(prodUrl);
 
@@ -54,6 +65,7 @@ async function main() {
     orphan_checks: [],
     registry_duplicates: null,
     audit_delta: null,
+    dropped_duplicates: { per_table: droppedDuplicates, total: droppedTotal, rehearsal_env: allowImportDedupEnv },
     warnings: [],
     status: 'PENDING',
   };
@@ -277,10 +289,30 @@ async function main() {
     );
     const hasCountWarning = report.row_counts.some((c) => c.severity === 'WARN');
 
+    // Dropped duplicates from in-import dedup: hard FAIL by default; downgrade
+    // to OK_WITH_WARNINGS only if rehearsal 2-key guard satisfied at import
+    // time (we read ALLOW_IMPORT_DEDUP_FOR_REHEARSAL here for the env half,
+    // and assume the CLI half was true at import time when the importer
+    // actually proceeded — 06_import_prod throws otherwise).
+    const hasDroppedDuplicates = droppedTotal > 0;
+    const dropsAllowedByRehearsal = hasDroppedDuplicates && allowImportDedupEnv;
+
     if (hasFkFail || hasCountFail || hasOrphanFail || hasChecksumMismatch || hasRegistryDup || hasAuditInflation) {
       report.status = 'VERIFY_FAILED';
-    } else if (report.warnings.length > 0 || hasChecksumWarning || hasCountWarning) {
+    } else if (hasDroppedDuplicates && !dropsAllowedByRehearsal) {
+      report.status = 'VERIFY_FAILED';
+      report.warnings.push(
+        `${droppedTotal} duplicate PK(s) were dropped during import without the rehearsal 2-key guard. ` +
+        `Re-export OLD via REPEATABLE READ snapshot (default in 04_export_old).`,
+      );
+    } else if (report.warnings.length > 0 || hasChecksumWarning || hasCountWarning || hasDroppedDuplicates) {
       report.status = 'VERIFY_OK_WITH_WARNINGS';
+      if (hasDroppedDuplicates) {
+        report.warnings.push(
+          `${droppedTotal} duplicate PK(s) were dropped during import under rehearsal mode ` +
+          `(ALLOW_IMPORT_DEDUP_FOR_REHEARSAL=true). Status downgraded from VERIFY_OK.`,
+        );
+      }
     } else {
       report.status = 'VERIFY_OK';
     }
@@ -379,6 +411,21 @@ function writeReport(report) {
     if (a.note) lines.push(`> ${a.note}`);
   }
 
+  if (report.dropped_duplicates && report.dropped_duplicates.total > 0) {
+    lines.push('');
+    lines.push('## In-import PK de-duplication (drift detector)');
+    lines.push('');
+    lines.push(`Total duplicate PKs dropped at import: **${report.dropped_duplicates.total}**`);
+    lines.push(`Rehearsal env (\`ALLOW_IMPORT_DEDUP_FOR_REHEARSAL\`): \`${report.dropped_duplicates.rehearsal_env}\``);
+    lines.push('');
+    lines.push('| Table | Dropped duplicate PKs |');
+    lines.push('|---|---:|');
+    for (const [tbl, n] of Object.entries(report.dropped_duplicates.per_table)) {
+      lines.push(`| \`${tbl}\` | ${n} |`);
+    }
+    lines.push('');
+    lines.push('> Duplicates in NDJSON indicate either pagination drift during a live OLD export or trigger-induced artefacts. The default export path (`04_export_old.mjs`) uses a `REPEATABLE READ READ ONLY` snapshot + keyset pagination, which makes drift impossible. Non-zero counts mean export was run against an inconsistent source — for production cutover, re-export from a frozen OLD.');
+  }
   if (report.warnings.length > 0) {
     lines.push('');
     lines.push('## Warnings');

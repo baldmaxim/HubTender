@@ -22,12 +22,12 @@ import {
   requireExportFiles, ensureNoBlockers, twoKeyGuard, fatal, assertMcpPreflightOk,
   assertCleanAuthAllowed,
 } from './_lib.mjs';
-import { IMPORT_ORDER, REQUIRES_TRIGGER_DISABLE, CLEAN_PROD_PROHIBITED } from './_tables.mjs';
+import { IMPORT_ORDER, REQUIRES_TRIGGER_DISABLE, CLEAN_PROD_PROHIBITED, SELF_FK_TABLES } from './_tables.mjs';
 import {
   CONFLICT_POLICY, AUTH_CONFLICT_POLICY, getConflictPolicy, getInsertColumns,
   AUTH_USERS_OVERRIDES, AUTH_USERS_NOT_NULL_TOKENS,
 } from './_mapping.mjs';
-import { readNdjson, batchInsert, withTempDisabledTriggers, countRows } from './_copy.mjs';
+import { readNdjson, batchInsert, withTempDisabledTriggers, countRows, topoSortBySelfFK } from './_copy.mjs';
 import {
   bootstrapMissingIdentities, getEnabledProviders,
   loadAuthFkGraph, listAuthTables, planAuthCleanup, cleanAuthTarget,
@@ -53,6 +53,7 @@ const { values } = parseCliArgs({
     'confirm':         { type: 'boolean', default: false, describe: 'Required for --clean-prod' },
     'use-mcp-preflight': { type: 'boolean', default: false, describe: 'Trust .old-to-prod-export/schema_diff.json (source=mcp) instead of old_schema/prod_schema files' },
     'clean-auth':      { type: 'boolean', default: false, describe: 'DELETE rows from PROD auth schema before auth import. 3-key guard: --clean-auth + ALLOW_CLEAN_AUTH=true + ALLOW_AUTH_IMPORT=true. Plus auth_collision_analysis.json + MCP_PREFLIGHT not FAILED.' },
+    'allow-import-dedup-for-rehearsal': { type: 'boolean', default: false, describe: 'Allow in-import PK de-duplication (NDJSON drift safety). 2-key guard with ALLOW_IMPORT_DEDUP_FOR_REHEARSAL=true. WITHOUT this gate, a duplicate PK in NDJSON is a hard FAIL. With it, dedup proceeds and VERIFY is downgraded to OK_WITH_WARNINGS.' },
   },
 });
 
@@ -69,6 +70,9 @@ const forceConfirmEmails = process.env.FORCE_CONFIRM_EMAILS === 'true';
 const resume = values.resume === true;
 const useMcpPreflight = values['use-mcp-preflight'];
 const cleanAuthCli = values['clean-auth'];
+const allowImportDedupCli = values['allow-import-dedup-for-rehearsal'];
+const allowImportDedupEnv = process.env.ALLOW_IMPORT_DEDUP_FOR_REHEARSAL === 'true';
+const importDedupRehearsalOk = allowImportDedupCli && allowImportDedupEnv;
 
 async function main() {
   // ---- Preconditions ----
@@ -497,17 +501,69 @@ async function importPublicTable(client, entry, state, dryRun, batchSize) {
     throw new Error('requires_trigger_disable');
   }
 
+  // In-import PK deduplication. NDJSON exports paginated via LIMIT/OFFSET on
+  // a live OLD table can yield duplicate ids when rows shift between pages
+  // (concurrent inserts/updates between paginated SELECTs). Audit tables are
+  // especially prone (every public-row change spawns an audit row). We
+  // de-dup by PK while streaming, log a warning, and surface the count in
+  // import_state for the IMPORT_REPORT.
+  //
+  // `firstColumn` (usually `id`, except for tables in PRIMARY_KEY_OVERRIDES
+  // like roles.code/units.code) is the de-dup key. Aligns with how
+  // batchInsert detects conflicts.
+  const pkColForDedup = (() => {
+    // Mirror batchInsert's conflict-target choice.
+    if (entry.table === 'roles' || entry.table === 'units') return 'code';
+    return 'id';
+  })();
+  const seenPks = new Set();
+  let droppedDuplicates = 0;
+  const dedupAndPush = (row, buf) => {
+    const pk = row[pkColForDedup];
+    if (pk == null) { buf.push(row); return; }
+    if (seenPks.has(pk)) { droppedDuplicates++; return; }
+    seenPks.add(pk);
+    buf.push(row);
+  };
+
   const doImport = async () => {
     let inserted = 0, skipped_identical = 0, overwritten = 0;
-    let buffer = [];
     const flushOne = async (rows) => {
       if (dryRun) return { inserted: 0, skipped_identical: 0, overwritten: 0 };
       return batchInsert(client, {
         schema: 'public', table: entry.table, columns, rows, policy,
       });
     };
+
+    // Self-FK tables (e.g. client_positions.parent_position_id → id) require
+    // parents before children. Buffer ALL rows, topo-sort, then chunk into
+    // batches. For non-self-FK tables, stream as before to keep memory bounded.
+    const selfFk = SELF_FK_TABLES[entry.table];
+    if (selfFk) {
+      const all = [];
+      for await (const row of readNdjson(path)) {
+        // dedup before pushing to buffer
+        const pk = row[pkColForDedup];
+        if (pk != null) {
+          if (seenPks.has(pk)) { droppedDuplicates++; continue; }
+          seenPks.add(pk);
+        }
+        all.push(row);
+      }
+      const sorted = topoSortBySelfFK(all, selfFk.idCol, selfFk.parentCol);
+      for (let i = 0; i < sorted.length; i += batchSize) {
+        const slice = sorted.slice(i, i + batchSize);
+        const r = await flushOne(slice);
+        inserted += r.inserted ?? 0;
+        skipped_identical += r.skipped_identical ?? 0;
+        overwritten += r.overwritten ?? 0;
+      }
+      return { inserted, skipped_identical, overwritten };
+    }
+
+    let buffer = [];
     for await (const row of readNdjson(path)) {
-      buffer.push(row);
+      dedupAndPush(row, buffer);
       if (buffer.length >= batchSize) {
         const r = await flushOne(buffer);
         inserted += r.inserted ?? 0;
@@ -538,12 +594,28 @@ async function importPublicTable(client, entry, state, dryRun, batchSize) {
   }
 
   state.completed.push(`public.${entry.table}`);
-  const tail = `${dryRun ? ' (dry-run)' : ''}${result.overwritten ? ` overwritten=${result.overwritten}` : ''}`;
+  if (droppedDuplicates > 0) {
+    state.dropped_duplicates ??= {};
+    state.dropped_duplicates[`public.${entry.table}`] = droppedDuplicates;
+    // Hard fail unless the rehearsal 2-key guard is satisfied. Dropping
+    // duplicate PKs silently masks pagination drift on a live OLD; for
+    // production cutover the export must be re-done from a frozen source
+    // or via REPEATABLE READ snapshot (already enforced in 04_export_old).
+    if (!importDedupRehearsalOk && !dryRun) {
+      throw new Error(
+        `public.${entry.table}: in-import de-duplication dropped ${droppedDuplicates} duplicate PK(s) from NDJSON. ` +
+        `This is a hard FAIL by default — duplicate PKs in NDJSON indicate pagination drift or trigger artefacts on OLD. ` +
+        `Resolve: re-export OLD with the REPEATABLE READ snapshot in 04_export_old.mjs (default), ` +
+        `or pass --allow-import-dedup-for-rehearsal + ALLOW_IMPORT_DEDUP_FOR_REHEARSAL=true to continue at OK_WITH_WARNINGS status.`,
+      );
+    }
+  }
+  const tail = `${dryRun ? ' (dry-run)' : ''}${result.overwritten ? ` overwritten=${result.overwritten}` : ''}${droppedDuplicates > 0 ? ` ⚠ dropped_duplicate_pks=${droppedDuplicates}` : ''}`;
   console.log(
     `${tag('PROD')} public.${entry.table}: policy=${policy} ` +
     `inserted=${result.inserted} skipped_identical=${result.skipped_identical}${tail}`,
   );
-  return { table: entry.table, policy, ...result };
+  return { table: entry.table, policy, dropped_duplicates: droppedDuplicates, ...result };
 }
 
 function saveState(path, state, dryRun) {
@@ -621,13 +693,19 @@ function writeImportReportMd(report) {
     '',
     'Conflict policy is per-table. `FAIL_BY_DEFAULT` is the default and never silently skips. `SKIP_IF_IDENTICAL` is used for seed tables; mismatched rows fail the import. `OVERWRITE` requires both `--allow-overwrite` and `ALLOW_PROD_OVERWRITE=true`.',
     '',
-    '| Table | Policy | Inserted | Skipped (identical) | Overwritten | Error |',
-    '|---|---|---:|---:|---:|---|',
+    '| Table | Policy | Inserted | Skipped (identical) | Overwritten | Dropped dup-PK | Error |',
+    '|---|---|---:|---:|---:|---:|---|',
   ];
   for (const t of report.per_table) {
     lines.push(
-      `| ${t.table} | ${t.policy ?? '-'} | ${t.inserted ?? '-'} | ${t.skipped_identical ?? '-'} | ${t.overwritten ?? '-'} | ${t.error ?? ''} |`,
+      `| ${t.table} | ${t.policy ?? '-'} | ${t.inserted ?? '-'} | ${t.skipped_identical ?? '-'} | ${t.overwritten ?? '-'} | ${t.dropped_duplicates ?? 0} | ${t.error ?? ''} |`,
     );
+  }
+  // Highlight tables where we de-duped the input NDJSON.
+  const dedupedTables = report.per_table.filter((t) => (t.dropped_duplicates ?? 0) > 0);
+  if (dedupedTables.length > 0) {
+    lines.push('');
+    lines.push('> ⚠ NDJSON pagination drift detected — see Dropped dup-PK column. Live OLD writes during paginated export caused these duplicate ids. The importer de-duped by PK before INSERT. For production cutover use a frozen OLD or keyset pagination in `04_export_old.mjs`.');
   }
   try {
     writeFileSync(path, lines.join('\n') + '\n', 'utf8');

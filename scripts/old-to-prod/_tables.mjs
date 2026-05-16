@@ -155,3 +155,25 @@ export const CLEAN_PROD_PROHIBITED = new Set([
   // seed tables — PROD owns these
   ...SEED_TABLES,
 ]);
+
+/**
+ * Tables with self-referencing FK (a column → same table's id). During import
+ * from NDJSON, children may appear before their parents in the file order
+ * → FK violation. We buffer all rows for these tables and topologically sort
+ * (roots first, then children whose parent is already inserted) before any
+ * INSERT.
+ *
+ * Discovered via:
+ *   SELECT con_cls.relname, att_from.attname, att_to.attname FROM pg_constraint con
+ *   ... WHERE con.contype='f' AND con.conrelid = con.confrelid
+ *
+ * Memory cost: O(rows × avg_row_size) per table; capped by NDJSON size.
+ * client_positions ~40k×500B ≈ 20MB, boq_items ~110k×600B ≈ 65MB — acceptable.
+ */
+export const SELF_FK_TABLES = Object.freeze({
+  boq_items:        { idCol: 'id', parentCol: 'parent_work_item_id' },
+  client_positions: { idCol: 'id', parentCol: 'parent_position_id'  },
+  library_folders:  { idCol: 'id', parentCol: 'parent_id'           },
+  template_items:   { idCol: 'id', parentCol: 'parent_work_item_id' },
+  users:            { idCol: 'id', parentCol: 'approved_by'         },
+});

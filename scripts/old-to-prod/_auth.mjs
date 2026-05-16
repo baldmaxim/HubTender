@@ -14,22 +14,34 @@ import { redactEmail } from './_lib.mjs';
  * migrate. Keeps memory bounded for large dumps.
  */
 export async function* loadAuthUsersForExport(client, { batchSize = 500 } = {}) {
-  let offset = 0;
+  // Keyset pagination by id. Safer than OFFSET on a live table — no row drift
+  // between pages even if auth.users receives concurrent inserts. Inside a
+  // REPEATABLE READ snapshot (which 04_export_old opens), the snapshot also
+  // guarantees consistency; keyset is the defence-in-depth choice.
+  let lastId = null;
   while (true) {
-    const { rows } = await client.query(
-      `SELECT id, email, encrypted_password, email_confirmed_at,
-              raw_user_meta_data, raw_app_meta_data, role, phone,
-              phone_confirmed_at, created_at, updated_at, last_sign_in_at,
-              banned_until, deleted_at, is_sso_user, is_anonymous
-         FROM auth.users
-         ORDER BY id
-         LIMIT $1 OFFSET $2`,
-      [batchSize, offset]
-    );
+    const sql = lastId === null
+      ? `SELECT id, email, encrypted_password, email_confirmed_at,
+                raw_user_meta_data, raw_app_meta_data, role, phone,
+                phone_confirmed_at, created_at, updated_at, last_sign_in_at,
+                banned_until, deleted_at, is_sso_user, is_anonymous
+           FROM auth.users
+           ORDER BY id
+           LIMIT $1`
+      : `SELECT id, email, encrypted_password, email_confirmed_at,
+                raw_user_meta_data, raw_app_meta_data, role, phone,
+                phone_confirmed_at, created_at, updated_at, last_sign_in_at,
+                banned_until, deleted_at, is_sso_user, is_anonymous
+           FROM auth.users
+           WHERE id > $2
+           ORDER BY id
+           LIMIT $1`;
+    const params = lastId === null ? [batchSize] : [batchSize, lastId];
+    const { rows } = await client.query(sql, params);
     if (rows.length === 0) return;
     for (const r of rows) yield r;
     if (rows.length < batchSize) return;
-    offset += batchSize;
+    lastId = rows[rows.length - 1].id;
   }
 }
 
@@ -124,20 +136,26 @@ export async function bootstrapMissingIdentities(client, { enabledProviders } = 
  * Stream OLD auth.identities for export. Skips internal columns we don't need.
  */
 export async function* loadIdentitiesForExport(client, { batchSize = 500 } = {}) {
-  let offset = 0;
+  let lastId = null;
   while (true) {
-    const { rows } = await client.query(
-      `SELECT id, provider_id, user_id, identity_data, provider,
-              last_sign_in_at, created_at, updated_at, email
-         FROM auth.identities
-         ORDER BY id
-         LIMIT $1 OFFSET $2`,
-      [batchSize, offset]
-    );
+    const sql = lastId === null
+      ? `SELECT id, provider_id, user_id, identity_data, provider,
+                last_sign_in_at, created_at, updated_at, email
+           FROM auth.identities
+           ORDER BY id
+           LIMIT $1`
+      : `SELECT id, provider_id, user_id, identity_data, provider,
+                last_sign_in_at, created_at, updated_at, email
+           FROM auth.identities
+           WHERE id > $2
+           ORDER BY id
+           LIMIT $1`;
+    const params = lastId === null ? [batchSize] : [batchSize, lastId];
+    const { rows } = await client.query(sql, params);
     if (rows.length === 0) return;
     for (const r of rows) yield r;
     if (rows.length < batchSize) return;
-    offset += batchSize;
+    lastId = rows[rows.length - 1].id;
   }
 }
 
