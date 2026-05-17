@@ -23,6 +23,8 @@
     "old-to-prod:import": "node scripts/old-to-prod/06_import_prod.mjs",
     "old-to-prod:verify": "node scripts/old-to-prod/07_verify.mjs",
     "old-to-prod:verify-auth": "node scripts/old-to-prod/08_verify_auth.mjs",
+    "old-to-prod:repair-auth": "node scripts/old-to-prod/10_repair_prod_auth_tokens.mjs",
+    "old-to-prod:test-temporal": "node scripts/old-to-prod/11_test_temporal_roundtrip.mjs",
     "old-to-prod:smoke": "node scripts/old-to-prod/09_smoke_go_bff.mjs",
     "old-to-prod:verify-go": "node scripts/old-to-prod/09_smoke_go_bff.mjs",
     "old-to-prod:migrate": "node scripts/old-to-prod/migrate.mjs"

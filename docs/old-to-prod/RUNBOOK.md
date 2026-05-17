@@ -256,6 +256,75 @@ Pool-safe export — только этап подготовки данных. П
 - Supabase Dashboard restore point на PROD (или `pg_dump` через docker — см. раздел 12.A "Backup PROD");
 - актуальные `prepare_status.json` (status: READY) и `auth_collision_analysis.json` (recommendation ∈ {clean-prod, clean-auth}).
 
+## 10.C Temporal raw parsers (date / timestamp / timestamptz fidelity)
+
+### Симптом (был)
+
+Strict cutover с **замороженным** OLD всё равно давал `VERIFY_FAILED` на
+`public.client_positions` и `public.projects`. Row counts совпадали,
+`duplicate_pk_total=0`, auth — `AUTH_VERIFY_OK`.
+
+### Причина
+
+node-postgres по умолчанию парсит `date`/`timestamp`/`timestamptz` в JS
+`Date`. JS `Date` имеет только миллисекундную точность и привязан к
+таймзоне Node-процесса. На экспорте это:
+
+- усекало микросекунды у `timestamptz` (`.309186`→`.309`);
+- сдвигало **каждое** `date`-значение на **−1 день** (например
+  `projects.contract_date`, `construction_end_date`).
+
+Это была реальная порча данных пайплайном, а не live-writes (см.
+`docs/old-to-prod/VERIFY_ROOT_CAUSE.md`; гипотеза §7
+`REHEARSAL_VERIFICATION_DECISION.md` — superseded).
+
+### Что сделано
+
+- `_lib.mjs::installPgRawTemporalParsers()` — process-wide raw-text
+  парсеры для `DATE`/`TIMESTAMP`/`TIMESTAMPTZ` (builtins + OID
+  1082/1114/1184 fallback), вызывается в `getClient()` до создания клиента.
+- `getClient()` после connect: `SET TIME ZONE 'UTC'` +
+  `SET DateStyle = 'ISO, MDY'`. Ошибка SET ⇒ соединение закрывается +
+  throw (fail-fast). Делает server-side `md5(string_agg(t::text))`
+  детерминированным на OLD и PROD.
+- `assertTemporalRawParsers()` — self-check, экспорт (`04`, оба режима) и
+  verify (`07`) падают, если pg всё ещё отдаёт JS Date. Результат пишется
+  в `export_validation.json.temporal_parser_check` и `manifest.json`
+  (`temporal_raw_parsers`/`session_time_zone`/`date_style`).
+- `_copy.mjs::normalizeForPg()` бросает, если получил JS `Date`
+  (regression guard).
+
+### Regression test (read-only, ничего не меняет)
+
+```bash
+npm run old-to-prod:test-temporal          # default target = PROD (disposable)
+# TEMPORAL_TEST_DB=old npm run old-to-prod:test-temporal
+```
+
+TEMP TABLE + ROLLBACK. Ожидаемо: `TEMPORAL_ROUNDTRIP_OK` (date без сдвига,
+timestamp/timestamptz сохраняют `.123456`, tstz в UTC).
+
+### Повторный strict cutover после фикса
+
+OLD должен быть заморожен. Real import — только по отдельному
+подтверждению оператора:
+
+```powershell
+npm run old-to-prod:check
+npm run old-to-prod:export -- --use-mcp-preflight --pool-safe-export --batch-size=2500
+#   → проверить .old-to-prod-export/export_validation.json:
+#     duplicate_pk_total=0, errors=[], temporal_parser_check.date == "2026-05-17"
+$env:ALLOW_AUTH_IMPORT="true"; $env:ALLOW_DISABLE_IMPORT_TRIGGERS="true"
+$env:ALLOW_CLEAN_AUTH="true"; $env:ALLOW_CLEAN_PROD="true"
+npm run old-to-prod:prepare -- --use-mcp-preflight --clean-auth --clean-prod --confirm
+npm run old-to-prod:migrate -- --use-mcp-preflight --import-only --clean-auth --clean-prod --confirm
+npm run old-to-prod:verify        # ожидаем VERIFY_OK
+npm run old-to-prod:verify-auth   # ожидаем AUTH_VERIFY_OK
+```
+
+Без `--allow-overwrite`, без `ALLOW_PROD_OVERWRITE`. Yandex — только после
+`PROD_GO_BFF_VERIFICATION.md = READY_FOR_YANDEX_MIGRATION`.
+
 ## 11. Prepare PROD
 
 ```bash
@@ -517,6 +586,61 @@ npm run old-to-prod:verify-auth
 - Если `GO_BFF_BASE_URL` задан → `GET /api/v1/me` с полученным токеном.
 
 Артефакт: `docs/old-to-prod/AUTH_VERIFY_RESULT.md`. Статус: `AUTH_VERIFY_OK` / `WITH_WARNINGS` / `AUTH_VERIFY_FAILED`.
+
+`verify-auth` теперь также выполняет **NULL token-column audit** (см. §14.A): любая существующая колонка из `AUTH_USERS_NOT_NULL_TOKENS` с NULL → `AUTH_VERIFY_FAILED`.
+
+## 14.A Repair GoTrue NULL token fields
+
+### Симптом
+
+`verify-auth` показывает все DB-метрики зелёными (counts/passwords/identities/bootstrap match), но `smoke login` падает:
+
+```
+✗ smokeLogin failed: HTTP 500 {"code":500,"error_code":"unexpected_failure","msg":"Database error querying schema"}
+```
+
+### Причина
+
+Supabase GoTrue сканирует строки `auth.users` в Go-структуру, где token/change-колонки объявлены как **non-pointer `string`**, не `*string`. Если любая из них = **NULL** (даже если колонка `is_nullable = YES` на уровне БД), `database/sql` падает с `converting NULL to string is unsupported` → GoTrue отдаёт HTTP 500 «Database error querying schema» на **любой** login.
+
+Затронутые колонки (`AUTH_USERS_NOT_NULL_TOKENS` в `scripts/old-to-prod/_mapping.mjs`):
+`confirmation_token`, `recovery_token`, `email_change_token_new`, `email_change_token_current`, `email_change`, `reauthentication_token`, `phone_change`, `phone_change_token`.
+
+`06_import_prod` coerce'ит NULL→'' для этих колонок на import'е. Но если список был неполон (исторический баг — `email_change`/`phone_change`/`phone_change_token` отсутствовали), уже импортированные строки остаются с NULL. `10_repair_prod_auth_tokens.mjs` чинит это **без повторного полного public-import**.
+
+### Dry-run (по умолчанию ничего не меняет)
+
+```powershell
+npm run old-to-prod:repair-auth -- --dry-run
+```
+
+Покажет per-column `null_before / updated(0) / null_after` и `status: DRY_RUN_PENDING_APPLY` если есть что чинить. Артефакт: `docs/old-to-prod/AUTH_REPAIR_RESULT.md`.
+
+### Apply (two-key guard)
+
+```powershell
+$env:ALLOW_AUTH_REPAIR="true"
+npm run old-to-prod:repair-auth -- --apply
+```
+
+Без `ALLOW_AUTH_REPAIR=true` `--apply` отказывается (`exit 7`). Скрипт:
+- работает ТОЛЬКО с `PROD_SUPABASE_DB_URL`;
+- проверяет существование каждой колонки в `auth.users` через `information_schema` перед UPDATE;
+- `UPDATE auth.users SET <col> = '' WHERE <col> IS NULL` для каждой существующей колонки;
+- НЕ трогает `encrypted_password`, `email`, `id`, `raw_*_meta_data`;
+- не печатает значения колонок — только counts.
+
+### После apply
+
+```powershell
+npm run old-to-prod:verify-auth
+```
+
+Должно дать `AUTH_VERIFY_OK` (если `MIGRATION_SMOKE_*` задан и login проходит) или `AUTH_VERIFY_OK_WITH_WARNINGS`.
+
+### Почему targeted repair, а не повторный import
+
+Полный `--clean-prod --clean-auth` import пере-зальёт ~480k public-строк (~20 мин) ради фикса 33 auth-строк. `10_repair_prod_auth_tokens` меняет ТОЛЬКО NULL-token-поля на уже импортированных auth.users — секунды, без касания public-данных, без повторного clean.
 
 ## 15. Smoke Go BFF
 

@@ -14,7 +14,7 @@ import { join } from 'node:path';
 
 import {
   loadDotenv, requireEnv, getClient, tag, parseCliArgs,
-  requireExportFiles, fatal,
+  requireExportFiles, fatal, assertTemporalRawParsers,
 } from './_lib.mjs';
 import { IMPORT_ORDER } from './_tables.mjs';
 import {
@@ -56,6 +56,13 @@ async function main() {
 
   console.log(`${tag('PROD')} connecting${dryRun ? ' (dry-run)' : ''}…`);
   const client = await getClient(prodUrl);
+
+  // The md5(string_agg(t::text)) checksum is computed server-side; its
+  // timestamptz rendering depends on the session TimeZone/DateStyle. getClient
+  // pins UTC + ISO and raw parsers; assert it took effect so the PROD checksum
+  // is comparable to the OLD manifest checksum (same root cause as VERIFY_FAILED).
+  const temporalCheck = await assertTemporalRawParsers(client);
+  console.log(`${tag('PROD')} temporal session ✓ (UTC, ISO, raw parsers — tstz=${temporalCheck.timestamptz})`);
 
   const report = {
     generated_at: new Date().toISOString(),

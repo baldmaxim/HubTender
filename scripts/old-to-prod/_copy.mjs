@@ -448,6 +448,18 @@ function normalizeForPg(v, colType) {
   if (v === undefined) return null;
   if (v === null) return null;
 
+  // Post temporal-parser fix, date/timestamp/timestamptz flow through the
+  // pipeline as RAW strings end-to-end (export NDJSON → import params). A JS
+  // Date here means installPgRawTemporalParsers() did not take effect: passing
+  // it to pg would re-introduce the ±1-day / microsecond-truncation corruption
+  // (see docs/old-to-prod/VERIFY_ROOT_CAUSE.md). Fail loudly instead.
+  if (v instanceof Date) {
+    throw new Error(
+      'normalizeForPg: received a JS Date for a temporal column — raw temporal ' +
+      'parsers are not installed. Aborting to prevent ±1-day / µs data corruption.',
+    );
+  }
+
   const isJsonb = colType?.data_type === 'jsonb' || colType?.data_type === 'json';
   const isPgArray = colType?.data_type === 'ARRAY';
 

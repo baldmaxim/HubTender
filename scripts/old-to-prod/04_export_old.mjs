@@ -36,7 +36,7 @@ import { join } from 'node:path';
 
 import {
   loadDotenv, requireEnv, getClient, redactHostType,
-  tag, writeJson, parseCliArgs, fatal,
+  tag, writeJson, parseCliArgs, fatal, assertTemporalRawParsers,
 } from './_lib.mjs';
 import { IMPORT_ORDER } from './_tables.mjs';
 import {
@@ -128,6 +128,7 @@ async function runSnapshotExport({ url, appName, hostType }) {
     operator_confirmed_no_writes_required: false,
     snapshot_started_at: null,
     snapshot_committed_at: null,
+    temporal_parser_check: null,
     tables: [],
     duplicate_pk_total: 0,
     errors: [],
@@ -145,6 +146,9 @@ async function runSnapshotExport({ url, appName, hostType }) {
 
     const { rows: [v] } = await client.query('SELECT version() AS v');
     console.log(`${tag('OLD')} ${v.v.slice(0, 40)}…`);
+
+    validation.temporal_parser_check = await assertTemporalRawParsers(client);
+    console.log(`${tag('OLD')} temporal raw-parser check ✓ (date/timestamp/timestamptz as raw text, µs preserved, UTC)`);
 
     const manifest = mkManifest({
       sourceVersion: v.v,
@@ -251,6 +255,7 @@ async function runPoolSafeExport({ url, appName, hostType }) {
     operator_confirmed_no_writes_required: true,
     snapshot_started_at: null,
     snapshot_committed_at: null,
+    temporal_parser_check: null,
     tables: [],
     duplicate_pk_total: 0,
     errors: [],
@@ -268,6 +273,8 @@ async function runPoolSafeExport({ url, appName, hostType }) {
       const { rows: [v] } = await probe.query('SELECT version() AS v');
       manifest.source_db_version = v.v;
       console.log(`${tag('OLD')} ${v.v.slice(0, 40)}…`);
+      validation.temporal_parser_check = await assertTemporalRawParsers(probe);
+      console.log(`${tag('OLD')} temporal raw-parser check ✓ (date/timestamp/timestamptz as raw text, µs preserved, UTC)`);
     } finally {
       await probe.end().catch(() => {});
     }
@@ -394,6 +401,9 @@ function mkManifest({ sourceVersion, mode, snapshotStartedAt }) {
     pool_safe_export: mode === 'pool-safe',
     transaction_snapshot: mode === 'snapshot',
     operator_confirmed_no_writes_required: mode === 'pool-safe',
+    temporal_raw_parsers: true,
+    session_time_zone: 'UTC',
+    date_style: 'ISO, MDY',
     snapshot_started_at: snapshotStartedAt,
     snapshot_committed_at: null,
     tables: [],
