@@ -18,6 +18,7 @@ import {
 import { readNdjson } from './_copy.mjs';
 import { compareEncryptedPasswords } from './_checksums.mjs';
 import { smokeLogin, callGoBffMe, collectAuthStats, listInsertableColumns } from './_auth.mjs';
+import { AUTH_USERS_NOT_NULL_TOKENS } from './_mapping.mjs';
 
 loadDotenv();
 
@@ -49,6 +50,7 @@ async function main() {
     oauth_only_audit: null,
     bootstrap_audit: null,
     confirm_audit: null,
+    null_token_audit: null,
     clean_auth_context: null,
     smoke_login: null,
     go_bff_me: null,
@@ -64,6 +66,37 @@ async function main() {
   const forceConfirmEmails = process.env.FORCE_CONFIRM_EMAILS === 'true';
 
   try {
+    // ---- NULL token-column audit on auth.users ----
+    //
+    // GoTrue scans these into non-pointer Go strings; ANY NULL → login HTTP
+    // 500 "Database error querying schema". Every column from
+    // AUTH_USERS_NOT_NULL_TOKENS that EXISTS on PROD must have 0 NULLs.
+    try {
+      const { rows: existing } = await client.query(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema='auth' AND table_name='users' AND column_name = ANY($1)`,
+        [AUTH_USERS_NOT_NULL_TOKENS],
+      );
+      const existingSet = new Set(existing.map((r) => r.column_name));
+      const perCol = [];
+      let totalNull = 0;
+      for (const col of AUTH_USERS_NOT_NULL_TOKENS) {
+        if (!existingSet.has(col)) { perCol.push({ column: col, present: false, null_count: null }); continue; }
+        const { rows: [n] } = await client.query(
+          `SELECT COUNT(*)::int AS n FROM auth.users WHERE "${col}" IS NULL`,
+        );
+        perCol.push({ column: col, present: true, null_count: n.n });
+        totalNull += n.n;
+      }
+      report.null_token_audit = { per_column: perCol, total_null: totalNull, ok: totalNull === 0 };
+      console.log(
+        `${tag('PROD')} null-token audit: total_null=${totalNull} ` +
+        `${totalNull === 0 ? '✓' : '✗ (run npm run old-to-prod:repair-auth)'}`,
+      );
+    } catch (e) {
+      report.warnings.push(`null-token audit failed: ${e.message}`);
+    }
+
     // ---- Generated-column audit on auth.identities ----
     //
     // Supabase Auth ≥2023.5 marks `auth.identities.email` as
@@ -300,8 +333,11 @@ async function main() {
     // assumption that auth.identities.email = lower(identity_data->>'email')).
     const genOk = !report.identities_generated_columns?.email_is_generated
       || (report.identities_generated_columns.email_drift_count ?? 0) === 0;
+    // NULL token columns → GoTrue login 500. Hard FAIL if any present column
+    // still has NULLs.
+    const nullTokenOk = !report.null_token_audit || report.null_token_audit.ok;
 
-    if (!countOk || !setsOk || !pwOk || !pwUserAuditOk || !oauthOk || !bootstrapOk || !confirmOk || !loginOk || !genOk) {
+    if (!countOk || !setsOk || !pwOk || !pwUserAuditOk || !oauthOk || !bootstrapOk || !confirmOk || !loginOk || !genOk || !nullTokenOk) {
       report.status = 'AUTH_VERIFY_FAILED';
     } else if (!loginPresent || report.warnings.length > 0) {
       report.status = 'AUTH_VERIFY_OK_WITH_WARNINGS';
@@ -596,6 +632,21 @@ function writeReport(report) {
           ? `- users whose email_confirmed_at was forced to now(): **${report.confirm_audit.forced_count}**`
           : `- unexpectedly changed email_confirmed_at: **${report.confirm_audit.unexpectedly_changed}** (must be 0 when FORCE_CONFIRM_EMAILS=false)`)
       : 'Not run.',
+    '',
+    '## NULL token-column audit (auth.users)',
+    '',
+    report.null_token_audit
+      ? [
+          `Total NULLs across present token columns: **${report.null_token_audit.total_null}** ` +
+          `${report.null_token_audit.ok ? '✓' : '✗ — GoTrue login will 500. Run `npm run old-to-prod:repair-auth`.'}`,
+          '',
+          '| Column | Present | NULL count |',
+          '|---|---|---:|',
+          ...report.null_token_audit.per_column.map(
+            (c) => `| \`${c.column}\` | ${c.present ? 'yes' : 'no'} | ${c.null_count ?? '-'} |`,
+          ),
+        ].join('\n')
+      : '_Audit not run._',
     '',
     '## Generated columns in auth.identities',
     '',

@@ -133,15 +133,30 @@ export const AUTH_USERS_OVERRIDES = {
 };
 
 /**
- * NOT-NULL token columns in auth.users that default to ''. If the OLD dump
- * has NULL for these, we coerce to ''.
+ * String token/change columns in auth.users that Supabase GoTrue scans into
+ * non-pointer Go `string` fields. GoTrue's `database/sql` row scan fails with
+ * `converting NULL to string is unsupported` → HTTP 500
+ * "Database error querying schema" on ANY login if any of these is NULL,
+ * even though the column is `is_nullable = YES` at the DB level.
+ *
+ * On import we coerce NULL → '' for every column in this list (see
+ * 06_import_prod flushAuthUsersBuffer). Post-import drift is repaired by
+ * 10_repair_prod_auth_tokens.mjs and asserted by 08_verify_auth.mjs.
+ *
+ * Keep this list in sync with the GoTrue schema. As of Supabase Auth 2024+
+ * the relevant set is: confirmation_token, recovery_token,
+ * email_change_token_new, email_change_token_current, email_change,
+ * reauthentication_token, phone_change, phone_change_token.
  */
 export const AUTH_USERS_NOT_NULL_TOKENS = [
   'confirmation_token',
   'recovery_token',
   'email_change_token_new',
   'email_change_token_current',
+  'email_change',
   'reauthentication_token',
+  'phone_change',
+  'phone_change_token',
 ];
 
 /**
