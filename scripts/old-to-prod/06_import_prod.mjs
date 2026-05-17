@@ -46,6 +46,7 @@ const { values } = parseCliArgs({
     'public-only':     { type: 'boolean', default: false, describe: 'Skip auth schema entirely' },
     'resume':          { type: 'boolean', default: false, describe: 'Resume from EXPORT_DIR/import_state.json (uses ON CONFLICT DO NOTHING for completed tables)' },
     'clean-prod':      { type: 'boolean', default: false, describe: 'TRUNCATE listed tables before import (REQUIRES ALLOW_CLEAN_PROD=true)' },
+    'clean-prod-include-seeds': { type: 'boolean', default: false, describe: 'Also TRUNCATE the 7 seed/reference tables (roles, units, …) so they are re-imported byte-exact from OLD. Use when PROD seed rows are stale residue of a prior buggy import. Piggybacks on the SAME 3-key gate as --clean-prod (--clean-prod + --confirm + ALLOW_CLEAN_PROD=true); does NOT use --allow-overwrite / ALLOW_PROD_OVERWRITE.' },
     'allow-overwrite': { type: 'boolean', default: false, describe: 'ON CONFLICT DO UPDATE on PK conflicts (REQUIRES ALLOW_PROD_OVERWRITE=true)' },
     'overwrite':       { type: 'boolean', default: false, describe: 'Alias for --allow-overwrite' },
     'batch-size':      { type: 'string',  default: '1000', describe: 'Rows per INSERT batch' },
@@ -129,6 +130,16 @@ async function main() {
     process.exit(7);
   }
 
+  // --clean-prod-include-seeds extends --clean-prod to also TRUNCATE the 7
+  // seed tables. It deliberately reuses the SAME 3-key gate (twoKeyGuard on
+  // ALLOW_CLEAN_PROD above + --clean-prod + --confirm) — no new env var, and
+  // explicitly NOT --allow-overwrite / ALLOW_PROD_OVERWRITE. It is only valid
+  // together with an active, confirmed --clean-prod.
+  if (values['clean-prod-include-seeds'] && !(values['clean-prod'] && values.confirm)) {
+    console.error('✗ --clean-prod-include-seeds requires --clean-prod --confirm (same 3-key gate as --clean-prod).');
+    process.exit(7);
+  }
+
   const importAuth = !values['public-only'] && (values['auth-only'] || true);
   if (importAuth && !allowAuthImport) {
     console.error('✗ Auth import requires ALLOW_AUTH_IMPORT=true in .env.old-to-prod.');
@@ -187,7 +198,7 @@ async function main() {
   try {
     // ---- Optional cleanup (TWO-KEY guarded above) ----
     if (values['clean-prod']) {
-      await cleanProd(client, manifest, state, dryRun);
+      await cleanProd(client, manifest, state, dryRun, values['clean-prod-include-seeds']);
     }
 
     // ---- Clean-auth phase (THREE-KEY guarded) ----
@@ -282,13 +293,23 @@ async function main() {
 
 // ---------------------------------------------------------------------------
 
-async function cleanProd(client, manifest, state, dryRun) {
+async function cleanProd(client, manifest, state, dryRun, includeSeeds = false) {
+  // When includeSeeds, the 7 seed/reference tables are ALSO truncated so they
+  // are re-inserted byte-exact from OLD (PROD seed rows were stale residue of
+  // a prior buggy import). The single multi-table TRUNCATE then covers the
+  // full closure of public.* tables, so it stays FK-safe without CASCADE
+  // (consistent with the "explicit list only" design).
   const targets = (manifest.tables ?? [])
-    .filter((t) => t.schema === 'public' && !CLEAN_PROD_PROHIBITED.has(t.table))
+    .filter((t) => t.schema === 'public'
+      && (includeSeeds || !CLEAN_PROD_PROHIBITED.has(t.table)))
     .map((t) => t.table);
   console.log(`${tag('PROD')} --clean-prod will TRUNCATE these tables:`);
   for (const t of targets) console.log(`    - public.${t}`);
-  console.log(`    (seed tables excluded: ${[...CLEAN_PROD_PROHIBITED].join(', ')})`);
+  if (includeSeeds) {
+    console.log(`    (seed tables INCLUDED via --clean-prod-include-seeds: ${[...CLEAN_PROD_PROHIBITED].join(', ')})`);
+  } else {
+    console.log(`    (seed tables excluded: ${[...CLEAN_PROD_PROHIBITED].join(', ')})`);
+  }
   if (dryRun) return;
   // CASCADE not used — explicit list only.
   const sql = `TRUNCATE TABLE ${targets.map((t) => `public.${t}`).join(', ')} RESTART IDENTITY`;
