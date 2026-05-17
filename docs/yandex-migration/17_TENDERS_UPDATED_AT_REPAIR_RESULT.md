@@ -5,8 +5,8 @@
 > Rationale: grand-total recalc triggers re-stamped tenders.updated_at
 > during import; only the audit timestamp differs (data is correct).
 
-- Run (UTC): 2026-05-17T21:26:33.627Z
-- Mode: **dry-run**
+- Run (UTC): 2026-05-17T21:31:48.425Z
+- Mode: **apply**
 - Target host: ***.yandexcloud.net
 - Export snapshot: data/public.tenders.ndjson
 
@@ -29,12 +29,14 @@
 
 ## Action
 
-- rows that would be updated (updated_at only): 48
-- trigger temporarily disabled: (none found)
-- trigger re-enabled: n/a (dry-run)
+- rows that were updated (updated_at only): 48
+- trigger temporarily disabled: public.tenders.update_tenders_updated_at
+- trigger re-enabled: ✓
+- post-apply updated_at mismatch: 0
+- post-apply business-column drift: 0
 
 ## Final status
 
 ```
-TENDERS_UPDATED_AT_REPAIR_DRY_RUN_OK
+TENDERS_UPDATED_AT_REPAIR_OK
 ```
