@@ -32,7 +32,12 @@
     "yandex:preflight": "node scripts/yandex-preflight/00_check_yandex_target.mjs",
     "prod-to-yandex:check": "node scripts/prod-to-yandex/00_check_connections.mjs",
     "prod-to-yandex:schema": "node scripts/prod-to-yandex/01_apply_schema.mjs",
-    "prod-to-yandex:verify-schema": "node scripts/prod-to-yandex/02_verify_schema.mjs"
+    "prod-to-yandex:verify-schema": "node scripts/prod-to-yandex/02_verify_schema.mjs",
+    "prod-to-yandex:export": "node scripts/prod-to-yandex/03_export_prod_supabase.mjs",
+    "prod-to-yandex:import": "node scripts/prod-to-yandex/04_import_yandex.mjs",
+    "prod-to-yandex:verify": "node scripts/prod-to-yandex/05_verify_yandex.mjs",
+    "prod-to-yandex:verify-passwords": "node scripts/prod-to-yandex/06_verify_passwords.mjs",
+    "prod-to-yandex:migrate": "node scripts/prod-to-yandex/migrate.mjs"
   },
   "dependencies": {
     "@ant-design/charts": "^2.6.7",
@@ -40,6 +45,7 @@
     "@sentry/react": "^8.55.2",
     "@supabase/supabase-js": "^2.80.0",
     "antd": "^5.28.0",
+    "bcryptjs": "^3.0.3",
     "chart.js": "^4.5.1",
     "chartjs-plugin-datalabels": "^2.2.0",
     "dayjs": "^1.11.19",
