@@ -166,6 +166,20 @@ Mitigation (варианты):
 **Рекомендация:** до app-auth — ограничить новые регистрации и password reset
 (вариант 1+2), либо явно и письменно принять риск drift с владельцем.
 
+**✅ РЕШЕНИЕ ОПЕРАТОРА (зафиксировано; bridge-период до Go app-auth):**
+- Supabase Auth остаётся источником JWT;
+- **логин существующих пользователей — разрешён**;
+- **новые регистрации — временно запрещены**;
+- **password reset — временно запрещён** либо только вручную оператором;
+- **смена email / пароля пользователями — временно запрещена**;
+- полный переход на **Go app-auth — отдельный следующий этап**.
+
+⚠️ Это **временный bridge-mode**: ограничения действуют до внедрения Go
+app-auth. Подробности и follow-up — `20_RUNTIME_CUTOVER_READINESS.md` §2.
+Follow-up (отдельные этапы, вне этого cutover): (1) реализовать Go app-auth;
+(2) перевести frontend с Supabase Auth на Go auth; (3) удалить Supabase
+runtime (Auth/SDK/project) после стабилизации app-auth.
+
 ## 8. Rollback
 
 **До пользовательских writes в Yandex:**
@@ -210,7 +224,7 @@ Mitigation (варианты):
 | Backup Yandex ready (snapshot/PITR) | ☐ |
 | Backup PROD Supabase ready | ☐ |
 | Data freshness confirmed (write-freeze / нет дельты) | ☐ |
-| Auth drift decision made (ограничить регистрации/reset или принять риск) | ☐ |
+| Auth drift decision made (login only; registration/reset/email/password change disabled до app-auth) | ✅ RESOLVED (оператор) |
 | Rollback owner assigned | ☐ |
 | Operator approval (явное «Go») | ☐ |
 
