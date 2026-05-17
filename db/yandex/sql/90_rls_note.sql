@@ -1,0 +1,82 @@
+-- =============================================================================
+-- 90_rls_note.sql — RLS strategy note (EXPLANATORY ONLY — NO ACTIVE POLICIES).
+--
+-- This file intentionally creates NOTHING. It documents why the Supabase RLS
+-- policies were NOT ported to the Yandex foundation. Every token below
+-- (authenticated / anon / service_role) appears ONLY inside SQL comments.
+--
+-- Source of the excluded policies:
+--   supabase/migrations/00000000000008_baseline_rls.sql
+--   supabase/migrations/00000000000013_rls_cost_redistribution_results.sql
+-- Reference: docs/yandex-migration/03_SCHEMA_STRATEGY.md §6–7.
+--
+-- 1. WHY SUPABASE RLS IS NOT PORTED
+-- ---------------------------------
+--   * Every PROD policy is keyed on Supabase primitives that DO NOT EXIST on
+--     Yandex Managed PostgreSQL:
+--       - the `(SELECT auth.uid())` JWT-derived identity (no GoTrue/JWT in PG),
+--       - the Supabase DB roles the policies are granted "TO": the
+--         authenticated role and the implicit anon / service_role / the
+--         authenticator login role.
+--   * Porting them as-is would either fail (missing roles) or silently
+--     allow/deny everything (auth.uid() resolving differently), giving a FALSE
+--     sense of security.
+--   * ENABLE ROW LEVEL SECURITY is therefore NOT set here, and no CREATE POLICY
+--     / CREATE ROLE statements are emitted.
+--
+-- 2. WHERE ACCESS CONTROL LIVES NOW
+-- ---------------------------------
+--   The Go BFF is the SINGLE runtime DB client (frontend never connects to the
+--   DB directly — 05_CUTOVER_RULES.md §8). Authentication and authorisation are
+--   enforced in the application layer: JWT verification + role / allowed_pages
+--   checks in Go middleware/handlers, before any SQL is issued. This mirrors
+--   the B2B-internal posture the PROD policies already had (most were
+--   "all authenticated users allowed, anon blocked").
+--
+-- 3. EXCLUDED POLICIES (for traceability — NOT recreated)
+-- -------------------------------------------------------
+--   boq_items                     : boq_items_select / _insert / _update / _delete
+--   comparison_notes              : comparison_notes_all
+--   import_sessions               : import_sessions_select / _insert / _update
+--   library_folders               : library_folders_select / _insert / _update / _delete
+--   markup_tactics                : view own+global / create / update / delete own
+--   project_additional_agreements : Allow full access for authenticated users
+--   project_monthly_completion    : Allow full access for authenticated users
+--   projects                      : Allow full access for authenticated users
+--   subcontract_growth_exclusions : Allow all for authenticated
+--   tender_documents              : view / create / update / delete (owner via tenders.created_by)
+--   tender_group_members          : select authenticated / manage privileged
+--   tender_groups                 : select authenticated / manage privileged
+--   tender_insurance              : tender_insurance_authenticated (ALL)
+--   tender_iterations             : select allowed users / insert own records
+--   tender_notes                  : select / insert / update / delete (own)
+--   users                         : registration insert / users_select_consolidated /
+--                                   update own / admin update / admin delete
+--   cost_redistribution_results   : select / insert / update / delete  (migration 13)
+--   (~16 tables, 35+ policies total.)
+--
+-- 4. FUTURE DEFENCE-IN-DEPTH (separate design, NOT this prompt)
+-- ------------------------------------------------------------
+--   If DB-level RLS is reintroduced later as defence-in-depth, it must NOT
+--   depend on Supabase roles or auth.uid(). The Go BFF would set a session GUC
+--   per request and policies would read it, e.g.:
+--
+--     -- ALTER TABLE public.<t> ENABLE ROW LEVEL SECURITY;
+--     -- CREATE POLICY <t>_app ON public.<t>
+--     --   USING (current_setting('app.user_id', true) <> '')
+--     --   WITH CHECK (current_setting('app.user_id', true) <> '');
+--
+--   (auth.uid() in 01_auth_compat_or_app_auth.sql already resolves from
+--   app.user_id / app.current_user_id, so policies could equivalently use it.)
+--   This is explicitly out of scope for the schema-foundation stage.
+--
+-- No statements are executed by this file.
+-- =============================================================================
+
+DO $$
+BEGIN
+  RAISE NOTICE
+    '90_rls_note.sql: documentation only. Supabase RLS NOT ported; access '
+    'control is enforced by the Go BFF. See '
+    'docs/yandex-migration/03_SCHEMA_STRATEGY.md and 07_SCHEMA_BUILD_REPORT.md.';
+END $$;

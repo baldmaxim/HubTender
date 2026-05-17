@@ -29,7 +29,9 @@
     "old-to-prod:smoke": "node scripts/old-to-prod/09_smoke_go_bff.mjs",
     "old-to-prod:verify-go": "node scripts/old-to-prod/09_smoke_go_bff.mjs",
     "old-to-prod:migrate": "node scripts/old-to-prod/migrate.mjs",
-    "yandex:preflight": "node scripts/yandex-preflight/00_check_yandex_target.mjs"
+    "yandex:preflight": "node scripts/yandex-preflight/00_check_yandex_target.mjs",
+    "prod-to-yandex:check": "node scripts/prod-to-yandex/00_check_connections.mjs",
+    "prod-to-yandex:schema": "node scripts/prod-to-yandex/01_apply_schema.mjs"
   },
   "dependencies": {
     "@ant-design/charts": "^2.6.7",
