@@ -272,6 +272,61 @@ npm run prod-to-yandex:verify-schema
 `12_DATA_IMPORT_REPORT.md` records: triggers planned / actually disabled /
 re-enabled, the reason, and final row counts after clean.
 
+## 12. Repair tenders.updated_at after trigger side effect
+
+**What happened.** `tenders` carries `update_tenders_updated_at` (BEFORE UPDATE
+`handle_updated_at`). The grand-total triggers
+(`trg_boq_items_grand_total`, `trg_markup_pct_grand_total`,
+`trg_insurance_grand_total`, `trg_subcontract_excl_grand_total`) call
+`recalculate_tender_grand_total()` which `UPDATE public.tenders`. During the
+first import those grand-total triggers were NOT in the disable set, so
+importing `boq_items` / `tender_markup_percentage` / `tender_insurance` /
+`subcontract_growth_exclusions` recomputed `cached_grand_total` and, via the
+BEFORE-UPDATE trigger, **re-stamped `tenders.updated_at = now()`** on all 48
+rows. Read-only diff confirmed: row counts equal, ids equal,
+`cached_grand_total` and every business column identical — **only
+`updated_at`** differed. This is not data corruption, but strict checksum
+verification (`YANDEX_VERIFY`) fails on `tenders`.
+
+**Root cause is fixed for future imports.** `04_import_yandex.mjs` now
+dynamically discovers (via `pg_trigger`/`pg_proc.prosrc`/`pg_get_triggerdef`,
+`tgisinternal=false`) every user trigger that calls
+`recalculate_tender_grand_total()` / UPDATEs `public.tenders`, plus the tenders
+`handle_updated_at` trigger, and disables them per-table during the bulk import
+(re-enabled in finally; kept in the final schema). `REQUIRES_TRIGGER_DISABLE`
+also lists them statically. A future clean re-import keeps
+`tenders.updated_at` byte-stable.
+
+**Targeted repair (preferred over a full re-import).** Restoring 48
+`updated_at` values from the export snapshot is far cheaper and lower-risk than
+re-cleaning + re-importing ~610k rows, and touches nothing else.
+`11_repair_yandex_tenders_updated_at.mjs`:
+
+- reads ONLY the export `data/public.tenders.ndjson` (never PROD DB),
+- refuses unless row counts + id sets match AND **only `updated_at`** differs
+  (any business-column drift → `TENDERS_UPDATED_AT_REPAIR_FAILED`, no change),
+- on `--apply` temporarily disables ONLY `public.tenders` `handle_updated_at`
+  (re-enabled in finally), runs
+  `UPDATE public.tenders SET updated_at = <exported> WHERE id = <id>` (no other
+  column/table), then post-asserts `updated_at` mismatch = 0 and no drift.
+
+```bash
+# dry-run (no writes; shows 48 updated_at mismatches, updates only updated_at):
+npm run prod-to-yandex:repair-tenders-updated-at -- --dry-run
+
+# real repair (operator-authorised):
+$env:ALLOW_REPAIR_YANDEX_DATA="true"
+npm run prod-to-yandex:repair-tenders-updated-at -- --apply
+Remove-Item Env:\ALLOW_REPAIR_YANDEX_DATA -ErrorAction SilentlyContinue
+
+# re-verify (expected YANDEX_VERIFY_OK / YANDEX_AUTH_VERIFY_OK):
+npm run prod-to-yandex:verify
+npm run prod-to-yandex:verify-passwords
+```
+
+Result doc: `17_TENDERS_UPDATED_AT_REPAIR_RESULT.md`
+(`TENDERS_UPDATED_AT_REPAIR_DRY_RUN_OK` / `_OK` / `_FAILED`).
+
 ## Final status
 
 ```

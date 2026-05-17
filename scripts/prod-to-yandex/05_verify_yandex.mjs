@@ -96,7 +96,16 @@ function writeReport(report) {
     L.push('|---|---|---|');
     for (const c of report.checksums) {
       const m = c.status === 'match' ? '✓' : c.status === 'mismatch' ? '✗' : '⚠';
-      L.push(`| public.${c.table} | ${m} ${c.status} | ${c.note ?? ''} |`);
+      let note = c.note ?? '';
+      if (c.table === 'tenders' && c.status === 'mismatch') {
+        note = (note ? note + ' — ' : '')
+          + 'KNOWN: grand-total recalc triggers re-stamped tenders.updated_at '
+          + 'during a pre-fix import (only updated_at differs; data is correct). '
+          + 'Fixed at root cause in 04_import_yandex; targeted repair: '
+          + 'npm run prod-to-yandex:repair-tenders-updated-at (see '
+          + 'docs/yandex-migration/17_TENDERS_UPDATED_AT_REPAIR_RESULT.md).';
+      }
+      L.push(`| public.${c.table} | ${m} ${c.status} | ${note.replace(/\|/g, '\\|')} |`);
     }
     L.push('');
   }

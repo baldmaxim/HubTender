@@ -38,7 +38,8 @@
     "prod-to-yandex:verify": "node scripts/prod-to-yandex/05_verify_yandex.mjs",
     "prod-to-yandex:verify-passwords": "node scripts/prod-to-yandex/06_verify_passwords.mjs",
     "prod-to-yandex:migrate": "node scripts/prod-to-yandex/migrate.mjs",
-    "prod-to-yandex:repair-audit-fk": "node scripts/prod-to-yandex/10_repair_yandex_schema_audit_fk.mjs"
+    "prod-to-yandex:repair-audit-fk": "node scripts/prod-to-yandex/10_repair_yandex_schema_audit_fk.mjs",
+    "prod-to-yandex:repair-tenders-updated-at": "node scripts/prod-to-yandex/11_repair_yandex_tenders_updated_at.mjs"
   },
   "dependencies": {
     "@ant-design/charts": "^2.6.7",

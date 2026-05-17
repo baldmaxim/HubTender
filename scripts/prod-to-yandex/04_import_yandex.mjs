@@ -79,6 +79,37 @@ const dryRun = values['dry-run'];
 const resume = values.resume === true;
 const cleanOnly = values['clean-only'] === true;
 
+// Populated once per import run by discoverTendersUpdatedAtRisk(): table →
+// [user trigger names] that would mutate public.tenders.updated_at during bulk
+// import. Merged into the per-table disable set in importPublicTable().
+let dynamicTendersRiskByTable = {};
+
+// Dynamically discover USER triggers (tgisinternal=false) whose function calls
+// recalculate_tender_grand_total() / UPDATEs public.tenders, plus the
+// public.tenders handle_updated_at trigger. These re-stamp tenders.updated_at
+// during bulk import. Returns { tableName: [triggerName, ...] }.
+async function discoverTendersUpdatedAtRisk(client) {
+  const { rows } = await client.query(`
+    SELECT c.relname AS tbl, t.tgname AS trg
+      FROM pg_trigger t
+      JOIN pg_class c ON c.oid = t.tgrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_proc p ON p.oid = t.tgfoid
+     WHERE NOT t.tgisinternal AND n.nspname = 'public'
+       AND (
+         p.prosrc ILIKE '%recalculate_tender_grand_total%'
+         OR p.prosrc ILIKE '%update%public.tenders%'
+         OR pg_get_triggerdef(t.oid) ILIKE '%recalculate_tender_grand_total%'
+         OR (c.relname = 'tenders' AND p.proname = 'handle_updated_at')
+       )`);
+  const map = {};
+  for (const r of rows) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(r.trg)) continue;
+    (map[r.tbl] ||= []).push(r.trg);
+  }
+  return map;
+}
+
 const allowDataImport = env('ALLOW_DATA_IMPORT') === 'true';
 const allowAuthImport = env('ALLOW_AUTH_IMPORT') === 'true';
 const allowCleanYandex = env('ALLOW_CLEAN_YANDEX') === 'true';
@@ -162,6 +193,7 @@ async function main() {
     options: { ...values, allowDataImport, allowAuthImport, allowCleanYandex, allowDisableTriggers },
     precheck: null,
     audit_fk_compat: null,
+    tenders_updated_at_protection: null,
     clean_yandex: null,
     auth: null,
     per_table: [],
@@ -217,6 +249,19 @@ async function main() {
       report.audit_fk_compat = { ok: true, constraints: [] };
       console.log(`${tag('YA')} audit FK compatibility ✓ (no enforced boq_items_audit.boq_item_id FK)`);
     }
+
+    // ---- Root-cause: dynamically find user triggers that would mutate
+    // public.tenders.updated_at during a bulk import (grand-total recalc →
+    // UPDATE public.tenders → handle_updated_at). Augments the static
+    // REQUIRES_TRIGGER_DISABLE map so future imports keep tenders.updated_at
+    // byte-stable vs the PROD export. User triggers only (tgisinternal=false);
+    // never DISABLE TRIGGER ALL / system triggers / session_replication_role.
+    dynamicTendersRiskByTable = await discoverTendersUpdatedAtRisk(client);
+    report.tenders_updated_at_protection = dynamicTendersRiskByTable;
+    const riskPairs = Object.entries(dynamicTendersRiskByTable)
+      .flatMap(([t, ts]) => ts.map((x) => `public.${t}.${x}`));
+    console.log(`${tag('YA')} tenders.updated_at-risk user triggers: ${riskPairs.length ? riskPairs.join(', ') : '(none)'}`
+      + ` — disabled per-table during import (re-enabled in finally)`);
 
     // ---- Existing tables on the target ----
     const { rows: pubRows } = await client.query(
@@ -401,10 +446,13 @@ async function importPublicTable(client, entry, state) {
 
   // Triggers to disable DURING this table's bulk import (only those that
   // actually exist on the target; only when ALLOW_DISABLE_IMPORT_TRIGGERS=true).
-  const candidateTriggers = [
+  const candidateTriggers = [...new Set([
     ...(REQUIRES_TRIGGER_DISABLE[entry.table] || []),
     ...(NOTIFY_TRIGGERS_BY_TABLE[entry.table] || []),
-  ];
+    // Root-cause fix: dynamically discovered triggers that would re-stamp
+    // public.tenders.updated_at (grand-total recalc) during this table's import.
+    ...(dynamicTendersRiskByTable[entry.table] || []),
+  ])];
   let triggers = [];
   if (candidateTriggers.length && !dryRun) {
     const present = await discoverTriggers(client, 'public', entry.table, candidateTriggers);
@@ -524,6 +572,19 @@ function writeReportMd(report) {
   for (const t of report.per_table) {
     L.push(`| ${t.table} | ${t.policy ?? '-'} | ${t.inserted ?? '-'} | ${t.skipped ?? '-'} | ${(t.disabled_triggers || []).join(', ') || '—'} | ${t.error ?? ''} |`);
   }
+  L.push('');
+  L.push('## tenders.updated_at side-effect protection (root-cause fix)');
+  L.push('');
+  L.push('> Dynamically discovered user triggers (tgisinternal=false) that call '
+    + '`recalculate_tender_grand_total()` / UPDATE `public.tenders` / are the '
+    + 'tenders `handle_updated_at` trigger. Disabled per-table during bulk '
+    + 'import so `tenders.updated_at` stays byte-stable vs the PROD export. '
+    + 'Re-enabled in finally; kept in the final schema. See '
+    + 'docs/yandex-migration/17_TENDERS_UPDATED_AT_REPAIR_RESULT.md.');
+  const tp = report.tenders_updated_at_protection;
+  if (tp && Object.keys(tp).length) {
+    for (const [t, ts] of Object.entries(tp)) L.push(`- public.${t}: ${ts.join(', ')}`);
+  } else { L.push('- _(none discovered)_'); }
   L.push('');
   L.push('## Triggers disabled during import (re-enabled in finally; kept in final schema)');
   L.push('');

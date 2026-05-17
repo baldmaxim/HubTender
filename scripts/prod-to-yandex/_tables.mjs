@@ -98,8 +98,22 @@ export const AUTH_IMPORT_ORDER = ['users', 'identities'];
  * auto_create_tender_registry. We keep the tenders entry defensively.
  */
 export const REQUIRES_TRIGGER_DISABLE = {
-  tenders: ['trigger_auto_create_tender_registry', 'trg_auto_create_tender_registry'],
-  boq_items: ['trg_boq_items_audit'],
+  tenders: [
+    'trigger_auto_create_tender_registry', 'trg_auto_create_tender_registry',
+    // BEFORE UPDATE handle_updated_at: a grand-total recalc UPDATE on tenders
+    // (fired while importing child tables) would otherwise re-stamp
+    // tenders.updated_at = now() → strict VERIFY mismatch on tenders.updated_at.
+    'update_tenders_updated_at',
+  ],
+  // Grand-total triggers call recalculate_tender_grand_total() →
+  // UPDATE public.tenders. Disabling them on their own source tables during
+  // bulk import keeps tenders.updated_at (and cached_grand_total) byte-stable
+  // vs the PROD export. Augmented dynamically (pg_get_triggerdef / prosrc) in
+  // 04_import_yandex.mjs to catch any renamed/extra equivalents.
+  boq_items: ['trg_boq_items_audit', 'trg_boq_items_grand_total'],
+  tender_markup_percentage: ['trg_markup_pct_grand_total'],
+  tender_insurance: ['trg_insurance_grand_total'],
+  subcontract_growth_exclusions: ['trg_subcontract_excl_grand_total'],
 };
 
 /**
