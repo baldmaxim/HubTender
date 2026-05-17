@@ -45,7 +45,7 @@ import {
 import {
   loadAuthUsersForExport, loadIdentitiesForExport, collectAuthStats,
 } from './_auth.mjs';
-import { sha256OfFile, tableChecksumSql, JSONB_TABLES } from './_checksums.mjs';
+import { sha256OfFile, tableChecksumSql, chunkedTableChecksum, HEAVY_CHECKSUM_CHUNK, JSONB_TABLES } from './_checksums.mjs';
 import { CHECKSUM_TABLES, HEAVY_CHECKSUM_SKIP } from './_mapping.mjs';
 
 loadDotenv();
@@ -432,11 +432,25 @@ async function exportPublicTable({ client, table, batchSize, checksumSet, dryRun
   }
   const checksum = dryRun || rowCount === 0 ? null : await sha256OfFile(ndjsonPath);
 
+  // Heavy tables (HEAVY_CHECKSUM_SKIP / pool-safe >100k) are NO LONGER
+  // skipped — they get a chunked, deterministic checksum (bounded per query)
+  // so strict cutover can reach VERIFY_OK without manual exclusions.
   let sqlChecksum = null;
-  const skipChecksum = shouldSkipServerChecksum(table, rowCount, mode);
-  if (!dryRun && rowCount > 0 && checksumSet.has(table) && !skipChecksum) {
-    const { rows: [r] } = await client.query(tableChecksumSql('public', table, pkColumn));
-    sqlChecksum = r?.checksum ?? null;
+  let sqlChecksumMode = null;
+  let sqlChecksumChunk = null;
+  if (!dryRun && rowCount > 0 && checksumSet.has(table)) {
+    const heavy = shouldSkipServerChecksum(table, rowCount, mode);
+    if (heavy) {
+      sqlChecksumChunk = HEAVY_CHECKSUM_CHUNK;
+      sqlChecksum = await chunkedTableChecksum(client, {
+        schema: 'public', table, orderBy: pkColumn, chunkSize: sqlChecksumChunk,
+      });
+      sqlChecksumMode = 'chunked';
+    } else {
+      const { rows: [r] } = await client.query(tableChecksumSql('public', table, pkColumn));
+      sqlChecksum = r?.checksum ?? null;
+      sqlChecksumMode = 'full';
+    }
   }
 
   let valid = { total: 0, distinct: 0, duplicates: 0, sample_duplicate_pks: [] };
@@ -454,7 +468,8 @@ async function exportPublicTable({ client, table, batchSize, checksumSet, dryRun
     ndjsonPath: dryRun ? null : `data/public.${table}.ndjson`,
     checksum,
     sqlChecksum,
-    sqlChecksumSkipped: skipChecksum,
+    sqlChecksumMode,
+    sqlChecksumChunk,
     has_jsonb: JSONB_TABLES.has(table),
     valid,
     mode,
@@ -474,14 +489,18 @@ function pushManifestPublic(manifest, table, e) {
     ndjson_path: e.ndjsonPath,
     checksum_sha256: e.checksum,
     sql_checksum: e.sqlChecksum,
-    sql_checksum_skipped_reason: e.sqlChecksumSkipped ? (HEAVY_CHECKSUM_SKIP.has(table) ? 'heavy_table' : 'row_count_threshold') : null,
+    sql_checksum_mode: e.sqlChecksumMode,           // 'full' | 'chunked' | null
+    sql_checksum_chunk_size: e.sqlChecksumChunk,    // chunk size when 'chunked'
+    sql_checksum_skipped_reason: null,              // heavy tables now chunked, not skipped
     has_jsonb: e.has_jsonb,
     pk_column: e.pkColumn,
   });
 }
 
 function logPublic(e) {
-  const csTag = e.sqlChecksum ? ' [sql-cs ✓]' : (e.sqlChecksumSkipped ? ' [sql-cs skip:heavy]' : '');
+  const csTag = e.sqlChecksum
+    ? (e.sqlChecksumMode === 'chunked' ? ' [sql-cs ✓ chunked]' : ' [sql-cs ✓]')
+    : '';
   const dupTag = (e.valid?.duplicates ?? 0) > 0 ? ` ⚠ dup_pk=${e.valid.duplicates}` : '';
   console.log(`${tag('OLD')} ${e.rowCount.toString().padStart(8)} public.${e.table}${dryRun ? ' (dry-run)' : ''}${csTag}${dupTag}`);
 }

@@ -304,25 +304,75 @@ npm run old-to-prod:test-temporal          # default target = PROD (disposable)
 TEMP TABLE + ROLLBACK. Ожидаемо: `TEMPORAL_ROUNDTRIP_OK` (date без сдвига,
 timestamp/timestamptz сохраняют `.123456`, tstz в UTC).
 
+## 10.D Strict verify — known pitfalls (path to VERIFY_OK без ручных исключений)
+
+Историю и доказательства см. `docs/old-to-prod/VERIFY_ROOT_CAUSE.md`.
+Четыре класса расхождений, которые мешали строгому `VERIFY_OK`, и как они
+закрыты в пайплайне (никаких ручных whitelist'ов):
+
+1. **date/timestamp/timestamptz → JS Date.** Raw parsers (OID
+   1082/1114/1184) + сессия `UTC` / `ISO, MDY` (§10.C). −1 день у date,
+   усечение µs у timestamptz устранены.
+2. **json/jsonb → JS object.** node-postgres по умолчанию парсит JSON/JSONB
+   (OID 114/3802) в объект; `JSON.stringify` не воспроизводит каноничный
+   текст PG (scale `2.50`→`2.5`, порядок ключей). Фикс: raw парсеры и для
+   JSON/JSONB (`installPgRawTypeParsers`), `normalizeForPg` пропускает
+   каноничную строку как есть. Проверка:
+   `npm run old-to-prod:test-raw-types` (date/timestamp/timestamptz/json/
+   jsonb, TEMP TABLE + ROLLBACK, jsonb обязан вернуться строкой, не object).
+3. **tenders.updated_at = время миграции.** На `public.tenders` есть
+   BEFORE UPDATE триггер `update_tenders_updated_at` (`handle_updated_at()`
+   → `now()`). Импорт дочерних строк каскадит `UPDATE public.tenders`
+   (recompute cached_grand_total) → триггер перезаписывал updated_at.
+   Фикс: `06_import_prod` динамически находит этот триггер, **DISABLE на
+   всё окно public-импорта** (gated `ALLOW_DISABLE_IMPORT_TRIGGERS=true`),
+   targeted restore только `updated_at` из OLD NDJSON, ENABLE в finally.
+   Счётчик `restored_tenders_updated_at` в `IMPORT_REPORT.md`. Бизнес- и
+   system-триггеры не трогаются; `session_replication_role` не используется.
+4. **heavy / пустые таблицы.** `boq_items` чексумма пропускалась
+   (HEAVY_CHECKSUM_SKIP / pool-safe >100k) → вечный WARN; `notifications`/
+   `tender_iterations` (0/0) тоже WARN. Фикс: `chunkedTableChecksum()` —
+   keyset-чанковый `md5(string_agg(t::text ORDER BY pk))` со
+   детерминированной сборкой (та же семантика PG `t::text`, ограничено по
+   времени на чанк). Export пишет `sql_checksum_mode`/
+   `sql_checksum_chunk_size` в manifest, verify пересчитывает тем же
+   разбиением. Пустая 0/0 = **match**; невычислимая чексумма = **FAIL**
+   (не warning); `jsonb_warning`-даунгрейд убран (jsonb теперь
+   байт-детерминирован). `boq_items_audit` остаётся вне `CHECKSUM_TABLES`
+   (целостность доказана row-count + file sha256 + dup-PK scan +
+   inflation=0).
+
+`VERIFY_OK` теперь достижим, если: row counts OK, FK OK, registry dups OK,
+audit inflation OK, **все** чексуммы match (вкл. chunked heavy и пустые
+0/0). `VERIFY_OK_WITH_WARNINGS` остаётся только для нестрогих rehearsal-
+прогонов (например `preexisting_rows` на seed/template без
+`--clean-prod-include-seeds`).
+
 ### Повторный strict cutover после фикса
 
 OLD должен быть заморожен. Real import — только по отдельному
-подтверждению оператора:
+подтверждению оператора. **Предыдущие NDJSON не использовать** (нужен
+свежий export с raw json/jsonb парсерами):
 
 ```powershell
 npm run old-to-prod:check
+npm run old-to-prod:test-raw-types      # ожидаем RAW_TYPE_ROUNDTRIP_OK
 npm run old-to-prod:export -- --use-mcp-preflight --pool-safe-export --batch-size=2500
-#   → проверить .old-to-prod-export/export_validation.json:
-#     duplicate_pk_total=0, errors=[], temporal_parser_check.date == "2026-05-17"
+#   → .old-to-prod-export/export_validation.json:
+#     duplicate_pk_total=0, errors=[], temporal_parser_check.{date,timestamp,timestamptz} OK
+#   → manifest.json: heavy CHECKSUM_TABLES имеют sql_checksum_mode="chunked"
 $env:ALLOW_AUTH_IMPORT="true"; $env:ALLOW_DISABLE_IMPORT_TRIGGERS="true"
 $env:ALLOW_CLEAN_AUTH="true"; $env:ALLOW_CLEAN_PROD="true"
 npm run old-to-prod:prepare -- --use-mcp-preflight --clean-auth --clean-prod --confirm
-npm run old-to-prod:migrate -- --use-mcp-preflight --import-only --clean-auth --clean-prod --confirm
-npm run old-to-prod:verify        # ожидаем VERIFY_OK
+npm run old-to-prod:migrate -- --use-mcp-preflight --import-only --clean-auth --clean-prod --clean-prod-include-seeds --confirm --batch-size=5000
+npm run old-to-prod:verify        # ожидаем VERIFY_OK (строгий)
 npm run old-to-prod:verify-auth   # ожидаем AUTH_VERIFY_OK
 ```
 
-Без `--allow-overwrite`, без `ALLOW_PROD_OVERWRITE`. Yandex — только после
+`--clean-prod-include-seeds` обязателен: PROD seed-таблицы содержат
+µs-усечённый residue прошлых pre-fix прогонов; флаг переимпортирует 7 seed
+байт-точно из OLD (тот же 3-key gate, что и `--clean-prod`; НЕ
+`--allow-overwrite`/`ALLOW_PROD_OVERWRITE`). Yandex — только после
 `PROD_GO_BFF_VERIFICATION.md = READY_FOR_YANDEX_MIGRATION`.
 
 ## 11. Prepare PROD

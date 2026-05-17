@@ -261,20 +261,62 @@ async function main() {
     }
 
     if (!values['auth-only']) {
-      // ---- Public phase ----
-      for (const table of IMPORT_ORDER) {
-        if (state.completed.includes(`public.${table}`)) {
-          console.log(`${tag('PROD')} skip public.${table} (already completed)`);
-          continue;
+      // ---- tenders.updated_at protection: disable for the WHOLE public phase ----
+      const uaTrigger = await discoverTendersUpdatedAtTrigger(client);
+      const allowDisable = process.env.ALLOW_DISABLE_IMPORT_TRIGGERS === 'true';
+      let uaDisabled = false;
+      if (uaTrigger && !dryRun) {
+        if (!allowDisable) {
+          throw new Error(
+            `public.tenders has updated_at trigger "${uaTrigger}" (handle_updated_at). ` +
+            `Child-row imports cascade an UPDATE onto public.tenders and this trigger would ` +
+            `overwrite updated_at with the migration time → tenders checksum mismatch. ` +
+            `Set ALLOW_DISABLE_IMPORT_TRIGGERS=true so it can be safely disabled for the ` +
+            `import window (re-enabled in finally).`,
+          );
         }
-        const entry = (manifest.tables ?? []).find((t) => t.schema === 'public' && t.table === table);
-        if (!entry || entry.rows === 0) {
-          state.completed.push(`public.${table}`);
-          continue;
+        await client.query(`ALTER TABLE public.tenders DISABLE TRIGGER "${uaTrigger}"`);
+        uaDisabled = true;
+        console.log(`${tag('PROD')} tenders.updated_at protected — DISABLE TRIGGER "${uaTrigger}" for the public import window`);
+      }
+      report.tenders_updated_at_protection = {
+        trigger: uaTrigger, disabled: uaDisabled, restored: 0,
+      };
+
+      try {
+        // ---- Public phase ----
+        for (const table of IMPORT_ORDER) {
+          if (state.completed.includes(`public.${table}`)) {
+            console.log(`${tag('PROD')} skip public.${table} (already completed)`);
+            continue;
+          }
+          const entry = (manifest.tables ?? []).find((t) => t.schema === 'public' && t.table === table);
+          if (!entry || entry.rows === 0) {
+            state.completed.push(`public.${table}`);
+            continue;
+          }
+          const tableResult = await importPublicTable(client, entry, state, dryRun, batchSize);
+          report.per_table.push(tableResult);
+          saveState(statePath, state, dryRun);
         }
-        const tableResult = await importPublicTable(client, entry, state, dryRun, batchSize);
-        report.per_table.push(tableResult);
-        saveState(statePath, state, dryRun);
+
+        // Targeted restore of ONLY tenders.updated_at from OLD NDJSON, while
+        // the trigger is still disabled (belt-and-suspenders — should be 0 if
+        // the disable fully prevented the bump).
+        if (uaDisabled) {
+          const restored = await restoreTendersUpdatedAt(client, manifest, dryRun);
+          report.tenders_updated_at_protection.restored = restored;
+          console.log(`${tag('PROD')} tenders.updated_at restore: ${restored} row(s) reset to OLD value`);
+        }
+      } finally {
+        if (uaDisabled) {
+          try {
+            await client.query(`ALTER TABLE public.tenders ENABLE TRIGGER "${uaTrigger}"`);
+            console.log(`${tag('PROD')} tenders.updated_at trigger "${uaTrigger}" re-enabled`);
+          } catch (e) {
+            console.error(`${tag('PROD')} ⚠ failed to re-enable trigger "${uaTrigger}": ${e.message}`);
+          }
+        }
       }
     }
 
@@ -316,6 +358,63 @@ async function cleanProd(client, manifest, state, dryRun, includeSeeds = false) 
   await client.query(sql);
   state.cleaned_at = new Date().toISOString();
   console.log(`${tag('PROD')} ✓ truncated ${targets.length} tables`);
+}
+
+// ---------------------------------------------------------------------------
+// tenders.updated_at protection
+//
+// public.tenders has a BEFORE UPDATE trigger running handle_updated_at()
+// (NEW.updated_at = now()). During import, child-row inserts cascade an
+// UPDATE back onto public.tenders (cached_grand_total recompute path), which
+// fires that trigger and overwrites updated_at with the migration timestamp —
+// even though the row was INSERTed with the correct OLD value. Result:
+// tenders checksum mismatch on updated_at ONLY (created_at / cached_grand_total
+// / everything else matches). See docs/old-to-prod/VERIFY_ROOT_CAUSE.md.
+//
+// Fix: discover that exact trigger dynamically and DISABLE it for the WHOLE
+// public import phase (the bump happens during child imports, not the tenders
+// insert), then a post-import targeted restore of ONLY updated_at from the
+// OLD NDJSON while it is still disabled, then ENABLE in finally. We never
+// disable business triggers, never touch system/internal triggers, and never
+// use session_replication_role.
+// ---------------------------------------------------------------------------
+
+async function discoverTendersUpdatedAtTrigger(client) {
+  const { rows } = await client.query(`
+    SELECT t.tgname
+    FROM pg_trigger t
+    JOIN pg_proc p ON p.oid = t.tgfoid
+    WHERE t.tgrelid = 'public.tenders'::regclass
+      AND p.proname = 'handle_updated_at'
+      AND NOT t.tgisinternal
+  `);
+  if (rows.length === 0) return null;
+  const name = rows[0].tgname;
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+    throw new Error(`unsafe trigger name discovered on public.tenders: ${name}`);
+  }
+  return name;
+}
+
+// Targeted restore: set ONLY public.tenders.updated_at back to the OLD
+// exported value. Safe to run even when the disable already prevented the
+// bump (it will simply find 0 rows to fix). MUST run while the updated_at
+// trigger is disabled, otherwise the UPDATE itself would re-bump it.
+async function restoreTendersUpdatedAt(client, manifest, dryRun) {
+  if (dryRun) return 0;
+  const entry = (manifest.tables ?? []).find((t) => t.schema === 'public' && t.table === 'tenders');
+  if (!entry || !entry.ndjson_path || (entry.rows ?? 0) === 0) return 0;
+  let restored = 0;
+  for await (const row of readNdjson(join(exportDir, entry.ndjson_path))) {
+    if (row.id == null || row.updated_at == null) continue;
+    const { rowCount } = await client.query(
+      `UPDATE public.tenders SET updated_at = $1
+        WHERE id = $2 AND updated_at IS DISTINCT FROM $1::timestamptz`,
+      [row.updated_at, row.id],
+    );
+    restored += rowCount ?? 0;
+  }
+  return restored;
 }
 
 async function importAuth_(client, state, dryRun, batchSize) {
@@ -722,6 +821,20 @@ function writeImportReportMd(report) {
       `| ${t.table} | ${t.policy ?? '-'} | ${t.inserted ?? '-'} | ${t.skipped_identical ?? '-'} | ${t.overwritten ?? '-'} | ${t.dropped_duplicates ?? 0} | ${t.error ?? ''} |`,
     );
   }
+  // tenders.updated_at protection summary.
+  const uap = report.tenders_updated_at_protection;
+  lines.push('');
+  lines.push('## tenders.updated_at protection');
+  lines.push('');
+  if (uap && uap.trigger) {
+    lines.push(
+      `> Trigger \`${uap.trigger}\` (handle_updated_at) ${uap.disabled ? 'DISABLED for the public import window, re-enabled in finally' : 'detected (dry-run — not disabled)'}. ` +
+      `restored_tenders_updated_at = **${uap.restored}** (rows whose updated_at was reset to the OLD exported value).`,
+    );
+  } else {
+    lines.push('> No updated_at trigger found on public.tenders (nothing to protect).');
+  }
+
   // Highlight tables where we de-duped the input NDJSON.
   const dedupedTables = report.per_table.filter((t) => (t.dropped_duplicates ?? 0) > 0);
   if (dedupedTables.length > 0) {

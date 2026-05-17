@@ -463,8 +463,18 @@ function normalizeForPg(v, colType) {
   const isJsonb = colType?.data_type === 'jsonb' || colType?.data_type === 'json';
   const isPgArray = colType?.data_type === 'ARRAY';
 
+  // Post raw json/jsonb parser fix: json/jsonb flow end-to-end as RAW PG
+  // canonical text strings (export NDJSON stores the string; JSON.parse on
+  // import returns the same string). Pass the string straight through as a
+  // text parameter — PG re-parses it into byte-identical jsonb. Re-stringifying
+  // it would double-encode (`"{\"a\":1}"`). Object fallback retained defensively
+  // for any caller without raw parsers / non-introspected paths.
+  if (isJsonb) {
+    if (typeof v === 'string') return v;
+    return JSON.stringify(v);
+  }
+
   if (typeof v === 'object' && !(v instanceof Date)) {
-    if (isJsonb) return JSON.stringify(v);
     if (isPgArray && Array.isArray(v)) return v;
     // Fallback when caller didn't introspect: serialize objects (the historical
     // behavior); leave arrays alone so text[] columns continue to work even

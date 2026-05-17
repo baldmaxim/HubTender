@@ -84,58 +84,74 @@ export function redactEmail(email) {
 }
 
 // pg.types.setTypeParser is a PROCESS-WIDE singleton (shared by every Client
-// instance). node-postgres' DEFAULT parsers convert date/timestamp/timestamptz
-// into a JS Date — which has only millisecond resolution AND is anchored to the
-// Node process timezone. On export that silently (a) truncated microseconds
-// (`.309186`→`.309`) and (b) shifted every `date` value by ±1 day, corrupting
-// projects.contract_date / construction_end_date and client_positions temporals.
-// Root cause of VERIFY_FAILED — see docs/old-to-prod/VERIFY_ROOT_CAUSE.md.
+// instance). node-postgres' DEFAULT parsers convert:
+//   - date/timestamp/timestamptz → JS Date (millisecond-only resolution,
+//     anchored to the Node process timezone): truncated µs (`.309186`→`.309`)
+//     and shifted every `date` value by ±1 day.
+//   - json/jsonb → a JS object: a subsequent JSON.stringify on import does NOT
+//     reproduce PG's canonical jsonb text (number scale `2.50`→`2.5`, key
+//     order, spacing) → server-side md5(string_agg(t::text)) mismatched even
+//     though the value was semantically equal (import_sessions.positions_snapshot).
+// Both classes caused VERIFY_OK_WITH_WARNINGS — see docs/old-to-prod/VERIFY_ROOT_CAUSE.md.
 //
-// Fix: parse these OIDs as RAW PostgreSQL text (identity function). The wire
-// text is exact; on re-insert pg passes the string back and PG parses it
-// losslessly. Combined with a deterministic UTC + ISO session (see getClient)
-// the server-side md5(string_agg(t::text)) checksum is byte-stable OLD↔PROD.
-let _temporalParsersInstalled = false;
-export async function installPgRawTemporalParsers() {
-  if (_temporalParsersInstalled) return;
+// Fix: parse ALL of these OIDs as RAW PostgreSQL text (identity function). The
+// wire text is PG's exact canonical form; on re-insert pg passes the string
+// back and PG re-parses it losslessly/idempotently. Combined with a
+// deterministic UTC + ISO session (see getClient) the server-side
+// md5(string_agg(t::text)) checksum is byte-stable OLD↔PROD for temporal AND
+// json/jsonb columns.
+let _rawTypeParsersInstalled = false;
+export async function installPgRawTypeParsers() {
+  if (_rawTypeParsersInstalled) return;
   const { default: pg } = await import('pg');
-  const ident = (v) => v; // raw text — never coerce to JS Date
+  const ident = (v) => v; // raw PG text — never coerce to JS Date / object
   const b = pg.types?.builtins ?? {};
   const DATE = b.DATE ?? 1082;
   const TIMESTAMP = b.TIMESTAMP ?? 1114;
   const TIMESTAMPTZ = b.TIMESTAMPTZ ?? 1184;
+  const JSON_OID = b.JSON ?? 114;
+  const JSONB_OID = b.JSONB ?? 3802;
   pg.types.setTypeParser(DATE, ident);
   pg.types.setTypeParser(TIMESTAMP, ident);
   pg.types.setTypeParser(TIMESTAMPTZ, ident);
-  _temporalParsersInstalled = true;
+  pg.types.setTypeParser(JSON_OID, ident);
+  pg.types.setTypeParser(JSONB_OID, ident);
+  _rawTypeParsersInstalled = true;
 }
 
+// Backward-compatible alias (previous name). Same coverage, now incl. json/jsonb.
+export const installPgRawTemporalParsers = installPgRawTypeParsers;
+
 /**
- * Fail-fast guard: confirm the raw temporal parsers + deterministic session are
+ * Fail-fast guard: confirm the raw type parsers + deterministic session are
  * actually in effect on `client` before any export/verify reads real data.
- * Returns { date, timestamp, timestamptz } sample strings for manifests/logs.
- * Throws (caller should let it abort the run) if pg still yields JS Date or
- * lossy values.
+ * Returns { date, timestamp, timestamptz, jsonb, json } sample strings for
+ * manifests/logs. Throws (caller should let it abort the run) if pg still
+ * yields JS Date / JS object or lossy temporal values.
  */
 export async function assertTemporalRawParsers(client) {
   const { rows: [r] } = await client.query(
     `SELECT '2026-05-17'::date AS d,
             '2026-05-17 12:34:56.123456'::timestamp AS ts,
-            '2026-05-17 12:34:56.123456+00'::timestamptz AS tstz`,
+            '2026-05-17 12:34:56.123456+00'::timestamptz AS tstz,
+            '{"b":2,"a":1}'::jsonb AS jb,
+            '{"b":2,"a":1}'::json AS js`,
   );
   const ok =
     typeof r.d === 'string' && r.d === '2026-05-17' &&
     typeof r.ts === 'string' && r.ts.includes('.123456') &&
-    typeof r.tstz === 'string' && r.tstz.includes('.123456');
+    typeof r.tstz === 'string' && r.tstz.includes('.123456') &&
+    typeof r.jb === 'string' && typeof r.js === 'string';
   if (!ok) {
     throw new Error(
-      'Temporal raw-parser self-check FAILED — pg returned non-string/lossy ' +
-      `temporal values (d=${typeof r.d}:${r.d} ts=${typeof r.ts}:${r.ts} ` +
-      `tstz=${typeof r.tstz}:${r.tstz}). installPgRawTemporalParsers()/UTC ` +
-      'session did not take effect. Refusing to export/verify to avoid data corruption.',
+      'Raw type-parser self-check FAILED — pg returned non-string/lossy values ' +
+      `(d=${typeof r.d}:${r.d} ts=${typeof r.ts}:${r.ts} ` +
+      `tstz=${typeof r.tstz}:${r.tstz} jsonb=${typeof r.jb} json=${typeof r.js}). ` +
+      'installPgRawTypeParsers()/UTC session did not take effect. ' +
+      'Refusing to export/verify to avoid data corruption.',
     );
   }
-  return { date: r.d, timestamp: r.ts, timestamptz: r.tstz };
+  return { date: r.d, timestamp: r.ts, timestamptz: r.tstz, jsonb: r.jb, json: r.js };
 }
 
 /**
@@ -152,7 +168,7 @@ export async function assertTemporalRawParsers(client) {
  */
 export async function getClient(url, opts = {}) {
   const { default: pg } = await import('pg');
-  await installPgRawTemporalParsers();
+  await installPgRawTypeParsers();
   // 60s default is too tight for streaming exports through the Supabase Session
   // Pooler (large jsonb tables can take >60s per 5000-row SELECT). Migration is
   // a one-shot operation; trade strict timeout for completion. Env override:

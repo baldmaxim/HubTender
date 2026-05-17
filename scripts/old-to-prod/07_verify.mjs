@@ -21,7 +21,7 @@ import {
   FK_CHECKS, CHECKSUM_TABLES, STRICT_BUSINESS_TABLES, allowsPreexistingRows,
 } from './_mapping.mjs';
 import { countRows, defaultOrderBy } from './_copy.mjs';
-import { tableChecksumSql, JSONB_TABLES } from './_checksums.mjs';
+import { tableChecksumSql, chunkedTableChecksum, HEAVY_CHECKSUM_CHUNK } from './_checksums.mjs';
 
 loadDotenv();
 
@@ -177,34 +177,58 @@ async function main() {
       }
       const oldChecksum = manifestEntry.sql_checksum ?? null;
       const oldRows = manifestEntry.rows ?? 0;
-      let prodChecksum = null;
-      try {
-        const orderBy = defaultOrderBy(table);
-        const { rows: [c] } = await client.query(tableChecksumSql('public', table, orderBy));
-        prodChecksum = c?.checksum ?? null;
-      } catch (e) {
-        report.warnings.push(`public.${table}: checksum query failed: ${e.message}`);
-        continue;
-      }
+      const prodRows = report.row_counts.find((r) => r.table === table)?.prod ?? null;
 
       let status = 'unknown';
       let note = null;
-      const prodRows = report.row_counts.find((r) => r.table === table)?.prod ?? null;
+
+      if ((oldRows ?? 0) === 0 && (prodRows ?? 0) === 0) {
+        // Empty on both sides — nothing to checksum, this is a clean MATCH
+        // (NOT a warning). Covers notifications / tender_iterations 0/0.
+        status = 'match';
+        note = 'empty (0 rows) — OLD == PROD';
+        report.checksums.push({ table, status, note });
+        console.log(`${tag('PROD')} ✓ checksum public.${table}: ${status} — ${note}`);
+        continue;
+      }
+
+      let prodChecksum = null;
+      try {
+        const orderBy = defaultOrderBy(table);
+        if (manifestEntry.sql_checksum_mode === 'chunked') {
+          // Recompute with the SAME partitioning the export used.
+          prodChecksum = await chunkedTableChecksum(client, {
+            schema: 'public', table, orderBy,
+            chunkSize: manifestEntry.sql_checksum_chunk_size || HEAVY_CHECKSUM_CHUNK,
+          });
+        } else {
+          const { rows: [c] } = await client.query(tableChecksumSql('public', table, orderBy));
+          prodChecksum = c?.checksum ?? null;
+        }
+      } catch (e) {
+        // Strict: a checksum we cannot compute is a FAILURE, never a warning.
+        status = 'mismatch';
+        note = `PROD checksum compute failed (${e.message}) — cannot verify integrity`;
+        report.checksums.push({ table, status, note });
+        console.log(`${tag('PROD')} ✗ checksum public.${table}: ${status} — ${note}`);
+        continue;
+      }
+
       if (!oldChecksum) {
-        status = 'skipped';
-        note = 'no OLD checksum in manifest (run :export again with the latest 04_export_old)';
+        // Non-empty table with no OLD checksum cannot be verified → FAIL
+        // (strict: re-export with the current 04_export_old).
+        status = 'mismatch';
+        note = 'no OLD checksum in manifest for a non-empty table — re-run :export';
       } else if (oldChecksum === prodChecksum) {
         status = 'match';
       } else if (prodRows != null && oldRows != null && prodRows > oldRows) {
-        // PROD has pre-existing rows beyond OLD; full-table checksum equality
-        // is impossible and not a failure — it's expected drift.
+        // PROD has pre-existing rows beyond OLD (seed/template tables allowed
+        // preexisting); full-table checksum equality is impossible — WARN.
         status = 'preexisting_rows';
         note = `PROD has ${prodRows - oldRows} pre-existing rows; full-table checksum match not expected`;
-      } else if (JSONB_TABLES.has(table)) {
-        // jsonb may re-serialize keys in different order. Treat as warning.
-        status = 'jsonb_warning';
-        note = 'jsonb columns may serialize differently; manual review';
       } else {
+        // Raw json/jsonb parsers make jsonb byte-deterministic OLD↔PROD, so a
+        // mismatch is a REAL data difference — no jsonb_warning downgrade.
         status = 'mismatch';
         note = 'PROD content differs from OLD export';
       }
@@ -380,7 +404,7 @@ function writeReport(report) {
   lines.push('');
   lines.push('## Table checksums (md5 of stable text aggregate)');
   lines.push('');
-  lines.push('Computed via `md5(string_agg(t::text, \',\' ORDER BY pk))` on both OLD (at export time) and PROD (here). `match` = byte-identical; `mismatch` = data drift (FAIL); `jsonb_warning` = mismatch could be due to jsonb key reordering only (WARN); `preexisting_rows` = PROD has rows beyond OLD export, full-table match impossible (WARN); `skipped` = missing OLD checksum.');
+  lines.push('Computed via `md5(string_agg(t::text, \',\' ORDER BY pk))` on both OLD (at export time) and PROD (here); heavy tables use the equivalent chunked fold with the same partitioning. Raw json/jsonb + temporal parsers + UTC/ISO session make `t::text` byte-deterministic OLD↔PROD. `match` = byte-identical (incl. empty 0/0 tables); `mismatch` = real data drift OR uncomputable checksum (FAIL — no jsonb downgrade); `preexisting_rows` = PROD has rows beyond OLD export, full-table match impossible (WARN, seed/template only).');
   lines.push('');
   lines.push('> `auth.users` is intentionally excluded from this section — its checksum would expose `encrypted_password`. See `08_verify_auth.mjs` for the password-safe row-by-row sha256 path.');
   lines.push('');

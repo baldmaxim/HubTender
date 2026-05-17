@@ -93,6 +93,69 @@ export function tableChecksumSql(schema, table, orderBy = 'id') {
             FROM "${schema}"."${table}" t`;
 }
 
+/** md5 hex of a string (node crypto) — used to fold chunk digests. */
+function md5(input) {
+  return createHash('md5').update(input).digest('hex');
+}
+
+/**
+ * Default chunk size for the chunked heavy-table checksum. A single
+ * md5(string_agg(t::text ORDER BY pk)) over 100k–400k rows (esp. tables with
+ * large jsonb columns like boq_items) pegs CPU / exceeds statement timeout on
+ * the Supabase pooler. Computing per-keyset-chunk digests and folding them is
+ * bounded per query and still fully deterministic.
+ */
+export const HEAVY_CHECKSUM_CHUNK = 10000;
+
+/**
+ * Chunked, deterministic table checksum for heavy tables. Walks the table by
+ * keyset on `orderBy` (a single PK column), computing
+ * `md5(string_agg(t::text, ',' ORDER BY pk))` over each chunk, then folds the
+ * ordered chunk digests via md5. Uses PG's own `t::text` (same canonical
+ * representation as tableChecksumSql) — NOT a JS row serialization — so it is
+ * byte-identical OLD↔PROD when run with the SAME `chunkSize` + raw type
+ * parsers + UTC/ISO session. Caller MUST persist the chunkSize so verify
+ * recomputes with the identical partitioning.
+ *
+ * @param {object} client - connected pg client (raw parsers + UTC/ISO)
+ * @param {{schema:string, table:string, orderBy?:string, chunkSize?:number}} o
+ * @returns {Promise<string>} md5 hex digest
+ */
+export async function chunkedTableChecksum(client, { schema, table, orderBy = 'id', chunkSize = HEAVY_CHECKSUM_CHUNK }) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(schema)) throw new Error(`unsafe schema: ${schema}`);
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(table)) throw new Error(`unsafe table: ${table}`);
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(orderBy)) throw new Error(`unsafe orderBy (single col required): ${orderBy}`);
+  const lim = Number.isInteger(chunkSize) && chunkSize > 0 ? chunkSize : HEAVY_CHECKSUM_CHUNK;
+
+  const chunkDigests = [];
+  let lastPk = null;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const sql = lastPk === null
+      ? `WITH chunk AS (
+           SELECT * FROM "${schema}"."${table}" ORDER BY "${orderBy}" LIMIT $1
+         )
+         SELECT COALESCE(md5(string_agg(c::text, ',' ORDER BY "${orderBy}")), md5('')) AS d,
+                COUNT(*)::int AS n, MAX("${orderBy}")::text AS maxpk
+         FROM chunk c`
+      : `WITH chunk AS (
+           SELECT * FROM "${schema}"."${table}" WHERE "${orderBy}" > $2 ORDER BY "${orderBy}" LIMIT $1
+         )
+         SELECT COALESCE(md5(string_agg(c::text, ',' ORDER BY "${orderBy}")), md5('')) AS d,
+                COUNT(*)::int AS n, MAX("${orderBy}")::text AS maxpk
+         FROM chunk c`;
+    const params = lastPk === null ? [lim] : [lim, lastPk];
+    const { rows: [r] } = await client.query(sql, params);
+    if (!r || r.n === 0) break;
+    chunkDigests.push(r.d);
+    if (r.n < lim) break;
+    lastPk = r.maxpk;
+  }
+  if (chunkDigests.length === 0) return md5(''); // empty table — same as tableChecksumSql NULL path
+  // Deterministic fold of ordered chunk digests.
+  return md5(chunkDigests.join(','));
+}
+
 /**
  * Compute a stable fingerprint of an auth.users row for collision detection
  * and identical-resume comparisons. Excludes `encrypted_password` from the
