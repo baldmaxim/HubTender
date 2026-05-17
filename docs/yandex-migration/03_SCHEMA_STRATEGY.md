@@ -114,3 +114,20 @@ Realtime Go BFF держится на `LISTEN/NOTIFY`. **Сохранить то
 - Текущая схема использует оба: `gen_random_uuid()` (~22) и `uuid_generate_v4()` (~19). Если при
   чистке унифицировать на `gen_random_uuid()` — потребуется только `pgcrypto`; пока обе функции
   используются — нужны оба расширения.
+
+## 11. Audit/history tables — без enforced FK на «живых» родителей
+
+- Audit/history-таблицы намеренно ссылаются на **уже удалённые** родительские строки:
+  `boq_items_audit` хранит INSERT/UPDATE/**DELETE**-историю BOQ-элементов, поэтому
+  `boq_items_audit.boq_item_id` — это **исторический указатель**, а не живой FK.
+- **Enforced FK несовместим с семантикой delete-audit:** он отверг бы импорт исторических
+  DELETE-записей по удалённым `boq_items`.
+- **Факт PROD:** в live PROD Supabase FK `boq_items_audit.boq_item_id → boq_items` **отсутствует**
+  (единственный FK на этой таблице — `changed_by → users`). Базовая миграция ошибочно несла этот
+  FK, и cleaned-схема его унаследовала — это schema-fidelity gap.
+- **Решение:** cleaned Yandex-схема **намеренно НЕ создаёт** этот FK
+  (`db/yandex/sql/06_indexes_constraints.sql`); вместо него — обычный lookup-индекс
+  `idx_boq_items_audit_boq_item_id`. `NOT VALID` FK не используется (он всё равно enforce'ит новые
+  вставки). Целостность проверяется **audit-history check** (сравнение total / orphan /
+  unique-orphan baseline PROD-export ↔ Yandex), а не FK-enforcement. Подробности и диагностика —
+  [15_AUDIT_FK_SCHEMA_DECISION.md](./15_AUDIT_FK_SCHEMA_DECISION.md).

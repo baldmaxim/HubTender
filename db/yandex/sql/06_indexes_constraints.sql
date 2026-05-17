@@ -190,7 +190,17 @@ ALTER TABLE public.boq_items ADD CONSTRAINT boq_items_unit_code_fkey FOREIGN KEY
 ALTER TABLE public.boq_items ADD CONSTRAINT boq_items_detail_cost_category_id_fkey FOREIGN KEY (detail_cost_category_id) REFERENCES public.detail_cost_categories(id);
 ALTER TABLE public.boq_items ADD CONSTRAINT boq_items_parent_work_item_id_fkey FOREIGN KEY (parent_work_item_id) REFERENCES public.boq_items(id) ON DELETE CASCADE;
 ALTER TABLE public.boq_items ADD CONSTRAINT boq_items_import_session_id_fkey FOREIGN KEY (import_session_id) REFERENCES public.import_sessions(id) ON DELETE SET NULL;
-ALTER TABLE public.boq_items_audit ADD CONSTRAINT boq_items_audit_boq_item_id_fkey FOREIGN KEY (boq_item_id) REFERENCES public.boq_items(id) ON DELETE CASCADE;
+-- NOTE: boq_items_audit.boq_item_id has NO enforced foreign key — by design.
+--   * boq_items_audit is historical / audit storage.
+--   * Deleted boq_items legitimately keep surviving audit rows (DELETE history).
+--   * Live PROD Supabase has NO such FK (only boq_items_audit_changed_by_fkey);
+--     an enforced FK here would reject the historical DELETE-audit import.
+--   * A NOT VALID FK is NOT used: it still enforces newly inserted rows.
+--   * Integrity is verified by an audit-history check (total / orphan /
+--     distinct-orphan vs the PROD baseline), not by FK enforcement.
+--     See docs/yandex-migration/15_AUDIT_FK_SCHEMA_DECISION.md.
+-- Supporting (non-FK) lookup index on the historical reference column:
+CREATE INDEX IF NOT EXISTS idx_boq_items_audit_boq_item_id ON public.boq_items_audit(boq_item_id);
 ALTER TABLE public.boq_items_audit ADD CONSTRAINT boq_items_audit_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.users(id);
 
 -- import_sessions

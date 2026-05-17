@@ -243,7 +243,11 @@ export const FK_CHECKS = [
   { table: 'client_positions', column: 'tender_id', refSchema: 'public', refTable: 'tenders', refColumn: 'id' },
   { table: 'boq_items', column: 'client_position_id', refSchema: 'public', refTable: 'client_positions', refColumn: 'id' },
   { table: 'boq_items', column: 'tender_id', refSchema: 'public', refTable: 'tenders', refColumn: 'id' },
-  { table: 'boq_items_audit', column: 'boq_item_id', refSchema: 'public', refTable: 'boq_items', refColumn: 'id' },
+  // NOTE: boq_items_audit.boq_item_id is INTENTIONALLY NOT an FK check — it is a
+  // historical/audit reference; deleted boq_items legitimately keep surviving
+  // audit rows (PROD has no such FK). Integrity is verified by the dedicated
+  // audit-history check in 05_verify_yandex.mjs, not as an FK orphan.
+  // See docs/yandex-migration/15_AUDIT_FK_SCHEMA_DECISION.md.
   { table: 'tender_iterations', column: 'user_id', refSchema: 'public', refTable: 'users', refColumn: 'id' },
   { table: 'tender_iterations', column: 'manager_id', refSchema: 'public', refTable: 'users', refColumn: 'id' },
   { table: 'tender_iterations', column: 'group_id', refSchema: 'public', refTable: 'tender_groups', refColumn: 'id' },

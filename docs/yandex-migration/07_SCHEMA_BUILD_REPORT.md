@@ -201,3 +201,29 @@ and NOT authorised in this stage.** Real apply requires all of:
 > Apply / verify outcomes are tracked in
 > [08_SCHEMA_APPLY_RESULT.md](./08_SCHEMA_APPLY_RESULT.md) and
 > [09_SCHEMA_VERIFY_RESULT.md](./09_SCHEMA_VERIFY_RESULT.md), not appended here.
+
+## Post-apply correction — audit FK (2026-05-17)
+
+The first real PROD→Yandex data import failed on `public.boq_items_audit`:
+the cleaned schema carried an **enforced** FK
+`boq_items_audit_boq_item_id_fkey (boq_item_id → boq_items ON DELETE CASCADE)`
+inherited from baseline migration `00000000000003`, but **live PROD Supabase
+has no such FK** (only `changed_by → users`). `boq_items_audit` is
+historical/audit storage — DELETE-history rows legitimately reference removed
+`boq_items` (PROD export: 388 598 rows, 157 730 orphan, 66 639 distinct orphan
+parents). An enforced FK is incompatible with delete-audit semantics.
+
+Correction applied to the foundation:
+- `db/yandex/sql/06_indexes_constraints.sql` no longer creates that FK; it
+  keeps a non-FK lookup index `idx_boq_items_audit_boq_item_id` + a rationale
+  comment. PK and all other FKs are unchanged.
+- Integrity is now verified by an **audit-history baseline check**
+  (`05_verify_yandex`), not FK enforcement; `02_verify_schema` fails if the
+  enforced FK is still present.
+- The already-applied Yandex schema is corrected by the gated repair script
+  `scripts/prod-to-yandex/10_repair_yandex_schema_audit_fk.mjs`.
+
+Full diagnostic + decision: [15_AUDIT_FK_SCHEMA_DECISION.md](./15_AUDIT_FK_SCHEMA_DECISION.md).
+A secondary, out-of-scope discrepancy was noted: `boq_items_audit_changed_by_fkey`
+ON DELETE rule is `SET NULL` on PROD vs `NO ACTION` in the cleaned schema
+(recorded, not changed).

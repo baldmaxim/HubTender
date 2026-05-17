@@ -146,6 +146,35 @@ cutover the Go BFF must hold a **direct / session-safe** Yandex connection
 concern — the data scripts here only read/write rows. See
 `05_CUTOVER_RULES.md` §9 and `07_pgnotify.sql`.
 
+## 9. Audit/history tables — no enforced FK (boq_items_audit)
+
+Audit/history tables intentionally reference **deleted** parent rows:
+`boq_items_audit` keeps INSERT/UPDATE/**DELETE** history, so
+`boq_items_audit.boq_item_id` is a *historical* reference, not a live FK. An
+enforced FK is incompatible with delete-audit semantics and **does not exist on
+live PROD Supabase**. The cleaned Yandex schema therefore **omits** this FK
+(keeps only the non-FK index `idx_boq_items_audit_boq_item_id`). Integrity is
+verified by comparing the **audit baseline** (total / orphan / unique-orphan
+counts; checksums) PROD-export ↔ Yandex — NOT by FK enforcement.
+
+If a previously-applied Yandex schema still has the spurious FK, the data
+import fails fast (`boq_items_audit_boq_item_id_fkey exists; run schema repair
+before import`). Repair the applied schema with the gated script:
+
+```bash
+npm run prod-to-yandex:repair-audit-fk -- --dry-run        # plan only, no changes
+# only when operator-authorised:
+ALLOW_REPAIR_YANDEX_SCHEMA=true \
+  npm run prod-to-yandex:repair-audit-fk -- --apply
+npm run prod-to-yandex:verify-schema                       # must be SCHEMA_VERIFY_OK
+```
+
+Result doc: `16_SCHEMA_REPAIR_AUDIT_FK_RESULT.md`
+(`SCHEMA_REPAIR_DRY_RUN_OK` / `SCHEMA_REPAIR_OK` / `SCHEMA_REPAIR_FAILED`).
+Diagnostic + decision: `15_AUDIT_FK_SCHEMA_DECISION.md`. After a successful
+repair, the data import / clean-yandex / verify cycle is resumed only under the
+existing two-key gates and a separate operator confirmation.
+
 ## Final status
 
 ```

@@ -26,7 +26,7 @@ import {
   IMPORT_ORDER, FK_CHECKS, CHECKSUM_TABLES, STRICT_VERIFY_TABLES,
   HEAVY_CHECKSUM_TABLES, defaultOrderBy,
 } from './_tables.mjs';
-import { countRows, tableExists } from './_copy.mjs';
+import { countRows, tableExists, readNdjson } from './_copy.mjs';
 import { tableChecksumSql, chunkedTableChecksum, HEAVY_CHECKSUM_CHUNK } from './_checksums.mjs';
 
 loadEnv();
@@ -120,6 +120,24 @@ function writeReport(report) {
     if (a.note) L.push(`- ${a.note}`);
     L.push('');
   }
+  if (report.audit_history) {
+    const h = report.audit_history;
+    L.push('## Audit history integrity');
+    L.push('');
+    L.push('> `boq_items_audit.boq_item_id` has NO enforced FK by design (audit/');
+    L.push('> history keeps DELETE rows for removed boq_items — PROD has no such');
+    L.push('> FK). Integrity = orphan baseline equality, not FK enforcement.');
+    L.push('');
+    L.push('| Metric | PROD export baseline | Yandex target | OK |');
+    L.push('|---|---:|---:|---|');
+    L.push(`| total audit rows | ${h.prod.total} | ${h.yandex.total} | ${h.total_ok ? '✓' : '✗'} |`);
+    L.push(`| orphan audit rows | ${h.prod.orphan_rows} | ${h.yandex.orphan_rows} | ${h.orphan_ok ? '✓' : '✗'} |`);
+    L.push(`| unique orphan boq_item_id | ${h.prod.distinct_orphan} | ${h.yandex.distinct_orphan} | ${h.distinct_ok ? '✓' : '✗'} |`);
+    L.push('');
+    L.push(`- Result: ${h.ok ? '✓ Yandex matches PROD audit baseline' : '✗ audit baseline mismatch — investigate (no auto re-import)'}`);
+    if (h.note) L.push(`- ${h.note}`);
+    L.push('');
+  }
   if (report.warnings && report.warnings.length) {
     L.push('## Warnings');
     L.push('');
@@ -164,7 +182,8 @@ async function main() {
   const report = {
     generated_at: new Date().toISOString(),
     row_counts: [], fk_violations: [], orphan_checks: [], checksums: [],
-    registry_duplicates: null, audit_delta: null, warnings: [], status: 'PENDING',
+    registry_duplicates: null, audit_delta: null, audit_history: null,
+    warnings: [], status: 'PENDING',
   };
 
   try {
@@ -305,6 +324,52 @@ async function main() {
       console.log(`${tag('YA')} ${ok ? '✓' : '✗'} boq_items_audit: prod=${prodAudit} yandex=${a.n} inflation=${inflation}`);
     } catch (e) { report.warnings.push(`audit inflation check: ${safeErr(e)}`); }
 
+    // ---- Audit history integrity (NOT an FK check) ----
+    // boq_items_audit keeps DELETE history for removed boq_items. PROD has no
+    // FK boq_items_audit.boq_item_id → boq_items. We verify the Yandex audit
+    // baseline (total / orphan / distinct-orphan) equals the PROD export
+    // baseline computed from the NDJSON, instead of failing on orphans.
+    try {
+      const auditPath = join(exportDir, 'data', 'public.boq_items_audit.ndjson');
+      const boqPath = join(exportDir, 'data', 'public.boq_items.ndjson');
+      if (!existsSync(auditPath) || !existsSync(boqPath)) {
+        report.warnings.push('audit-history: export NDJSON for boq_items/boq_items_audit not found — baseline skipped.');
+      } else {
+        const boqIds = new Set();
+        for await (const r of readNdjson(boqPath)) boqIds.add(r.id);
+        let pTotal = 0, pOrphan = 0;
+        const pDistinct = new Set();
+        for await (const r of readNdjson(auditPath)) {
+          pTotal++;
+          if (!boqIds.has(r.boq_item_id)) { pOrphan++; pDistinct.add(r.boq_item_id); }
+        }
+        const { rows: [yt] } = await client.query('SELECT COUNT(*)::bigint AS n FROM public.boq_items_audit');
+        const { rows: [yo] } = await client.query(`
+          SELECT COUNT(*) FILTER (WHERE bi.id IS NULL)::bigint AS orphan_rows,
+                 COUNT(DISTINCT a.boq_item_id) FILTER (WHERE bi.id IS NULL)::bigint AS distinct_orphan
+            FROM public.boq_items_audit a
+            LEFT JOIN public.boq_items bi ON bi.id = a.boq_item_id`);
+        const prod = { total: pTotal, orphan_rows: pOrphan, distinct_orphan: pDistinct.size };
+        const yandex = {
+          total: Number(yt.n),
+          orphan_rows: Number(yo.orphan_rows),
+          distinct_orphan: Number(yo.distinct_orphan),
+        };
+        const total_ok = yandex.total === prod.total;
+        const orphan_ok = yandex.orphan_rows === prod.orphan_rows;
+        const distinct_ok = yandex.distinct_orphan === prod.distinct_orphan;
+        const ok = total_ok && orphan_ok && distinct_ok;
+        report.audit_history = {
+          prod, yandex, total_ok, orphan_ok, distinct_ok, ok,
+          note: ok ? null
+            : (yandex.total === 0
+                ? 'Yandex boq_items_audit is empty — table not (re)imported yet.'
+                : 'Yandex audit baseline differs from PROD export — diagnose before any re-import.'),
+        };
+        console.log(`${tag('YA')} ${ok ? '✓' : '✗'} audit-history: prod(t=${prod.total},o=${prod.orphan_rows},d=${prod.distinct_orphan}) yandex(t=${yandex.total},o=${yandex.orphan_rows},d=${yandex.distinct_orphan})`);
+      }
+    } catch (e) { report.warnings.push(`audit-history check: ${safeErr(e)}`); }
+
     // ---- Status ----
     const hasCountFail = report.row_counts.some((r) => r.severity === 'FAIL');
     const hasFkFail = report.fk_violations.some((r) => !r.ok);
@@ -312,9 +377,10 @@ async function main() {
     const hasChecksumMismatch = report.checksums.some((c) => c.status === 'mismatch');
     const hasRegistryDup = report.registry_duplicates && !report.registry_duplicates.ok;
     const hasAuditInflation = report.audit_delta && !report.audit_delta.ok;
+    const hasAuditHistoryFail = report.audit_history && !report.audit_history.ok;
     const hasCountWarn = report.row_counts.some((r) => r.severity === 'WARN');
 
-    if (hasCountFail || hasFkFail || hasOrphanFail || hasChecksumMismatch || hasRegistryDup || hasAuditInflation) {
+    if (hasCountFail || hasFkFail || hasOrphanFail || hasChecksumMismatch || hasRegistryDup || hasAuditInflation || hasAuditHistoryFail) {
       report.status = STATUS.FAILED;
     } else if (report.warnings.length > 0 || hasCountWarn) {
       report.status = STATUS.WARN;

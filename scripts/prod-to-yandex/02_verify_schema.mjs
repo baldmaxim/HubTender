@@ -240,6 +240,39 @@ async function main() {
       `all: ${exts.join(', ') || '(none)'}`,
     ]);
 
+    // 7b. Audit schema compatibility
+    // boq_items_audit is historical/audit storage: an enforced FK on
+    // boq_item_id → boq_items is INCOMPATIBLE with DELETE-history and absent on
+    // PROD. Absence of the FK = OK; presence of an enforced FK = FAILED.
+    // The non-FK lookup index idx_boq_items_audit_boq_item_id should exist.
+    const auditFk = (await q(`
+      SELECT con.conname
+        FROM pg_constraint con
+        JOIN pg_class c ON c.oid = con.conrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_class rc ON rc.oid = con.confrelid
+       WHERE n.nspname='public' AND c.relname='boq_items_audit'
+         AND con.contype='f' AND rc.relname='boq_items'
+         AND 'boq_item_id' = ANY (
+               SELECT a.attname FROM unnest(con.conkey) k
+                 JOIN pg_attribute a ON a.attrelid=con.conrelid AND a.attnum=k)`))
+      .map((x) => x.conname);
+    const auditIdx = (await q(
+      "SELECT 1 FROM pg_indexes WHERE schemaname='public' " +
+      "AND tablename='boq_items_audit' AND indexname='idx_boq_items_audit_boq_item_id'")).length > 0;
+    if (auditFk.length > 0) {
+      blockers.push(`enforced FK on boq_items_audit.boq_item_id present (${auditFk.join(', ')}) — `
+        + 'incompatible with audit DELETE-history; run prod-to-yandex:repair-audit-fk');
+    }
+    if (!auditIdx) {
+      warnings.push('idx_boq_items_audit_boq_item_id absent (non-FK lookup index recommended)');
+    }
+    sec('Audit schema compatibility', [
+      `enforced boq_items_audit.boq_item_id FK: ${auditFk.length ? 'PRESENT — ' + auditFk.join(', ') + ' (FAIL: run repair)' : 'absent (OK — audit/history compatible)'}`,
+      `index idx_boq_items_audit_boq_item_id: ${auditIdx ? 'present (OK)' : 'absent (warning)'}`,
+      'rationale: docs/yandex-migration/15_AUDIT_FK_SCHEMA_DECISION.md',
+    ]);
+
     // 8. Supabase internal schemas absent
     const present = (await q(
       "SELECT nspname FROM pg_namespace WHERE nspname = ANY($1)",

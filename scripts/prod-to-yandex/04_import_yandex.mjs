@@ -143,6 +143,7 @@ async function main() {
     dry_run: dryRun,
     options: { ...values, allowDataImport, allowAuthImport, allowCleanYandex, allowDisableTriggers },
     precheck: null,
+    audit_fk_compat: null,
     clean_yandex: null,
     auth: null,
     per_table: [],
@@ -165,6 +166,39 @@ async function main() {
   try {
     const temporal = await assertTemporalRawParsers(client);
     console.log(`${tag('YA')} raw-parser self-check ✓ (tstz=${temporal.timestamptz}, UTC/ISO)`);
+
+    // ---- Audit FK compatibility (fail early) ----
+    // boq_items_audit is historical/audit storage; an enforced FK on
+    // boq_item_id → boq_items rejects legitimate DELETE-history rows. PROD has
+    // no such FK. If the (spurious) FK still exists on the applied Yandex
+    // schema, refuse BEFORE importing — run the schema repair first.
+    {
+      const { rows: afk } = await client.query(`
+        SELECT con.conname
+          FROM pg_constraint con
+          JOIN pg_class c ON c.oid = con.conrelid
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          JOIN pg_class rc ON rc.oid = con.confrelid
+         WHERE n.nspname='public' AND c.relname='boq_items_audit'
+           AND con.contype='f' AND rc.relname='boq_items'
+           AND 'boq_item_id' = ANY (
+                 SELECT a.attname FROM unnest(con.conkey) k
+                   JOIN pg_attribute a ON a.attrelid=con.conrelid AND a.attnum=k)`);
+      if (afk.length > 0) {
+        const names = afk.map((r) => r.conname).join(', ');
+        report.audit_fk_compat = { ok: false, constraints: afk.map((r) => r.conname) };
+        report.finished_at = new Date().toISOString();
+        report.status = 'DATA_IMPORT_FAILED';
+        report.error = `boq_items_audit FK on boq_item_id still present (${names}); run schema repair before import: npm run prod-to-yandex:repair-audit-fk -- --apply (gated). See docs/yandex-migration/15_AUDIT_FK_SCHEMA_DECISION.md`;
+        writeReportMd(report);
+        console.error(`✗ ${names} exists; run schema repair before import`);
+        console.error('  npm run prod-to-yandex:repair-audit-fk -- --dry-run   (then --apply, gated)');
+        await client.end().catch(() => {});
+        process.exit(3);
+      }
+      report.audit_fk_compat = { ok: true, constraints: [] };
+      console.log(`${tag('YA')} audit FK compatibility ✓ (no enforced boq_items_audit.boq_item_id FK)`);
+    }
 
     // ---- Existing tables on the target ----
     const { rows: pubRows } = await client.query(
@@ -435,6 +469,16 @@ function writeReportMd(report) {
   L.push('```json');
   L.push(JSON.stringify(report.options, null, 2));
   L.push('```');
+  L.push('');
+  L.push('## Audit FK compatibility');
+  L.push('');
+  if (report.audit_fk_compat) {
+    L.push(report.audit_fk_compat.ok
+      ? '- OK — no enforced FK on `boq_items_audit.boq_item_id` (audit/history compatible). '
+        + 'See docs/yandex-migration/15_AUDIT_FK_SCHEMA_DECISION.md.'
+      : `- ❌ enforced FK present: ${report.audit_fk_compat.constraints.join(', ')} — `
+        + 'import refused. Run `npm run prod-to-yandex:repair-audit-fk -- --apply` (gated) first.');
+  } else { L.push('_not checked_'); }
   L.push('');
   L.push('## Emptiness precheck');
   L.push('');
