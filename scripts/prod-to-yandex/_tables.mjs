@@ -253,6 +253,52 @@ export const FK_CHECKS = [
   { table: 'tender_iterations', column: 'group_id', refSchema: 'public', refTable: 'tender_groups', refColumn: 'id' },
 ];
 
+// Application enums (must match db/yandex/sql/02_enums.sql). Used by the
+// clean-only structure-only precheck (structure must be valid even when the
+// target still holds residual partial-import rows).
+export const EXPECTED_ENUMS = [
+  'access_status_type',
+  'boq_item_type',
+  'construction_scope_type',
+  'currency_type',
+  'delivery_price_type',
+  'housing_class_type',
+  'material_type',
+  'task_status',
+  'user_role_type',
+  'work_mode',
+  'work_status',
+];
+
+// The 6 tables that must carry the pg_notify `rowchange` AFTER trigger.
+export const PGNOTIFY_TABLES = [
+  'tenders', 'notifications', 'boq_items', 'client_positions',
+  'cost_redistribution_results', 'construction_cost_volumes',
+];
+
+// USER triggers (tgisinternal=false) whose firing during a bulk DELETE has
+// side effects that must be prevented while CLEANING the target:
+//   - trg_boq_items_audit: AFTER DELETE on boq_items re-inserts a DELETE-audit
+//     row into boq_items_audit → synthetic rows that defeat the clean.
+//   - trg_notify_row_change_*: pg_notify('rowchange') on every deleted row →
+//     a NOTIFY storm during cleanup (no data harm, but noisy/slow).
+// Exact schema.table → exact trigger names. Disabled per-name only (never
+// DISABLE TRIGGER ALL, never system triggers, never session_replication_role),
+// re-enabled in finally, kept in the final schema.
+export const CLEAN_SIDE_EFFECT_TRIGGERS = {
+  boq_items: ['trg_boq_items_audit', 'trg_notify_row_change_boq_items'],
+  tenders: ['trg_notify_row_change_tenders'],
+  notifications: ['trg_notify_row_change_notifications'],
+  client_positions: ['trg_notify_row_change_client_positions'],
+  cost_redistribution_results: ['trg_notify_row_change_cost_redistribution_results'],
+  construction_cost_volumes: ['trg_notify_row_change_construction_cost_volumes'],
+};
+
+// Supabase-internal schemas that MUST be absent from the cleaned Yandex DB.
+export const SUPABASE_INTERNAL_SCHEMAS = [
+  'realtime', 'storage', 'vault', 'graphql', 'supabase_migrations',
+];
+
 /**
  * Return tables from IMPORT_ORDER that actually exist on a target snapshot.
  * Used when the applied schema and IMPORT_ORDER drift (skip missing rather

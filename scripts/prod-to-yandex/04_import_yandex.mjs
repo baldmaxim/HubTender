@@ -20,6 +20,13 @@
 //    session_replication_role; NEVER system triggers. Triggers stay in the
 //    final schema.
 //  - NEVER --allow-overwrite / ALLOW_PROD_OVERWRITE — not supported here.
+//  - CLEAN-ONLY (variant B): --clean-only + --clean-yandex + --confirm +
+//    ALLOW_CLEAN_YANDEX=true performs a DATA-ONLY clean of partial-import rows
+//    and NEVER imports. It runs a STRUCTURE-only precheck (row counts ignored)
+//    and does NOT require manifest / SCHEMA_VERIFY_OK / ALLOW_DATA_IMPORT /
+//    ALLOW_AUTH_IMPORT / ALLOW_DISABLE_IMPORT_TRIGGERS. Explicit-list DELETE in
+//    reverse FK order (auth last); NO DROP/TRUNCATE CASCADE/session_replication_
+//    role/system-trigger disable. Normal import path stays strict & unchanged.
 //  - Exit codes: 0 ok · 2 config/precondition · 3 blocker · 7 guard · 1 fail.
 // ===========================================================================
 
@@ -34,6 +41,8 @@ import {
 import {
   IMPORT_ORDER, AUTH_IMPORT_ORDER, REQUIRES_TRIGGER_DISABLE,
   NOTIFY_TRIGGERS_BY_TABLE, SELF_FK_TABLES, defaultOrderBy,
+  EXPECTED_ENUMS, PGNOTIFY_TABLES, SUPABASE_INTERNAL_SCHEMAS,
+  CLEAN_SIDE_EFFECT_TRIGGERS,
 } from './_tables.mjs';
 import {
   readNdjson, batchInsert, withTempDisabledTriggers, discoverTriggers,
@@ -56,7 +65,8 @@ const { values } = parseCliArgs({
     'auth-only':     { type: 'boolean', default: false, describe: 'Import auth.users + auth.identities only' },
     'public-only':   { type: 'boolean', default: false, describe: 'Skip auth schema entirely' },
     'resume':        { type: 'boolean', default: false, describe: 'Resume from EXPORT_DIR/yandex_import_state.json (ON CONFLICT DO NOTHING for completed tables)' },
-    'clean-yandex':  { type: 'boolean', default: false, describe: 'DELETE listed target tables before import (REQUIRES ALLOW_CLEAN_YANDEX=true + --confirm)' },
+    'clean-yandex':  { type: 'boolean', default: false, describe: 'DELETE listed target tables (REQUIRES ALLOW_CLEAN_YANDEX=true + --confirm)' },
+    'clean-only':    { type: 'boolean', default: false, describe: 'Data-only clean of partial-import rows; NO import. Needs --clean-yandex --confirm + ALLOW_CLEAN_YANDEX=true. Structure-only precheck; ignores SCHEMA_VERIFY/manifest/import gates.' },
     'confirm':       { type: 'boolean', default: false, describe: 'Required for --clean-yandex' },
     'batch-size':    { type: 'string',  default: '1000', describe: 'Rows per INSERT batch' },
     'export-dir':    { type: 'string',  default: '',     describe: 'Override EXPORT_DIR env' },
@@ -67,6 +77,7 @@ const exportDir = values['export-dir'] || env('EXPORT_DIR') || getExportDir();
 const batchSize = parseInt(values['batch-size'], 10) || 1000;
 const dryRun = values['dry-run'];
 const resume = values.resume === true;
+const cleanOnly = values['clean-only'] === true;
 
 const allowDataImport = env('ALLOW_DATA_IMPORT') === 'true';
 const allowAuthImport = env('ALLOW_AUTH_IMPORT') === 'true';
@@ -76,6 +87,13 @@ const allowDisableTriggers = env('ALLOW_DISABLE_IMPORT_TRIGGERS') === 'true';
 async function main() {
   // ---- Hard OLD-env guard ----
   try { assertNoOldEnv(); } catch (e) { console.error(`✗ ${e.message}`); process.exit(7); }
+
+  // ---- Variant B: dedicated CLEAN-ONLY mode (no import) ----
+  // Removes residual partial-import rows when SCHEMA_VERIFY_OK is unreachable
+  // *only because* tables are non-empty. Validates schema STRUCTURE (not row
+  // emptiness); does NOT require manifest / SCHEMA_VERIFY_OK / ALLOW_DATA_IMPORT
+  // / ALLOW_AUTH_IMPORT / ALLOW_DISABLE_IMPORT_TRIGGERS. Never imports.
+  if (cleanOnly) { await runCleanOnly(); return; }
 
   // ---- Required export artefacts ----
   requireExportFiles(exportDir, ['manifest.json', 'export_validation.json'],
@@ -519,6 +537,404 @@ function writeReportMd(report) {
   L.push('```');
   L.push(report.status);
   L.push('```');
+  L.push('');
+  try { writeFileSync(IMPORT_REPORT, L.join('\n'), 'utf8'); console.log(`✓ wrote ${IMPORT_REPORT}`); }
+  catch (e) { console.error(`✗ failed to write ${IMPORT_REPORT}: ${e.message}`); }
+}
+
+// ===========================================================================
+// CLEAN-ONLY MODE (variant B): data-only clean of partial-import rows.
+// ===========================================================================
+
+const CLEAN_STATUS = {
+  DRY: 'DATA_CLEAN_DRY_RUN_OK',
+  OK: 'DATA_CLEAN_OK',
+  FAILED: 'DATA_CLEAN_FAILED',
+};
+
+// Structure-only precheck: schema must be structurally correct EVEN IF tables
+// are non-empty. Row counts are intentionally NOT checked here.
+async function structureOnlyPrecheck(client) {
+  const q = async (sql, p) => (await client.query(sql, p)).rows;
+  const items = [];
+  const add = (name, ok, detail) => items.push({ name, ok: !!ok, detail: detail || '' });
+
+  const ns = (await q(
+    "SELECT nspname FROM pg_namespace WHERE nspname IN ('public','auth')")).map((r) => r.nspname);
+  add('schema public exists', ns.includes('public'));
+  add('schema auth exists', ns.includes('auth'));
+
+  const hasAuthUsers = (await q("SELECT to_regclass('auth.users') AS r"))[0].r != null;
+  const hasAuthIdentities = (await q("SELECT to_regclass('auth.identities') AS r"))[0].r != null;
+  const authUid = (await q(
+    "SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid " +
+    "WHERE n.nspname='auth' AND p.proname='uid') AS e"))[0].e;
+  add('auth.users exists', hasAuthUsers);
+  add('auth.identities exists', hasAuthIdentities, hasAuthIdentities ? '' : 'optional bridge — required by schema foundation');
+  add('auth.uid() exists', authUid);
+
+  const dbTables = new Set((await q(
+    "SELECT table_name FROM information_schema.tables " +
+    "WHERE table_schema='public' AND table_type='BASE TABLE'")).map((r) => r.table_name));
+  const missingTables = IMPORT_ORDER.filter((t) => !dbTables.has(t));
+  add(`expected ${IMPORT_ORDER.length} public tables exist`, missingTables.length === 0,
+    missingTables.length ? `missing: ${missingTables.join(', ')}` : '');
+
+  const dbEnums = new Set((await q(
+    "SELECT t.typname FROM pg_type t JOIN pg_namespace n ON t.typnamespace=n.oid " +
+    "WHERE n.nspname='public' AND t.typtype='e'")).map((r) => r.typname));
+  const missingEnums = EXPECTED_ENUMS.filter((e) => !dbEnums.has(e));
+  add(`expected ${EXPECTED_ENUMS.length} enums exist`, missingEnums.length === 0,
+    missingEnums.length ? `missing: ${missingEnums.join(', ')}` : '');
+
+  const notifyFn = (await q(
+    "SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid " +
+    "WHERE n.nspname='public' AND p.proname='notify_row_change') AS e"))[0].e;
+  add('public.notify_row_change() exists', notifyFn);
+
+  const ntTables = new Set((await q(
+    "SELECT event_object_table AS t FROM information_schema.triggers " +
+    "WHERE trigger_schema='public' AND trigger_name LIKE 'trg_notify_row_change%'")).map((r) => r.t));
+  const missingNotify = PGNOTIFY_TABLES.filter((t) => !ntTables.has(t));
+  add('pg_notify rowchange triggers on 6 tables', missingNotify.length === 0,
+    missingNotify.length ? `missing on: ${missingNotify.join(', ')}` : '');
+
+  const exts = new Set((await q('SELECT extname FROM pg_extension')).map((r) => r.extname));
+  add('extension pgcrypto', exts.has('pgcrypto'));
+  add('extension uuid-ossp', exts.has('uuid-ossp'));
+
+  const sbPresent = (await q(
+    'SELECT nspname FROM pg_namespace WHERE nspname = ANY($1)',
+    [SUPABASE_INTERNAL_SCHEMAS])).map((r) => r.nspname);
+  add('Supabase internal schemas absent', sbPresent.length === 0,
+    sbPresent.length ? `present: ${sbPresent.join(', ')}` : '');
+
+  const auditFk = (await q(`
+    SELECT con.conname FROM pg_constraint con
+      JOIN pg_class c ON c.oid=con.conrelid
+      JOIN pg_namespace n ON n.oid=c.relnamespace
+      JOIN pg_class rc ON rc.oid=con.confrelid
+     WHERE n.nspname='public' AND c.relname='boq_items_audit'
+       AND con.contype='f' AND rc.relname='boq_items'
+       AND 'boq_item_id' = ANY (
+             SELECT a.attname FROM unnest(con.conkey) k
+               JOIN pg_attribute a ON a.attrelid=con.conrelid AND a.attnum=k)`))
+    .map((r) => r.conname);
+  add('no enforced boq_items_audit.boq_item_id FK', auditFk.length === 0,
+    auditFk.length ? `present: ${auditFk.join(', ')}` : '');
+  const auditIdx = (await q(
+    "SELECT 1 FROM pg_indexes WHERE schemaname='public' " +
+    "AND tablename='boq_items_audit' AND indexname='idx_boq_items_audit_boq_item_id'")).length > 0;
+  add('idx_boq_items_audit_boq_item_id exists', auditIdx);
+
+  return { ok: items.every((i) => i.ok), items, hasAuthUsers, hasAuthIdentities };
+}
+
+async function runCleanOnly() {
+  const report = {
+    mode: 'clean-only',
+    started_at: new Date().toISOString(),
+    finished_at: null,
+    dry_run: dryRun,
+    options: { ...values, allowCleanYandex, allowDisableTriggers },
+    structure: null,
+    clean_plan: null,
+    trigger_protection: {
+      reason: 'prevent synthetic boq_items_audit rows (trg_boq_items_audit on '
+        + 'boq_items DELETE) and a pg_notify rowchange storm during cleanup',
+      planned: [], disabled: [], reenabled: [],
+    },
+    rows_before: {},
+    rows_after: {},
+    errors: [],
+    status: 'PENDING',
+  };
+
+  // ---- Guard: clean-only needs --clean-only + --clean-yandex + --confirm
+  // always; ALLOW_CLEAN_YANDEX=true is the destructive key — required for the
+  // REAL clean, not for a no-write dry-run plan. ----
+  const missing = [];
+  if (!values['clean-only']) missing.push('--clean-only');
+  if (!values['clean-yandex']) missing.push('--clean-yandex');
+  if (!values.confirm) missing.push('--confirm');
+  if (!dryRun && !allowCleanYandex) missing.push('ALLOW_CLEAN_YANDEX=true (real clean)');
+  if (missing.length) {
+    report.errors.push(`clean-only refused — missing: ${missing.join(', ')}`);
+    report.finished_at = new Date().toISOString();
+    report.status = CLEAN_STATUS.FAILED;
+    writeCleanReportMd(report);
+    console.error('✗ clean-only refused. Need --clean-only --clean-yandex --confirm'
+      + ' (+ ALLOW_CLEAN_YANDEX=true for the real, non-dry-run clean).');
+    console.error(`  missing: ${missing.join(', ')}`);
+    process.exit(7);
+  }
+
+  const yaUrl = (() => {
+    try { return requireEnv('YANDEX_DATABASE_URL'); }
+    catch (e) { report.errors.push(e.message); report.status = CLEAN_STATUS.FAILED; writeCleanReportMd(report); console.error(`✗ ${e.message}`); process.exit(2); }
+  })();
+  const ca = resolveCa();
+  if (!ca.ok) {
+    report.errors.push(`Yandex CA unavailable (${ca.reason})`);
+    report.status = CLEAN_STATUS.FAILED; writeCleanReportMd(report);
+    console.error(`✗ Yandex CA unavailable (${ca.reason}); verify-full required.`);
+    process.exit(2);
+  }
+
+  console.log(`${tag('YA')} CLEAN-ONLY ${dryRun ? '(dry-run — no writes)' : '(REAL clean)'} — no import will run`);
+  const client = await getYandexClient(yaUrl, ca.pem, { applicationName: 'prod-to-yandex-clean-only' });
+
+  try {
+    // ---- Structure-only precheck ----
+    const st = await structureOnlyPrecheck(client);
+    report.structure = st;
+    for (const it of st.items) console.log(`${tag('YA')} ${it.ok ? '✓' : '✗'} ${it.name}${it.detail ? ' — ' + it.detail : ''}`);
+    if (!st.ok) {
+      report.errors.push('structure-only precheck FAILED — refusing to clean (schema not structurally valid).');
+      report.finished_at = new Date().toISOString();
+      report.status = CLEAN_STATUS.FAILED;
+      writeCleanReportMd(report);
+      console.error('✗ DATA_CLEAN_FAILED — structure precheck failed; nothing cleaned.');
+      await client.end().catch(() => {});
+      process.exit(3);
+    }
+
+    // ---- Existing tables + clean order (reverse import order; auth last) ----
+    const present = new Set((await client.query(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'",
+    )).rows.map((r) => r.table_name));
+    const order = [];
+    for (const t of [...IMPORT_ORDER].reverse()) if (present.has(t)) order.push({ schema: 'public', table: t });
+    if (st.hasAuthIdentities) order.push({ schema: 'auth', table: 'identities' });
+    if (st.hasAuthUsers) order.push({ schema: 'auth', table: 'users' });
+
+    let totalBefore = 0;
+    const nonEmpty = [];
+    for (const o of order) {
+      const n = await countRows(client, o.schema, o.table);
+      report.rows_before[`${o.schema}.${o.table}`] = n;
+      totalBefore += n;
+      if (n !== 0) nonEmpty.push(`${o.schema}.${o.table}=${n}`);
+    }
+    report.clean_plan = {
+      reverse_import_order: order.map((o) => `${o.schema}.${o.table}`),
+      method: 'DELETE FROM explicit table (reverse FK order, NO CASCADE, NO session_replication_role)',
+      tables: order.length,
+      non_empty: nonEmpty,
+      total_rows_before: totalBefore,
+    };
+    console.log(`${tag('YA')} clean plan: ${order.length} tables, ${nonEmpty.length} non-empty, ${totalBefore} rows total`);
+    nonEmpty.forEach((x) => console.log(`${tag('YA')}   ${x}`));
+
+    // ---- Discover side-effect USER triggers to disable during the clean ----
+    // Exact schema.table + exact trigger name; discoverTriggers filters
+    // tgisinternal=false (user triggers only). Never DISABLE TRIGGER ALL,
+    // never system triggers, never session_replication_role.
+    const planned = [];
+    for (const o of order) {
+      if (o.schema !== 'public') continue;
+      const cand = CLEAN_SIDE_EFFECT_TRIGGERS[o.table];
+      if (!cand || !cand.length) continue;
+      const present = await discoverTriggers(client, 'public', o.table, cand);
+      if (present.length) planned.push({ schema: 'public', table: o.table, triggers: present });
+    }
+    report.trigger_protection.planned = planned.map((p) => ({ table: `${p.schema}.${p.table}`, triggers: p.triggers }));
+    if (planned.length) {
+      console.log(`${tag('YA')} side-effect triggers planned for temporary disable:`);
+      for (const p of planned) console.log(`${tag('YA')}   public.${p.table}: ${p.triggers.join(', ')}`);
+    } else {
+      console.log(`${tag('YA')} no side-effect triggers present to disable`);
+    }
+
+    if (dryRun) {
+      report.finished_at = new Date().toISOString();
+      report.status = CLEAN_STATUS.DRY;
+      writeCleanReportMd(report);
+      console.log(`${tag('YA')} status: ${CLEAN_STATUS.DRY} (nothing written to Yandex; no triggers touched)`);
+      await client.end().catch(() => {});
+      return;
+    }
+
+    // ---- Real clean: trigger-disable gate ----
+    if (planned.length > 0 && !allowDisableTriggers) {
+      report.errors.push(
+        'clean-only would generate synthetic audit rows (trg_boq_items_audit) '
+        + 'and a NOTIFY storm unless the listed user triggers are disabled. '
+        + 'Real clean with trigger disable requires ALLOW_DISABLE_IMPORT_TRIGGERS=true '
+        + '(plus ALLOW_CLEAN_YANDEX=true + --clean-yandex --clean-only --confirm).');
+      report.finished_at = new Date().toISOString();
+      report.status = CLEAN_STATUS.FAILED;
+      writeCleanReportMd(report);
+      console.error('✗ DATA_CLEAN_FAILED — ALLOW_DISABLE_IMPORT_TRIGGERS=true required to disable side-effect triggers; nothing cleaned.');
+      await client.end().catch(() => {});
+      process.exit(7);
+    }
+
+    // ---- Real clean: disable side-effect triggers, DELETE, re-enable in finally ----
+    const disabledList = []; // { schema, table, trigger } actually disabled
+    try {
+      for (const p of planned) {
+        for (const trg of p.triggers) {
+          await client.query(`ALTER TABLE "${p.schema}"."${p.table}" DISABLE TRIGGER "${trg}"`);
+          disabledList.push({ schema: p.schema, table: p.table, trigger: trg });
+          console.log(`${tag('YA')} disabled trigger ${p.schema}.${p.table}.${trg}`);
+        }
+      }
+      report.trigger_protection.disabled = disabledList.map((d) => `${d.schema}.${d.table}.${d.trigger}`);
+
+      for (const o of order) {
+        const r = await client.query(`DELETE FROM "${o.schema}"."${o.table}"`);
+        report.rows_after[`${o.schema}.${o.table}`] = 0;
+        console.log(`${tag('YA')} cleaned ${o.schema}.${o.table} (${r.rowCount ?? 0} rows deleted)`);
+      }
+      let postFail = null;
+      for (const o of order) {
+        const n = await countRows(client, o.schema, o.table);
+        report.rows_after[`${o.schema}.${o.table}`] = n;
+        if (n !== 0) postFail = `${o.schema}.${o.table} still has ${n} rows`;
+      }
+      // Explicit boq_items_audit post-assert (the table the side-effect hit).
+      const auditN = await countRows(client, 'public', 'boq_items_audit');
+      report.rows_after['public.boq_items_audit'] = auditN;
+      if (!postFail && auditN !== 0) postFail = `public.boq_items_audit still has ${auditN} rows`;
+
+      if (postFail) {
+        report.errors.push(`post-assert failed: ${postFail}`);
+        report.finished_at = new Date().toISOString();
+        report.status = CLEAN_STATUS.FAILED;
+        console.error(`✗ DATA_CLEAN_FAILED — ${postFail}`);
+        // report written in finally (after re-enable) so the doc reflects truth
+      } else {
+        report.finished_at = new Date().toISOString();
+        report.status = CLEAN_STATUS.OK;
+        console.log(`${tag('YA')} status: ${CLEAN_STATUS.OK} — ${order.length} tables cleaned (data only; schema untouched)`);
+      }
+    } finally {
+      // Re-enable EXACTLY the triggers we disabled, even on error.
+      for (const d of disabledList) {
+        try {
+          await client.query(`ALTER TABLE "${d.schema}"."${d.table}" ENABLE TRIGGER "${d.trigger}"`);
+          report.trigger_protection.reenabled.push(`${d.schema}.${d.table}.${d.trigger}`);
+          console.log(`${tag('YA')} re-enabled trigger ${d.schema}.${d.table}.${d.trigger}`);
+        } catch (e) {
+          report.errors.push(`FAILED to re-enable ${d.schema}.${d.table}.${d.trigger}: ${String(e?.message || e)}`);
+          console.error(`✗ FAILED to re-enable ${d.schema}.${d.table}.${d.trigger} — re-enable manually: `
+            + `ALTER TABLE "${d.schema}"."${d.table}" ENABLE TRIGGER "${d.trigger}";`);
+        }
+      }
+    }
+    writeCleanReportMd(report);
+    if (report.status === CLEAN_STATUS.FAILED) { await client.end().catch(() => {}); process.exit(1); }
+  } catch (e) {
+    report.finished_at = new Date().toISOString();
+    report.status = CLEAN_STATUS.FAILED;
+    report.errors.push(String(e?.message || e).replace(/postgres(?:ql)?:\/\/\S+/gi, '<redacted-conn>'));
+    writeCleanReportMd(report);
+    throw e;
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+function writeCleanReportMd(report) {
+  mkdirSync(DOC_DIR, { recursive: true });
+  const L = [];
+  L.push('# 12. DATA IMPORT REPORT');
+  L.push('');
+  L.push('> Generated by `scripts/prod-to-yandex/04_import_yandex.mjs`.');
+  L.push('> Overwritten on every run. Source = PROD Supabase export only.');
+  L.push('');
+  L.push(`- Mode: **${report.mode}**`);
+  L.push(`- Dry-run: ${report.dry_run ? 'YES' : 'no'}`);
+  L.push(`- Started (UTC): ${report.started_at}`);
+  L.push(`- Finished (UTC): ${report.finished_at || '(in progress / failed)'}`);
+  L.push('');
+  L.push('## Options');
+  L.push('');
+  L.push('```json');
+  L.push(JSON.stringify(report.options, null, 2));
+  L.push('```');
+  L.push('');
+  L.push('## Clean precheck (structure-only — row counts intentionally ignored)');
+  L.push('');
+  if (report.structure) {
+    L.push('| Check | OK | Detail |');
+    L.push('|---|---|---|');
+    for (const it of report.structure.items) L.push(`| ${it.name} | ${it.ok ? '✓' : '✗'} | ${String(it.detail).replace(/\|/g, '\\|')} |`);
+  } else { L.push('_not run_'); }
+  L.push('');
+  L.push('## Clean plan');
+  L.push('');
+  if (report.clean_plan) {
+    L.push(`- method: ${report.clean_plan.method}`);
+    L.push(`- tables: ${report.clean_plan.tables} (reverse import order; auth after public)`);
+    L.push(`- reverse import order: ${report.clean_plan.reverse_import_order.join(' → ')}`);
+    L.push(`- non-empty before: ${report.clean_plan.non_empty.length ? report.clean_plan.non_empty.join(', ') : '(none)'}`);
+    L.push(`- total rows before: ${report.clean_plan.total_rows_before}`);
+  } else { L.push('_not computed_'); }
+  L.push('');
+  L.push('## Clean-only trigger side-effect protection');
+  L.push('');
+  const tp = report.trigger_protection;
+  if (tp) {
+    L.push(`- reason: ${tp.reason}`);
+    L.push(`- triggers planned for disable: ${tp.planned.length
+      ? tp.planned.map((p) => `${p.table} [${p.triggers.join(', ')}]`).join('; ') : '(none)'}`);
+    L.push(`- triggers actually disabled: ${tp.disabled.length ? tp.disabled.join(', ') : '(none — dry-run / not required)'}`);
+    L.push(`- triggers re-enabled: ${tp.reenabled.length ? tp.reenabled.join(', ') : '(none)'}`);
+    L.push('- method: ALTER TABLE … DISABLE/ENABLE TRIGGER <exact name> (user triggers '
+      + 'only, tgisinternal=false); re-enabled in finally; kept in final schema. '
+      + 'NO DISABLE TRIGGER ALL, NO system triggers, NO session_replication_role.');
+    L.push('- real-clean gate: ALLOW_DISABLE_IMPORT_TRIGGERS=true required when '
+      + 'side-effect triggers are present (plus ALLOW_CLEAN_YANDEX=true + '
+      + '--clean-yandex --clean-only --confirm). Dry-run only plans.');
+  } else { L.push('_n/a_'); }
+  L.push('');
+  L.push('## Final row counts after clean');
+  L.push('');
+  if (!report.dry_run && Object.keys(report.rows_after).length) {
+    const nz = Object.entries(report.rows_after).filter(([, v]) => v !== 0);
+    L.push(nz.length ? nz.map(([k, v]) => `- ❌ ${k} = ${v} (expected 0)`).join('\n')
+      : '- ✓ all cleaned public app tables + auth.users + auth.identities + boq_items_audit = 0');
+  } else { L.push('_dry-run — no changes_'); }
+  L.push('');
+  L.push('## Tables cleaned');
+  L.push('');
+  const cleanedKeys = Object.keys(report.rows_after);
+  if (!report.dry_run && cleanedKeys.length) {
+    for (const k of cleanedKeys) L.push(`- ${k}: ${report.rows_before[k] ?? '?'} → ${report.rows_after[k]}`);
+  } else { L.push(report.dry_run ? '_dry-run — nothing cleaned_' : '_none_'); }
+  L.push('');
+  L.push('## Rows before');
+  L.push('');
+  L.push('```json');
+  L.push(JSON.stringify(report.rows_before, null, 2));
+  L.push('```');
+  L.push('');
+  L.push('## Rows after');
+  L.push('');
+  L.push('```json');
+  L.push(report.dry_run ? '{}  // dry-run: no changes' : JSON.stringify(report.rows_after, null, 2));
+  L.push('```');
+  L.push('');
+  L.push('## Errors');
+  L.push('');
+  if (report.errors.length) for (const e of report.errors) L.push(`- ❌ ${e}`);
+  else L.push('_none_');
+  L.push('');
+  L.push('## Final status');
+  L.push('');
+  L.push('```');
+  L.push(report.status);
+  L.push('```');
+  L.push('');
+  L.push('Statuses: `DATA_CLEAN_DRY_RUN_OK` · `DATA_CLEAN_OK` · `DATA_CLEAN_FAILED` · '
+    + '`DATA_IMPORT_DRY_RUN_OK` · `DATA_IMPORT_OK` · `DATA_IMPORT_FAILED`');
+  L.push('');
+  L.push('> After `DATA_CLEAN_OK` run `npm run prod-to-yandex:verify-schema` '
+    + '(expected `SCHEMA_VERIFY_OK`). Normal import stays strict (requires '
+    + 'SCHEMA_VERIFY_OK + manifest + ALLOW_DATA_IMPORT/ALLOW_AUTH_IMPORT/'
+    + 'ALLOW_DISABLE_IMPORT_TRIGGERS).');
   L.push('');
   try { writeFileSync(IMPORT_REPORT, L.join('\n'), 'utf8'); console.log(`✓ wrote ${IMPORT_REPORT}`); }
   catch (e) { console.error(`✗ failed to write ${IMPORT_REPORT}: ${e.message}`); }

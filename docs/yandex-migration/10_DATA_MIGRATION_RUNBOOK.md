@@ -175,6 +175,103 @@ Diagnostic + decision: `15_AUDIT_FK_SCHEMA_DECISION.md`. After a successful
 repair, the data import / clean-yandex / verify cycle is resumed only under the
 existing two-key gates and a separate operator confirmation.
 
+## 10. Clean partial Yandex import state (clean-only / variant B)
+
+**Why this exists.** A failed/partial import leaves rows in the target. The
+normal import path requires `SCHEMA_VERIFY_OK`, but `02_verify_schema` reports
+`SCHEMA_VERIFY_FAILED` whenever tables are non-empty — so a full
+`SCHEMA_VERIFY_OK` is **unreachable while partial-import rows remain**. That is
+a deadlock: clean-yandex is exactly what removes those rows, but it was gated
+behind the very status it would restore.
+
+**clean-only** breaks the deadlock without weakening the normal import:
+
+- It validates the schema **structure** (schemas, auth bridge, 40 public
+  tables, 11 enums, `notify_row_change`, the 6 pg_notify `rowchange` triggers,
+  `pgcrypto`/`uuid-ossp`, absence of Supabase-internal schemas, audit-FK
+  compatibility) and **ignores non-empty row counts**.
+- It does **not** require `manifest` / `SCHEMA_VERIFY_OK` /
+  `ALLOW_DATA_IMPORT` / `ALLOW_AUTH_IMPORT` / `ALLOW_DISABLE_IMPORT_TRIGGERS`.
+- It **never imports**. It only `DELETE`s rows from the explicit known
+  application/auth table list in reverse import order (auth after public),
+  then post-asserts every table at 0 rows. No `DROP`, no
+  `TRUNCATE … CASCADE`, no `session_replication_role`, no system-trigger
+  disable. Schema/functions/triggers/extensions are untouched.
+- After `DATA_CLEAN_OK`, run `verify-schema` — it should now read
+  `SCHEMA_VERIFY_OK`. Only then is the normal (strict) import allowed.
+
+```bash
+# dry-run clean (no writes; shows tables, current row counts, reverse order):
+npm run prod-to-yandex:import -- --dry-run --clean-yandex --clean-only --confirm
+
+# real clean (data only — operator-authorised):
+$env:ALLOW_CLEAN_YANDEX="true"            # PowerShell
+npm run prod-to-yandex:import -- --clean-yandex --clean-only --confirm
+Remove-Item Env:\ALLOW_CLEAN_YANDEX -ErrorAction SilentlyContinue
+
+# then re-verify the schema (expected SCHEMA_VERIFY_OK):
+npm run prod-to-yandex:verify-schema
+```
+
+Result doc: `12_DATA_IMPORT_REPORT.md` (statuses
+`DATA_CLEAN_DRY_RUN_OK` / `DATA_CLEAN_OK` / `DATA_CLEAN_FAILED`, alongside the
+`DATA_IMPORT_*` statuses for the import mode). The normal import remains strict:
+it still requires `SCHEMA_VERIFY_OK` + manifest + `ALLOW_DATA_IMPORT` +
+`ALLOW_AUTH_IMPORT` + `ALLOW_DISABLE_IMPORT_TRIGGERS`, and is run only under a
+separate operator confirmation.
+
+## 11. Clean-only trigger protection
+
+`boq_items` carries the AFTER-DELETE business trigger `trg_boq_items_audit`
+(`log_boq_items_changes`). A bulk `DELETE FROM public.boq_items` therefore
+**re-inserts one DELETE-audit row per deleted row into `boq_items_audit`** —
+synthetic rows that are NOT PROD data and defeat the clean (this caused the
+first clean-only `DATA_CLEAN_FAILED`: `boq_items_audit still has 113134 rows`).
+The 6 `trg_notify_row_change_*` triggers also fire on every deleted row → a
+pg_notify storm during cleanup.
+
+clean-only therefore temporarily disables **only specific named user
+triggers** for the duration of the clean:
+
+- `public.boq_items` → `trg_boq_items_audit`, `trg_notify_row_change_boq_items`
+- `public.tenders` / `notifications` / `client_positions` /
+  `cost_redistribution_results` / `construction_cost_volumes` →
+  their `trg_notify_row_change_*`
+
+Rules: exact `schema.table` + exact trigger name; `discoverTriggers` only
+matches `pg_trigger.tgisinternal = false` (user triggers). **No
+`DISABLE TRIGGER ALL`, no system triggers, no `session_replication_role`, no
+`DROP TRIGGER`.** Triggers are re-enabled in a `finally` (even on error) and
+stay in the final schema. `session_replication_role` is forbidden because it
+bypasses ALL triggers/FKs session-wide (incl. system/RI), is too blunt, and
+masks integrity problems — per-trigger `DISABLE` is precise and auditable.
+
+Env required for a **real** clean that needs trigger disable:
+`ALLOW_CLEAN_YANDEX=true` **and** `ALLOW_DISABLE_IMPORT_TRIGGERS=true` (plus
+`--clean-yandex --clean-only --confirm`). Without
+`ALLOW_DISABLE_IMPORT_TRIGGERS` the real clean refuses
+(`DATA_CLEAN_FAILED`, nothing cleaned) and explains it would otherwise generate
+synthetic audit rows. The dry-run does **not** require it — it only lists the
+triggers that would be disabled.
+
+```bash
+# dry-run (no writes, no triggers touched; lists planned disables):
+npm run prod-to-yandex:import -- --dry-run --clean-yandex --clean-only --confirm
+
+# real clean (operator-authorised):
+$env:ALLOW_CLEAN_YANDEX="true"
+$env:ALLOW_DISABLE_IMPORT_TRIGGERS="true"
+npm run prod-to-yandex:import -- --clean-yandex --clean-only --confirm
+Remove-Item Env:\ALLOW_CLEAN_YANDEX -ErrorAction SilentlyContinue
+Remove-Item Env:\ALLOW_DISABLE_IMPORT_TRIGGERS -ErrorAction SilentlyContinue
+
+# then re-verify (expected SCHEMA_VERIFY_OK):
+npm run prod-to-yandex:verify-schema
+```
+
+`12_DATA_IMPORT_REPORT.md` records: triggers planned / actually disabled /
+re-enabled, the reason, and final row counts after clean.
+
 ## Final status
 
 ```

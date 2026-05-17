@@ -33,6 +33,19 @@ applies and verifies the cleaned schema only — no data is migrated here.**
 - `02_verify_schema` is read-only and, before the schema is applied or without a
   reachable/configured target, emits a clear `SCHEMA_VERIFY_FAILED` (never a
   stack trace).
+- **Clean-only mode (variant B)** — `04_import_yandex.mjs --clean-only`: a
+  DATA-ONLY clean of residual partial-import rows that **never imports**. Needs
+  `--clean-only` + `--clean-yandex` + `--confirm` + `ALLOW_CLEAN_YANDEX=true`
+  *together*. It runs a **structure-only precheck** (schemas / auth bridge /
+  40 tables / 11 enums / `notify_row_change` / 6 pg_notify triggers /
+  `pgcrypto`+`uuid-ossp` / no Supabase-internal schemas / audit-FK
+  compatibility) — **row counts are ignored** — and does NOT require manifest /
+  `SCHEMA_VERIFY_OK` / `ALLOW_DATA_IMPORT` / `ALLOW_AUTH_IMPORT` /
+  `ALLOW_DISABLE_IMPORT_TRIGGERS`. Clean = explicit-list `DELETE` in reverse
+  import order (auth after public), post-asserts every table at 0 rows. NO
+  `DROP`/`TRUNCATE … CASCADE`/`session_replication_role`/system-trigger
+  disable. The **normal import path stays strict and unchanged** (still
+  requires `SCHEMA_VERIFY_OK` + manifest + the import ALLOW_* gates).
 
 ## Result docs
 
