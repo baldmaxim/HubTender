@@ -4,9 +4,11 @@
 > [02_PROD_TO_YANDEX_PLAN.md](./02_PROD_TO_YANDEX_PLAN.md). **No data migrated.
 > No runtime changed. No real schema applied in this build.**
 >
-> Generated alongside `db/yandex/`. `scripts/prod-to-yandex/01_apply_schema.mjs`
-> appends an `## Apply run …` section to the bottom of this file on every
-> dry-run / real apply.
+> Generated alongside `db/yandex/`. Apply / verify results live in their own
+> docs: [08_SCHEMA_APPLY_RESULT.md](./08_SCHEMA_APPLY_RESULT.md) (written by
+> `01_apply_schema.mjs`) and
+> [09_SCHEMA_VERIFY_RESULT.md](./09_SCHEMA_VERIFY_RESULT.md) (written by
+> `02_verify_schema.mjs`).
 
 - Build date (repo time): 2026-05-17
 - Source of truth: **`supabase/migrations/`** (1–14). `supabase/schemas/prod.sql`
@@ -161,11 +163,13 @@ client). Future defence-in-depth, if added, must use
   source.
 
 ### Script syntax / dry-run
-- `node --check scripts/prod-to-yandex/00_check_connections.mjs` → OK
-- `node --check scripts/prod-to-yandex/01_apply_schema.mjs` → OK
-- `npm run prod-to-yandex:schema -- --dry-run` → see appended apply-run section
-  below (lists the 10 files in lexical order; no DB connection, nothing
-  applied).
+- `node --check scripts/prod-to-yandex/*.mjs` → OK
+- `npm run prod-to-yandex:schema -- --dry-run` → `SCHEMA_DRY_RUN_OK`; lists the
+  10 files in lexical order, runs the comment-aware forbidden scan (clean), no
+  DB connection. Full result: [08_SCHEMA_APPLY_RESULT.md](./08_SCHEMA_APPLY_RESULT.md).
+- `npm run prod-to-yandex:verify-schema` (before apply / no env) →
+  `SCHEMA_VERIFY_FAILED` with clear per-check detail (no stack trace). Full
+  result: [09_SCHEMA_VERIFY_RESULT.md](./09_SCHEMA_VERIFY_RESULT.md).
 - `npm run prod-to-yandex:check` → requires real `PROD_SUPABASE_DB_URL` /
   `YANDEX_DATABASE_URL` (not set in this build) — not run here.
 
@@ -190,13 +194,10 @@ and NOT authorised in this stage.** Real apply requires all of:
   schema/data preparation.
 - `06_indexes_constraints.sql` is not idempotent on its own (plain
   `ADD CONSTRAINT`) — apply to the empty target guaranteed by the preflight
-  gate, or via a careful `--from/--to` range.
+  gate **and** the apply-time empty-target precheck in `01_apply_schema.mjs`.
 
 ---
-<!-- 01_apply_schema.mjs appends "## Apply run <ts>" sections below this line. -->
 
-## Apply run 2026-05-17T17:40:22.613Z — DRY-RUN
-
-- Mode: dry-run (no connection, no changes)
-- Range: (start) → (end)
-- Planned files (10): 00_schemas.sql, 01_auth_compat_or_app_auth.sql, 02_enums.sql, 03_tables.sql, 04_functions.sql, 05_triggers.sql, 06_indexes_constraints.sql, 07_pgnotify.sql, 08_permissions.sql, 90_rls_note.sql
+> Apply / verify outcomes are tracked in
+> [08_SCHEMA_APPLY_RESULT.md](./08_SCHEMA_APPLY_RESULT.md) and
+> [09_SCHEMA_VERIFY_RESULT.md](./09_SCHEMA_VERIFY_RESULT.md), not appended here.
