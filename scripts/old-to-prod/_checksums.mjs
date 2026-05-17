@@ -131,18 +131,24 @@ export async function chunkedTableChecksum(client, { schema, table, orderBy = 'i
   let lastPk = null;
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    // NOTE: keyset boundary is taken via `ORDER BY pk DESC LIMIT 1`, NOT
+    // MAX(pk) — there is no max() aggregate for `uuid` (most PKs here are
+    // uuid). uuid/int/text all have btree ordering, so this works for any
+    // single-column PK.
     const sql = lastPk === null
       ? `WITH chunk AS (
            SELECT * FROM "${schema}"."${table}" ORDER BY "${orderBy}" LIMIT $1
          )
          SELECT COALESCE(md5(string_agg(c::text, ',' ORDER BY "${orderBy}")), md5('')) AS d,
-                COUNT(*)::int AS n, MAX("${orderBy}")::text AS maxpk
+                COUNT(*)::int AS n,
+                (SELECT "${orderBy}"::text FROM chunk ORDER BY "${orderBy}" DESC LIMIT 1) AS maxpk
          FROM chunk c`
       : `WITH chunk AS (
            SELECT * FROM "${schema}"."${table}" WHERE "${orderBy}" > $2 ORDER BY "${orderBy}" LIMIT $1
          )
          SELECT COALESCE(md5(string_agg(c::text, ',' ORDER BY "${orderBy}")), md5('')) AS d,
-                COUNT(*)::int AS n, MAX("${orderBy}")::text AS maxpk
+                COUNT(*)::int AS n,
+                (SELECT "${orderBy}"::text FROM chunk ORDER BY "${orderBy}" DESC LIMIT 1) AS maxpk
          FROM chunk c`;
     const params = lastPk === null ? [lim] : [lim, lastPk];
     const { rows: [r] } = await client.query(sql, params);
