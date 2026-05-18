@@ -21,6 +21,11 @@ type libraryServicer interface {
 	CreateMaterial(ctx context.Context, in repository.MaterialLibraryInput) error
 	UpdateMaterial(ctx context.Context, id string, in repository.MaterialLibraryInput) error
 	DeleteMaterial(ctx context.Context, id string) error
+	ListFolders(ctx context.Context, folderType string) ([]repository.LibraryFolderRow, error)
+	CreateFolder(ctx context.Context, in repository.LibraryFolderInput) error
+	RenameFolder(ctx context.Context, id, name string) error
+	DeleteFolder(ctx context.Context, id string) error
+	MoveLibraryItem(ctx context.Context, table, itemID string, folderID *string) error
 }
 
 // LibraryHandler serves the Library page endpoints.
@@ -176,6 +181,116 @@ func (h *LibraryHandler) DeleteMaterial(w http.ResponseWriter, r *http.Request) 
 	}
 	if err := h.svc.DeleteMaterial(r.Context(), id); err != nil {
 		apierr.InternalError("failed to delete material").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ─── library_folders ────────────────────────────────────────────────────────
+
+func (h *LibraryHandler) ListFolders(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	folderType := r.URL.Query().Get("type")
+	if folderType == "" {
+		apierr.BadRequest("type query param is required").Render(w)
+		return
+	}
+	rows, err := h.svc.ListFolders(r.Context(), folderType)
+	if err != nil {
+		apierr.InternalError("failed to list folders").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.LibraryFolderRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+func (h *LibraryHandler) CreateFolder(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var in repository.LibraryFolderInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.svc.CreateFolder(r.Context(), in); err != nil {
+		apierr.InternalError("failed to create folder").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+type renameFolderReq struct {
+	Name string `json:"name"`
+}
+
+func (h *LibraryHandler) RenameFolder(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing id").Render(w)
+		return
+	}
+	var req renameFolderReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.svc.RenameFolder(r.Context(), id, req.Name); err != nil {
+		apierr.InternalError("failed to rename folder").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *LibraryHandler) DeleteFolder(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing id").Render(w)
+		return
+	}
+	if err := h.svc.DeleteFolder(r.Context(), id); err != nil {
+		apierr.InternalError("failed to delete folder").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type moveItemReq struct {
+	Table    string  `json:"table"`
+	ItemID   string  `json:"item_id"`
+	FolderID *string `json:"folder_id"`
+}
+
+func (h *LibraryHandler) MoveItem(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var req moveItemReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if req.Table == "" || req.ItemID == "" {
+		apierr.BadRequest("table and item_id are required").Render(w)
+		return
+	}
+	if err := h.svc.MoveLibraryItem(r.Context(), req.Table, req.ItemID, req.FolderID); err != nil {
+		apierr.BadRequest("failed to move library item").Render(w)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

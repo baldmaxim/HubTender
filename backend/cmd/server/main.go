@@ -325,6 +325,11 @@ func main() {
 		r.Post("/api/v1/library/materials", libraryH.CreateMaterial)
 		r.Patch("/api/v1/library/materials/{id}", libraryH.UpdateMaterial)
 		r.Delete("/api/v1/library/materials/{id}", libraryH.DeleteMaterial)
+		r.Get("/api/v1/library/folders", libraryH.ListFolders)
+		r.Post("/api/v1/library/folders", libraryH.CreateFolder)
+		r.Patch("/api/v1/library/folders/{id}", libraryH.RenameFolder)
+		r.Delete("/api/v1/library/folders/{id}", libraryH.DeleteFolder)
+		r.Post("/api/v1/library/move", libraryH.MoveItem)
 
 		// Phase 5: atomic redistribution save (cost_redistribution_results).
 		r.Post("/api/v1/redistributions/save", redistributionH.Save)

@@ -75,3 +75,37 @@ func (s *LibraryService) DeleteMaterial(ctx context.Context, id string) error {
 	s.cache.Delete("materials-library:all")
 	return nil
 }
+
+func (s *LibraryService) ListFolders(ctx context.Context, folderType string) ([]repository.LibraryFolderRow, error) {
+	return s.repo.ListFolders(ctx, folderType)
+}
+
+func (s *LibraryService) CreateFolder(ctx context.Context, in repository.LibraryFolderInput) error {
+	if err := s.repo.CreateFolder(ctx, in); err != nil {
+		return fmt.Errorf("libraryService.CreateFolder: %w", err)
+	}
+	return nil
+}
+
+func (s *LibraryService) RenameFolder(ctx context.Context, id, name string) error {
+	if err := s.repo.RenameFolder(ctx, id, name); err != nil {
+		return fmt.Errorf("libraryService.RenameFolder: %w", err)
+	}
+	return nil
+}
+
+func (s *LibraryService) DeleteFolder(ctx context.Context, id string) error {
+	if err := s.repo.DeleteFolder(ctx, id); err != nil {
+		return fmt.Errorf("libraryService.DeleteFolder: %w", err)
+	}
+	return nil
+}
+
+func (s *LibraryService) MoveLibraryItem(ctx context.Context, table, itemID string, folderID *string) error {
+	if err := s.repo.MoveLibraryItem(ctx, table, itemID, folderID); err != nil {
+		return fmt.Errorf("libraryService.MoveLibraryItem: %w", err)
+	}
+	s.cache.Delete("works-library:all")
+	s.cache.Delete("materials-library:all")
+	return nil
+}

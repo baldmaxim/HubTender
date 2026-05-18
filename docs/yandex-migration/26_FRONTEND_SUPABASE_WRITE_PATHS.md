@@ -319,6 +319,17 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Library/useFolders DONE (verified; library_folders + move)
+
+`src/pages/Library/hooks/useFolders.ts` (5 supabase → 0). library-домен
+расширен: `GET /api/v1/library/folders?type=`, `POST/PATCH(name)/DELETE
+/api/v1/library/folders[/{id}]`, `POST /api/v1/library/move`
+(`{table,item_id,folder_id}` — table по allowlist
+works_library|materials_library|templates, безопасная интерполяция).
+library_folders без updated_at. Дерево папок строится на клиенте
+(buildFolderTree без изменений). `go build` 0,
+`go test ./internal/services` ok, `tsc` 0, `vite build` ✓.
+
 ## P5.3 — Library/MaterialsTab DONE (verified; library-домен расширен)
 
 `src/pages/Library/MaterialsTab/` (useMaterialsData 2, useMaterialsActions 3

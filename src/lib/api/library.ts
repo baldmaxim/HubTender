@@ -91,3 +91,51 @@ export async function deleteMaterialLibrary(id: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+// ─── library_folders ────────────────────────────────────────────────────────
+
+export type LibraryFolderRow = Tables<'library_folders'>;
+
+export async function listLibraryFolders(
+  type: 'works' | 'materials' | 'templates',
+): Promise<LibraryFolderRow[]> {
+  const res = await apiFetch<{ data: LibraryFolderRow[] }>(
+    `/api/v1/library/folders?type=${encodeURIComponent(type)}`,
+  );
+  return res.data ?? [];
+}
+
+export async function createLibraryFolder(input: {
+  name: string;
+  type: string;
+  parent_id: string | null;
+}): Promise<void> {
+  await apiFetch<undefined>('/api/v1/library/folders', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function renameLibraryFolder(id: string, name: string): Promise<void> {
+  await apiFetch<undefined>(`/api/v1/library/folders/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function deleteLibraryFolder(id: string): Promise<void> {
+  await apiFetch<undefined>(`/api/v1/library/folders/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function moveLibraryItem(
+  table: 'works_library' | 'materials_library' | 'templates',
+  itemId: string,
+  folderId: string | null,
+): Promise<void> {
+  await apiFetch<undefined>('/api/v1/library/move', {
+    method: 'POST',
+    body: JSON.stringify({ table, item_id: itemId, folder_id: folderId }),
+  });
+}

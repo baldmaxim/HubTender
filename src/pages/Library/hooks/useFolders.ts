@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
 import type { LibraryFolder } from '../../../lib/supabase';
+import {
+  listLibraryFolders,
+  createLibraryFolder,
+  renameLibraryFolder,
+  deleteLibraryFolder,
+  moveLibraryItem,
+} from '../../../lib/api/library';
 
 export type FolderNode = LibraryFolder & { children: FolderNode[] };
 
@@ -26,14 +32,12 @@ export const useFolders = (type: 'works' | 'materials' | 'templates') => {
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
 
   const fetchFolders = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('library_folders')
-      .select('*')
-      .eq('type', type)
-      .order('sort_order')
-      .order('name');
-    if (error) { message.error('Ошибка загрузки папок'); return; }
-    setFolders(data || []);
+    try {
+      const data = await listLibraryFolders(type);
+      setFolders((data || []) as unknown as LibraryFolder[]);
+    } catch {
+      message.error('Ошибка загрузки папок');
+    }
   }, [type]);
 
   useEffect(() => { fetchFolders(); }, [fetchFolders]);
@@ -41,28 +45,17 @@ export const useFolders = (type: 'works' | 'materials' | 'templates') => {
   const folderTree = useMemo(() => buildFolderTree(folders), [folders]);
 
   const createFolder = async (name: string, parentId?: string | null): Promise<void> => {
-    const { error } = await supabase
-      .from('library_folders')
-      .insert({ name: name.trim(), type, parent_id: parentId ?? null });
-    if (error) throw error;
+    await createLibraryFolder({ name: name.trim(), type, parent_id: parentId ?? null });
     await fetchFolders();
   };
 
   const renameFolder = async (id: string, name: string): Promise<void> => {
-    const { error } = await supabase
-      .from('library_folders')
-      .update({ name: name.trim() })
-      .eq('id', id);
-    if (error) throw error;
+    await renameLibraryFolder(id, name.trim());
     await fetchFolders();
   };
 
   const deleteFolder = async (id: string): Promise<void> => {
-    const { error } = await supabase
-      .from('library_folders')
-      .delete()
-      .eq('id', id);
-    if (error) throw error;
+    await deleteLibraryFolder(id);
     await fetchFolders();
   };
 
@@ -71,11 +64,7 @@ export const useFolders = (type: 'works' | 'materials' | 'templates') => {
     itemId: string,
     folderId: string | null
   ): Promise<void> => {
-    const { error } = await supabase
-      .from(table)
-      .update({ folder_id: folderId })
-      .eq('id', itemId);
-    if (error) throw error;
+    await moveLibraryItem(table, itemId, folderId);
   };
 
   return { folders, folderTree, fetchFolders, createFolder, renameFolder, deleteFolder, moveItem };
