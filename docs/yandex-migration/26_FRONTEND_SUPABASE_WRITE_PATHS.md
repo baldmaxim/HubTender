@@ -319,6 +319,15 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Library ПОЛНОСТЬЮ закрыт (InsertTemplateIntoPositionModal, reuse)
+
+`src/pages/Library/InsertTemplateIntoPositionModal.tsx` (2 supabase → 0):
+`tenders` → reuse `fetchTenders()` (импорт как `apiFetchTenders` из-за
+коллизии с локальной fn); `client_positions` paged → reuse
+`fetchPositionsWithCosts()` (Go ORDER BY position_number,id; leaf-логика
+`computeLeafPositionIndices` без изменений). Бэкенд не трогали. **Весь
+`src/pages/Library` теперь 0 supabase.** `tsc` 0, `vite build` ✓.
+
 ## P5.3 — Library/templates DONE (verified; library-домен + templates)
 
 `src/pages/Library/hooks/{useTemplates,useTemplateItems,useTemplateCreation,

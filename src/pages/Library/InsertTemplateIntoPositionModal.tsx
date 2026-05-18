@@ -7,7 +7,8 @@ import {
   Row,
   Col,
 } from 'antd';
-import { supabase } from '../../lib/supabase';
+import { fetchTenders as apiFetchTenders } from '../../lib/api/tenders';
+import { fetchPositionsWithCosts } from '../../lib/api/positions';
 import { insertTemplateItems } from '../../utils/insertTemplateItems';
 import { getErrorMessage } from '../../utils/errors';
 
@@ -85,13 +86,8 @@ const InsertTemplateIntoPositionModal: React.FC<InsertTemplateIntoPositionModalP
 
   const fetchTenders = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('id, title, version, is_archived')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setTenders(data || []);
+      const data = await apiFetchTenders();
+      setTenders((data || []) as unknown as Tender[]);
     } catch (error) {
       console.error('Ошибка загрузки тендеров:', error);
       message.error('Не удалось загрузить тендеры');
@@ -132,30 +128,11 @@ const InsertTemplateIntoPositionModal: React.FC<InsertTemplateIntoPositionModalP
 
   const fetchLeafPositions = async (tenderId: string) => {
     try {
-      // Загружаем данные батчами (Supabase ограничивает 1000 строк за запрос)
-      let allPositions: LeafPosition[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('client_positions')
-          .select('*')
-          .eq('tender_id', tenderId)
-          .order('position_number', { ascending: true })
-          .range(from, from + batchSize - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allPositions = [...allPositions, ...data];
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
+      // Go: /tenders/:id/positions/with-costs (ORDER BY position_number,id);
+      // пагинация больше не нужна. Leaf-логика ниже без изменений.
+      const allPositions = (await fetchPositionsWithCosts(
+        tenderId,
+      )) as unknown as LeafPosition[];
 
       if (allPositions.length === 0) {
         setLeafPositions([]);
