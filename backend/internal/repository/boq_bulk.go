@@ -112,3 +112,48 @@ func (r *BulkBoqRepo) BulkUpdateCommercial(
 
 	return updatedCount, tenderIDs, nil
 }
+
+// SetQuoteLinkByName sets quote_link for every boq_item of a tender whose
+// material_name_id / work_name_id matches. `field` is whitelisted to the two
+// allowed columns; the value is always parameterised.
+func (r *BulkBoqRepo) SetQuoteLinkByName(
+	ctx context.Context,
+	tenderID, field, value string,
+	quoteLink *string,
+) (int, error) {
+	var col string
+	switch field {
+	case "material_name_id":
+		col = "material_name_id"
+	case "work_name_id":
+		col = "work_name_id"
+	default:
+		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByName: invalid field %q", field)
+	}
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE public.boq_items SET quote_link = $3
+		 WHERE tender_id = $1::uuid AND `+col+` = $2::uuid`,
+		tenderID, value, quoteLink)
+	if err != nil {
+		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByName: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// SetQuoteLinkByIDs sets quote_link for the given boq_item ids.
+func (r *BulkBoqRepo) SetQuoteLinkByIDs(
+	ctx context.Context,
+	ids []string,
+	quoteLink *string,
+) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE public.boq_items SET quote_link = $2 WHERE id = ANY($1::uuid[])`,
+		ids, quoteLink)
+	if err != nil {
+		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByIDs: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}

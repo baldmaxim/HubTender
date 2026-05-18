@@ -285,6 +285,18 @@ tender_id_2=` (обе ориентации), `POST /api/v1/comparison-notes` (up
 tenders уже были Go. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Bsm DONE (verified)
+
+2 новых quote-link эндпоинта (расширение BulkBoq):
+`PATCH /api/v1/tenders/{id}/boq/quote-link` (field whitelisted
+material_name_id|work_name_id, value параметризован),
+`PATCH /api/v1/boq/quote-link-by-ids`. Фронт `Bsm.tsx`: tenders →
+`apiFetchTenders`; detail-cats → `listDetailCostCategoriesWithCategory`;
+boq+имена → `listAllBoqItemsForTender`+`listMaterialNames`/`listWorkNames`
+(shared `loadTenderBoqRaw`); quote-link updates → новые эндпоинты.
+0 supabase. `go build ./...` 0, `go test` без новых провалов (calc
+pre-existing §11), `tsc` 0, `vite build` ✓.
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)

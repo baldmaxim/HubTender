@@ -14,6 +14,8 @@ type bulkBoqRepoer interface {
 		ctx context.Context,
 		rows []repository.BulkCommercialRow,
 	) (int, []string, error)
+	SetQuoteLinkByName(ctx context.Context, tenderID, field, value string, quoteLink *string) (int, error)
+	SetQuoteLinkByIDs(ctx context.Context, ids []string, quoteLink *string) (int, error)
 }
 
 // BulkBoqService handles bulk commercial cost updates and cache invalidation.
@@ -47,4 +49,30 @@ func (s *BulkBoqService) BulkUpdateCommercial(
 	}
 
 	return count, nil
+}
+
+// SetQuoteLinkByName sets quote_link for tender items matching a name field.
+func (s *BulkBoqService) SetQuoteLinkByName(
+	ctx context.Context,
+	tenderID, field, value string,
+	quoteLink *string,
+) (int, error) {
+	n, err := s.repo.SetQuoteLinkByName(ctx, tenderID, field, value, quoteLink)
+	if err != nil {
+		return 0, fmt.Errorf("bulkBoqService.SetQuoteLinkByName: %w", err)
+	}
+	return n, nil
+}
+
+// SetQuoteLinkByIDs sets quote_link for the given boq_item ids.
+func (s *BulkBoqService) SetQuoteLinkByIDs(
+	ctx context.Context,
+	ids []string,
+	quoteLink *string,
+) (int, error) {
+	n, err := s.repo.SetQuoteLinkByIDs(ctx, ids, quoteLink)
+	if err != nil {
+		return 0, fmt.Errorf("bulkBoqService.SetQuoteLinkByIDs: %w", err)
+	}
+	return n, nil
 }

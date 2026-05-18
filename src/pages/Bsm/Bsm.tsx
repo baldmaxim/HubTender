@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Card, Table, Select, Tabs, Tag, Input, message, Button, Typography, Space, Row, Col } from 'antd';
 import { SearchOutlined, FileExcelOutlined, ArrowLeftOutlined, LinkOutlined } from '@ant-design/icons';
-import { supabase } from '../../lib/supabase';
 import type { UnitType, BoqItemType } from '../../lib/supabase';
+import { fetchTenders as apiFetchTenders } from '../../lib/api/tenders';
+import { listAllBoqItemsForTender } from '../../lib/api/fi';
+import { listDetailCostCategoriesWithCategory } from '../../lib/api/costs';
+import { listMaterialNames, listWorkNames } from '../../lib/api/nomenclatures';
+import { apiFetch } from '../../lib/api/client';
 import * as XLSX from 'xlsx-js-style';
 import { getVersionColorByTitle } from '../../utils/versionColor';
 
@@ -57,17 +61,50 @@ const Bsm: React.FC = () => {
   // Fetch tenders
   const fetchTenders = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('id, title, tender_number, client_name, version, is_archived')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setTenders(data || []);
+      const data = await apiFetchTenders();
+      setTenders(
+        data.map((t) => ({
+          id: t.id,
+          title: t.title,
+          tender_number: t.tender_number,
+          client_name: t.client_name,
+          version: t.version ?? undefined,
+          is_archived: t.is_archived ?? undefined,
+        })),
+      );
     } catch (error) {
       console.error('Error fetching tenders:', error);
       message.error('Ошибка загрузки тендеров');
     }
+  };
+
+  // Загрузка boq_items тендера через Go + резолв имён работ/материалов.
+  const loadTenderBoqRaw = async (tenderId: string) => {
+    const [items, mats, works] = await Promise.all([
+      listAllBoqItemsForTender(tenderId),
+      listMaterialNames(),
+      listWorkNames(),
+    ]);
+    const matMap = new Map(mats.map((m) => [m.id, m.name]));
+    const workMap = new Map(works.map((wk) => [wk.id, wk.name]));
+    return items.map((i) => ({
+      id: i.id,
+      boq_item_type: i.boq_item_type as string,
+      material_type: (i.material_type ?? null) as string | null,
+      quantity: i.quantity ?? null,
+      unit_code: i.unit_code as string,
+      total_amount: i.total_amount ?? null,
+      work_name_id: i.work_name_id ?? null,
+      material_name_id: i.material_name_id ?? null,
+      quote_link: i.quote_link ?? null,
+      detail_cost_category_id: i.detail_cost_category_id ?? null,
+      work_names: i.work_name_id && workMap.has(i.work_name_id)
+        ? { name: workMap.get(i.work_name_id)! }
+        : null,
+      material_names: i.material_name_id && matMap.has(i.material_name_id)
+        ? { name: matMap.get(i.material_name_id)! }
+        : null,
+    }));
   };
 
   // Получение уникальных наименований тендеров
@@ -141,16 +178,15 @@ const Bsm: React.FC = () => {
   const fetchBoqItems = async (tenderId: string) => {
     setLoading(true);
     try {
-      // Загружаем справочник детальных категорий затрат
-      const { data: categories } = await supabase
-        .from('detail_cost_categories')
-        .select('id, name, location, cost_categories(name)');
+      // Справочник детальных категорий затрат (Go)
+      const categories = await listDetailCostCategoriesWithCategory();
 
       const expenseMap = new Map<string, string>();
-      (categories || []).forEach((cat) => {
-        const cc = Array.isArray(cat.cost_categories) ? cat.cost_categories[0] : cat.cost_categories;
-        const catName = cc?.name || '';
-        const label = [catName, cat.name, cat.location].filter(Boolean).join(' / ');
+      categories.forEach((cat) => {
+        const catName = cat.cost_categories?.name || '';
+        const label = [catName, cat.name, (cat as { location?: string | null }).location]
+          .filter(Boolean)
+          .join(' / ');
         expenseMap.set(cat.id, label);
       });
 
@@ -168,47 +204,8 @@ const Bsm: React.FC = () => {
         work_names: { name: string } | null;
         material_names: { name: string } | null;
       }
-      // Загружаем ВСЕ BOQ элементы с батчингом (Supabase лимит 1000 строк)
-      let data: RawBoqItem[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data: batchData, error } = await supabase
-          .from('boq_items')
-          .select(`
-            id,
-            boq_item_type,
-            material_type,
-            quantity,
-            unit_code,
-            total_amount,
-            work_name_id,
-            material_name_id,
-            quote_link,
-            detail_cost_category_id,
-            work_names (
-              name
-            ),
-            material_names (
-              name
-            )
-          `)
-          .eq('tender_id', tenderId)
-          .order('created_at', { ascending: false })
-          .range(from, from + batchSize - 1);
-
-        if (error) throw error;
-
-        if (batchData && batchData.length > 0) {
-          data = [...data, ...(batchData as unknown as RawBoqItem[])];
-          from += batchSize;
-          hasMore = batchData.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
+      // Go BFF: все boq_items тендера + резолв имён работ/материалов.
+      const data: RawBoqItem[] = await loadTenderBoqRaw(tenderId);
 
       // Group by material/work + затрата and aggregate
       const grouped = new Map<string, BoqItemData>();
@@ -286,14 +283,18 @@ const Bsm: React.FC = () => {
         return;
       }
 
-      // UPDATE всех boq_items с тем же материалом/работой в текущем тендере
-      const { error } = await supabase
-        .from('boq_items')
-        .update({ quote_link: newQuoteLink || null })
-        .eq('tender_id', selectedTenderId!)
-        .eq(updateField, updateValue);
-
-      if (error) throw error;
+      // Go BFF: UPDATE всех boq_items с тем же материалом/работой в тендере
+      await apiFetch<{ updated: number }>(
+        `/api/v1/tenders/${encodeURIComponent(selectedTenderId!)}/boq/quote-link`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            field: updateField,
+            value: updateValue,
+            quote_link: newQuoteLink || null,
+          }),
+        },
+      );
 
       // Обновить локальное состояние
       setAllItems(prevItems =>
@@ -341,50 +342,9 @@ const Bsm: React.FC = () => {
         work_names: { name: string } | null;
         material_names: { name: string } | null;
       }
-      // Шаг 2: Получить все boq_items текущего тендера с батчингом
-      let boqItems: BoqItemForLinkMatch[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('boq_items')
-          .select(`
-            id,
-            boq_item_type,
-            material_type,
-            work_name_id,
-            material_name_id,
-            unit_code,
-            quantity,
-            total_amount,
-            work_names (
-              name
-            ),
-            material_names (
-              name
-            )
-          `)
-          .eq('tender_id', selectedTenderId)
-          .range(from, from + batchSize - 1);
-
-        if (error) {
-          throw error;
-        }
-
-        if (data && data.length > 0) {
-          boqItems = [...boqItems, ...(data as unknown as BoqItemForLinkMatch[])];
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
-
-      const fetchError = null; // для совместимости с кодом ниже
-
-      if (fetchError) throw fetchError;
+      // Шаг 2: Все boq_items текущего тендера (Go) + резолв имён.
+      const boqItems: BoqItemForLinkMatch[] =
+        (await loadTenderBoqRaw(selectedTenderId)) as unknown as BoqItemForLinkMatch[];
 
       // Шаг 3: Для каждой строки с ссылкой найти совпадения и обновить
       let updatedCount = 0;
@@ -412,16 +372,14 @@ const Bsm: React.FC = () => {
         if (matchingItems.length > 0) {
           const itemIds = matchingItems.map(item => item.id);
 
-          const { error: updateError } = await supabase
-            .from('boq_items')
-            .update({ quote_link: sourceItem.quote_link })
-            .in('id', itemIds)
-            .select();
-
-          if (updateError) {
-            console.error('Error updating batch:', updateError);
-          } else {
+          try {
+            await apiFetch<{ updated: number }>('/api/v1/boq/quote-link-by-ids', {
+              method: 'PATCH',
+              body: JSON.stringify({ ids: itemIds, quote_link: sourceItem.quote_link }),
+            });
             updatedCount += matchingItems.length;
+          } catch (updateError) {
+            console.error('Error updating batch:', updateError);
           }
         }
       }

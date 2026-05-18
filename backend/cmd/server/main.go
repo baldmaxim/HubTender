@@ -263,6 +263,8 @@ func main() {
 		// Slice 3a: ported RPCs.
 		r.Get("/api/v1/tenders/{id}/positions/with-costs", positionCostsH.GetPositionsWithCosts)
 		r.Patch("/api/v1/items/bulk-commercial", bulkBoqH.BulkUpdateCommercial)
+		r.Patch("/api/v1/tenders/{id}/boq/quote-link", bulkBoqH.SetQuoteLinkByName)
+		r.Patch("/api/v1/boq/quote-link-by-ids", bulkBoqH.SetQuoteLinkByIDs)
 		r.Post("/api/v1/timeline/groups/{id}/quality", timelineH.SetGroupQuality)
 		r.Post("/api/v1/timeline/iterations/{id}/respond", timelineH.RespondIteration)
 		r.Get("/api/v1/timeline/assignable-users", timelineH.ListAssignableUsers)
