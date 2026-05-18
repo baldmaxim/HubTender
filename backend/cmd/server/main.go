@@ -131,6 +131,7 @@ func main() {
 	tasksRepo := repository.NewTasksRepo(pool)
 	comparisonRepo := repository.NewComparisonRepo(pool)
 	costImportRepo := repository.NewCostImportRepo(pool)
+	libraryRepo := repository.NewLibraryRepo(pool)
 	redistributionRepo := repository.NewRedistributionRepo(pool)
 	insuranceRepo := repository.NewInsuranceRepo(pool)
 	positionFiltersRepo := repository.NewPositionFiltersRepo(pool)
@@ -161,6 +162,7 @@ func main() {
 	tasksSvc := services.NewTasksService(tasksRepo)
 	comparisonSvc := services.NewComparisonService(comparisonRepo)
 	costImportSvc := services.NewCostImportService(costImportRepo, inMemCache)
+	librarySvc := services.NewLibraryService(libraryRepo, inMemCache)
 	redistributionSvc := services.NewRedistributionService(redistributionRepo, inMemCache)
 	insuranceSvc := services.NewInsuranceService(insuranceRepo, inMemCache)
 	positionFiltersSvc := services.NewPositionFiltersService(positionFiltersRepo)
@@ -196,6 +198,7 @@ func main() {
 	tasksH := handlers.NewTasksHandler(tasksSvc)
 	comparisonH := handlers.NewComparisonHandler(comparisonSvc)
 	costImportH := handlers.NewCostImportHandler(costImportSvc)
+	libraryH := handlers.NewLibraryHandler(librarySvc)
 	redistributionH := handlers.NewRedistributionHandler(redistributionSvc)
 	insuranceH := handlers.NewInsuranceHandler(insuranceSvc)
 	positionFiltersH := handlers.NewPositionFiltersHandler(positionFiltersSvc)
@@ -312,6 +315,12 @@ func main() {
 
 		// Phase 5: atomic Excel cost-category import.
 		r.Post("/api/v1/cost-import", costImportH.Import)
+
+		// Library — WorksTab (works_library CRUD).
+		r.Get("/api/v1/library/works", libraryH.ListWorks)
+		r.Post("/api/v1/library/works", libraryH.CreateWork)
+		r.Patch("/api/v1/library/works/{id}", libraryH.UpdateWork)
+		r.Delete("/api/v1/library/works/{id}", libraryH.DeleteWork)
 
 		// Phase 5: atomic redistribution save (cost_redistribution_results).
 		r.Post("/api/v1/redistributions/save", redistributionH.Save)

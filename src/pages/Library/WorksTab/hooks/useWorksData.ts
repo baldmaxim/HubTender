@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { message } from 'antd';
-import { supabase, WorkLibraryFull, WorkName } from '../../../../lib/supabase';
+import type { WorkLibraryFull, WorkName } from '../../../../lib/supabase';
+import { listWorksLibrary } from '../../../../lib/api/library';
+import { listWorkNames } from '../../../../lib/api/nomenclatures';
 
 export const useWorksData = () => {
   const [data, setData] = useState<WorkLibraryFull[]>([]);
@@ -11,19 +13,7 @@ export const useWorksData = () => {
   const fetchWorks = async () => {
     setLoading(true);
     try {
-      const { data: worksData, error } = await supabase
-        .from('works_library')
-        .select(`
-          *,
-          work_names (
-            id,
-            name,
-            unit
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const worksData = await listWorksLibrary();
 
       const formatted = worksData?.map(item => ({
         ...item,
@@ -45,29 +35,8 @@ export const useWorksData = () => {
     hasFetchedNames.current = true;
 
     try {
-      // Загружаем все записи батчами (Supabase ограничение 1000 строк)
-      let allNames: WorkName[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data: namesData, error } = await supabase
-          .from('work_names')
-          .select('*')
-          .order('name')
-          .range(from, from + batchSize - 1);
-
-        if (error) throw error;
-
-        if (namesData && namesData.length > 0) {
-          allNames = [...allNames, ...namesData];
-          from += batchSize;
-          hasMore = namesData.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
+      // Go отдаёт все work_names одним запросом (без 1000-стр. пагинации).
+      const allNames = (await listWorkNames()) as unknown as WorkName[];
 
       // Дедупликация: сначала по name (оставляем первое вхождение), потом по id
       const uniqueByName = Array.from(

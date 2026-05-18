@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { Form, message } from 'antd';
-import { supabase, WorkLibraryFull, WorkName, WorkItemType, UnitType } from '../../../../lib/supabase';
+import type { WorkLibraryFull, WorkName, WorkItemType, UnitType } from '../../../../lib/supabase';
+import {
+  createWorkLibrary,
+  updateWorkLibrary,
+  deleteWorkLibrary,
+} from '../../../../lib/api/library';
 
 export const useWorksActions = (workNames: WorkName[], onRefresh: () => void) => {
   const [form] = Form.useForm();
@@ -48,19 +53,12 @@ export const useWorksActions = (workNames: WorkName[], onRefresh: () => void) =>
         return;
       }
 
-      const updateData = {
+      await updateWorkLibrary(id, {
         work_name_id: workName.id,
         item_type: row.item_type,
         unit_rate: row.unit_rate,
         currency_type: row.currency_type,
-      };
-
-      const { error } = await supabase
-        .from('works_library')
-        .update(updateData)
-        .eq('id', id);
-
-      if (error) throw error;
+      });
       message.success('Работа обновлена');
 
       await onRefresh();
@@ -74,12 +72,7 @@ export const useWorksActions = (workNames: WorkName[], onRefresh: () => void) =>
 
   const handleDelete = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('works_library')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await deleteWorkLibrary(id);
 
       message.success('Работа удалена');
       await onRefresh();
@@ -99,18 +92,12 @@ export const useWorksActions = (workNames: WorkName[], onRefresh: () => void) =>
         return;
       }
 
-      const insertData = {
+      await createWorkLibrary({
         work_name_id: workName.id,
         item_type: row.item_type,
         unit_rate: row.unit_rate,
         currency_type: row.currency_type,
-      };
-
-      const { error } = await supabase
-        .from('works_library')
-        .insert([insertData]);
-
-      if (error) throw error;
+      });
 
       message.success('Работа добавлена');
       await onRefresh();

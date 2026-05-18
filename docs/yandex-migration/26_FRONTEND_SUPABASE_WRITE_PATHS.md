@@ -319,6 +319,27 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Library/WorksTab DONE (verified; новый library-домен в Go)
+
+`src/pages/Library/WorksTab/` (useWorksData 2, useWorksActions 3 → 0
+supabase). Новый Go library-домен (repo `library.go` + service +
+handler + DI + routes):
+
+| Эндпоинт | Заменяет |
+|---|---|
+| `GET /api/v1/library/works` | `works_library` + `work_names(id,name,unit)` embed, order created_at desc |
+| `POST /api/v1/library/works` | insert works_library |
+| `PATCH /api/v1/library/works/{id}` | update (work_name_id,item_type,unit_rate,currency_type) |
+| `DELETE /api/v1/library/works/{id}` | delete works_library |
+
+`fetchWorkNames` → reuse `listWorkNames()` (nomenclatures.ts); 1000-стр.
+пагинация убрана, клиентская дедупликация по name→id сохранена.
+Сервис инвалидирует `works-library:all`. Enum-поля шлются строками
+(implicit cast, как в boq_write). `go build ./...` 0,
+`go test ./internal/services` ok, `tsc` 0, `vite build` ✓.
+Остаток Library (MaterialsTab/folders/templates/useLibraryData) —
+следующими инкрементами по тому же library-домену.
+
 ## P5.3 — Projects domain DONE (verified; 4 новых read-эндпоинта + reuse)
 
 `src/pages/Projects/*` (useProjectsData 4, ProjectDetail 4, ProjectModal 1,
