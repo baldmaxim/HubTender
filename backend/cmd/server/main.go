@@ -130,6 +130,7 @@ func main() {
 	boqAuditRollbackRepo := repository.NewBoqAuditRollbackRepo(pool)
 	tasksRepo := repository.NewTasksRepo(pool)
 	comparisonRepo := repository.NewComparisonRepo(pool)
+	costImportRepo := repository.NewCostImportRepo(pool)
 	redistributionRepo := repository.NewRedistributionRepo(pool)
 	insuranceRepo := repository.NewInsuranceRepo(pool)
 	positionFiltersRepo := repository.NewPositionFiltersRepo(pool)
@@ -159,6 +160,7 @@ func main() {
 	boqAuditRollbackSvc := services.NewBoqAuditRollbackService(boqAuditRollbackRepo, inMemCache)
 	tasksSvc := services.NewTasksService(tasksRepo)
 	comparisonSvc := services.NewComparisonService(comparisonRepo)
+	costImportSvc := services.NewCostImportService(costImportRepo, inMemCache)
 	redistributionSvc := services.NewRedistributionService(redistributionRepo, inMemCache)
 	insuranceSvc := services.NewInsuranceService(insuranceRepo, inMemCache)
 	positionFiltersSvc := services.NewPositionFiltersService(positionFiltersRepo)
@@ -193,6 +195,7 @@ func main() {
 	boqAuditRollbackH := handlers.NewBoqAuditRollbackHandler(boqAuditRollbackSvc)
 	tasksH := handlers.NewTasksHandler(tasksSvc)
 	comparisonH := handlers.NewComparisonHandler(comparisonSvc)
+	costImportH := handlers.NewCostImportHandler(costImportSvc)
 	redistributionH := handlers.NewRedistributionHandler(redistributionSvc)
 	insuranceH := handlers.NewInsuranceHandler(insuranceSvc)
 	positionFiltersH := handlers.NewPositionFiltersHandler(positionFiltersSvc)
@@ -302,6 +305,9 @@ func main() {
 		r.Get("/api/v1/comparison-notes", comparisonH.ListNotes)
 		r.Post("/api/v1/comparison-notes", comparisonH.UpsertNote)
 		r.Get("/api/v1/tenders/{id}/cost-volumes", comparisonH.ListCostVolumes)
+
+		// Phase 5: atomic Excel cost-category import.
+		r.Post("/api/v1/cost-import", costImportH.Import)
 
 		// Phase 5: atomic redistribution save (cost_redistribution_results).
 		r.Post("/api/v1/redistributions/save", redistributionH.Save)

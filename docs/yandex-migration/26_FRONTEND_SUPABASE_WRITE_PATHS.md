@@ -306,6 +306,19 @@ pre-existing §11), `tsc` 0, `vite build` ✓.
 `.filter(Boolean)` (строгий `markup_parameter: MarkupParameter|null`).
 0 supabase, `tsc` 0, `vite build` ✓.
 
+## P5.3 — costImportService DONE (verified; +Yandex schema-fix)
+
+⚠️ Находка: оригинал использовал таблицу `locations` + `detail_cost_
+categories.location_id` — это **старая Supabase-схема**; Yandex имеет
+`detail_cost_categories.location TEXT NOT NULL` и **таблицы `locations`
+нет** → фича была сломана против Yandex (pre-existing, как clone). Новый
+`POST /api/v1/cost-import` (repo/service/handler+route+DI) делает всё
+атомарно в pgx.Tx под **Yandex-схему**: cost_categories find-or-create
+(name+unit), detail_cost_categories bulk-insert (skip по
+cost_category_id+name), `location` как TEXT. Фронт парсит Excel и шлёт
+один payload. 0 supabase. `go build ./...` 0, `go test` без новых
+провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)
