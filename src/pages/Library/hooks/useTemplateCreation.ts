@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
+import { createTemplate } from '../../../lib/api/library';
 import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
 import type { TemplateItemWithDetails } from './useTemplateItems';
 
@@ -128,70 +128,32 @@ export const useTemplateCreation = (
       return false;
     }
 
-    const { data: templateData, error: templateError } = await supabase
-      .from('templates')
-      .insert({
-        name,
-        detail_cost_category_id: detailCostCategoryId,
-      })
-      .select()
-      .single();
-
-    if (templateError) throw templateError;
-
     const workItems = templateItems.filter(item => item.kind === 'work');
     const materialItems = templateItems.filter(item => item.kind === 'material');
 
-    const tempIdToRealId: Record<string, string> = {};
-
-    if (workItems.length > 0) {
-      const worksToInsert = workItems.map((item, index) => ({
-        template_id: templateData.id,
-        kind: item.kind,
-        work_library_id: item.work_library_id,
-        material_library_id: null,
-        parent_work_item_id: null,
-        conversation_coeff: null,
+    // parent_work_item_id материала — temp-id work-элемента; маппим в индекс
+    // массива работ (сервер резолвит в реальный id после вставки работ).
+    await createTemplate({
+      name,
+      detail_cost_category_id: detailCostCategoryId,
+      works: workItems.map((item) => ({
+        work_library_id: item.work_library_id ?? null,
         detail_cost_category_id: item.detail_cost_category_id || null,
-        position: index,
-        note: item.note,
-      }));
-
-      const { data: insertedWorks, error: worksError } = await supabase
-        .from('template_items')
-        .insert(worksToInsert)
-        .select();
-
-      if (worksError) throw worksError;
-
-      workItems.forEach((item, index) => {
-        if (insertedWorks && insertedWorks[index]) {
-          tempIdToRealId[item.id] = insertedWorks[index].id;
-        }
-      });
-    }
-
-    if (materialItems.length > 0) {
-      const materialsToInsert = materialItems.map((item, index) => ({
-        template_id: templateData.id,
-        kind: item.kind,
-        work_library_id: null,
-        material_library_id: item.material_library_id,
-        parent_work_item_id: item.parent_work_item_id
-          ? tempIdToRealId[item.parent_work_item_id] || null
-          : null,
-        conversation_coeff: item.conversation_coeff,
-        detail_cost_category_id: item.detail_cost_category_id || null,
-        position: workItems.length + index,
-        note: item.note,
-      }));
-
-      const { error: materialsError } = await supabase
-        .from('template_items')
-        .insert(materialsToInsert);
-
-      if (materialsError) throw materialsError;
-    }
+        note: item.note ?? null,
+      })),
+      materials: materialItems.map((item) => {
+        const parentIndex = item.parent_work_item_id
+          ? workItems.findIndex(w => w.id === item.parent_work_item_id)
+          : -1;
+        return {
+          material_library_id: item.material_library_id ?? null,
+          parent_work_index: parentIndex >= 0 ? parentIndex : null,
+          conversation_coeff: item.conversation_coeff ?? null,
+          detail_cost_category_id: item.detail_cost_category_id || null,
+          note: item.note ?? null,
+        };
+      }),
+    });
 
     return true;
   };

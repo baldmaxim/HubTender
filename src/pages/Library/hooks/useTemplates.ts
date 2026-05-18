@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
+import { listTemplates, deleteTemplate } from '../../../lib/api/library';
 import { getErrorMessage } from '../../../utils/errors';
 import type { Template } from '../../../lib/supabase';
 
@@ -18,12 +18,7 @@ export const useTemplates = () => {
 
   const fetchTemplates = async () => {
     try {
-      const { data, error } = await supabase
-        .from('templates')
-        .select('*, detail_cost_categories(name, location, cost_categories(name))')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await listTemplates();
 
       const formattedTemplates: TemplateWithDetails[] = (data || []).map((item) => {
         const dcc = Array.isArray(item.detail_cost_categories) ? item.detail_cost_categories[0] : item.detail_cost_categories;
@@ -36,7 +31,7 @@ export const useTemplates = () => {
           : '';
 
         return {
-          ...item,
+          ...(item as unknown as Template),
           cost_category_name: costCategoryName,
           detail_category_name: detailCategoryName,
           location: location,
@@ -52,12 +47,7 @@ export const useTemplates = () => {
 
   const handleDeleteTemplate = async (templateId: string) => {
     try {
-      const { error } = await supabase
-        .from('templates')
-        .delete()
-        .eq('id', templateId);
-
-      if (error) throw error;
+      await deleteTemplate(templateId);
 
       message.success('Шаблон удален');
       fetchTemplates();

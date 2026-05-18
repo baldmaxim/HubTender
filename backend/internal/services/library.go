@@ -109,3 +109,48 @@ func (s *LibraryService) MoveLibraryItem(ctx context.Context, table, itemID stri
 	s.cache.Delete("materials-library:all")
 	return nil
 }
+
+func (s *LibraryService) ListTemplates(ctx context.Context) ([]repository.TemplateRow, error) {
+	return s.repo.ListTemplates(ctx)
+}
+
+func (s *LibraryService) DeleteTemplate(ctx context.Context, id string) error {
+	if err := s.repo.DeleteTemplate(ctx, id); err != nil {
+		return fmt.Errorf("libraryService.DeleteTemplate: %w", err)
+	}
+	return nil
+}
+
+func (s *LibraryService) ListTemplateItems(ctx context.Context, templateID string) ([]repository.TemplateItemRow, error) {
+	return s.repo.ListTemplateItems(ctx, templateID)
+}
+
+func (s *LibraryService) DeleteTemplateItem(ctx context.Context, id string) error {
+	if err := s.repo.DeleteTemplateItem(ctx, id); err != nil {
+		return fmt.Errorf("libraryService.DeleteTemplateItem: %w", err)
+	}
+	return nil
+}
+
+func (s *LibraryService) CreateTemplate(ctx context.Context, in repository.CreateTemplateInput) (string, error) {
+	id, err := s.repo.CreateTemplate(ctx, in)
+	if err != nil {
+		return "", fmt.Errorf("libraryService.CreateTemplate: %w", err)
+	}
+	return id, nil
+}
+
+func (s *LibraryService) UpdateTemplate(ctx context.Context, id string, in repository.UpdateTemplateInput) error {
+	if err := s.repo.UpdateTemplate(ctx, id, in); err != nil {
+		return fmt.Errorf("libraryService.UpdateTemplate: %w", err)
+	}
+	return nil
+}
+
+func (s *LibraryService) AddTemplateItem(ctx context.Context, templateID string, in repository.AddTemplateItemInput) (*repository.TemplateItemRow, error) {
+	row, err := s.repo.AddTemplateItem(ctx, templateID, in)
+	if err != nil {
+		return nil, fmt.Errorf("libraryService.AddTemplateItem: %w", err)
+	}
+	return row, nil
+}

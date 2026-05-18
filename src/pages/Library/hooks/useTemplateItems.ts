@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
+import { listTemplateItems, deleteTemplateItem } from '../../../lib/api/library';
 import { getErrorMessage } from '../../../utils/errors';
 import type { TemplateItem } from '../../../lib/supabase';
 
@@ -24,13 +24,6 @@ export interface TemplateItemWithDetails extends TemplateItem {
   detail_cost_category_full?: string;
   manual_cost_override?: boolean;
 }
-
-const ITEMS_QUERY = `
-  *,
-  works_library:work_library_id(*, work_names(name, unit)),
-  materials_library:material_library_id(*, material_names(name, unit)),
-  detail_cost_categories:detail_cost_category_id(name, location, cost_categories(name))
-`;
 
 // O(n) — Map вместо повторных filter()
 const sortItemsByHierarchy = (items: TemplateItemWithDetails[]): TemplateItemWithDetails[] => {
@@ -127,13 +120,7 @@ export const useTemplateItems = () => {
     setLoadingTemplates(prev => new Set(prev).add(templateId));
 
     try {
-      const { data, error } = await supabase
-        .from('template_items')
-        .select(ITEMS_QUERY)
-        .eq('template_id', templateId)
-        .order('position');
-
-      if (error) throw error;
+      const data = await listTemplateItems(templateId);
 
       const raw = data || [];
       // Строим Map для поиска родительских имён за O(n)
@@ -165,30 +152,9 @@ export const useTemplateItems = () => {
 
   const handleDeleteTemplateItem = async (templateId: string, itemId: string) => {
     try {
-      const currentItems = loadedTemplateItems[templateId] || [];
-      const itemToDelete = currentItems.find(item => item.id === itemId);
-
-      if (itemToDelete?.kind === 'work') {
-        const linkedIds = currentItems
-          .filter(item => item.kind === 'material' && item.parent_work_item_id === itemId)
-          .map(item => item.id);
-
-        if (linkedIds.length > 0) {
-          // Один запрос вместо цикла
-          const { error: updateError } = await supabase
-            .from('template_items')
-            .update({ parent_work_item_id: null, conversation_coeff: null })
-            .in('id', linkedIds);
-          if (updateError) throw updateError;
-        }
-      }
-
-      const { error } = await supabase
-        .from('template_items')
-        .delete()
-        .eq('id', itemId);
-
-      if (error) throw error;
+      // Go выполняет в одной транзакции: отвязка дочерних материалов
+      // (parent_work_item_id ON DELETE CASCADE) + удаление строки.
+      await deleteTemplateItem(itemId);
 
       message.success('Элемент удален');
 

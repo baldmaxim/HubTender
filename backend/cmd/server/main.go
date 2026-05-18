@@ -330,6 +330,13 @@ func main() {
 		r.Patch("/api/v1/library/folders/{id}", libraryH.RenameFolder)
 		r.Delete("/api/v1/library/folders/{id}", libraryH.DeleteFolder)
 		r.Post("/api/v1/library/move", libraryH.MoveItem)
+		r.Get("/api/v1/library/templates", libraryH.ListTemplates)
+		r.Post("/api/v1/library/templates", libraryH.CreateTemplate)
+		r.Patch("/api/v1/library/templates/{id}", libraryH.UpdateTemplate)
+		r.Delete("/api/v1/library/templates/{id}", libraryH.DeleteTemplate)
+		r.Get("/api/v1/library/templates/{id}/items", libraryH.ListTemplateItems)
+		r.Post("/api/v1/library/templates/{id}/items", libraryH.AddTemplateItem)
+		r.Delete("/api/v1/library/template-items/{id}", libraryH.DeleteTemplateItem)
 
 		// Phase 5: atomic redistribution save (cost_redistribution_results).
 		r.Post("/api/v1/redistributions/save", redistributionH.Save)

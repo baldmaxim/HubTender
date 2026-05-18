@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { message, Form } from 'antd';
-import { supabase } from '../../../lib/supabase';
+import { updateTemplate, addTemplateItem } from '../../../lib/api/library';
 import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
 import type { TemplateItemWithDetails } from './useTemplateItems';
 import type { TemplateWithDetails } from './useTemplates';
@@ -44,30 +44,16 @@ export const useTemplateEditing = (
   const saveEditing = async (templateId: string, setOpenedTemplate: (id: string) => void, fetchTemplates: () => void, refetchTemplateItems: (id: string) => void) => {
     const values = await editingTemplateForm.validateFields();
 
-    const { error: templateError } = await supabase
-      .from('templates')
-      .update({
-        name: values.name,
-        detail_cost_category_id: values.detail_cost_category_id,
-      })
-      .eq('id', templateId);
-
-    if (templateError) throw templateError;
-
-    // Batch update: один запрос через upsert вместо цикла
-    if (editingItems.length > 0) {
-      const { error: itemsError } = await supabase
-        .from('template_items')
-        .upsert(
-          editingItems.map(item => ({
-            id: item.id,
-            parent_work_item_id: item.parent_work_item_id,
-            conversation_coeff: item.conversation_coeff,
-            detail_cost_category_id: item.detail_cost_category_id,
-          }))
-        );
-      if (itemsError) throw itemsError;
-    }
+    await updateTemplate(templateId, {
+      name: values.name,
+      detail_cost_category_id: values.detail_cost_category_id,
+      items: editingItems.map(item => ({
+        id: item.id,
+        parent_work_item_id: item.parent_work_item_id ?? null,
+        conversation_coeff: item.conversation_coeff ?? null,
+        detail_cost_category_id: item.detail_cost_category_id ?? null,
+      })),
+    });
 
     message.success('Шаблон обновлен');
     cancelEditing();
@@ -80,30 +66,23 @@ export const useTemplateEditing = (
     const currentItems = loadedTemplateItems[templateId] || [];
     const newPosition = currentItems.length;
 
-    const { data, error } = await supabase
-      .from('template_items')
-      .insert({
-        template_id: templateId,
-        kind: 'work',
-        work_library_id: work.id,
-        material_library_id: null,
-        parent_work_item_id: null,
-        conversation_coeff: null,
-        position: newPosition,
-        note: null,
-      })
-      .select(`
-        *,
-        works_library:work_library_id(*, work_names(name, unit)),
-        detail_cost_categories:detail_cost_category_id(name, location, cost_categories(name))
-      `)
-      .single();
-
-    if (error) throw error;
+    const data = await addTemplateItem(templateId, {
+      kind: 'work',
+      work_library_id: work.id,
+      material_library_id: null,
+      position: newPosition,
+    }) as {
+      works_library?: {
+        work_names?: { name?: string; unit?: string };
+        item_type?: string;
+        unit_rate?: number;
+        currency_type?: string;
+      };
+    } & Record<string, unknown>;
 
     if (data) {
       const newItem: TemplateItemWithDetails = {
-        ...data,
+        ...(data as unknown as TemplateItemWithDetails),
         work_name: data.works_library?.work_names?.name,
         work_unit: data.works_library?.work_names?.unit,
         work_item_type: data.works_library?.item_type,
@@ -124,30 +103,27 @@ export const useTemplateEditing = (
     const currentItems = loadedTemplateItems[templateId] || [];
     const newPosition = currentItems.length;
 
-    const { data, error } = await supabase
-      .from('template_items')
-      .insert({
-        template_id: templateId,
-        kind: 'material',
-        work_library_id: null,
-        material_library_id: material.id,
-        parent_work_item_id: null,
-        conversation_coeff: null,
-        position: newPosition,
-        note: null,
-      })
-      .select(`
-        *,
-        materials_library:material_library_id(*, material_names(name, unit)),
-        detail_cost_categories:detail_cost_category_id(name, location, cost_categories(name))
-      `)
-      .single();
-
-    if (error) throw error;
+    const data = await addTemplateItem(templateId, {
+      kind: 'material',
+      work_library_id: null,
+      material_library_id: material.id,
+      position: newPosition,
+    }) as {
+      materials_library?: {
+        material_names?: { name?: string; unit?: string };
+        item_type?: string;
+        material_type?: string;
+        consumption_coefficient?: number;
+        unit_rate?: number;
+        currency_type?: string;
+        delivery_price_type?: string;
+        delivery_amount?: number;
+      };
+    } & Record<string, unknown>;
 
     if (data) {
       const newItem: TemplateItemWithDetails = {
-        ...data,
+        ...(data as unknown as TemplateItemWithDetails),
         material_name: data.materials_library?.material_names?.name,
         material_unit: data.materials_library?.material_names?.unit,
         material_item_type: data.materials_library?.item_type,

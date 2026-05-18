@@ -26,6 +26,13 @@ type libraryServicer interface {
 	RenameFolder(ctx context.Context, id, name string) error
 	DeleteFolder(ctx context.Context, id string) error
 	MoveLibraryItem(ctx context.Context, table, itemID string, folderID *string) error
+	ListTemplates(ctx context.Context) ([]repository.TemplateRow, error)
+	DeleteTemplate(ctx context.Context, id string) error
+	ListTemplateItems(ctx context.Context, templateID string) ([]repository.TemplateItemRow, error)
+	DeleteTemplateItem(ctx context.Context, id string) error
+	CreateTemplate(ctx context.Context, in repository.CreateTemplateInput) (string, error)
+	UpdateTemplate(ctx context.Context, id string, in repository.UpdateTemplateInput) error
+	AddTemplateItem(ctx context.Context, templateID string, in repository.AddTemplateItemInput) (*repository.TemplateItemRow, error)
 }
 
 // LibraryHandler serves the Library page endpoints.
@@ -294,4 +301,140 @@ func (h *LibraryHandler) MoveItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ─── templates / template_items ─────────────────────────────────────────────
+
+func (h *LibraryHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	rows, err := h.svc.ListTemplates(r.Context())
+	if err != nil {
+		apierr.InternalError("failed to list templates").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.TemplateRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+func (h *LibraryHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing id").Render(w)
+		return
+	}
+	if err := h.svc.DeleteTemplate(r.Context(), id); err != nil {
+		apierr.InternalError("failed to delete template").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *LibraryHandler) ListTemplateItems(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	templateID := chi.URLParam(r, "id")
+	if templateID == "" {
+		apierr.BadRequest("missing template id").Render(w)
+		return
+	}
+	rows, err := h.svc.ListTemplateItems(r.Context(), templateID)
+	if err != nil {
+		apierr.InternalError("failed to list template items").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.TemplateItemRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+func (h *LibraryHandler) DeleteTemplateItem(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing id").Render(w)
+		return
+	}
+	if err := h.svc.DeleteTemplateItem(r.Context(), id); err != nil {
+		apierr.InternalError("failed to delete template item").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *LibraryHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var in repository.CreateTemplateInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	id, err := h.svc.CreateTemplate(r.Context(), in)
+	if err != nil {
+		apierr.InternalError("failed to create template").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: map[string]string{"id": id}})
+}
+
+func (h *LibraryHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing id").Render(w)
+		return
+	}
+	var in repository.UpdateTemplateInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.svc.UpdateTemplate(r.Context(), id, in); err != nil {
+		apierr.InternalError("failed to update template").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *LibraryHandler) AddTemplateItem(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	templateID := chi.URLParam(r, "id")
+	if templateID == "" {
+		apierr.BadRequest("missing template id").Render(w)
+		return
+	}
+	var in repository.AddTemplateItemInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	row, err := h.svc.AddTemplateItem(r.Context(), templateID, in)
+	if err != nil {
+		apierr.InternalError("failed to add template item").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: row})
 }

@@ -319,6 +319,32 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Library/templates DONE (verified; library-домен + templates)
+
+`src/pages/Library/hooks/{useTemplates,useTemplateItems,useTemplateCreation,
+useTemplateEditing}.ts` (2+3+3+4 supabase → 0). library-домен расширен
+templates/template_items:
+
+| Эндпоинт | Заменяет |
+|---|---|
+| `GET /api/v1/library/templates` | templates + detail_cost_categories(name,location,cost_categories(name)) |
+| `DELETE /api/v1/library/templates/{id}` | delete template (FK cascade) |
+| `GET /api/v1/library/templates/{id}/items` | template_items + works/materials_library(+names) + dcc embed, order position |
+| `POST /api/v1/library/templates` | атомарное создание (template + works → materials, parent по work-индексу) |
+| `PATCH /api/v1/library/templates/{id}` | tx: update header + upsert items (parent/coeff/dcc) |
+| `POST /api/v1/library/templates/{id}/items` | add work/material, возвращает строку с embed |
+| `DELETE /api/v1/library/template-items/{id}` | **tx: unlink детей (parent_work_item_id ON DELETE CASCADE!) → delete** |
+
+⚠️ Критично: `template_items.parent_work_item_id` — `ON DELETE CASCADE`,
+поэтому удаление work-элемента БЕЗ предварительной отвязки детей удалило
+бы материалы. Легаси-двухшаг (null children → delete) воспроизведён
+**в одной серверной tx**. `formatItem`/`sortItemsByHierarchy`/маппинг —
+без изменений (Go отдаёт ту же вложенную форму). createTemplate резолвит
+material→work parent по индексу массива работ (как tempIdToRealId).
+`go build` 0, `go test ./internal/services` ok, `tsc` 0, `vite build` ✓.
+0 supabase во всём `src/pages/Library/hooks`. Остаток Library:
+`InsertTemplateIntoPositionModal` (tenders+client_positions — отд. домен).
+
 ## P5.3 — Library/useLibraryData DONE (verified; reuse, без backend)
 
 `src/pages/Library/hooks/useLibraryData.ts` (3 supabase → 0): reuse

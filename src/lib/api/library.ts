@@ -139,3 +139,103 @@ export async function moveLibraryItem(
     body: JSON.stringify({ table, item_id: itemId, folder_id: folderId }),
   });
 }
+
+// ─── templates / template_items ─────────────────────────────────────────────
+
+export interface TemplateApiRow {
+  id: string;
+  name: string;
+  detail_cost_category_id: string | null;
+  folder_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  detail_cost_categories:
+    | { name: string; location: string | null; cost_categories: { name: string } | null }
+    | null;
+}
+
+export async function listTemplates(): Promise<TemplateApiRow[]> {
+  const res = await apiFetch<{ data: TemplateApiRow[] }>('/api/v1/library/templates');
+  return res.data ?? [];
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  await apiFetch<undefined>(`/api/v1/library/templates/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function listTemplateItems(templateId: string): Promise<unknown[]> {
+  const res = await apiFetch<{ data: unknown[] }>(
+    `/api/v1/library/templates/${encodeURIComponent(templateId)}/items`,
+  );
+  return res.data ?? [];
+}
+
+export async function deleteTemplateItem(id: string): Promise<void> {
+  await apiFetch<undefined>(`/api/v1/library/template-items/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export interface CreateTemplateWork {
+  work_library_id: string | null;
+  detail_cost_category_id: string | null;
+  note: string | null;
+}
+export interface CreateTemplateMaterial {
+  material_library_id: string | null;
+  parent_work_index: number | null;
+  conversation_coeff: number | null;
+  detail_cost_category_id: string | null;
+  note: string | null;
+}
+export interface CreateTemplatePayload {
+  name: string;
+  detail_cost_category_id: string;
+  works: CreateTemplateWork[];
+  materials: CreateTemplateMaterial[];
+}
+
+export async function createTemplate(payload: CreateTemplatePayload): Promise<string> {
+  const res = await apiFetch<{ data: { id: string } }>('/api/v1/library/templates', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return res.data.id;
+}
+
+export interface UpdateTemplateItemPatch {
+  id: string;
+  parent_work_item_id: string | null;
+  conversation_coeff: number | null;
+  detail_cost_category_id: string | null;
+}
+export interface UpdateTemplatePayload {
+  name: string;
+  detail_cost_category_id: string;
+  items: UpdateTemplateItemPatch[];
+}
+
+export async function updateTemplate(id: string, payload: UpdateTemplatePayload): Promise<void> {
+  await apiFetch<undefined>(`/api/v1/library/templates/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function addTemplateItem(
+  templateId: string,
+  input: {
+    kind: 'work' | 'material';
+    work_library_id: string | null;
+    material_library_id: string | null;
+    position: number;
+  },
+): Promise<Record<string, unknown>> {
+  const res = await apiFetch<{ data: Record<string, unknown> }>(
+    `/api/v1/library/templates/${encodeURIComponent(templateId)}/items`,
+    { method: 'POST', body: JSON.stringify(input) },
+  );
+  return res.data;
+}
