@@ -2,7 +2,7 @@
  * Загрузка параметров наценок для тендеров
  */
 
-import { supabase } from '../../lib/supabase';
+import { listTenderMarkupPercentages } from '../../lib/api/markup';
 
 /**
  * Загружает параметры наценок для тендера
@@ -13,27 +13,14 @@ export async function loadMarkupParameters(tenderId: string): Promise<Map<string
   const parametersMap = new Map<string, number>();
 
   try {
-    // Загружаем значения из tender_markup_percentage вместе с ключами из markup_parameters
-    const { data: tenderPercentages, error } = await supabase
-      .from('tender_markup_percentage')
-      .select(`
-        markup_parameter_id,
-        value,
-        markup_parameter:markup_parameters(key)
-      `)
-      .eq('tender_id', tenderId);
+    // Go BFF: GET /api/v1/tenders/{id}/markup/percentages — строки уже с
+    // присоединённым markup_parameter (содержит key).
+    const rows = await listTenderMarkupPercentages(tenderId);
 
-    if (error) {
-      return getFallbackParameters();
-    }
-
-    if (tenderPercentages && tenderPercentages.length > 0) {
-      for (const param of tenderPercentages) {
-        const mp = param.markup_parameter;
-        const keyName = (Array.isArray(mp) ? mp[0] : mp)?.key;
-        if (keyName) {
-          parametersMap.set(keyName, param.value);
-        }
+    for (const r of rows) {
+      const keyName = r.markup_parameter?.key;
+      if (keyName) {
+        parametersMap.set(keyName, r.value);
       }
     }
 
@@ -43,7 +30,7 @@ export async function loadMarkupParameters(tenderId: string): Promise<Map<string
 
     return parametersMap;
 
-  } catch (error) {
+  } catch {
     return getFallbackParameters();
   }
 }

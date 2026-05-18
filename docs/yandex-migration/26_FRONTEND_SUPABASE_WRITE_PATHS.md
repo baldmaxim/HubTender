@@ -154,6 +154,21 @@ repo/service/handler расширены, routes + DI. Фронт `src/lib/api/ti
 (calc pre-existing §11), `tsc` 0, `vite build` ✓. **Весь `src/lib/api/*`
 теперь Supabase-free** (остался только `featureFlags.ts:1` — комментарий).
 
+## P5.3 — markupTactic-services (частично, verified)
+
+`services/markupTactic/calculation.ts` + `parameters.ts` → **0 supabase**:
+переведены на существующие Go-хелперы `lib/api/markup.ts`
+(`getTenderPricingDistribution`, `listSubcontractGrowthExclusionsForTender`,
+`listTenderMarkupPercentages`) — нового backend не потребовалось. `tsc` 0.
+
+**Остаётся `tactics.ts` (13)** — сложная клиент-оркестрация пересчёта
+наценок (read boq/tactic/tender + bulk/per-row commercial update +
+`updatePositionTotals`). План: reads → `getMarkupTactic` /
+`getTenderMarkupTacticId` / `listAllBoqItemsForTender`; writes →
+`bulkUpdateCommercial` (Go); `updatePositionTotals`/per-row fallback —
+кандидаты на удаление, **требуют верификации триггеров пересчёта**
+(`05_triggers.sql`) — критичный pricing-путь, отдельным под-шагом.
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)

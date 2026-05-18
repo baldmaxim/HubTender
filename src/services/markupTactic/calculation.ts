@@ -2,8 +2,11 @@
  * Логика расчета наценок для элементов BOQ
  */
 
-import { supabase } from '../../lib/supabase';
 import type { BoqItem, MarkupStep } from '../../lib/supabase';
+import {
+  getTenderPricingDistribution,
+  listSubcontractGrowthExclusionsForTender,
+} from '../../lib/api/markup';
 import {
   calculateMarkupResult,
   type CalculationContext
@@ -48,18 +51,17 @@ export interface PricingDistribution {
  * Загружает настройки ценообразования для тендера
  */
 export async function loadPricingDistribution(tenderId: string): Promise<PricingDistribution | null> {
-  const { data, error } = await supabase
-    .from('tender_pricing_distribution')
-    .select('*')
-    .eq('tender_id', tenderId)
-    .single();
-
-  if (error || !data) {
+  try {
+    const data = await getTenderPricingDistribution(tenderId);
+    if (!data) {
+      console.warn('⚠️ Настройки ценообразования не найдены, используются defaults');
+      return null;
+    }
+    return data as unknown as PricingDistribution;
+  } catch {
     console.warn('⚠️ Настройки ценообразования не найдены, используются defaults');
     return null;
   }
-
-  return data as PricingDistribution;
 }
 
 /**
@@ -234,28 +236,23 @@ type CalculableBoqItem = Pick<
  * Загружает исключения роста субподряда для тендера
  */
 export async function loadSubcontractGrowthExclusions(tenderId: string): Promise<SubcontractGrowthExclusions> {
-  const { data, error } = await supabase
-    .from('subcontract_growth_exclusions')
-    .select('detail_cost_category_id, exclusion_type')
-    .eq('tender_id', tenderId);
-
   const exclusions: SubcontractGrowthExclusions = {
     works: new Set(),
     materials: new Set()
   };
 
-  if (error || !data) {
-    return exclusions;
+  try {
+    const rows = await listSubcontractGrowthExclusionsForTender(tenderId);
+    rows.forEach(e => {
+      if (e.exclusion_type === 'works') {
+        exclusions.works.add(e.detail_cost_category_id);
+      } else if (e.exclusion_type === 'materials') {
+        exclusions.materials.add(e.detail_cost_category_id);
+      }
+    });
+  } catch {
+    // нет настроек / ошибка — пустые исключения (как и было при ошибке)
   }
-
-  // Разделяем исключения по типам
-  data.forEach(e => {
-    if (e.exclusion_type === 'works') {
-      exclusions.works.add(e.detail_cost_category_id);
-    } else if (e.exclusion_type === 'materials') {
-      exclusions.materials.add(e.detail_cost_category_id);
-    }
-  });
 
   return exclusions;
 }
