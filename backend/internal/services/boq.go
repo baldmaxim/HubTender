@@ -15,6 +15,7 @@ type boqRepoer interface {
 	CreateBoqItem(ctx context.Context, in repository.CreateBoqItemInput) (*repository.BoqItemRow, error)
 	UpdateBoqItem(ctx context.Context, id string, in repository.UpdateBoqItemInput) (*repository.BoqItemRow, error)
 	DeleteBoqItem(ctx context.Context, id, changedBy string) (*repository.BoqItemRow, error)
+	InsertTemplateItems(ctx context.Context, templateID, clientPositionID, changedBy string) (*repository.TemplateInsertResult, error)
 }
 
 // BoqService provides access to boq_items data.
@@ -91,4 +92,19 @@ func (s *BoqService) DeleteBoqItem(
 	s.cache.Delete("tender:overview:" + item.TenderID)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return item, nil
+}
+
+// InsertTemplateItems inserts every template item into a client position
+// (atomic, with audit) and invalidates the affected tender's cache.
+func (s *BoqService) InsertTemplateItems(
+	ctx context.Context,
+	templateID, clientPositionID, changedBy string,
+) (*repository.TemplateInsertResult, error) {
+	res, err := s.repo.InsertTemplateItems(ctx, templateID, clientPositionID, changedBy)
+	if err != nil {
+		return nil, fmt.Errorf("boqService.InsertTemplateItems: %w", err)
+	}
+	s.cache.Delete("tender:overview:" + res.TenderID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	return res, nil
 }

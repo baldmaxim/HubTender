@@ -21,6 +21,7 @@ type boqWriteServicer interface {
 	CreateBoqItem(ctx context.Context, in repository.CreateBoqItemInput) (*repository.BoqItemRow, error)
 	UpdateBoqItem(ctx context.Context, id string, in repository.UpdateBoqItemInput) (*repository.BoqItemRow, error)
 	DeleteBoqItem(ctx context.Context, id, changedBy string) (*repository.BoqItemRow, error)
+	InsertTemplateItems(ctx context.Context, templateID, clientPositionID, changedBy string) (*repository.TemplateInsertResult, error)
 }
 
 // BoqWriteHandler handles mutating BOQ item endpoints.
@@ -249,4 +250,54 @@ func (h *BoqWriteHandler) DeleteBoqItem(w http.ResponseWriter, r *http.Request) 
 	}
 
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: deleted})
+}
+
+// insertTemplateReq is the request body for
+// POST /api/v1/templates/:templateId/insert-into-position.
+type insertTemplateReq struct {
+	ClientPositionID string `json:"client_position_id" validate:"required,uuid"`
+}
+
+// InsertTemplate handles POST /api/v1/templates/:templateId/insert-into-position.
+// Atomically inserts every template item into the given client position,
+// restoring parent links, recomputing position totals, and writing audit rows.
+func (h *BoqWriteHandler) InsertTemplate(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+
+	templateID := chi.URLParam(r, "templateId")
+	if templateID == "" {
+		apierr.BadRequest("missing template id").Render(w)
+		return
+	}
+
+	var req insertTemplateReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+
+	res, err := h.svc.InsertTemplateItems(r.Context(), templateID, req.ClientPositionID, authUser.ID)
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrTemplateNotFound),
+			errors.Is(err, repository.ErrPositionNotFound):
+			apierr.NotFound(err.Error()).Render(w)
+		case errors.Is(err, repository.ErrTemplateEmpty),
+			errors.Is(err, repository.ErrTemplateItemNoLib):
+			apierr.BadRequest(err.Error()).Render(w)
+		default:
+			apierr.InternalError("failed to insert template").Render(w)
+		}
+		return
+	}
+
+	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: res})
 }

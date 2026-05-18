@@ -319,6 +319,36 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — insertTemplateItems DONE (verified; новый атомарный Go endpoint)
+
+`src/utils/insertTemplateItems.ts` — 7 supabase callsites (4×from-чтения
+template/template_items/client_positions/tenders, 1×from boq_items maxSort,
+1×from boq_items totals, 1×from client_positions update) +
+`insertBoqItemWithAudit`/`updateBoqItemWithAudit` циклы. Новый
+`POST /api/v1/templates/{templateId}/insert-into-position` (body
+`{client_position_id}`) делает всё в одной pgx.Tx: выборка template +
+template_items JOIN `works_library`/`materials_library` + `work_names`/
+`material_names` (ORDER BY position), client_position, курсы тендера,
+max(sort_number); bulk-insert boq_items с **легаси-формулой шаблона**
+total_amount (НЕ `calc.CalculateBoqItemTotalAmount` — сохранена точная
+семантика TS); восстановление `parent_work_item_id` по индексам массива
+(UPDATE+audit); пересчёт `client_positions.total_material/total_works`;
+INSERT/UPDATE audit-строки в той же tx.
+
+⚠️ Yandex-схема: `public.boq_items` **без колонки `created_by`** (актор
+аудита — `boq_items_audit.changed_by`), поэтому она намеренно отсутствует
+в INSERT (легаси TS-объекты её тоже не задавали). Sentinel-ошибки
+(`ErrTemplateNotFound`/`ErrPositionNotFound`→404,
+`ErrTemplateEmpty`/`ErrTemplateItemNoLib`→400) сохраняют русские
+UI-сообщения. Слои: `repository/template_insert.go` (новый),
+`services/boq.go` (+метод+инвалидация tender:overview+tender-list),
+`handlers/boq_write.go` (+`InsertTemplate`), route в `r.Group(authMW)`.
+Фронтовая сигнатура и `InsertTemplateResult` без изменений (callers
+`useItemActions.ts`/`InsertTemplateIntoPositionModal.tsx` не тронуты;
+их собственные supabase-callsite'ы — другие домены). 0 supabase в
+`insertTemplateItems.ts`. `go build ./...` 0, `go test` без новых
+провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)
