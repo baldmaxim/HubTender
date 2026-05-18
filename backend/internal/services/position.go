@@ -15,6 +15,7 @@ type positionRepoer interface {
 	CreatePosition(ctx context.Context, in repository.CreatePositionInput) (*repository.PositionRow, error)
 	UpdatePosition(ctx context.Context, id string, in repository.UpdatePositionInput) (*repository.PositionRow, error)
 	BulkDeletePositions(ctx context.Context, positionIDs []string) error
+	CreateAdditionalPosition(ctx context.Context, in repository.CreateAdditionalPositionInput) (string, error)
 }
 
 // PositionService provides access to client_positions data.
@@ -97,4 +98,20 @@ func (s *PositionService) BulkDeletePositions(
 	}
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return nil
+}
+
+// CreateAdditionalPosition inserts an is_additional child position and
+// invalidates the tender's caches.
+func (s *PositionService) CreateAdditionalPosition(
+	ctx context.Context,
+	in repository.CreateAdditionalPositionInput,
+) (string, error) {
+	id, err := s.repo.CreateAdditionalPosition(ctx, in)
+	if err != nil {
+		return "", fmt.Errorf("positionService.CreateAdditionalPosition: %w", err)
+	}
+	s.cache.Delete("tender:overview:" + in.TenderID)
+	s.cache.Delete("positions:with_costs:" + in.TenderID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	return id, nil
 }

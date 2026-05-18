@@ -50,6 +50,26 @@ export async function fetchPositionsWithCosts(tenderId: string): Promise<Positio
 }
 
 /**
+ * Атомарно создать дополнительную работу (is_additional child).
+ * Go: POST /api/v1/positions/additional — read parent + расчёт
+ * десятичного суффикса (5.1, 5.2…) + insert в одной pgx.Tx.
+ */
+export async function createAdditionalPosition(input: {
+  parent_position_id: string;
+  tender_id: string;
+  work_name: string;
+  unit_code?: string | null;
+  manual_volume?: number | null;
+  manual_note?: string | null;
+}): Promise<string> {
+  const res = await apiFetch<{ data: { id: string } }>('/api/v1/positions/additional', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return res.data.id;
+}
+
+/**
  * Атомарно удалить позиции заказчика вместе с их boq_items.
  * Go: POST /api/v1/positions/bulk-delete — одна pgx.Tx
  * (delete boq_items → delete client_positions).

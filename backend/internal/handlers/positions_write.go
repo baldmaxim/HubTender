@@ -21,6 +21,7 @@ type positionWriteServicer interface {
 	CreatePosition(ctx context.Context, in repository.CreatePositionInput) (*repository.PositionRow, error)
 	UpdatePosition(ctx context.Context, id string, in repository.UpdatePositionInput, tenderID string) (*repository.PositionRow, error)
 	BulkDeletePositions(ctx context.Context, positionIDs []string, tenderID string) error
+	CreateAdditionalPosition(ctx context.Context, in repository.CreateAdditionalPositionInput) (string, error)
 }
 
 // PositionWriteHandler handles mutating position endpoints.
@@ -189,4 +190,48 @@ func (h *PositionWriteHandler) BulkDeletePositions(w http.ResponseWriter, r *htt
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// createAdditionalPositionReq is the body for POST /api/v1/positions/additional.
+type createAdditionalPositionReq struct {
+	ParentPositionID string   `json:"parent_position_id" validate:"required,uuid"`
+	TenderID         string   `json:"tender_id" validate:"required,uuid"`
+	WorkName         string   `json:"work_name" validate:"required,max=1024"`
+	UnitCode         *string  `json:"unit_code"`
+	ManualVolume     *float64 `json:"manual_volume"`
+	ManualNote       *string  `json:"manual_note"`
+}
+
+// CreateAdditionalPosition handles POST /api/v1/positions/additional.
+func (h *PositionWriteHandler) CreateAdditionalPosition(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var req createAdditionalPositionReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+	id, err := h.svc.CreateAdditionalPosition(r.Context(), repository.CreateAdditionalPositionInput{
+		ParentPositionID: req.ParentPositionID,
+		TenderID:         req.TenderID,
+		WorkName:         req.WorkName,
+		UnitCode:         req.UnitCode,
+		ManualVolume:     req.ManualVolume,
+		ManualNote:       req.ManualNote,
+	})
+	if err != nil {
+		if errors.Is(err, repository.ErrParentPositionNotFound) {
+			apierr.NotFound(err.Error()).Render(w)
+			return
+		}
+		apierr.InternalError("failed to create additional position").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: map[string]string{"id": id}})
 }

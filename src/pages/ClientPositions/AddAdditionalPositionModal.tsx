@@ -7,7 +7,8 @@ import {
   Select,
   message,
 } from 'antd';
-import { supabase } from '../../lib/supabase';
+import { listUnits } from '../../lib/api/nomenclatures';
+import { createAdditionalPosition } from '../../lib/api/positions';
 import { getErrorMessage } from '../../utils/errors';
 
 const { TextArea } = Input;
@@ -44,13 +45,12 @@ const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
 
   const fetchUnits = async () => {
     try {
-      const { data, error } = await supabase
-        .from('units')
-        .select('*')
-        .order('code', { ascending: true });
-
-      if (error) throw error;
-      setUnits(data || []);
+      // Go сортирует units по sort_order; исходный .order('code') —
+      // воспроизводим клиентом.
+      const data = (await listUnits())
+        .slice()
+        .sort((a, b) => (a.code || '').localeCompare(b.code || ''));
+      setUnits(data as unknown as Unit[]);
     } catch (error) {
       console.error('Ошибка загрузки единиц измерения:', error);
       message.error('Не удалось загрузить единицы измерения');
@@ -67,67 +67,19 @@ const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
         return;
       }
 
-      // Получаем родительскую позицию
-      const { data: parentPosition, error: parentError } = await supabase
-        .from('client_positions')
-        .select('*')
-        .eq('id', parentPositionId)
-        .single();
-
-      if (parentError) throw parentError;
-
-      // Получаем все дополнительные работы для этого родителя
-      const { data: existingAdditional, error: additionalError } = await supabase
-        .from('client_positions')
-        .select('position_number')
-        .eq('parent_position_id', parentPositionId)
-        .eq('is_additional', true)
-        .order('position_number', { ascending: false })
-        .limit(1);
-
-      if (additionalError) throw additionalError;
-
-      // Вычисляем position_number с суффиксом (например, 5.1, 5.2, 5.3)
-      let newPositionNumber: number;
-      if (existingAdditional && existingAdditional.length > 0) {
-        // Есть уже дополнительные работы - увеличиваем суффикс
-        const lastNumber = existingAdditional[0].position_number;
-        const decimalPart = lastNumber - Math.floor(lastNumber);
-        const nextSuffix = Math.round((decimalPart + 0.1) * 10) / 10;
-        newPositionNumber = Math.floor(lastNumber) + nextSuffix;
-      } else {
-        // Первая дополнительная работа - добавляем .1
-        newPositionNumber = parentPosition.position_number + 0.1;
-      }
-
-      // Создаем новую дополнительную позицию
-      const newPosition = {
+      // Go: read parent + расчёт десятичного суффикса + insert в одной tx.
+      const newId = await createAdditionalPosition({
+        parent_position_id: parentPositionId,
         tender_id: tenderId,
-        position_number: newPositionNumber,
         work_name: values.work_name,
         unit_code: values.unit_code,
         manual_volume: values.manual_volume,
         manual_note: values.manual_note || null,
-        hierarchy_level: (parentPosition.hierarchy_level || 0) + 1,
-        is_additional: true,
-        parent_position_id: parentPositionId,
-        // Копируем некоторые поля от родителя для целостности
-        volume: null,
-        client_note: null,
-        item_no: null,
-      };
-
-      const { data: inserted, error: insertError } = await supabase
-        .from('client_positions')
-        .insert(newPosition)
-        .select('id')
-        .single();
-
-      if (insertError) throw insertError;
+      });
 
       message.success('Дополнительная работа успешно добавлена');
       form.resetFields();
-      onSuccess(inserted.id);
+      onSuccess(newId);
     } catch (error) {
       console.error('Ошибка добавления дополнительной работы:', error);
       message.error('Ошибка добавления: ' + getErrorMessage(error));

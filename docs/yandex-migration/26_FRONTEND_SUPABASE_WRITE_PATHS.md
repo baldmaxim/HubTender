@@ -319,6 +319,19 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — ClientPositions/AddAdditionalPositionModal DONE (verified)
+
+`src/pages/ClientPositions/AddAdditionalPositionModal.tsx` (4 supabase → 0):
+units → reuse `listUnits()` (Go ORDER BY sort_order; исходный `.order('code')`
+воспроизведён клиентской сортировкой). Многошаговое создание ДОП-работы
+(read parent → max-суффикс среди is_additional детей → расчёт 5.1/5.2 →
+insert) заменено новым `POST /api/v1/positions/additional` (repo
+`CreateAdditionalPosition` + service + handler + route) — одна pgx.Tx,
+float-логика суффикса воспроизведена в Go (`math.Floor/Round`),
+`created_by` не пишется (колонки нет на client_positions; легаси тоже не
+писал). `ErrParentPositionNotFound`→404. `go build` 0,
+`go test ./internal/services` ok, `tsc` 0, `vite build` ✓.
+
 ## P5.3 — ClientPositions/usePositionDelete DONE (verified; новый bulk-delete)
 
 `src/pages/ClientPositions/hooks/usePositionDelete.ts` (2 supabase → 0):
