@@ -12,7 +12,7 @@ export interface TimelineIterationInput {
 }
 
 /**
- * TenderTimeline read endpoints (заменяют вложенные supabase.from() селекты
+ * TenderTimeline read endpoints (заменяют вложенные PostgREST-селекты
  * в useTenders / useTenderGroups / useTenderIterations). Нормализация и
  * скоринг остаются на клиенте — возвращаются «сырые» вложенные формы.
  */
