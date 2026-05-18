@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
-import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/api/client';
 import type { TenderNote, TenderNoteFull } from '../lib/supabase/types';
 
 interface UseTenderNotesResult {
@@ -11,9 +11,23 @@ interface UseTenderNotesResult {
   saveNote: (text: string) => Promise<void>;
 }
 
+interface NotesEnvelope {
+  data: {
+    my_note: TenderNote | null;
+    all_notes: TenderNoteFull[];
+  };
+}
+
+/**
+ * Заметки тендера — через Go BFF (→ Yandex). Привилегированность ("видеть
+ * все") определяется сервером по role_code из JWT-пользователя; параметр
+ * canViewAll оставлен для совместимости сигнатуры (UI-логика), на выборку
+ * не влияет — сервер сам отдаёт all_notes только привилегированным ролям.
+ */
 export const useTenderNotes = (
   tenderId: string | null,
   userId: string | null,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   canViewAll: boolean,
 ): UseTenderNotesResult => {
   const [myNote, setMyNote] = useState<TenderNote | null>(null);
@@ -30,103 +44,43 @@ export const useTenderNotes = (
 
     setLoading(true);
     try {
-      if (canViewAll) {
-        // Шаг 1: все заметки тендера
-        const { data: notesData, error: notesError } = await supabase
-          .from('tender_notes')
-          .select('*')
-          .eq('tender_id', tenderId)
-          .order('updated_at', { ascending: false });
-
-        if (notesError) throw notesError;
-
-        const rows = notesData || [];
-
-        // Шаг 2: имена авторов из public.users
-        const userIds = [...new Set(rows.map(r => r.user_id))];
-        const { data: usersData } = userIds.length > 0
-          ? await supabase.from('users').select('id, full_name').in('id', userIds)
-          : { data: [] };
-
-        const nameMap = Object.fromEntries(
-          (usersData || []).map((u: { id: string; full_name: string }) => [u.id, u.full_name]),
-        );
-
-        const notes: TenderNoteFull[] = rows
-          .filter(row => row.note_text.trim() !== '')
-          .map(row => ({
-            id: row.id,
-            tender_id: row.tender_id,
-            user_id: row.user_id,
-            note_text: row.note_text,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-            user_full_name: nameMap[row.user_id] ?? 'Неизвестный',
-          }));
-
-        setAllNotes(notes);
-        const own = notes.find(n => n.user_id === userId) ?? null;
-        setMyNote(own);
-      } else {
-        // Обычный пользователь видит только свою заметку (RLS уже фильтрует)
-        const { data, error } = await supabase
-          .from('tender_notes')
-          .select('*')
-          .eq('tender_id', tenderId)
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        if (error) throw error;
-        // Игнорируем запись с пустым текстом
-        setMyNote(data && data.note_text.trim() !== '' ? data : null);
-        setAllNotes([]);
-      }
+      const res = await apiFetch<NotesEnvelope>(
+        `/api/v1/tenders/${encodeURIComponent(tenderId)}/notes`,
+      );
+      setMyNote(res.data.my_note ?? null);
+      setAllNotes(res.data.all_notes ?? []);
     } catch (err) {
       console.error('Ошибка загрузки заметок:', err);
     } finally {
       setLoading(false);
     }
-  }, [tenderId, userId, canViewAll]);
+  }, [tenderId, userId]);
 
   useEffect(() => {
     fetchNotes();
   }, [fetchNotes]);
 
-  const saveNote = useCallback(async (text: string) => {
-    if (!tenderId || !userId) return;
+  const saveNote = useCallback(
+    async (text: string) => {
+      if (!tenderId || !userId) return;
 
-    setSaving(true);
-    try {
-      if (text.trim() === '') {
-        // Пустой текст — удаляем запись, чтобы пользователь не фигурировал в списке
-        const { error } = await supabase
-          .from('tender_notes')
-          .delete()
-          .eq('tender_id', tenderId)
-          .eq('user_id', userId);
-
-        if (error) throw error;
-        message.success('Заметка удалена');
-      } else {
-        const { error } = await supabase
-          .from('tender_notes')
-          .upsert(
-            { tender_id: tenderId, user_id: userId, note_text: text },
-            { onConflict: 'tender_id,user_id' },
-          );
-
-        if (error) throw error;
-        message.success('Заметка сохранена');
+      setSaving(true);
+      try {
+        await apiFetch<void>(
+          `/api/v1/tenders/${encodeURIComponent(tenderId)}/notes`,
+          { method: 'PUT', body: JSON.stringify({ note_text: text }) },
+        );
+        message.success(text.trim() === '' ? 'Заметка удалена' : 'Заметка сохранена');
+        await fetchNotes();
+      } catch (err) {
+        console.error('Ошибка сохранения заметки:', err);
+        message.error('Не удалось сохранить заметку');
+      } finally {
+        setSaving(false);
       }
-
-      await fetchNotes();
-    } catch (err) {
-      console.error('Ошибка сохранения заметки:', err);
-      message.error('Не удалось сохранить заметку');
-    } finally {
-      setSaving(false);
-    }
-  }, [tenderId, userId, fetchNotes]);
+    },
+    [tenderId, userId, fetchNotes],
+  );
 
   return { myNote, allNotes, loading, saving, saveNote };
 };

@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
-import type { BoqItemInsert } from './supabase';
+import type { BoqItem, BoqItemInsert } from './supabase';
 import { apiFetch } from './api/client';
-import { isGoEnabled, API_BASE_URL } from './api/featureFlags';
+import { API_BASE_URL } from './api/featureFlags';
 
 // ─── Go path helpers ────────────────────────────────────────────────────────
 // Reads the ETag header from a plain fetch (apiFetch discards headers).
@@ -78,8 +78,8 @@ async function deleteItemOnce(itemId: string, etag: string): Promise<{ conflict:
 // ─── Public wrappers ────────────────────────────────────────────────────────
 /**
  * Wrapper для INSERT операций с автоматическим audit логированием.
- * При VITE_API_BOQ_ENABLED=true идёт в Go BFF (user_id из JWT, audit в
- * pgx.Tx), иначе — supabase.rpc('insert_boq_item_with_audit').
+ * Только Go BFF: POST /api/v1/tenders/{id}/positions/{posId}/items
+ * (user_id из JWT, audit-строка в той же pgx.Tx). Supabase-fallback убран.
  */
 export async function insertBoqItemWithAudit(
   userId: string | undefined,
@@ -89,29 +89,19 @@ export async function insertBoqItemWithAudit(
     throw new Error('User ID required for audit operations');
   }
 
-  if (isGoEnabled('boq')) {
-    const { tender_id, client_position_id, ...rest } = data as Record<string, unknown>;
-    if (!tender_id || !client_position_id) {
-      throw new Error('tender_id and client_position_id are required for Go INSERT path');
-    }
-    try {
-      const res = await apiFetch<{ data: unknown }>(
-        `/api/v1/tenders/${encodeURIComponent(String(tender_id))}/positions/${encodeURIComponent(String(client_position_id))}/items`,
-        { method: 'POST', body: JSON.stringify(rest) },
-      );
-      return { data: res.data, error: null };
-    } catch (err) {
-      throw err instanceof Error ? err : new Error(String(err));
-    }
+  const { tender_id, client_position_id, ...rest } = data as Record<string, unknown>;
+  if (!tender_id || !client_position_id) {
+    throw new Error('tender_id and client_position_id are required for INSERT path');
   }
-
-  const { data: result, error } = await supabase.rpc('insert_boq_item_with_audit', {
-    p_user_id: userId,
-    p_data: data as unknown,
-  });
-
-  if (error) throw error;
-  return { data: result, error: null };
+  try {
+    const res = await apiFetch<{ data: BoqItem }>(
+      `/api/v1/tenders/${encodeURIComponent(String(tender_id))}/positions/${encodeURIComponent(String(client_position_id))}/items`,
+      { method: 'POST', body: JSON.stringify(rest) },
+    );
+    return { data: res.data, error: null };
+  } catch (err) {
+    throw err instanceof Error ? err : new Error(String(err));
+  }
 }
 
 /**
@@ -129,33 +119,22 @@ export async function updateBoqItemWithAudit(
     throw new Error('User ID required for audit operations');
   }
 
-  if (isGoEnabled('boq')) {
-    const body = data as Record<string, unknown>;
-    const maxAttempts = 5;
-    let res: Awaited<ReturnType<typeof patchItemOnce>> = { data: null, conflict: true };
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const etag = await fetchItemETag(itemId);
-      res = await patchItemOnce(itemId, body, etag);
-      if (!res.conflict) {
-        return { data: res.data, error: null };
-      }
-      if (attempt < maxAttempts) {
-        // Лёгкая экспоненциальная задержка: 50/100/200/400 мс. Даёт фоновому
-        // пересчёту шанс закрыть свой апдейт прежде чем мы ретраимся.
-        await new Promise((r) => setTimeout(r, 50 * 2 ** (attempt - 1)));
-      }
+  const body = data as Record<string, unknown>;
+  const maxAttempts = 5;
+  let res: Awaited<ReturnType<typeof patchItemOnce>> = { data: null, conflict: true };
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const etag = await fetchItemETag(itemId);
+    res = await patchItemOnce(itemId, body, etag);
+    if (!res.conflict) {
+      return { data: res.data, error: null };
     }
-    throw new Error('Item was modified concurrently by another user. Please reload.');
+    if (attempt < maxAttempts) {
+      // Лёгкая экспоненциальная задержка: 50/100/200/400 мс. Даёт фоновому
+      // пересчёту шанс закрыть свой апдейт прежде чем мы ретраимся.
+      await new Promise((r) => setTimeout(r, 50 * 2 ** (attempt - 1)));
+    }
   }
-
-  const { data: result, error } = await supabase.rpc('update_boq_item_with_audit', {
-    p_user_id: userId,
-    p_item_id: itemId,
-    p_data: data as unknown,
-  });
-
-  if (error) throw error;
-  return { data: result, error: null };
+  throw new Error('Item was modified concurrently by another user. Please reload.');
 }
 
 /**
@@ -171,20 +150,10 @@ export async function deleteBoqItemWithAudit(
     throw new Error('User ID required for audit operations');
   }
 
-  if (isGoEnabled('boq')) {
-    const res = await deleteItemOnce(itemId, '*');
-    if (res.conflict) {
-      throw new Error('Не удалось удалить строку: сервер отклонил DELETE.');
-    }
-    return { data: null, error: null };
+  const res = await deleteItemOnce(itemId, '*');
+  if (res.conflict) {
+    throw new Error('Не удалось удалить строку: сервер отклонил DELETE.');
   }
-
-  const { data: result, error } = await supabase.rpc('delete_boq_item_with_audit', {
-    p_user_id: userId,
-    p_item_id: itemId,
-  });
-
-  if (error) throw error;
-  return { data: result, error: null };
+  return { data: null, error: null };
 }
 

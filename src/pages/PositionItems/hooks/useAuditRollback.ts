@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
+import { apiFetch } from '../../../lib/api/client';
 import { updateBoqItemWithAudit } from '../../../lib/supabaseWithAudit';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { BoqItemAudit } from '../../../types/audit';
@@ -30,20 +30,20 @@ export function useAuditRollback(): UseAuditRollbackReturn {
 
     try {
       if (record.operation_type === 'DELETE') {
-        // Re-insert с тем же id, чтобы parent_work_item_id-ссылки уцелели.
-        // created_at/updated_at сбрасываем — пусть default'ы выставят свежие.
-        const old = record.old_data as unknown as Record<string, unknown>;
-        const { created_at: _ca, updated_at: _ua, ...payload } = old;
-        void _ca; void _ua;
-        const { error } = await supabase.from('boq_items').insert(payload as unknown as BoqItemInsert);
-        if (error) {
-          if (error.code === '23503') {
-            throw new Error('Не удалось восстановить: позиция или тендер удалены');
-          }
-          if (error.code === '23505') {
-            throw new Error('Элемент с таким id уже существует');
-          }
-          throw error;
+        // Сервер по audit.id перечитывает old_data и реинсертит boq_item с
+        // исходным id (parent_work_item_id-ссылки уцелеют) в одной операции;
+        // boq_items-триггер логирует это как новый INSERT-audit.
+        try {
+          await apiFetch(
+            `/api/v1/boq-audit/${encodeURIComponent(record.id)}/rollback`,
+            { method: 'POST' },
+          );
+        } catch (e) {
+          const body = (e as { body?: { detail?: string; title?: string } }).body;
+          throw new Error(
+            body?.detail || body?.title ||
+              (e instanceof Error ? e.message : 'Ошибка восстановления'),
+          );
         }
       } else {
         const rollbackData = Object.fromEntries(

@@ -1,4 +1,4 @@
-import { supabase } from '../../lib/supabase';
+import { apiFetch } from '../../lib/api/client';
 
 export interface VersionTransferNewPositionPayload {
   row_index: number;
@@ -39,24 +39,24 @@ export async function executeVersionTransfer({
   newPositions,
   matches,
 }: ExecuteVersionTransferParams): Promise<ExecuteVersionTransferResult> {
-  const { data, error } = await supabase.rpc('execute_version_transfer', {
-    p_source_tender_id: sourceTenderId,
-    p_new_positions: newPositions,
-    p_matches: matches,
-  });
-
-  if (error) {
-    const baseMessage = `Ошибка серверного переноса версии: ${error.message}`;
-
-    if (error.message.includes('statement timeout')) {
-      throw new Error(
-        `${baseMessage}. Проверьте, что в Supabase применена последняя SQL-миграция для execute_version_transfer.`
-      );
-    }
-
-    throw new Error(baseMessage);
+  let envelope: { data: Partial<ExecuteVersionTransferResult> };
+  try {
+    envelope = await apiFetch<{ data: Partial<ExecuteVersionTransferResult> }>(
+      `/api/v1/tenders/${encodeURIComponent(sourceTenderId)}/versions/transfer`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ new_positions: newPositions, matches }),
+        // Перенос версии — тяжёлая операция (копирование позиций/BOQ/затрат);
+        // отключаем дефолтный 10s-таймаут apiFetch.
+        timeoutMs: 0,
+      },
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Ошибка серверного переноса версии: ${msg}`);
   }
 
+  const data = envelope?.data;
   if (!data || typeof data !== 'object') {
     throw new Error('Сервер не вернул результат переноса версии');
   }

@@ -3,7 +3,6 @@ import * as XLSX from 'xlsx';
 import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
 import { apiFetch } from '../../../lib/api/client';
-import { isGoEnabled } from '../../../lib/api/featureFlags';
 import {
   ParsedBoqItem,
   PositionUpdateData,
@@ -388,15 +387,17 @@ export const useMassBoqImport = () => {
       let updatedPositionsCount = 0;
       let importSessionId: string | null = null;
 
-      if (isGoEnabled('boq')) {
-        // Go BFF path: один pgx.Tx, audit пишется внутри той же транзакции,
-        // user_id берётся из JWT (не из body).
+      {
+        // Go BFF: один pgx.Tx, audit в той же транзакции, user_id из JWT
+        // (не из body). Bulk-импорт может быть объёмным → timeoutMs:0
+        // (отключаем дефолтный 10s-таймаут apiFetch).
         const goResp = await apiFetch<{
           import_session_id: string | null;
           inserted_items_count: number;
           updated_positions_count: number;
         }>('/api/v1/imports/boq', {
           method: 'POST',
+          timeoutMs: 0,
           body: JSON.stringify({
             tender_id: tenderId,
             file_name: fileName || '',
@@ -407,23 +408,6 @@ export const useMassBoqImport = () => {
         insertedItemsCount = goResp.inserted_items_count;
         updatedPositionsCount = goResp.updated_positions_count;
         importSessionId = goResp.import_session_id;
-      } else {
-        const { data: rpcResult, error } = await supabase.rpc('bulk_import_client_position_boq', {
-          p_user_id: userId || null,
-          p_tender_id: tenderId,
-          p_file_name: fileName || null,
-          p_items: itemsPayload,
-          p_position_updates: positionUpdatesPayload,
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        const rpcResultObj = rpcResult as Record<string, unknown> | null;
-        insertedItemsCount = Number(rpcResultObj?.inserted_items_count || 0);
-        updatedPositionsCount = Number(rpcResultObj?.updated_positions_count || 0);
-        importSessionId = (rpcResultObj?.import_session_id as string | null) || null;
       }
 
       setUploadProgress(100);

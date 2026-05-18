@@ -125,6 +125,9 @@ func main() {
 	timelineRepo := repository.NewTimelineRepo(pool)
 	subcontractRepo := repository.NewSubcontractRepo(pool)
 	transferRepo := repository.NewTransferRepo(pool)
+	cloneRepo := repository.NewCloneRepo(pool)
+	tenderNotesRepo := repository.NewTenderNotesRepo(pool)
+	boqAuditRollbackRepo := repository.NewBoqAuditRollbackRepo(pool)
 	redistributionRepo := repository.NewRedistributionRepo(pool)
 	insuranceRepo := repository.NewInsuranceRepo(pool)
 	positionFiltersRepo := repository.NewPositionFiltersRepo(pool)
@@ -149,6 +152,9 @@ func main() {
 	timelineSvc := services.NewTimelineService(timelineRepo)
 	subcontractSvc := services.NewSubcontractService(subcontractRepo, inMemCache)
 	transferSvc := services.NewTransferService(transferRepo, inMemCache)
+	cloneSvc := services.NewCloneService(cloneRepo, inMemCache)
+	tenderNotesSvc := services.NewTenderNotesService(tenderNotesRepo)
+	boqAuditRollbackSvc := services.NewBoqAuditRollbackService(boqAuditRollbackRepo, inMemCache)
 	redistributionSvc := services.NewRedistributionService(redistributionRepo, inMemCache)
 	insuranceSvc := services.NewInsuranceService(insuranceRepo, inMemCache)
 	positionFiltersSvc := services.NewPositionFiltersService(positionFiltersRepo)
@@ -178,6 +184,9 @@ func main() {
 	userRegH := handlers.NewUserRegisterHandler(userSvc)
 	subcontractH := handlers.NewSubcontractHandler(subcontractSvc)
 	transferH := handlers.NewTenderTransferHandler(transferSvc)
+	cloneH := handlers.NewTenderCloneHandler(cloneSvc)
+	tenderNotesH := handlers.NewTenderNotesHandler(tenderNotesSvc)
+	boqAuditRollbackH := handlers.NewBoqAuditRollbackHandler(boqAuditRollbackSvc)
 	redistributionH := handlers.NewRedistributionHandler(redistributionSvc)
 	insuranceH := handlers.NewInsuranceHandler(insuranceSvc)
 	positionFiltersH := handlers.NewPositionFiltersHandler(positionFiltersSvc)
@@ -259,6 +268,17 @@ func main() {
 
 		// Phase 5: version transfer (replaces public.execute_version_transfer RPC).
 		r.Post("/api/v1/tenders/{id}/versions/transfer", transferH.Transfer)
+
+		// Phase 5: duplicate tender as new version (calls SQL function
+		// public.clone_tender_as_new_version, ported into Yandex schema).
+		r.Post("/api/v1/tenders/{id}/versions/clone", cloneH.Clone)
+
+		// Phase 5: tender notes (per-user; privileged roles see all).
+		r.Get("/api/v1/tenders/{id}/notes", tenderNotesH.List)
+		r.Put("/api/v1/tenders/{id}/notes", tenderNotesH.Save)
+
+		// Phase 5: restore a DELETE'd BOQ item from its audit record.
+		r.Post("/api/v1/boq-audit/{auditId}/rollback", boqAuditRollbackH.Rollback)
 
 		// Phase 5: atomic redistribution save (cost_redistribution_results).
 		r.Post("/api/v1/redistributions/save", redistributionH.Save)

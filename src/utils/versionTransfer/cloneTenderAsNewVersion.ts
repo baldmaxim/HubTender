@@ -1,4 +1,4 @@
-import { supabase } from '../../lib/supabase';
+import { apiFetch } from '../../lib/api/client';
 
 export interface CloneTenderResult {
   tenderId: string;
@@ -18,14 +18,23 @@ export interface CloneTenderResult {
 }
 
 export async function cloneTenderAsNewVersion(sourceTenderId: string): Promise<CloneTenderResult> {
-  const { data, error } = await supabase.rpc('clone_tender_as_new_version', {
-    p_source_tender_id: sourceTenderId,
-  });
-
-  if (error) {
-    throw new Error(`Ошибка дублирования тендера: ${error.message}`);
+  let envelope: { data: Partial<CloneTenderResult> };
+  try {
+    envelope = await apiFetch<{ data: Partial<CloneTenderResult> }>(
+      `/api/v1/tenders/${encodeURIComponent(sourceTenderId)}/versions/clone`,
+      {
+        method: 'POST',
+        // Дублирование тендера — тяжёлая операция (копирование позиций/BOQ/
+        // затрат/наценок/доков); отключаем дефолтный 10s-таймаут apiFetch.
+        timeoutMs: 0,
+      },
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Ошибка дублирования тендера: ${msg}`);
   }
 
+  const data = envelope?.data;
   if (!data || typeof data !== 'object') {
     throw new Error('Сервер не вернул результат дублирования тендера');
   }
