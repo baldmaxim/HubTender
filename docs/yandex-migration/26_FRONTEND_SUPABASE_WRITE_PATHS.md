@@ -224,6 +224,30 @@ pricing-порчи снят (мёртвый путь не исполняется
 для строгого `MarkupTactic`. **markupTactic-домен полностью Go-only,
 0 supabase.** `tsc` 0, `vite build` ✓.
 
+## P5.3 — статус остатка (честно): «лёгкие» победы исчерпаны
+
+Закрыто (Go-only, verified, pushed): P5.1, P5.2, **весь P5.4**
+(`src/lib/api/*`), versionTransfer (dead-code), timeline-домен (+2
+эндпоинта), **markupTactic полностью** (calc+params+tactics).
+`src` multiline supabase-business: **479/112 → ~278/~74**.
+
+Все простые пути (мёртвый код; reuse существующих Go-хелперов) —
+**исчерпаны**. Остаток = **net-new backend в core/чувствительных путях**,
+каждый — focused-сессия (свежий контекст + полная верификация):
+
+| Домен | Что нужно (backend) |
+|---|---|
+| `useDeadlineCheck` | расширить core `GET /api/v1/me` + домен `user` JSONB `tender_deadline_extensions` (чувствит. shared-путь) + фронт → `getTenderById`+`/me` |
+| `AuthContext` (`loadUserData`) | профиль через Go (`/api/v1/me`-расширенный) вместо `supabase.from('users')` — затрагивает весь auth-bridge |
+| `Tasks/*` (TaskListTab/index/Employee/AddTask) | Go-домена задач НЕТ — repo+service+handler+routes для tasks CRUD с нуля |
+| big page-hooks `useBoqItems`/`useCostData`/`usePositionActions`/`useBoqItemsImport`/`useClientPositions` | новые Go-эндпоинты по boq/positions read+write, критичные write-пути |
+| `Library/*`, `Commerce`(useCommerceData/Actions), `Bsm`, `Analytics/ObjectComparison`, `costImportService`, `insertTemplateItems`, `calculateGrandTotal`, `MainLayout`-notifications, `Tenders/*`-modals, `useTendersData`/`useTenderActions`/`useBoqUpload` | новые Go-эндпоинты по доменам |
+
+Каждый домен полностью специфицируется по образцу clone/notes/timeline
+(route+handler+service+repo, pgx+JWT+tx, фронт → apiFetch, верификация
+`go build`/`go test`/`tsc`/`vite build` + multiline-grep). Делать
+focused-сессиями, не одним проходом. P5.5/P5.6 — после закрытия P5.3.
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)
