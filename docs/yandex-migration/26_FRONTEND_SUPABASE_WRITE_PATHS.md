@@ -129,6 +129,21 @@ hooks/useRedistributionData.ts:112`, `FinancialIndicators.tsx:124`.
 **un-gated** функции (`listTimelineAssignableUsers`,
 `createTenderIteration`) → P5.3 (нужны Go-эндпоинты, нет backend).
 
+## P5.3 — versionTransfer dead-code removed (verified)
+
+«Самое сложное» (`src/utils/versionTransfer/*` клиент-оркестрация
+многотабличной записи) оказалось **мёртвым кодом**: 6 модулей
+(`createNewVersion`, `transferPositionData`, `handleAdditionalPositions`,
+`copyBoqItems`, `copyCostVolumes`, `copyInsuranceData`) нигде не
+использовались — вытеснены серверным `executeVersionTransfer` (Go, P5.1).
+Удалены (нулевой риск). Тип `AdditionalWorkTransfer` (нужен UI VersionMatch)
+сохранён как чистый `versionTransfer/types.ts`. `tsc` 0, `vite build` ✓.
+−6 файлов, ~−23 un-gated callsites.
+
+**Прогресс `src` multiline supabase-business: 479/112 (старт) → 316/84.**
+В `src/lib/api` осталось только `timeline.ts:2` (un-gated → P5.3) +
+`featureFlags.ts:1` (комментарий, не вызов).
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)

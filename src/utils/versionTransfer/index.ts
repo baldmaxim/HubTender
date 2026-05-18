@@ -1,19 +1,18 @@
 /**
- * Модуль переноса данных между версиями тендера
+ * Перенос версий тендера — только Go BFF.
  *
- * Включает:
- * - Создание новой версии тендера с автоинкрементом version
- * - Перенос данных позиций (manual_volume, manual_note)
- * - Копирование boq_items с сохранением связей parent_work_item_id
- * - Обработка дополнительных работ с поиском альтернативных родителей
+ * Тяжёлое копирование (positions/boq/costs/insurance/exclusions/доп.работы)
+ * выполняет серверный эндпоинт `POST /api/v1/tenders/{id}/versions/transfer`
+ * (см. executeVersionTransfer). Дублирование тендера —
+ * `cloneTenderAsNewVersion` (импортируется напрямую, не через этот баррель).
+ *
+ * Легаси клиент-оркестрованные модули (createNewVersion / transferPositionData
+ * / handleAdditionalPositions / copyBoqItems / copyCostVolumes /
+ * copyInsuranceData) удалены: вытеснены серверным executeVersionTransfer,
+ * нигде не использовались.
  *
  * @module utils/versionTransfer
  */
 
-export * from './createNewVersion';
-export * from './transferPositionData';
-export * from './copyBoqItems';
 export * from './executeVersionTransfer';
-export * from './handleAdditionalPositions';
-export * from './copyCostVolumes';
-export * from './copyInsuranceData';
+export * from './types';
