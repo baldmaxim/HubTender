@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Select, Input, message } from 'antd';
-import { supabase } from '../../lib/supabase';
+import { fetchTenders as apiFetchTenders } from '../../lib/api/tenders';
+import { createUserTask } from '../../lib/api/tasks';
 
 interface AddTaskModalProps {
   open: boolean;
@@ -28,25 +29,23 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
   }, [open]);
 
   const fetchTenders = async () => {
-    const { data, error } = await supabase
-      .from('tenders')
-      .select('id, title')
-      .order('title');
-
-    if (error) {
-      message.error('Ошибка загрузки проектов: ' + error.message);
-      return;
+    try {
+      const all = await apiFetchTenders();
+      const rows = all.map((t) => ({ id: t.id, title: t.title }));
+      // Группировка по title, выбор первого по каждому наименованию
+      const uniqueTitles = rows.reduce((acc, tender) => {
+        if (!acc.find((t) => t.title === tender.title)) {
+          acc.push(tender);
+        }
+        return acc;
+      }, [] as { id: string; title: string }[]);
+      setTenders(uniqueTitles);
+    } catch (err) {
+      message.error(
+        'Ошибка загрузки проектов: ' +
+          (err instanceof Error ? err.message : 'неизвестная ошибка'),
+      );
     }
-
-    // Группировка по title, выбор первого по каждому наименованию
-    const uniqueTitles = data?.reduce((acc, tender) => {
-      if (!acc.find(t => t.title === tender.title)) {
-        acc.push(tender);
-      }
-      return acc;
-    }, [] as typeof data);
-
-    setTenders(uniqueTitles || []);
   };
 
   const handleSubmit = async () => {
@@ -54,25 +53,24 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({
       const values = await form.validateFields();
 
       setLoading(true);
-      const { error } = await supabase
-        .from('user_tasks')
-        .insert({
+      try {
+        await createUserTask({
           user_id: userId,
           tender_id: values.tender_id === 'other' ? null : values.tender_id,
           description: values.description,
-          task_status: 'running',
         });
-
-      setLoading(false);
-
-      if (error) {
-        message.error('Ошибка создания задачи: ' + error.message);
-      } else {
         message.success('Задача добавлена');
         form.resetFields();
         onSuccess();
+      } catch (err) {
+        message.error(
+          'Ошибка создания задачи: ' +
+            (err instanceof Error ? err.message : 'неизвестная ошибка'),
+        );
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
+    } catch {
       setLoading(false);
     }
   };

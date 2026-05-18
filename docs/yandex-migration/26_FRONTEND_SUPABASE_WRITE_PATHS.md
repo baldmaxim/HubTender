@@ -248,6 +248,19 @@ pricing-порчи снят (мёртвый путь не исполняется
 `go build`/`go test`/`tsc`/`vite build` + multiline-grep). Делать
 focused-сессиями, не одним проходом. P5.5/P5.6 — после закрытия P5.3.
 
+## P5.3 — Tasks-домен DONE (verified, новый Go-домен с нуля)
+
+5 новых Go-эндпоинтов (мирроринг clone/notes/timeline):
+`GET /api/v1/tasks` (user_id?/exclude_completed? → ListByUser; без user_id
+→ ListAll, server-side privilege по role_code {administrator,director,
+developer}), `POST /api/v1/tasks`, `PATCH /api/v1/tasks/{id}`,
+`GET|PATCH /api/v1/users/{id}/work-settings`. repo/service/handler+routes+DI.
+Фронт: новый `src/lib/api/tasks.ts` + 4 файла (`index`/`TaskListTab`/
+`AddTaskModal`/`EmployeeTasksTab`) → 0 supabase; users/tenders-списки
+переиспользуют `listTimelineAssignableUsers`/`fetchTenders` (Go).
+`go build ./...` 0, `go test` без новых провалов (calc pre-existing §11),
+`tsc` 0, `vite build` ✓.
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)

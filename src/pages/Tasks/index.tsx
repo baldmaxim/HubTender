@@ -3,7 +3,7 @@ import { Tabs, Select, message } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { canManageUsers } from '../../lib/supabase/types';
-import { supabase } from '../../lib/supabase';
+import { listTimelineAssignableUsers } from '../../lib/api/timeline';
 import TaskListTab from './TaskListTab';
 import EmployeeTasksTab from './EmployeeTasksTab';
 import './Tasks.css';
@@ -22,17 +22,15 @@ const Tasks: React.FC = () => {
   }, [activeTab]);
 
   const fetchUsers = async () => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, full_name')
-      .order('full_name');
-
-    if (error) {
-      message.error('Ошибка загрузки пользователей: ' + error.message);
-      return;
+    try {
+      const data = await listTimelineAssignableUsers();
+      setUsers(data.map((u) => ({ id: u.id, full_name: u.full_name })));
+    } catch (err) {
+      message.error(
+        'Ошибка загрузки пользователей: ' +
+          (err instanceof Error ? err.message : 'неизвестная ошибка'),
+      );
     }
-
-    setUsers(data || []);
   };
 
   if (!user) {

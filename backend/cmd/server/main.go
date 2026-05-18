@@ -128,6 +128,7 @@ func main() {
 	cloneRepo := repository.NewCloneRepo(pool)
 	tenderNotesRepo := repository.NewTenderNotesRepo(pool)
 	boqAuditRollbackRepo := repository.NewBoqAuditRollbackRepo(pool)
+	tasksRepo := repository.NewTasksRepo(pool)
 	redistributionRepo := repository.NewRedistributionRepo(pool)
 	insuranceRepo := repository.NewInsuranceRepo(pool)
 	positionFiltersRepo := repository.NewPositionFiltersRepo(pool)
@@ -155,6 +156,7 @@ func main() {
 	cloneSvc := services.NewCloneService(cloneRepo, inMemCache)
 	tenderNotesSvc := services.NewTenderNotesService(tenderNotesRepo)
 	boqAuditRollbackSvc := services.NewBoqAuditRollbackService(boqAuditRollbackRepo, inMemCache)
+	tasksSvc := services.NewTasksService(tasksRepo)
 	redistributionSvc := services.NewRedistributionService(redistributionRepo, inMemCache)
 	insuranceSvc := services.NewInsuranceService(insuranceRepo, inMemCache)
 	positionFiltersSvc := services.NewPositionFiltersService(positionFiltersRepo)
@@ -187,6 +189,7 @@ func main() {
 	cloneH := handlers.NewTenderCloneHandler(cloneSvc)
 	tenderNotesH := handlers.NewTenderNotesHandler(tenderNotesSvc)
 	boqAuditRollbackH := handlers.NewBoqAuditRollbackHandler(boqAuditRollbackSvc)
+	tasksH := handlers.NewTasksHandler(tasksSvc)
 	redistributionH := handlers.NewRedistributionHandler(redistributionSvc)
 	insuranceH := handlers.NewInsuranceHandler(insuranceSvc)
 	positionFiltersH := handlers.NewPositionFiltersHandler(positionFiltersSvc)
@@ -281,6 +284,13 @@ func main() {
 
 		// Phase 5: restore a DELETE'd BOQ item from its audit record.
 		r.Post("/api/v1/boq-audit/{auditId}/rollback", boqAuditRollbackH.Rollback)
+
+		// Phase 5: tasks (user_tasks) + per-user work settings.
+		r.Get("/api/v1/tasks", tasksH.List)
+		r.Post("/api/v1/tasks", tasksH.Create)
+		r.Patch("/api/v1/tasks/{id}", tasksH.Update)
+		r.Get("/api/v1/users/{id}/work-settings", tasksH.GetWorkSettings)
+		r.Patch("/api/v1/users/{id}/work-settings", tasksH.SetWorkSettings)
 
 		// Phase 5: atomic redistribution save (cost_redistribution_results).
 		r.Post("/api/v1/redistributions/save", redistributionH.Save)

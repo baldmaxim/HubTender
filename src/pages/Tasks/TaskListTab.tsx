@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Space, Button, Table, Typography, Switch, Modal, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
-import { supabase, type UserTaskWithRelations, type TaskStatus, type WorkMode, type WorkStatus } from '../../lib/supabase';
+import type { UserTaskWithRelations, TaskStatus, WorkMode, WorkStatus } from '../../lib/supabase';
+import {
+  listUserTasks,
+  updateUserTask,
+  getWorkSettings,
+  setWorkSettings,
+} from '../../lib/api/tasks';
 import { useTheme } from '../../contexts/ThemeContext';
 import AddTaskModal from './AddTaskModal';
 
@@ -28,40 +34,26 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
 
   const fetchTasks = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('user_tasks')
-      .select(`
-        *,
-        tender:tender_id(id, title)
-      `)
-      .eq('user_id', userId)
-      .neq('task_status', 'completed')
-      .order('created_at', { ascending: false });
-
-    setLoading(false);
-
-    if (error) {
-      message.error('Ошибка загрузки задач: ' + error.message);
-    } else {
-      setTasks(data || []);
+    try {
+      const data = await listUserTasks(userId, true);
+      setTasks(data);
+    } catch (err) {
+      message.error(
+        'Ошибка загрузки задач: ' +
+          (err instanceof Error ? err.message : 'неизвестная ошибка'),
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchUserSettings = async () => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('current_work_mode, current_work_status')
-      .eq('id', userId)
-      .single();
-
-    if (error) {
-      console.error('Ошибка загрузки настроек:', error);
-      return;
-    }
-
-    if (data) {
-      setWorkMode(data.current_work_mode);
-      setWorkStatus(data.current_work_status);
+    try {
+      const ws = await getWorkSettings(userId);
+      setWorkMode(ws.current_work_mode);
+      setWorkStatus(ws.current_work_status);
+    } catch (err) {
+      console.error('Ошибка загрузки настроек:', err);
     }
   };
 
@@ -69,13 +61,13 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
     const newMode: WorkMode = checked ? 'remote' : 'office';
     setWorkMode(newMode);
 
-    const { error } = await supabase
-      .from('users')
-      .update({ current_work_mode: newMode })
-      .eq('id', userId);
-
-    if (error) {
-      message.error('Ошибка обновления режима работы: ' + error.message);
+    try {
+      await setWorkSettings(userId, { current_work_mode: newMode });
+    } catch (err) {
+      message.error(
+        'Ошибка обновления режима работы: ' +
+          (err instanceof Error ? err.message : 'неизвестная ошибка'),
+      );
       setWorkMode(checked ? 'office' : 'remote');
     }
   };
@@ -84,27 +76,26 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
     const newStatus: WorkStatus = checked ? 'not_working' : 'working';
     setWorkStatus(newStatus);
 
-    const { error } = await supabase
-      .from('users')
-      .update({ current_work_status: newStatus })
-      .eq('id', userId);
-
-    if (error) {
-      message.error('Ошибка обновления статуса работы: ' + error.message);
+    try {
+      await setWorkSettings(userId, { current_work_status: newStatus });
+    } catch (err) {
+      message.error(
+        'Ошибка обновления статуса работы: ' +
+          (err instanceof Error ? err.message : 'неизвестная ошибка'),
+      );
       setWorkStatus(checked ? 'working' : 'not_working');
     }
   };
 
   const handleToggleTaskStatus = async (taskId: string, newStatus: TaskStatus) => {
-    const { error } = await supabase
-      .from('user_tasks')
-      .update({ task_status: newStatus })
-      .eq('id', taskId);
-
-    if (error) {
-      message.error('Ошибка обновления статуса задачи: ' + error.message);
-    } else {
+    try {
+      await updateUserTask(taskId, { task_status: newStatus });
       fetchTasks();
+    } catch (err) {
+      message.error(
+        'Ошибка обновления статуса задачи: ' +
+          (err instanceof Error ? err.message : 'неизвестная ошибка'),
+      );
     }
   };
 
@@ -116,19 +107,18 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
       cancelText: 'Отмена',
       rootClassName: currentTheme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
-        const { error } = await supabase
-          .from('user_tasks')
-          .update({
+        try {
+          await updateUserTask(taskId, {
             task_status: 'completed',
             completed_at: new Date().toISOString(),
-          })
-          .eq('id', taskId);
-
-        if (error) {
-          message.error('Ошибка завершения задачи: ' + error.message);
-        } else {
+          });
           message.success('Задача завершена');
           fetchTasks();
+        } catch (err) {
+          message.error(
+            'Ошибка завершения задачи: ' +
+              (err instanceof Error ? err.message : 'неизвестная ошибка'),
+          );
         }
       },
     });

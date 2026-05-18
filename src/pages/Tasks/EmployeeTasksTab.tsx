@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Table, Tabs, message } from 'antd';
-import { supabase, type UserTaskWithRelations, type TaskStatus, type WorkMode, type WorkStatus } from '../../lib/supabase';
+import type { UserTaskWithRelations, TaskStatus, WorkMode, WorkStatus } from '../../lib/supabase';
+import { listAllTasks } from '../../lib/api/tasks';
 import dayjs from 'dayjs';
 
 interface EmployeeTasksTabProps {
@@ -34,23 +35,17 @@ const EmployeeTasksTab: React.FC<EmployeeTasksTabProps> = ({ searchUserId }) => 
 
   const fetchAllTasks = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('user_tasks')
-      .select(`
-        *,
-        tender:tender_id(id, title),
-        user:user_id(id, full_name, email, current_work_mode, current_work_status)
-      `)
-      .order('created_at', { ascending: false });
-
-    setLoading(false);
-
-    if (error) {
-      message.error('Ошибка загрузки задач: ' + error.message);
-      return;
+    try {
+      const data = await listAllTasks();
+      setAllTasks(data);
+    } catch (err) {
+      message.error(
+        'Ошибка загрузки задач: ' +
+          (err instanceof Error ? err.message : 'неизвестная ошибка'),
+      );
+    } finally {
+      setLoading(false);
     }
-
-    setAllTasks(data || []);
   };
 
   const getRowClassName = (record: UserTaskWithRelations) => {
