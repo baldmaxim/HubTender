@@ -258,6 +258,8 @@ func main() {
 		r.Patch("/api/v1/items/bulk-commercial", bulkBoqH.BulkUpdateCommercial)
 		r.Post("/api/v1/timeline/groups/{id}/quality", timelineH.SetGroupQuality)
 		r.Post("/api/v1/timeline/iterations/{id}/respond", timelineH.RespondIteration)
+		r.Get("/api/v1/timeline/assignable-users", timelineH.ListAssignableUsers)
+		r.Post("/api/v1/timeline/iterations", timelineH.CreateIteration)
 
 		// Slice 3b: remaining simple RPCs.
 		r.Post("/api/v1/users/register", userRegH.Register)

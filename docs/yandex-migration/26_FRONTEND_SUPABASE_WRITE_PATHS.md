@@ -144,6 +144,16 @@ hooks/useRedistributionData.ts:112`, `FinancialIndicators.tsx:124`.
 В `src/lib/api` осталось только `timeline.ts:2` (un-gated → P5.3) +
 `featureFlags.ts:1` (комментарий, не вызов).
 
+## P5.3 — timeline domain DONE (verified)
+
+2 новых Go-эндпоинта (мирроринг паттерна clone/notes):
+`GET /api/v1/timeline/assignable-users`,
+`POST /api/v1/timeline/iterations` (user_id из JWT, не из body) —
+repo/service/handler расширены, routes + DI. Фронт `src/lib/api/timeline.ts`
+→ полностью Go (0 supabase). `go build` 0, `go test` без новых провалов
+(calc pre-existing §11), `tsc` 0, `vite build` ✓. **Весь `src/lib/api/*`
+теперь Supabase-free** (остался только `featureFlags.ts:1` — комментарий).
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)

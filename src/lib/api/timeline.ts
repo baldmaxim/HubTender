@@ -1,7 +1,5 @@
 // Timeline helpers with Go BFF / Supabase fallback.
-// NOTE: listTimelineAssignableUsers / createTenderIteration ещё ходят в
-// Supabase напрямую (un-gated, нет Go-эндпоинта) — отмечено в doc 26 для P5.3.
-import { supabase } from '../supabase';
+// Timeline helpers — Go BFF only.
 import type { TimelineUserRef } from '../supabase/types';
 import { apiFetch } from './client';
 
@@ -15,21 +13,24 @@ export interface TimelineIterationInput {
 
 /** Fetch users with id/full_name/role_code for the timeline assignment lists. */
 export async function listTimelineAssignableUsers(): Promise<TimelineUserRef[]> {
-  const { data, error } = await supabase.from('users').select('id, full_name, role_code');
-  if (error) throw error;
-  return (data ?? []) as TimelineUserRef[];
+  const res = await apiFetch<{ data: TimelineUserRef[] }>(
+    '/api/v1/timeline/assignable-users',
+  );
+  return res.data ?? [];
 }
 
-/** Insert a tender_iterations row (manual user-side entry). */
+/** Insert a tender_iterations row (manual user-side entry).
+ *  user_id берётся сервером из JWT (не из body). */
 export async function createTenderIteration(input: TimelineIterationInput): Promise<void> {
-  const { error } = await supabase.from('tender_iterations').insert({
-    group_id: input.group_id,
-    user_id: input.user_id,
-    iteration_number: input.iteration_number,
-    user_comment: input.user_comment,
-    user_amount: input.user_amount,
+  await apiFetch<undefined>('/api/v1/timeline/iterations', {
+    method: 'POST',
+    body: JSON.stringify({
+      group_id: input.group_id,
+      iteration_number: input.iteration_number,
+      user_comment: input.user_comment,
+      user_amount: input.user_amount,
+    }),
   });
-  if (error) throw error;
 }
 
 /**

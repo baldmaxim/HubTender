@@ -27,6 +27,8 @@ type timelineRepoer interface {
 	SetGroupQuality(ctx context.Context, groupID string, qualityLevel *int16, qualityComment *string, updatedBy string) (*repository.TenderGroupRow, error)
 	RespondIteration(ctx context.Context, iterationID, managerID, managerComment, approvalStatus string) (*repository.TenderIterationRow, error)
 	GetUserRoleCode(ctx context.Context, userID string) (string, error)
+	ListAssignableUsers(ctx context.Context) ([]repository.TimelineUserRef, error)
+	CreateIteration(ctx context.Context, in repository.CreateIterationInput) (*repository.TenderIterationRow, error)
 }
 
 // TimelineService handles tender timeline mutations.
@@ -85,6 +87,30 @@ func (s *TimelineService) RespondIteration(
 			return nil, pgx.ErrNoRows
 		}
 		return nil, fmt.Errorf("timelineService.RespondIteration: %w", err)
+	}
+	return it, nil
+}
+
+// ListAssignableUsers returns id/full_name/role_code for the timeline
+// assignment lists.
+func (s *TimelineService) ListAssignableUsers(
+	ctx context.Context,
+) ([]repository.TimelineUserRef, error) {
+	u, err := s.repo.ListAssignableUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("timelineService.ListAssignableUsers: %w", err)
+	}
+	return u, nil
+}
+
+// CreateIteration inserts a manual tender_iterations row (user-side entry).
+func (s *TimelineService) CreateIteration(
+	ctx context.Context,
+	in repository.CreateIterationInput,
+) (*repository.TenderIterationRow, error) {
+	it, err := s.repo.CreateIteration(ctx, in)
+	if err != nil {
+		return nil, fmt.Errorf("timelineService.CreateIteration: %w", err)
 	}
 	return it, nil
 }

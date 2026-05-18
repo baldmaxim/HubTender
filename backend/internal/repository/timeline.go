@@ -186,6 +186,67 @@ func (r *TimelineRepo) GetUserRoleCode(ctx context.Context, userID string) (stri
 	return code, nil
 }
 
+// TimelineUserRef is the assignable-user shape consumed by the timeline UI
+// (mirrors the previous supabase.from('users').select('id,full_name,role_code')).
+type TimelineUserRef struct {
+	ID       string `json:"id"`
+	FullName string `json:"full_name"`
+	RoleCode string `json:"role_code"`
+}
+
+// ListAssignableUsers returns id/full_name/role_code for all users.
+func (r *TimelineRepo) ListAssignableUsers(ctx context.Context) ([]TimelineUserRef, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id::text, full_name, role_code FROM public.users ORDER BY full_name`)
+	if err != nil {
+		return nil, fmt.Errorf("timelineRepo.ListAssignableUsers: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]TimelineUserRef, 0)
+	for rows.Next() {
+		var u TimelineUserRef
+		if err := rows.Scan(&u.ID, &u.FullName, &u.RoleCode); err != nil {
+			return nil, fmt.Errorf("timelineRepo.ListAssignableUsers scan: %w", err)
+		}
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timelineRepo.ListAssignableUsers rows: %w", err)
+	}
+	return out, nil
+}
+
+// CreateIterationInput is the payload for inserting a tender_iteration.
+type CreateIterationInput struct {
+	GroupID         string
+	UserID          string
+	IterationNumber int
+	UserComment     string
+	UserAmount      *float64
+}
+
+// CreateIteration inserts a manual tender_iterations row (user-side entry).
+// user_id is set by the caller from the JWT, never from the request body.
+func (r *TimelineRepo) CreateIteration(
+	ctx context.Context,
+	in CreateIterationInput,
+) (*TenderIterationRow, error) {
+	q := `
+		INSERT INTO public.tender_iterations
+			(group_id, user_id, iteration_number, user_comment, user_amount)
+		VALUES ($1::uuid, $2::uuid, $3, $4, $5)
+		RETURNING ` + iterScanCols
+
+	row := r.pool.QueryRow(ctx, q,
+		in.GroupID, in.UserID, in.IterationNumber, in.UserComment, in.UserAmount)
+	it, err := scanIterRow(row)
+	if err != nil {
+		return nil, fmt.Errorf("timelineRepo.CreateIteration: %w", err)
+	}
+	return it, nil
+}
+
 // trimString is a lightweight strings.TrimSpace without importing strings.
 func trimString(s string) string {
 	// Use a byte loop to avoid an extra import — only trims ASCII whitespace.

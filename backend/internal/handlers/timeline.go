@@ -19,6 +19,8 @@ import (
 type timelineServicer interface {
 	SetGroupQuality(ctx context.Context, groupID string, qualityLevel *int16, qualityComment *string, updatedBy string) (*repository.TenderGroupRow, error)
 	RespondIteration(ctx context.Context, iterationID, userID, managerComment, approvalStatus string) (*repository.TenderIterationRow, error)
+	ListAssignableUsers(ctx context.Context) ([]repository.TimelineUserRef, error)
+	CreateIteration(ctx context.Context, in repository.CreateIterationInput) (*repository.TenderIterationRow, error)
 }
 
 // TimelineHandler serves the timeline mutation endpoints.
@@ -136,4 +138,68 @@ func (h *TimelineHandler) RespondIteration(w http.ResponseWriter, r *http.Reques
 	}
 
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: it})
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/timeline/assignable-users
+// ---------------------------------------------------------------------------
+
+// ListAssignableUsers handles GET /api/v1/timeline/assignable-users.
+func (h *TimelineHandler) ListAssignableUsers(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	users, err := h.svc.ListAssignableUsers(r.Context())
+	if err != nil {
+		apierr.InternalError("failed to list assignable users").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: users})
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/timeline/iterations
+// ---------------------------------------------------------------------------
+
+// createIterationReq is the request body. user_id is taken from the JWT,
+// never from the body.
+type createIterationReq struct {
+	GroupID         string   `json:"group_id"         validate:"required,uuid"`
+	IterationNumber int      `json:"iteration_number" validate:"gte=0"`
+	UserComment     string   `json:"user_comment"`
+	UserAmount      *float64 `json:"user_amount"`
+}
+
+// CreateIteration handles POST /api/v1/timeline/iterations.
+func (h *TimelineHandler) CreateIteration(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+
+	var req createIterationReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+
+	it, err := h.svc.CreateIteration(r.Context(), repository.CreateIterationInput{
+		GroupID:         req.GroupID,
+		UserID:          authUser.ID,
+		IterationNumber: req.IterationNumber,
+		UserComment:     req.UserComment,
+		UserAmount:      req.UserAmount,
+	})
+	if err != nil {
+		apierr.InternalError("failed to create iteration").Render(w)
+		return
+	}
+
+	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: it})
 }
