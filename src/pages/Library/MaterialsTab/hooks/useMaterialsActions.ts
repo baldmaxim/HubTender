@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { Form, message } from 'antd';
-import { supabase, MaterialLibraryFull, MaterialName, ItemType, UnitType, DeliveryPriceType } from '../../../../lib/supabase';
+import type { MaterialLibraryFull, MaterialName, ItemType, UnitType, DeliveryPriceType } from '../../../../lib/supabase';
+import {
+  createMaterialLibrary,
+  updateMaterialLibrary,
+  deleteMaterialLibrary,
+} from '../../../../lib/api/library';
 
 export const useMaterialsActions = (materialNames: MaterialName[], onRefresh: () => void) => {
   const [form] = Form.useForm();
@@ -53,7 +58,7 @@ export const useMaterialsActions = (materialNames: MaterialName[], onRefresh: ()
         return;
       }
 
-      const updateData = {
+      await updateMaterialLibrary(id, {
         material_type: row.material_type,
         item_type: row.item_type,
         material_name_id: materialName.id,
@@ -62,14 +67,7 @@ export const useMaterialsActions = (materialNames: MaterialName[], onRefresh: ()
         currency_type: row.currency_type,
         delivery_price_type: row.delivery_price_type,
         delivery_amount: row.delivery_price_type === 'суммой' ? row.delivery_amount : 0,
-      };
-
-      const { error } = await supabase
-        .from('materials_library')
-        .update(updateData)
-        .eq('id', id);
-
-      if (error) throw error;
+      });
       message.success('Материал обновлен');
 
       await onRefresh();
@@ -83,12 +81,7 @@ export const useMaterialsActions = (materialNames: MaterialName[], onRefresh: ()
 
   const handleDelete = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('materials_library')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await deleteMaterialLibrary(id);
 
       message.success('Материал удален');
       await onRefresh();
@@ -108,7 +101,7 @@ export const useMaterialsActions = (materialNames: MaterialName[], onRefresh: ()
         return;
       }
 
-      const insertData = {
+      await createMaterialLibrary({
         material_type: row.material_type,
         item_type: row.item_type,
         material_name_id: materialName.id,
@@ -117,13 +110,7 @@ export const useMaterialsActions = (materialNames: MaterialName[], onRefresh: ()
         currency_type: row.currency_type,
         delivery_price_type: row.delivery_price_type,
         delivery_amount: row.delivery_price_type === 'суммой' ? row.delivery_amount : 0,
-      };
-
-      const { error } = await supabase
-        .from('materials_library')
-        .insert([insertData]);
-
-      if (error) throw error;
+      });
 
       message.success('Материал добавлен');
       await onRefresh();

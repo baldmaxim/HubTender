@@ -47,3 +47,31 @@ func (s *LibraryService) DeleteWork(ctx context.Context, id string) error {
 	s.cache.Delete("works-library:all")
 	return nil
 }
+
+func (s *LibraryService) ListMaterials(ctx context.Context) ([]repository.MaterialLibraryRow, error) {
+	return s.repo.ListMaterials(ctx)
+}
+
+func (s *LibraryService) CreateMaterial(ctx context.Context, in repository.MaterialLibraryInput) error {
+	if err := s.repo.CreateMaterial(ctx, in); err != nil {
+		return fmt.Errorf("libraryService.CreateMaterial: %w", err)
+	}
+	s.cache.Delete("materials-library:all")
+	return nil
+}
+
+func (s *LibraryService) UpdateMaterial(ctx context.Context, id string, in repository.MaterialLibraryInput) error {
+	if err := s.repo.UpdateMaterial(ctx, id, in); err != nil {
+		return fmt.Errorf("libraryService.UpdateMaterial: %w", err)
+	}
+	s.cache.Delete("materials-library:all")
+	return nil
+}
+
+func (s *LibraryService) DeleteMaterial(ctx context.Context, id string) error {
+	if err := s.repo.DeleteMaterial(ctx, id); err != nil {
+		return fmt.Errorf("libraryService.DeleteMaterial: %w", err)
+	}
+	s.cache.Delete("materials-library:all")
+	return nil
+}

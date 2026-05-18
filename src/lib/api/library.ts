@@ -48,3 +48,46 @@ export async function deleteWorkLibrary(id: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+// ─── materials_library ──────────────────────────────────────────────────────
+
+export type MaterialLibraryRow = Tables<'materials_library'> & {
+  material_names: LibraryNameEmbed | null;
+};
+
+export interface MaterialLibraryInput {
+  material_name_id: string;
+  material_type: string;
+  item_type: string;
+  consumption_coefficient: number;
+  unit_rate: number;
+  currency_type: string;
+  delivery_price_type: string;
+  delivery_amount: number;
+}
+
+/** materials_library + material_names embed, newest first. */
+export async function listMaterialsLibrary(): Promise<MaterialLibraryRow[]> {
+  const res = await apiFetch<{ data: MaterialLibraryRow[] }>('/api/v1/library/materials');
+  return res.data ?? [];
+}
+
+export async function createMaterialLibrary(input: MaterialLibraryInput): Promise<void> {
+  await apiFetch<undefined>('/api/v1/library/materials', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateMaterialLibrary(id: string, input: MaterialLibraryInput): Promise<void> {
+  await apiFetch<undefined>(`/api/v1/library/materials/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteMaterialLibrary(id: string): Promise<void> {
+  await apiFetch<undefined>(`/api/v1/library/materials/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}

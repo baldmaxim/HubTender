@@ -321,6 +321,10 @@ func main() {
 		r.Post("/api/v1/library/works", libraryH.CreateWork)
 		r.Patch("/api/v1/library/works/{id}", libraryH.UpdateWork)
 		r.Delete("/api/v1/library/works/{id}", libraryH.DeleteWork)
+		r.Get("/api/v1/library/materials", libraryH.ListMaterials)
+		r.Post("/api/v1/library/materials", libraryH.CreateMaterial)
+		r.Patch("/api/v1/library/materials/{id}", libraryH.UpdateMaterial)
+		r.Delete("/api/v1/library/materials/{id}", libraryH.DeleteMaterial)
 
 		// Phase 5: atomic redistribution save (cost_redistribution_results).
 		r.Post("/api/v1/redistributions/save", redistributionH.Save)

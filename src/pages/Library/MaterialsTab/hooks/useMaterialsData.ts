@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { message } from 'antd';
-import { supabase, MaterialLibraryFull, MaterialName } from '../../../../lib/supabase';
+import type { MaterialLibraryFull, MaterialName } from '../../../../lib/supabase';
+import { listMaterialsLibrary } from '../../../../lib/api/library';
+import { listMaterialNames } from '../../../../lib/api/nomenclatures';
 
 export const useMaterialsData = () => {
   const [data, setData] = useState<MaterialLibraryFull[]>([]);
@@ -11,19 +13,7 @@ export const useMaterialsData = () => {
   const fetchMaterials = async () => {
     setLoading(true);
     try {
-      const { data: materialsData, error } = await supabase
-        .from('materials_library')
-        .select(`
-          *,
-          material_names (
-            id,
-            name,
-            unit
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const materialsData = await listMaterialsLibrary();
 
       const formatted = materialsData?.map(item => ({
         ...item,
@@ -45,29 +35,8 @@ export const useMaterialsData = () => {
     hasFetchedNames.current = true;
 
     try {
-      // Загружаем все записи батчами (Supabase ограничение 1000 строк)
-      let allNames: MaterialName[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data: namesData, error } = await supabase
-          .from('material_names')
-          .select('*')
-          .order('name')
-          .range(from, from + batchSize - 1);
-
-        if (error) throw error;
-
-        if (namesData && namesData.length > 0) {
-          allNames = [...allNames, ...namesData];
-          from += batchSize;
-          hasMore = namesData.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
+      // Go отдаёт все material_names одним запросом (без 1000-стр. пагинации).
+      const allNames = (await listMaterialNames()) as unknown as MaterialName[];
 
       // Дедупликация: сначала по name (оставляем первое вхождение), потом по id
       const uniqueByName = Array.from(

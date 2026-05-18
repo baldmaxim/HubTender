@@ -319,6 +319,16 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Library/MaterialsTab DONE (verified; library-домен расширен)
+
+`src/pages/Library/MaterialsTab/` (useMaterialsData 2, useMaterialsActions 3
+→ 0 supabase). library-домен расширен materials_library CRUD:
+`GET/POST/PATCH/DELETE /api/v1/library/materials` (+`material_names`
+embed, order created_at desc). `fetchMaterialNames` → reuse
+`listMaterialNames()` (пагинация убрана, дедуп на клиенте). Сервис
+инвалидирует `materials-library:all`. Симметрично WorksTab.
+`go build` 0, `go test ./internal/services` ok, `tsc` 0, `vite build` ✓.
+
 ## P5.3 — Library/WorksTab DONE (verified; новый library-домен в Go)
 
 `src/pages/Library/WorksTab/` (useWorksData 2, useWorksActions 3 → 0
