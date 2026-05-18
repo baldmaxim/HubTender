@@ -273,6 +273,9 @@ func main() {
 		r.Post("/api/v1/timeline/iterations/{id}/respond", timelineH.RespondIteration)
 		r.Get("/api/v1/timeline/assignable-users", timelineH.ListAssignableUsers)
 		r.Post("/api/v1/timeline/iterations", timelineH.CreateIteration)
+		r.Get("/api/v1/timeline/tenders", timelineH.ListTimelineTenders)
+		r.Get("/api/v1/timeline/tenders/{tenderId}/groups", timelineH.ListTenderGroups)
+		r.Get("/api/v1/timeline/groups/{groupId}/iterations", timelineH.ListGroupIterations)
 
 		// Slice 3b: remaining simple RPCs.
 		r.Post("/api/v1/users/register", userRegH.Register)

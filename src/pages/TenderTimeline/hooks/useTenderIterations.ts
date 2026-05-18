@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { listTimelineGroupIterations } from '../../../lib/api/timeline';
 import type { TenderIterationWithRelations } from '../../../lib/supabase/types';
 
 interface UseTenderIterationsResult {
@@ -28,41 +28,7 @@ export function useTenderIterations(
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('tender_iterations')
-        .select(`
-          id,
-          group_id,
-          user_id,
-          iteration_number,
-          user_comment,
-          user_amount,
-          submitted_at,
-          manager_id,
-          manager_comment,
-          manager_responded_at,
-          approval_status,
-          created_at,
-          updated_at,
-          user:users!user_id (
-            id,
-            full_name,
-            role_code
-          ),
-          manager:users!manager_id (
-            id,
-            full_name,
-            role_code
-          )
-        `)
-        .eq('group_id', groupId)
-        .eq('user_id', userId)
-        .order('iteration_number', { ascending: true });
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
+      const data = await listTimelineGroupIterations(groupId, userId);
       setIterations((data || []) as unknown as TenderIterationWithRelations[]);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Не удалось загрузить итерации';

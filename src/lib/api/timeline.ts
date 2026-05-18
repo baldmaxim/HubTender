@@ -11,6 +11,35 @@ export interface TimelineIterationInput {
   user_amount: number | null;
 }
 
+/**
+ * TenderTimeline read endpoints (заменяют вложенные supabase.from() селекты
+ * в useTenders / useTenderGroups / useTenderIterations). Нормализация и
+ * скоринг остаются на клиенте — возвращаются «сырые» вложенные формы.
+ */
+export async function listTimelineTenders(): Promise<{ registry: unknown[]; tenders: unknown[] }> {
+  const res = await apiFetch<{ data: { registry: unknown[]; tenders: unknown[] } }>(
+    '/api/v1/timeline/tenders',
+  );
+  return res.data ?? { registry: [], tenders: [] };
+}
+
+export async function listTimelineTenderGroups(tenderId: string): Promise<unknown[]> {
+  const res = await apiFetch<{ data: unknown[] }>(
+    `/api/v1/timeline/tenders/${encodeURIComponent(tenderId)}/groups`,
+  );
+  return res.data ?? [];
+}
+
+export async function listTimelineGroupIterations(
+  groupId: string,
+  userId: string,
+): Promise<unknown[]> {
+  const res = await apiFetch<{ data: unknown[] }>(
+    `/api/v1/timeline/groups/${encodeURIComponent(groupId)}/iterations?user_id=${encodeURIComponent(userId)}`,
+  );
+  return res.data ?? [];
+}
+
 /** Fetch users with id/full_name/role_code for the timeline assignment lists. */
 export async function listTimelineAssignableUsers(): Promise<TimelineUserRef[]> {
   const res = await apiFetch<{ data: TimelineUserRef[] }>(

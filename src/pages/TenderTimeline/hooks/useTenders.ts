@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { listTimelineTenders } from '../../../lib/api/timeline';
 import type { ApprovalStatus } from '../../../lib/supabase/types';
 
 const EXCLUDED_TENDER_NUMBERS = new Set([
@@ -219,25 +219,15 @@ export function useTenders(): UseTendersResult {
     setError(null);
 
     try {
-      const { data: registryData, error: registryError } = await supabase
-        .from('tender_registry')
-        .select(`
-          id,
-          title,
-          tender_number,
-          submission_date,
-          sort_order,
-          is_archived
-        `)
-        .order('sort_order', { ascending: true });
+      // Go: GET /api/v1/timeline/tenders — registry + tenders(+groups+iters).
+      // Сервер уже фильтрует tenders по tender_number из registry; вся
+      // нормализация/скоринг ниже остаётся без изменений.
+      const payload = await listTimelineTenders();
 
-      if (registryError) {
-        throw registryError;
-      }
+      const registryRows = dedupeRegistryRowsByTenderNumber(
+        (payload.registry || []) as TenderRegistryRow[]
+      ).filter((row) => !isExcludedTender(row.title || '', row.tender_number || ''));
 
-      const registryRows = dedupeRegistryRowsByTenderNumber((registryData || []) as TenderRegistryRow[]).filter(
-        (row) => !isExcludedTender(row.title || '', row.tender_number || '')
-      );
       const tenderNumbers = Array.from(
         new Set(
           registryRows
@@ -251,38 +241,7 @@ export function useTenders(): UseTendersResult {
         return;
       }
 
-      const { data: tendersData, error: tendersError } = await supabase
-        .from('tenders')
-        .select(`
-          id,
-          title,
-          tender_number,
-          submission_deadline,
-          is_archived,
-          version,
-          created_at,
-          tender_groups (
-            id,
-            name,
-            color,
-            quality_level,
-            tender_iterations (
-              id,
-              user_id,
-              iteration_number,
-              approval_status,
-              submitted_at,
-              manager_responded_at
-            )
-          )
-        `)
-        .in('tender_number', tenderNumbers);
-
-      if (tendersError) {
-        throw tendersError;
-      }
-
-      const latestTendersByNumber = pickLatestTenderVersion((tendersData || []) as TenderRow[]);
+      const latestTendersByNumber = pickLatestTenderVersion((payload.tenders || []) as TenderRow[]);
 
       const normalized = registryRows
         .filter((registryRow) => {

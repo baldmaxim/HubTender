@@ -29,6 +29,9 @@ type timelineRepoer interface {
 	GetUserRoleCode(ctx context.Context, userID string) (string, error)
 	ListAssignableUsers(ctx context.Context) ([]repository.TimelineUserRef, error)
 	CreateIteration(ctx context.Context, in repository.CreateIterationInput) (*repository.TenderIterationRow, error)
+	ListGroupIterations(ctx context.Context, groupID, userID string) ([]repository.TimelineIterationWithRefs, error)
+	ListTenderGroups(ctx context.Context, tenderID string) ([]repository.TimelineGroupWithRelations, error)
+	ListTimelineTenders(ctx context.Context) (*repository.TimelineTendersPayload, error)
 }
 
 // TimelineService handles tender timeline mutations.
@@ -113,6 +116,41 @@ func (s *TimelineService) CreateIteration(
 		return nil, fmt.Errorf("timelineService.CreateIteration: %w", err)
 	}
 	return it, nil
+}
+
+// ListGroupIterations returns iterations for (groupID, userID) with refs.
+func (s *TimelineService) ListGroupIterations(
+	ctx context.Context,
+	groupID, userID string,
+) ([]repository.TimelineIterationWithRefs, error) {
+	out, err := s.repo.ListGroupIterations(ctx, groupID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("timelineService.ListGroupIterations: %w", err)
+	}
+	return out, nil
+}
+
+// ListTenderGroups returns the groups (+members +iter subset) for a tender.
+func (s *TimelineService) ListTenderGroups(
+	ctx context.Context,
+	tenderID string,
+) ([]repository.TimelineGroupWithRelations, error) {
+	out, err := s.repo.ListTenderGroups(ctx, tenderID)
+	if err != nil {
+		return nil, fmt.Errorf("timelineService.ListTenderGroups: %w", err)
+	}
+	return out, nil
+}
+
+// ListTimelineTenders returns the registry + tenders-with-groups payload.
+func (s *TimelineService) ListTimelineTenders(
+	ctx context.Context,
+) (*repository.TimelineTendersPayload, error) {
+	out, err := s.repo.ListTimelineTenders(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("timelineService.ListTimelineTenders: %w", err)
+	}
+	return out, nil
 }
 
 // ErrForbidden is returned when the caller's role is not in the privilege list.

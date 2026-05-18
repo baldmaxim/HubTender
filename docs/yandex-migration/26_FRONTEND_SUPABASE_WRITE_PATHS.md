@@ -319,6 +319,27 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — TenderTimeline hooks DONE (verified; 3 новых read-эндпоинта)
+
+`src/pages/TenderTimeline/hooks/` — вложенные PostgREST-селекты заменены
+3 net-new Go read-эндпоинтами (repo `timeline_read.go` +
+service + handler + routes). Вся клиентская нормализация/скоринг
+(getQualityScore, pickLatestTenderVersion, getGroupStatus и т.д.) — без
+изменений; эндпоинты лишь переносят выборку с PostgREST:
+
+| Хук | Было | Стало |
+|---|---|---|
+| `useTenderIterations` (1) | `tender_iterations` + user/manager embeds | `GET /api/v1/timeline/groups/{groupId}/iterations?user_id=` |
+| `useTenderGroups` (1) | `tender_groups` + members(+user) + iter-subset | `GET /api/v1/timeline/tenders/{tenderId}/groups` |
+| `useTenders` (2) | `tender_registry` + `tenders`(+groups+iters IN tender_number) | `GET /api/v1/timeline/tenders` → `{registry, tenders}` |
+
+Сборка вложенности в Go (ANY($1::uuid[]) + map-assembly); `tenders`
+фильтруются по tender_number из registry (как было через `.in()`).
+Embedded `TenderIterationRow`/`TenderGroupRow` промоутятся в JSON →
+формы структурно совместимы с фронтовыми типами (хуки уже кастуют
+`as unknown as`). `go build ./...` 0, `go test ./internal/services` ok,
+`tsc` 0, `vite build` ✓. 0 supabase в TenderTimeline/hooks.
+
 ## P5.3 — CostRedistribution useCostCategories/useSaveResults DONE (verified)
 
 - **useCostCategories.ts** (2 supabase) → costs.ts `listCostCategories` +

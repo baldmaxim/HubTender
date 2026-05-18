@@ -21,6 +21,9 @@ type timelineServicer interface {
 	RespondIteration(ctx context.Context, iterationID, userID, managerComment, approvalStatus string) (*repository.TenderIterationRow, error)
 	ListAssignableUsers(ctx context.Context) ([]repository.TimelineUserRef, error)
 	CreateIteration(ctx context.Context, in repository.CreateIterationInput) (*repository.TenderIterationRow, error)
+	ListGroupIterations(ctx context.Context, groupID, userID string) ([]repository.TimelineIterationWithRefs, error)
+	ListTenderGroups(ctx context.Context, tenderID string) ([]repository.TimelineGroupWithRelations, error)
+	ListTimelineTenders(ctx context.Context) (*repository.TimelineTendersPayload, error)
 }
 
 // TimelineHandler serves the timeline mutation endpoints.
@@ -156,6 +159,66 @@ func (h *TimelineHandler) ListAssignableUsers(w http.ResponseWriter, r *http.Req
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: users})
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/timeline/tenders
+// GET /api/v1/timeline/tenders/{tenderId}/groups
+// GET /api/v1/timeline/groups/{groupId}/iterations?user_id=
+// ---------------------------------------------------------------------------
+
+// ListTimelineTenders handles GET /api/v1/timeline/tenders.
+func (h *TimelineHandler) ListTimelineTenders(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	out, err := h.svc.ListTimelineTenders(r.Context())
+	if err != nil {
+		apierr.InternalError("failed to list timeline tenders").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: out})
+}
+
+// ListTenderGroups handles GET /api/v1/timeline/tenders/{tenderId}/groups.
+func (h *TimelineHandler) ListTenderGroups(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	tenderID := chi.URLParam(r, "tenderId")
+	if tenderID == "" {
+		apierr.BadRequest("missing tender id").Render(w)
+		return
+	}
+	out, err := h.svc.ListTenderGroups(r.Context(), tenderID)
+	if err != nil {
+		apierr.InternalError("failed to list tender groups").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: out})
+}
+
+// ListGroupIterations handles
+// GET /api/v1/timeline/groups/{groupId}/iterations?user_id=.
+func (h *TimelineHandler) ListGroupIterations(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	groupID := chi.URLParam(r, "groupId")
+	userID := r.URL.Query().Get("user_id")
+	if groupID == "" || userID == "" {
+		apierr.BadRequest("group id and user_id are required").Render(w)
+		return
+	}
+	out, err := h.svc.ListGroupIterations(r.Context(), groupID, userID)
+	if err != nil {
+		apierr.InternalError("failed to list group iterations").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: out})
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { listTimelineTenderGroups } from '../../../lib/api/timeline';
 import type {
   ApprovalStatus,
   TenderGroup,
@@ -85,44 +85,7 @@ export function useTenderGroups(tenderId: string | null): UseTenderGroupsResult 
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('tender_groups')
-        .select(`
-          id,
-          tender_id,
-          name,
-          color,
-          sort_order,
-          quality_level,
-          quality_comment,
-          quality_updated_by,
-          quality_updated_at,
-          created_at,
-          updated_at,
-          tender_group_members (
-            id,
-            group_id,
-            user_id,
-            created_at,
-            user:users!user_id (
-              id,
-              full_name,
-              role_code
-            )
-          ),
-          tender_iterations (
-            id,
-            user_id,
-            approval_status,
-            iteration_number
-          )
-        `)
-        .eq('tender_id', tenderId)
-        .order('sort_order', { ascending: true });
-
-      if (fetchError) {
-        throw fetchError;
-      }
+      const data = await listTimelineTenderGroups(tenderId);
 
       const normalized = ((data || []) as unknown as GroupResponseRow[]).map((group) => {
         const members = group.tender_group_members || [];
