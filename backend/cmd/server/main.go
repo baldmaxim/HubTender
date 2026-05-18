@@ -129,6 +129,7 @@ func main() {
 	tenderNotesRepo := repository.NewTenderNotesRepo(pool)
 	boqAuditRollbackRepo := repository.NewBoqAuditRollbackRepo(pool)
 	tasksRepo := repository.NewTasksRepo(pool)
+	comparisonRepo := repository.NewComparisonRepo(pool)
 	redistributionRepo := repository.NewRedistributionRepo(pool)
 	insuranceRepo := repository.NewInsuranceRepo(pool)
 	positionFiltersRepo := repository.NewPositionFiltersRepo(pool)
@@ -157,6 +158,7 @@ func main() {
 	tenderNotesSvc := services.NewTenderNotesService(tenderNotesRepo)
 	boqAuditRollbackSvc := services.NewBoqAuditRollbackService(boqAuditRollbackRepo, inMemCache)
 	tasksSvc := services.NewTasksService(tasksRepo)
+	comparisonSvc := services.NewComparisonService(comparisonRepo)
 	redistributionSvc := services.NewRedistributionService(redistributionRepo, inMemCache)
 	insuranceSvc := services.NewInsuranceService(insuranceRepo, inMemCache)
 	positionFiltersSvc := services.NewPositionFiltersService(positionFiltersRepo)
@@ -190,6 +192,7 @@ func main() {
 	tenderNotesH := handlers.NewTenderNotesHandler(tenderNotesSvc)
 	boqAuditRollbackH := handlers.NewBoqAuditRollbackHandler(boqAuditRollbackSvc)
 	tasksH := handlers.NewTasksHandler(tasksSvc)
+	comparisonH := handlers.NewComparisonHandler(comparisonSvc)
 	redistributionH := handlers.NewRedistributionHandler(redistributionSvc)
 	insuranceH := handlers.NewInsuranceHandler(insuranceSvc)
 	positionFiltersH := handlers.NewPositionFiltersHandler(positionFiltersSvc)
@@ -292,6 +295,11 @@ func main() {
 		r.Patch("/api/v1/tasks/{id}", tasksH.Update)
 		r.Get("/api/v1/users/{id}/work-settings", tasksH.GetWorkSettings)
 		r.Patch("/api/v1/users/{id}/work-settings", tasksH.SetWorkSettings)
+
+		// Phase 5: object comparison — notes (pair) + cost volumes.
+		r.Get("/api/v1/comparison-notes", comparisonH.ListNotes)
+		r.Post("/api/v1/comparison-notes", comparisonH.UpsertNote)
+		r.Get("/api/v1/tenders/{id}/cost-volumes", comparisonH.ListCostVolumes)
 
 		// Phase 5: atomic redistribution save (cost_redistribution_results).
 		r.Post("/api/v1/redistributions/save", redistributionH.Save)

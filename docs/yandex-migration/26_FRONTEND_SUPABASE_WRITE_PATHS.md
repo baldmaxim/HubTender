@@ -272,6 +272,19 @@ blast-radius). Фронт `src/hooks/useDeadlineCheck.ts` → `getTenderById`
 `tsc` 0, `vite build` ✓. AuthContext.loadUserData (high-blast-radius
 auth-bridge) НЕ трогался — отдельный осторожный шаг.
 
+## P5.3 — Analytics/ObjectComparison DONE (verified)
+
+Новый comparison-домен: `GET /api/v1/comparison-notes?tender_id_1=&
+tender_id_2=` (обе ориентации), `POST /api/v1/comparison-notes` (upsert
+обеих ориентаций в tx, created_by из JWT, тот же unique-constraint),
+`GET /api/v1/tenders/{id}/cost-volumes` — repo/service/handler+routes+DI.
+Фронт `useComparisonData.ts`: notes/volumes → новые эндпоинты;
+`fetchBoqItems` → reuse `listAllBoqItemsForTender` (fi, Go) +
+`listDetailCostCategoriesWithCategory` (costs, Go), семантика прежних
+`!inner`-джойнов сохранена (фильтр по резолвящемуся detail_cost_category_id);
+tenders уже были Go. 0 supabase. `go build ./...` 0, `go test` без новых
+провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)

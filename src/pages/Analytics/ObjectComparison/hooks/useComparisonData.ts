@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
-import { supabase, type Tender } from '../../../../lib/supabase';
+import type { Tender } from '../../../../lib/supabase';
 import { fetchTenders as apiFetchTenders, fetchTendersByIds as apiFetchTendersByIds } from '../../../../lib/api/tenders';
+import { listAllBoqItemsForTender } from '../../../../lib/api/fi';
+import { listDetailCostCategoriesWithCategory } from '../../../../lib/api/costs';
+import { apiFetch } from '../../../../lib/api/client';
 import type { CostType, ComparisonRow, TenderCosts } from '../types';
 import { getErrorMessage } from '../../../../utils/errors';
 
@@ -43,17 +46,20 @@ function calcPerUnit(row: ComparisonRow): void {
   }
 }
 
-async function fetchVolumes(tenderId: string): Promise<{ detailMap: Map<string, number>; groupMap: Map<string, number> }> {
-  const { data, error } = await supabase
-    .from('construction_cost_volumes')
-    .select('*')
-    .eq('tender_id', tenderId);
+interface CostVolumeRow {
+  detail_cost_category_id: string | null;
+  volume: number | null;
+  group_key: string | null;
+}
 
-  if (error) throw error;
+async function fetchVolumes(tenderId: string): Promise<{ detailMap: Map<string, number>; groupMap: Map<string, number> }> {
+  const res = await apiFetch<{ data: CostVolumeRow[] }>(
+    `/api/v1/tenders/${encodeURIComponent(tenderId)}/cost-volumes`,
+  );
 
   const detailMap = new Map<string, number>();
   const groupMap = new Map<string, number>();
-  for (const v of (data || [])) {
+  for (const v of (res.data || [])) {
     if (v.detail_cost_category_id) {
       detailMap.set(v.detail_cost_category_id, v.volume || 0);
     } else if (v.group_key) {
@@ -63,59 +69,66 @@ async function fetchVolumes(tenderId: string): Promise<{ detailMap: Map<string, 
   return { detailMap, groupMap };
 }
 
-async function fetchBoqItems(tenderId: string) {
-  let items: BoqItemForComparison[] = [];
-  let from = 0;
-  const batchSize = 1000;
-  let hasMore = true;
+async function fetchBoqItems(tenderId: string): Promise<BoqItemForComparison[]> {
+  // Go BFF: boq-items-flat для тендера + справочник детальных категорий
+  // (с присоединённой родительской категорией). Соединяем по
+  // detail_cost_category_id. Сохраняем семантику прежних !inner-джойнов:
+  // берём только элементы с detail_cost_category_id, который резолвится.
+  const [items, detailCats] = await Promise.all([
+    listAllBoqItemsForTender(tenderId),
+    listDetailCostCategoriesWithCategory(),
+  ]);
 
-  while (hasMore) {
-    const { data, error } = await supabase
-      .from('boq_items')
-      .select(`
-        total_amount,
-        boq_item_type,
-        total_commercial_material_cost,
-        total_commercial_work_cost,
-        detail_cost_category_id,
-        detail_cost_categories!inner(
-          name,
-          location,
-          cost_categories(name)
-        ),
-        client_positions!inner(tender_id)
-      `)
-      .eq('client_positions.tender_id', tenderId)
-      .range(from, from + batchSize - 1);
-
-    if (error) throw error;
-
-    if (data && data.length > 0) {
-      items = [...items, ...(data as unknown as BoqItemForComparison[])];
-      from += batchSize;
-      hasMore = data.length === batchSize;
-    } else {
-      hasMore = false;
-    }
+  const catMap = new Map<
+    string,
+    { name: string | null; location: string | null; cost_categories: { name: string | null } | null }
+  >();
+  for (const dc of detailCats) {
+    catMap.set(dc.id, {
+      name: dc.name ?? null,
+      location: (dc as { location?: string | null }).location ?? null,
+      cost_categories: dc.cost_categories ? { name: dc.cost_categories.name ?? null } : null,
+    });
   }
-  return items;
+
+  const out: BoqItemForComparison[] = [];
+  for (const i of items) {
+    const detailId = i.detail_cost_category_id ?? null;
+    if (!detailId) continue;
+    const cat = catMap.get(detailId);
+    if (!cat) continue; // эквивалент detail_cost_categories!inner
+    out.push({
+      total_amount: i.total_amount ?? null,
+      boq_item_type: i.boq_item_type ?? null,
+      total_commercial_material_cost: i.total_commercial_material_cost ?? null,
+      total_commercial_work_cost: i.total_commercial_work_cost ?? null,
+      detail_cost_category_id: detailId,
+      detail_cost_categories: cat,
+      client_positions: { tender_id: tenderId },
+    });
+  }
+  return out;
 }
 
 type NotesMap = Map<string, string>;
 
-async function fetchNotes(tenderId1: string, tenderId2: string): Promise<NotesMap> {
-  const { data, error } = await supabase
-    .from('comparison_notes')
-    .select('tender_id_1, tender_id_2, cost_category_name, detail_category_key, note')
-    .or(
-      `and(tender_id_1.eq.${tenderId1},tender_id_2.eq.${tenderId2}),and(tender_id_1.eq.${tenderId2},tender_id_2.eq.${tenderId1})`
-    );
+interface ComparisonNoteRow {
+  tender_id_1: string;
+  tender_id_2: string;
+  cost_category_name: string;
+  detail_category_key: string | null;
+  note: string;
+}
 
-  if (error) throw error;
+async function fetchNotes(tenderId1: string, tenderId2: string): Promise<NotesMap> {
+  const res = await apiFetch<{ data: ComparisonNoteRow[] }>(
+    `/api/v1/comparison-notes?tender_id_1=${encodeURIComponent(tenderId1)}&tender_id_2=${encodeURIComponent(tenderId2)}`,
+  );
+  const data = res.data || [];
 
   const map = new Map<string, string>();
-  const exactOrderRows = (data || []).filter(r => r.tender_id_1 === tenderId1 && r.tender_id_2 === tenderId2);
-  const reversedOrderRows = (data || []).filter(r => r.tender_id_1 === tenderId2 && r.tender_id_2 === tenderId1);
+  const exactOrderRows = data.filter(r => r.tender_id_1 === tenderId1 && r.tender_id_2 === tenderId2);
+  const reversedOrderRows = data.filter(r => r.tender_id_1 === tenderId2 && r.tender_id_2 === tenderId1);
 
   for (const row of exactOrderRows) {
     const key = row.detail_category_key || `main__${row.cost_category_name}`;
@@ -418,14 +431,17 @@ export function useComparisonData() {
     const [tenderId1, tenderId2] = validTenders;
 
     try {
-      const { error } = await supabase
-        .from('comparison_notes')
-        .upsert([
-          { tender_id_1: tenderId1, tender_id_2: tenderId2, cost_category_name: categoryName, detail_category_key: detailKey, note },
-          { tender_id_1: tenderId2, tender_id_2: tenderId1, cost_category_name: categoryName, detail_category_key: detailKey, note },
-        ], { onConflict: 'tender_id_1,tender_id_2,cost_category_name,detail_category_key' });
-
-      if (error) throw error;
+      // Go BFF апсертит обе ориентации пары + created_by из JWT.
+      await apiFetch<void>('/api/v1/comparison-notes', {
+        method: 'POST',
+        body: JSON.stringify({
+          tender_id_1: tenderId1,
+          tender_id_2: tenderId2,
+          cost_category_name: categoryName,
+          detail_category_key: detailKey,
+          note,
+        }),
+      });
 
       const mapKey = detailKey || `main__${categoryName}`;
       setNotesMap(prev => {
