@@ -297,6 +297,15 @@ boq+имена → `listAllBoqItemsForTender`+`listMaterialNames`/`listWorkNames
 0 supabase. `go build ./...` 0, `go test` без новых провалов (calc
 pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — calculateGrandTotal DONE (verified, без нового backend)
+
+Все 4 read → существующие Go-хелперы: `getTenderById` (проверка
+существования, 404→0), `listTenderMarkupPercentages`,
+`listAllBoqItemsForTender`, `listSubcontractGrowthExclusionsForTender`.
+Чистый фронт-рефактор, backend не трогался. Type-guard вместо
+`.filter(Boolean)` (строгий `markup_parameter: MarkupParameter|null`).
+0 supabase, `tsc` 0, `vite build` ✓.
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)

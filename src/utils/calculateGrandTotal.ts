@@ -1,5 +1,9 @@
-import { supabase } from '../lib/supabase';
 import type { BoqItem } from '../lib/supabase';
+import { getTenderById, listAllBoqItemsForTender } from '../lib/api/fi';
+import {
+  listTenderMarkupPercentages,
+  listSubcontractGrowthExclusionsForTender,
+} from '../lib/api/markup';
 
 interface CalculateGrandTotalParams {
   tenderId: string;
@@ -7,59 +11,24 @@ interface CalculateGrandTotalParams {
 
 export const calculateGrandTotal = async ({ tenderId }: CalculateGrandTotalParams): Promise<number> => {
   try {
-    // Загружаем тендер
-    const { data: tender, error: tenderError } = await supabase
-      .from('tenders')
-      .select('*')
-      .eq('id', tenderId)
-      .single();
-
-    if (tenderError || !tender) return 0;
-
-    // Загружаем проценты наценок
-    const { data: tenderMarkupPercentages } = await supabase
-      .from('tender_markup_percentage')
-      .select(`
-        *,
-        markup_parameter:markup_parameters(*)
-      `)
-      .eq('tender_id', tenderId);
-
-    // Загружаем ВСЕ BOQ элементы с батчингом
-    let boqItems: BoqItem[] = [];
-    let from = 0;
-    const batchSize = 1000;
-    let hasMore = true;
-
-    while (hasMore) {
-      const { data, error } = await supabase
-        .from('boq_items')
-        .select(`
-          *,
-          client_position:client_positions!inner(tender_id)
-        `)
-        .eq('client_position.tender_id', tenderId)
-        .range(from, from + batchSize - 1);
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        boqItems = [...boqItems, ...(data as unknown as BoqItem[])];
-        from += batchSize;
-        hasMore = data.length === batchSize;
-      } else {
-        hasMore = false;
-      }
+    // Проверка существования тендера (Go; 404 → grandTotal 0)
+    try {
+      await getTenderById(tenderId);
+    } catch {
+      return 0;
     }
 
-    // Загрузка исключений роста субподряда
-    const { data: exclusions } = await supabase
-      .from('subcontract_growth_exclusions')
-      .select('detail_cost_category_id')
-      .eq('tender_id', tenderId);
+    // Проценты наценок + BOQ + исключения роста субподряда — всё через Go.
+    const [tenderMarkupPercentages, boqItemsRaw, exclusions] = await Promise.all([
+      listTenderMarkupPercentages(tenderId),
+      listAllBoqItemsForTender(tenderId),
+      listSubcontractGrowthExclusionsForTender(tenderId),
+    ]);
+
+    const boqItems = boqItemsRaw as unknown as BoqItem[];
 
     const excludedCategoryIds = new Set(
-      exclusions?.map(e => e.detail_cost_category_id) || []
+      exclusions.map(e => e.detail_cost_category_id)
     );
 
     // Расчет прямых затрат
@@ -111,7 +80,7 @@ export const calculateGrandTotal = async ({ tenderId }: CalculateGrandTotalParam
 
     const markupParams = (tenderMarkupPercentages || [])
       .map(tmp => tmp.markup_parameter)
-      .filter(Boolean);
+      .filter((p): p is NonNullable<typeof p> => p != null);
 
     const percentagesMap = new Map<string, number>();
     tenderMarkupPercentages?.forEach(tmp => {
