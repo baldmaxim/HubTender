@@ -319,6 +319,14 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — мёртвые diagnostic-утилиты УДАЛЕНЫ (verified)
+
+`src/utils/showGlobalTactic.ts` (2), `checkMarkupSequences.ts` (2),
+`verifyCoefficients.ts` (2) — console.log-скрипты ручной проверки, **0
+импортёров во всём репозитории** (не window-биндинг, не barrel). Удалены
+как мёртвый код (паттерн versionTransfer/useMarkupTactics). −6 supabase
+callsites. `tsc` 0, `vite build` ✓. Multiline-аудит: 251/68 → 229/62.
+
 ## P5.3 — MarkupConstructor DONE (verified; reuse + удаление мёртвого кода)
 
 `src/pages/Admin/MarkupConstructor/hooks/`:
