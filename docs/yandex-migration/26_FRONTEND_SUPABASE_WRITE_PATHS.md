@@ -116,11 +116,13 @@ hooks/useRedistributionData.ts:112`, `FinancialIndicators.tsx:124`.
   `listTimelineAssignableUsers` (нужен `GET /api/v1/timeline/
   assignable-users`), `createTenderIteration` (нужен
   `POST /api/v1/timeline/iterations`) — **P5.3** (нет Go-эндпоинта).
-- **Остаётся P5.4:** `importLog.ts`(7), `positionFilters.ts`(4),
+- **batch-2 DONE (Go-only):** `positionFilters.ts`, `importLog.ts`,
+  `hooks/useApiReferences.ts` (tsc=0).
+- **Остаётся P5.4 (крупные core-домены, отдельными верифиц. батчами):**
   `tenderRegistry.ts`(10), `projects.ts`(10), `costs.ts`(17),
-  `nomenclatures.ts`(21), `markup.ts`(24), `userAdmin.ts`(15),
-  `hooks/useApiReferences.ts`(6) — следующие верифицируемые батчи.
-  (`featureFlags.ts:1` — это комментарий, не вызов.)
+  `nomenclatures.ts`(21), `markup.ts`(24), `userAdmin.ts`(15) = 97 callsites.
+  `src/lib/api` multiline: 130/19 → **100/8** (timeline:2 un-gated→P5.3;
+  `featureFlags.ts:1` — комментарий, не вызов).
 
 ## Migrated paths
 

@@ -1,11 +1,7 @@
-// Read-only reference data hooks with Go BFF / Supabase fallback.
-// When isGoEnabled('references') is true → fetch from Go API.
-// Otherwise → fetch directly from Supabase (zero behaviour change for existing pages).
+// Read-only reference data hooks — Go BFF only.
 import { useEffect, useRef, useState } from 'react';
-import { supabase } from '../../supabase';
 import type { Database } from '../../supabase/database.types';
 import { apiFetch } from '../client';
-import { isGoEnabled } from '../featureFlags';
 
 // ─── Row types from generated schema ─────────────────────────────────────────
 type UnitRow = Database['public']['Tables']['units']['Row'];
@@ -44,7 +40,6 @@ function useRefData<T>(
   cacheKey: string,
   ttlMs: number,
   fetchGo: () => Promise<T[]>,
-  fetchSupabase: () => Promise<T[]>,
 ): RefState<T> {
   const [state, setState] = useState<RefState<T>>(() => {
     const cached = getCached<T>(cacheKey);
@@ -64,7 +59,7 @@ function useRefData<T>(
 
     const run = async () => {
       try {
-        const data = isGoEnabled('references') ? await fetchGo() : await fetchSupabase();
+        const data = await fetchGo();
         setCached(cacheKey, data, ttlMs);
         setState({ data, loading: false, error: null });
       } catch (err) {
@@ -77,7 +72,7 @@ function useRefData<T>(
     };
 
     run();
-  }, [cacheKey, ttlMs, fetchGo, fetchSupabase]);
+  }, [cacheKey, ttlMs, fetchGo]);
 
   return state;
 }
@@ -85,102 +80,48 @@ function useRefData<T>(
 // ─── Public hooks ─────────────────────────────────────────────────────────────
 
 export function useUnits() {
-  return useRefData<UnitRow>(
-    'units',
-    24 * 60 * 60_000,
-    async () => {
-      const res = await apiFetch<{ data: UnitRow[] }>('/api/v1/references/units', {
-        cacheKey: 'ref:units',
-      });
-      return res.data;
-    },
-    async () => {
-      const { data, error } = await supabase
-        .from('units')
-        .select('*')
-        .order('sort_order', { ascending: true });
-      if (error) throw new Error(error.message);
-      return data ?? [];
-    },
-  );
+  return useRefData<UnitRow>('units', 24 * 60 * 60_000, async () => {
+    const res = await apiFetch<{ data: UnitRow[] }>('/api/v1/references/units', {
+      cacheKey: 'ref:units',
+    });
+    return res.data;
+  });
 }
 
 export function useRoles() {
-  return useRefData<RoleRow>(
-    'roles',
-    60 * 60_000,
-    async () => {
-      const res = await apiFetch<{ data: RoleRow[] }>('/api/v1/references/roles', {
-        cacheKey: 'ref:roles',
-      });
-      return res.data;
-    },
-    async () => {
-      const { data, error } = await supabase.from('roles').select('*').order('code');
-      if (error) throw new Error(error.message);
-      return data ?? [];
-    },
-  );
+  return useRefData<RoleRow>('roles', 60 * 60_000, async () => {
+    const res = await apiFetch<{ data: RoleRow[] }>('/api/v1/references/roles', {
+      cacheKey: 'ref:roles',
+    });
+    return res.data;
+  });
 }
 
 export function useMaterialNames() {
-  return useRefData<MaterialNameRow>(
-    'material_names',
-    15 * 60_000,
-    async () => {
-      const res = await apiFetch<{ data: MaterialNameRow[] }>('/api/v1/references/material-names', {
-        cacheKey: 'ref:material_names',
-      });
-      return res.data;
-    },
-    async () => {
-      const { data, error } = await supabase
-        .from('material_names')
-        .select('*')
-        .order('name', { ascending: true });
-      if (error) throw new Error(error.message);
-      return data ?? [];
-    },
-  );
+  return useRefData<MaterialNameRow>('material_names', 15 * 60_000, async () => {
+    const res = await apiFetch<{ data: MaterialNameRow[] }>('/api/v1/references/material-names', {
+      cacheKey: 'ref:material_names',
+    });
+    return res.data;
+  });
 }
 
 export function useWorkNames() {
-  return useRefData<WorkNameRow>(
-    'work_names',
-    15 * 60_000,
-    async () => {
-      const res = await apiFetch<{ data: WorkNameRow[] }>('/api/v1/references/work-names', {
-        cacheKey: 'ref:work_names',
-      });
-      return res.data;
-    },
-    async () => {
-      const { data, error } = await supabase
-        .from('work_names')
-        .select('*')
-        .order('name', { ascending: true });
-      if (error) throw new Error(error.message);
-      return data ?? [];
-    },
-  );
+  return useRefData<WorkNameRow>('work_names', 15 * 60_000, async () => {
+    const res = await apiFetch<{ data: WorkNameRow[] }>('/api/v1/references/work-names', {
+      cacheKey: 'ref:work_names',
+    });
+    return res.data;
+  });
 }
 
 export function useCostCategoriesRef() {
-  return useRefData<CostCategoryRow>(
-    'cost_categories',
-    60 * 60_000,
-    async () => {
-      const res = await apiFetch<{ data: CostCategoryRow[] }>('/api/v1/references/cost-categories', {
-        cacheKey: 'ref:cost_categories',
-      });
-      return res.data;
-    },
-    async () => {
-      const { data, error } = await supabase.from('cost_categories').select('*');
-      if (error) throw new Error(error.message);
-      return data ?? [];
-    },
-  );
+  return useRefData<CostCategoryRow>('cost_categories', 60 * 60_000, async () => {
+    const res = await apiFetch<{ data: CostCategoryRow[] }>('/api/v1/references/cost-categories', {
+      cacheKey: 'ref:cost_categories',
+    });
+    return res.data;
+  });
 }
 
 export function useDetailCostCategoriesRef(tenderId?: string) {
@@ -189,30 +130,12 @@ export function useDetailCostCategoriesRef(tenderId?: string) {
     ? `/api/v1/references/detail-cost-categories?tender_id=${encodeURIComponent(tenderId)}`
     : '/api/v1/references/detail-cost-categories';
 
-  return useRefData<DetailCostCategoryRow>(
-    cacheKey,
-    60 * 60_000,
-    async () => {
-      const res = await apiFetch<{ data: DetailCostCategoryRow[] }>(path, {
-        cacheKey: `ref:detail_cost_categories:${tenderId ?? ''}`,
-      });
-      return res.data;
-    },
-    async () => {
-      const query = supabase
-        .from('detail_cost_categories')
-        .select('*')
-        .order('order_num', { ascending: true });
-      if (tenderId) {
-        // detail_cost_categories are global; tender_id filter is a Go-side concern only
-        // Supabase path returns all and caller filters if needed
-        void tenderId;
-      }
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data ?? [];
-    },
-  );
+  return useRefData<DetailCostCategoryRow>(cacheKey, 60 * 60_000, async () => {
+    const res = await apiFetch<{ data: DetailCostCategoryRow[] }>(path, {
+      cacheKey: `ref:detail_cost_categories:${tenderId ?? ''}`,
+    });
+    return res.data;
+  });
 }
 
 /** Invalidate one or all reference caches (call after admin writes). */
