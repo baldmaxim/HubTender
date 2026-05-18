@@ -4,7 +4,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
 import type { Tender, BoqItem } from '../../../lib/supabase';
 import type { PositionWithCommercialCost, MarkupTactic } from '../types';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
@@ -15,6 +14,11 @@ import {
   loadSubcontractGrowthExclusions,
   resetTypeCoefficientsCache,
 } from '../../../services/markupTacticService';
+import { fetchTenders } from '../../../lib/api/tenders';
+import { listMarkupTactics, getMarkupTactic } from '../../../lib/api/markup';
+import { getTenderById, listAllBoqItemsForTender } from '../../../lib/api/fi';
+import { loadTenderInsurance } from '../../../lib/api/insurance';
+import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 
 type CommerceBoqItem = Pick<
   BoqItem,
@@ -61,37 +65,6 @@ type PositionAccumulator = {
   workCostTotal: number;
   itemsCount: number;
 };
-
-
-async function fetchAllPages<T>(
-  loader: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
-  batchSize: number = 1000
-): Promise<T[]> {
-  const allRows: T[] = [];
-  let from = 0;
-
-  for (;;) {
-    const { data, error } = await loader(from, from + batchSize - 1);
-
-    if (error) {
-      throw error;
-    }
-
-    if (!data || data.length === 0) {
-      break;
-    }
-
-    allRows.push(...data);
-
-    if (data.length < batchSize) {
-      break;
-    }
-
-    from += batchSize;
-  }
-
-  return allRows;
-}
 
 function computeLeafPositionIds(positions: Pick<PositionWithCommercialCost, 'id' | 'hierarchy_level' | 'is_additional'>[]): Set<string> {
   const leafIds = new Set<string>();
@@ -199,45 +172,18 @@ function buildPositionsFromBoqItems(
   };
 }
 
-async function loadClientPositionsFallback(tenderId: string): Promise<PositionWithCommercialCost[]> {
-  return fetchAllPages(async (from, to) =>
-    supabase
-      .from('client_positions')
-      .select('*')
-      .eq('tender_id', tenderId)
-      .order('position_number')
-      .range(from, to)
-  ) as Promise<PositionWithCommercialCost[]>;
+// Все позиции тендера (Go: /api/v1/tenders/:id/positions/with-costs,
+// ORDER BY position_number,id — leaf-flag алгоритм сохраняется).
+async function loadClientPositions(tenderId: string): Promise<PositionWithCommercialCost[]> {
+  const rows = await fetchPositionsWithCosts(tenderId);
+  return rows as unknown as PositionWithCommercialCost[];
 }
 
-async function loadBoqItemsFallback(tenderId: string): Promise<CommerceBoqItem[]> {
-  return fetchAllPages(async (from, to) =>
-    supabase
-      .from('boq_items')
-      .select(`
-        id,
-        tender_id,
-        client_position_id,
-        sort_number,
-        boq_item_type,
-        material_type,
-        quantity,
-        unit_rate,
-        currency_type,
-        delivery_price_type,
-        delivery_amount,
-        consumption_coefficient,
-        parent_work_item_id,
-        total_amount,
-        detail_cost_category_id,
-        total_commercial_material_cost,
-        total_commercial_work_cost
-      `)
-      .eq('tender_id', tenderId)
-      .order('sort_number')
-      .order('id')
-      .range(from, to)
-  ) as Promise<CommerceBoqItem[]>;
+// Все boq_items тендера (Go: /api/v1/tenders/:id/boq-items-flat).
+// Порядок не важен — агрегация по позициям и сумма referenceTotal.
+async function loadBoqItems(tenderId: string): Promise<CommerceBoqItem[]> {
+  const rows = await listAllBoqItemsForTender(tenderId);
+  return rows as unknown as CommerceBoqItem[];
 }
 
 async function loadMarkupTacticById(tacticId: string | null | undefined): Promise<CalculationTactic | null> {
@@ -245,43 +191,29 @@ async function loadMarkupTacticById(tacticId: string | null | undefined): Promis
     return null;
   }
 
-  const { data, error } = await supabase
-    .from('markup_tactics')
-    .select('*')
-    .eq('id', tacticId)
-    .maybeSingle();
-
-  if (error) {
+  try {
+    const tactic = await getMarkupTactic(tacticId);
+    if (!tactic?.sequences) {
+      return null;
+    }
+    return tactic as unknown as CalculationTactic;
+  } catch (error) {
     console.warn('Не удалось загрузить тактику наценок для коммерческого расчета:', error);
     return null;
   }
-
-  if (!data?.sequences) {
-    return null;
-  }
-
-  return data as CalculationTactic;
 }
 
 async function loadCommerceCalculationContext(tenderId: string): Promise<CommerceCalculationContext> {
-  const { data, error } = await supabase
-    .from('tenders')
-    .select('usd_rate, eur_rate, cny_rate, markup_tactic_id')
-    .eq('id', tenderId)
-    .single();
-
-  if (error) {
-    throw error;
-  }
+  const tender = await getTenderById(tenderId);
 
   const tenderRates: TenderRates = {
-    usd_rate: data?.usd_rate || 0,
-    eur_rate: data?.eur_rate || 0,
-    cny_rate: data?.cny_rate || 0,
+    usd_rate: tender?.usd_rate || 0,
+    eur_rate: tender?.eur_rate || 0,
+    cny_rate: tender?.cny_rate || 0,
   };
 
   const [tactic, markupParameters, pricingDistribution, exclusions] = await Promise.all([
-    loadMarkupTacticById(data?.markup_tactic_id),
+    loadMarkupTacticById(tender?.markup_tactic_id),
     loadMarkupParameters(tenderId),
     loadPricingDistribution(tenderId),
     loadSubcontractGrowthExclusions(tenderId),
@@ -297,11 +229,7 @@ async function loadCommerceCalculationContext(tenderId: string): Promise<Commerc
 }
 
 async function loadInsuranceTotal(tenderId: string): Promise<number> {
-  const { data } = await supabase
-    .from('tender_insurance')
-    .select('judicial_pct, total_pct, apt_price_m2, apt_area, parking_price_m2, parking_area, storage_price_m2, storage_area')
-    .eq('tender_id', tenderId)
-    .maybeSingle();
+  const data = await loadTenderInsurance(tenderId);
 
   if (!data) {
     return 0;
@@ -365,12 +293,7 @@ export function useCommerceData() {
 
   const loadTenders = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await fetchTenders();
       setTenders(data || []);
     } catch (error) {
       console.error('Ошибка загрузки тендеров:', error);
@@ -380,14 +303,8 @@ export function useCommerceData() {
 
   const loadMarkupTactics = async () => {
     try {
-      const { data, error } = await supabase
-        .from('markup_tactics')
-        .select('*')
-        .order('is_global', { ascending: false })
-        .order('name');
-
-      if (error) throw error;
-      setMarkupTactics(data || []);
+      const data = await listMarkupTactics();
+      setMarkupTactics((data || []) as unknown as MarkupTactic[]);
     } catch (error) {
       console.error('Ошибка загрузки тактик наценок:', error);
       message.error('Не удалось загрузить список тактик');
@@ -402,8 +319,8 @@ export function useCommerceData() {
       const [positionsResult, nextInsuranceTotal] = await Promise.all([
         (async (): Promise<AggregatedPositionLoadResult> => {
           const [clientPositions, allBoqItems, calculationContext] = await Promise.all([
-            loadClientPositionsFallback(tenderId),
-            loadBoqItemsFallback(tenderId),
+            loadClientPositions(tenderId),
+            loadBoqItems(tenderId),
             loadCommerceCalculationContext(tenderId),
           ]);
 

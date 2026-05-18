@@ -3,9 +3,9 @@
  */
 
 import { message, Modal } from 'antd';
-import { supabase } from '../../../lib/supabase';
 import { applyTacticToTender } from '../../../services/markupTacticService';
 import { initializeTestMarkup } from '../../../utils/initializeTestMarkup';
+import { setTenderMarkupTacticId } from '../../../lib/api/markup';
 
 export function useCommerceActions(
   selectedTenderId: string | undefined,
@@ -78,13 +78,8 @@ export function useCommerceActions(
       onOk: async () => {
         setCalculating(true);
         try {
-          // Обновляем тактику в тендере
-          const { error: updateError } = await supabase
-            .from('tenders')
-            .update({ markup_tactic_id: selectedTacticId })
-            .eq('id', selectedTenderId);
-
-          if (updateError) throw updateError;
+          // Обновляем тактику в тендере (Go: PUT /tenders/:id/markup/tactic-id)
+          await setTenderMarkupTacticId(selectedTenderId, selectedTacticId);
 
           syncTenderMarkupTactic(selectedTenderId, selectedTacticId);
 

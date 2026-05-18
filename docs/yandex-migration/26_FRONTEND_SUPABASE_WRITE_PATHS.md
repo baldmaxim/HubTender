@@ -319,6 +319,30 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Commerce DONE (verified; без нового backend — reuse)
+
+`src/pages/Commerce/hooks/useCommerceData.ts` (7 supabase) +
+`useCommerceActions.ts` (1 supabase) → переведены на **существующие**
+Go-хелперы, новых эндпоинтов не потребовалось:
+
+| Было (supabase.from) | Стало (Go-хелпер) |
+|---|---|
+| `tenders` list | `fetchTenders()` |
+| `markup_tactics` list | `listMarkupTactics()` |
+| `markup_tactics` by id | `getMarkupTactic(id)` (сохр. `!sequences→null`) |
+| `tenders` rates+tactic_id | `getTenderById(id)` |
+| `tender_insurance` | `loadTenderInsurance(id)` (total считается на клиенте из тех же полей) |
+| `client_positions` paged | `fetchPositionsWithCosts(id)` (Go ORDER BY position_number,id — leaf-flag сохранён) |
+| `boq_items` paged | `listAllBoqItemsForTender(id)` (порядок не важен — сумма/агрегация по позициям) |
+| `tenders.update({markup_tactic_id})` | `setTenderMarkupTacticId(id, tacticId)` (PUT /tenders/:id/markup/tactic-id) |
+
+Удалён `fetchAllPages` (пагинация больше не нужна — Go отдаёт всё).
+`markupTacticService` (loadMarkupParameters/PricingDistribution/
+SubcontractGrowthExclusions/calculateBoqItemCost) уже Go-only (P5.3).
+Вся calc-логика (buildPositionsFromBoqItems/computeLeafPositionIds/
+applyLeafFlags) без изменений. 0 supabase во всём `src/pages/Commerce`.
+`tsc` 0, `vite build` ✓ (backend не трогали).
+
 ## P5.3 — insertTemplateItems DONE (verified; новый атомарный Go endpoint)
 
 `src/utils/insertTemplateItems.ts` — 7 supabase callsites (4×from-чтения
