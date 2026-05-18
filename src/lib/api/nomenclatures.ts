@@ -1,16 +1,11 @@
-// CRUD helpers for the Nomenclatures admin pages with Go BFF / Supabase
-// fallback. Toggle via VITE_API_NOMENCLATURES_ENABLED.
+// CRUD helpers for the Nomenclatures admin pages — Go BFF only.
 
-import { supabase } from '../supabase';
 import type { Database } from '../supabase/database.types';
 import { apiFetch } from './client';
-import { isGoEnabled } from './featureFlags';
 
 type UnitRow = Database['public']['Tables']['units']['Row'];
 type MaterialNameRow = Database['public']['Tables']['material_names']['Row'];
 type WorkNameRow = Database['public']['Tables']['work_names']['Row'];
-
-const PAGE_SIZE = 1000;
 
 // ─── Units ──────────────────────────────────────────────────────────────────
 
@@ -24,101 +19,45 @@ export interface UnitInput {
 }
 
 export async function listUnits(): Promise<UnitRow[]> {
-  if (isGoEnabled('nomenclatures')) {
-    const res = await apiFetch<{ data: UnitRow[] }>('/api/v1/nomenclatures/units', {
-      cacheKey: 'nomenclatures:units',
-    });
-    return res.data ?? [];
-  }
-  const { data, error } = await supabase
-    .from('units')
-    .select('*')
-    .order('sort_order', { ascending: true });
-  if (error) throw error;
-  return data ?? [];
+  const res = await apiFetch<{ data: UnitRow[] }>('/api/v1/nomenclatures/units', {
+    cacheKey: 'nomenclatures:units',
+  });
+  return res.data ?? [];
 }
 
 export async function listActiveUnits(): Promise<Array<Pick<UnitRow, 'code' | 'name'>>> {
-  if (isGoEnabled('nomenclatures')) {
-    const res = await apiFetch<{ data: Array<Pick<UnitRow, 'code' | 'name'>> }>(
-      '/api/v1/nomenclatures/units/active-list',
-      { cacheKey: 'nomenclatures:units:active' },
-    );
-    return res.data ?? [];
-  }
-  const { data, error } = await supabase
-    .from('units')
-    .select('code, name')
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true });
-  if (error) throw error;
-  return data ?? [];
+  const res = await apiFetch<{ data: Array<Pick<UnitRow, 'code' | 'name'>> }>(
+    '/api/v1/nomenclatures/units/active-list',
+    { cacheKey: 'nomenclatures:units:active' },
+  );
+  return res.data ?? [];
 }
 
 export async function unitExists(code: string): Promise<boolean> {
-  if (isGoEnabled('nomenclatures')) {
-    const res = await apiFetch<{ exists: boolean }>(
-      `/api/v1/nomenclatures/units/exists?code=${encodeURIComponent(code)}`,
-    );
-    return Boolean(res.exists);
-  }
-  const { data, error } = await supabase
-    .from('units')
-    .select('code')
-    .eq('code', code)
-    .maybeSingle();
-  if (error) throw error;
-  return Boolean(data);
+  const res = await apiFetch<{ exists: boolean }>(
+    `/api/v1/nomenclatures/units/exists?code=${encodeURIComponent(code)}`,
+  );
+  return Boolean(res.exists);
 }
 
 export async function createUnit(input: UnitInput): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>('/api/v1/nomenclatures/units', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-    return;
-  }
-  const { error } = await supabase.from('units').insert({
-    code: input.code,
-    name: input.name,
-    category: input.category,
-    description: input.description,
-    sort_order: input.sort_order,
-    is_active: input.is_active,
+  await apiFetch<undefined>('/api/v1/nomenclatures/units', {
+    method: 'POST',
+    body: JSON.stringify(input),
   });
-  if (error) throw error;
 }
 
 export async function updateUnit(code: string, input: UnitInput): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>(`/api/v1/nomenclatures/units/${encodeURIComponent(code)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    });
-    return;
-  }
-  const { error } = await supabase
-    .from('units')
-    .update({
-      name: input.name,
-      category: input.category,
-      sort_order: input.sort_order,
-      is_active: input.is_active,
-    })
-    .eq('code', code);
-  if (error) throw error;
+  await apiFetch<undefined>(`/api/v1/nomenclatures/units/${encodeURIComponent(code)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function deleteUnit(code: string): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>(`/api/v1/nomenclatures/units/${encodeURIComponent(code)}`, {
-      method: 'DELETE',
-    });
-    return;
-  }
-  const { error } = await supabase.from('units').delete().eq('code', code);
-  if (error) throw error;
+  await apiFetch<undefined>(`/api/v1/nomenclatures/units/${encodeURIComponent(code)}`, {
+    method: 'DELETE',
+  });
 }
 
 // ─── Material names ─────────────────────────────────────────────────────────
@@ -128,134 +67,63 @@ export interface MaterialNameInput {
   unit: string;
 }
 
-async function listAllPaginated<T>(table: 'material_names' | 'work_names'): Promise<T[]> {
-  const all: T[] = [];
-  let from = 0;
-  for (;;) {
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .order('name', { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    all.push(...(data as T[]));
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-  return all;
-}
-
 export async function listMaterialNames(): Promise<MaterialNameRow[]> {
-  if (isGoEnabled('nomenclatures')) {
-    const res = await apiFetch<{ data: MaterialNameRow[] }>(
-      '/api/v1/nomenclatures/material-names',
-      { cacheKey: 'nomenclatures:material-names' },
-    );
-    return res.data ?? [];
-  }
-  return listAllPaginated<MaterialNameRow>('material_names');
+  const res = await apiFetch<{ data: MaterialNameRow[] }>(
+    '/api/v1/nomenclatures/material-names',
+    { cacheKey: 'nomenclatures:material-names' },
+  );
+  return res.data ?? [];
 }
 
 export async function listMaterialNamesByUnit(
   unit: string,
 ): Promise<Array<Pick<MaterialNameRow, 'name' | 'unit'>>> {
-  if (isGoEnabled('nomenclatures')) {
-    const res = await apiFetch<{ data: Array<Pick<MaterialNameRow, 'name' | 'unit'>> }>(
-      `/api/v1/nomenclatures/material-names/by-unit?unit=${encodeURIComponent(unit)}`,
-    );
-    return res.data ?? [];
-  }
-  const { data, error } = await supabase
-    .from('material_names')
-    .select('name, unit')
-    .eq('unit', unit);
-  if (error) throw error;
-  return data ?? [];
+  const res = await apiFetch<{ data: Array<Pick<MaterialNameRow, 'name' | 'unit'>> }>(
+    `/api/v1/nomenclatures/material-names/by-unit?unit=${encodeURIComponent(unit)}`,
+  );
+  return res.data ?? [];
 }
 
 export async function createMaterialName(input: MaterialNameInput): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>('/api/v1/nomenclatures/material-names', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-    return;
-  }
-  const { error } = await supabase.from('material_names').insert([{
-    name: input.name,
-    unit: input.unit,
-  }]);
-  if (error) throw error;
+  await apiFetch<undefined>('/api/v1/nomenclatures/material-names', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function updateMaterialName(id: string, input: MaterialNameInput): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>(`/api/v1/nomenclatures/material-names/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    });
-    return;
-  }
-  const { error } = await supabase
-    .from('material_names')
-    .update({ name: input.name, unit: input.unit })
-    .eq('id', id);
-  if (error) throw error;
+  await apiFetch<undefined>(`/api/v1/nomenclatures/material-names/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function deleteMaterialName(id: string): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>(`/api/v1/nomenclatures/material-names/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    });
-    return;
-  }
-  const { error } = await supabase.from('material_names').delete().eq('id', id);
-  if (error) throw error;
+  await apiFetch<undefined>(`/api/v1/nomenclatures/material-names/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function deleteMaterialNamesIn(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>('/api/v1/nomenclatures/material-names/delete-batch', {
-      method: 'POST',
-      body: JSON.stringify({ ids }),
-    });
-    return;
-  }
-  const { error } = await supabase.from('material_names').delete().in('id', ids);
-  if (error) throw error;
+  await apiFetch<undefined>('/api/v1/nomenclatures/material-names/delete-batch', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
 }
 
 export async function remapBoqMaterialName(from: string, to: string): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>('/api/v1/nomenclatures/remap/boq-material', {
-      method: 'POST',
-      body: JSON.stringify({ from, to }),
-    });
-    return;
-  }
-  const { error } = await supabase
-    .from('boq_items')
-    .update({ material_name_id: to })
-    .eq('material_name_id', from);
-  if (error) throw error;
+  await apiFetch<undefined>('/api/v1/nomenclatures/remap/boq-material', {
+    method: 'POST',
+    body: JSON.stringify({ from, to }),
+  });
 }
 
 export async function remapMaterialsLibraryMaterialName(from: string, to: string): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>('/api/v1/nomenclatures/remap/library-material', {
-      method: 'POST',
-      body: JSON.stringify({ from, to }),
-    });
-    return;
-  }
-  const { error } = await supabase
-    .from('materials_library')
-    .update({ material_name_id: to })
-    .eq('material_name_id', from);
-  if (error) throw error;
+  await apiFetch<undefined>('/api/v1/nomenclatures/remap/library-material', {
+    method: 'POST',
+    body: JSON.stringify({ from, to }),
+  });
 }
 
 // ─── Work names ─────────────────────────────────────────────────────────────
@@ -266,113 +134,60 @@ export interface WorkNameInput {
 }
 
 export async function listWorkNames(): Promise<WorkNameRow[]> {
-  if (isGoEnabled('nomenclatures')) {
-    const res = await apiFetch<{ data: WorkNameRow[] }>(
-      '/api/v1/nomenclatures/work-names',
-      { cacheKey: 'nomenclatures:work-names' },
-    );
-    return res.data ?? [];
-  }
-  return listAllPaginated<WorkNameRow>('work_names');
+  const res = await apiFetch<{ data: WorkNameRow[] }>(
+    '/api/v1/nomenclatures/work-names',
+    { cacheKey: 'nomenclatures:work-names' },
+  );
+  return res.data ?? [];
 }
 
 export async function listWorkNamesByUnit(
   unit: string,
 ): Promise<Array<Pick<WorkNameRow, 'name' | 'unit'>>> {
-  if (isGoEnabled('nomenclatures')) {
-    const res = await apiFetch<{ data: Array<Pick<WorkNameRow, 'name' | 'unit'>> }>(
-      `/api/v1/nomenclatures/work-names/by-unit?unit=${encodeURIComponent(unit)}`,
-    );
-    return res.data ?? [];
-  }
-  const { data, error } = await supabase
-    .from('work_names')
-    .select('name, unit')
-    .eq('unit', unit);
-  if (error) throw error;
-  return data ?? [];
+  const res = await apiFetch<{ data: Array<Pick<WorkNameRow, 'name' | 'unit'>> }>(
+    `/api/v1/nomenclatures/work-names/by-unit?unit=${encodeURIComponent(unit)}`,
+  );
+  return res.data ?? [];
 }
 
 export async function createWorkName(input: WorkNameInput): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>('/api/v1/nomenclatures/work-names', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-    return;
-  }
-  const { error } = await supabase.from('work_names').insert([{
-    name: input.name,
-    unit: input.unit,
-  }]);
-  if (error) throw error;
+  await apiFetch<undefined>('/api/v1/nomenclatures/work-names', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function updateWorkName(id: string, input: WorkNameInput): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>(`/api/v1/nomenclatures/work-names/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    });
-    return;
-  }
-  const { error } = await supabase
-    .from('work_names')
-    .update({ name: input.name, unit: input.unit })
-    .eq('id', id);
-  if (error) throw error;
+  await apiFetch<undefined>(`/api/v1/nomenclatures/work-names/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function deleteWorkName(id: string): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>(`/api/v1/nomenclatures/work-names/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    });
-    return;
-  }
-  const { error } = await supabase.from('work_names').delete().eq('id', id);
-  if (error) throw error;
+  await apiFetch<undefined>(`/api/v1/nomenclatures/work-names/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function deleteWorkNamesIn(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>('/api/v1/nomenclatures/work-names/delete-batch', {
-      method: 'POST',
-      body: JSON.stringify({ ids }),
-    });
-    return;
-  }
-  const { error } = await supabase.from('work_names').delete().in('id', ids);
-  if (error) throw error;
+  await apiFetch<undefined>('/api/v1/nomenclatures/work-names/delete-batch', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
 }
 
 export async function remapBoqWorkName(from: string, to: string): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>('/api/v1/nomenclatures/remap/boq-work', {
-      method: 'POST',
-      body: JSON.stringify({ from, to }),
-    });
-    return;
-  }
-  const { error } = await supabase
-    .from('boq_items')
-    .update({ work_name_id: to })
-    .eq('work_name_id', from);
-  if (error) throw error;
+  await apiFetch<undefined>('/api/v1/nomenclatures/remap/boq-work', {
+    method: 'POST',
+    body: JSON.stringify({ from, to }),
+  });
 }
 
 export async function remapWorksLibraryWorkName(from: string, to: string): Promise<void> {
-  if (isGoEnabled('nomenclatures')) {
-    await apiFetch<undefined>('/api/v1/nomenclatures/remap/library-work', {
-      method: 'POST',
-      body: JSON.stringify({ from, to }),
-    });
-    return;
-  }
-  const { error } = await supabase
-    .from('works_library')
-    .update({ work_name_id: to })
-    .eq('work_name_id', from);
-  if (error) throw error;
+  await apiFetch<undefined>('/api/v1/nomenclatures/remap/library-work', {
+    method: 'POST',
+    body: JSON.stringify({ from, to }),
+  });
 }

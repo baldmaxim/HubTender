@@ -116,13 +116,18 @@ hooks/useRedistributionData.ts:112`, `FinancialIndicators.tsx:124`.
   `listTimelineAssignableUsers` (нужен `GET /api/v1/timeline/
   assignable-users`), `createTenderIteration` (нужен
   `POST /api/v1/timeline/iterations`) — **P5.3** (нет Go-эндпоинта).
-- **batch-2 DONE (Go-only):** `positionFilters.ts`, `importLog.ts`,
-  `hooks/useApiReferences.ts` (tsc=0).
-- **Остаётся P5.4 (крупные core-домены, отдельными верифиц. батчами):**
-  `tenderRegistry.ts`(10), `projects.ts`(10), `costs.ts`(17),
-  `nomenclatures.ts`(21), `markup.ts`(24), `userAdmin.ts`(15) = 97 callsites.
-  `src/lib/api` multiline: 130/19 → **100/8** (timeline:2 un-gated→P5.3;
-  `featureFlags.ts:1` — комментарий, не вызов).
+- **batch-2 DONE:** `positionFilters.ts`, `importLog.ts`,
+  `hooks/useApiReferences.ts`.
+- **batch-3 DONE:** `tenderRegistry.ts`, `projects.ts`, `costs.ts`,
+  `nomenclatures.ts`, `markup.ts`, `userAdmin.ts`.
+
+### ✅ P5.4 ЗАВЕРШЁН (verified: `tsc` 0, `npm run build` ✓)
+
+Весь gated-слой `src/lib/api/*` — **Go-only, 0 Supabase-fallback**.
+`src/lib/api` multiline: **130/19 → 3** (все non-business):
+`featureFlags.ts:48` — комментарий (не вызов); `timeline.ts:18,25` — 2
+**un-gated** функции (`listTimelineAssignableUsers`,
+`createTenderIteration`) → P5.3 (нужны Go-эндпоинты, нет backend).
 
 ## Migrated paths
 
@@ -202,14 +207,14 @@ no schema-qualified extension calls): `extensions.uuid_generate_v4()` →
   0 supabase-business; интерфейс/возврат не менялись (caller
   `Tenders.tsx:58` совместим).
 
-> ⚠️ **ДЕЙСТВИЕ ОПЕРАТОРА (gate):** функция добавлена только в каноничную
-> схему репозитория. Чтобы эндпоинт заработал против Yandex, оператор
-> должен **применить `clone_tender_as_new_version` к Yandex** (psql/
-> миграционный тулинг — у sandbox нет доступа к Yandex). Это идемпотентный
-> `CREATE OR REPLACE FUNCTION`, **данные не трогаются**, добавляется ровно
-> одна отсутствующая функция (gap-fix исходной миграции). До применения
-> «дублировать тендер» остаётся нерабочим против Yandex — как и было
-> (pre-existing), но теперь без Supabase-зависимости и готово к работе.
+> ✅ **GATE СНЯТ (2026-05-18):** оператор применил
+> `clone_tender_as_new_version` к Yandex
+> (`psql -f … → CREATE FUNCTION`; `to_regprocedure('public.
+> clone_tender_as_new_version(uuid)')` подтвердил сигнатуру). Эндпоинт
+> `POST /api/v1/tenders/{id}/versions/clone` (код в commit `3a35a67`)
+> функционален против Yandex **после ближайшего передеплоя BFF**. Данные
+> не трогались — добавлена ровно одна отсутствующая функция (gap-fix
+> исходной миграции).
 
 ### P5.2-rest — DONE (verified: `go build ./...` 0, `go test` без новых
 провалов [calc pre-existing §11], `tsc` 0, `vite build` ✓)
