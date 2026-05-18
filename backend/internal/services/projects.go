@@ -42,6 +42,22 @@ func (s *ProjectsService) ListActiveTendersForSelect(ctx context.Context) ([]rep
 	return s.repo.ListActiveTendersForSelect(ctx)
 }
 
+func (s *ProjectsService) ListProjects(ctx context.Context) ([]repository.ProjectWithTenderRow, error) {
+	return s.repo.ListProjects(ctx)
+}
+
+func (s *ProjectsService) GetProject(ctx context.Context, id string) (*repository.ProjectWithTenderRow, error) {
+	return s.repo.GetProject(ctx, id)
+}
+
+func (s *ProjectsService) ListAllAgreements(ctx context.Context) ([]repository.AgreementRow, error) {
+	return s.repo.ListAllAgreements(ctx)
+}
+
+func (s *ProjectsService) ListMonthlyCompletion(ctx context.Context, projectID string) ([]repository.MonthlyCompletionRow, error) {
+	return s.repo.ListMonthlyCompletion(ctx, projectID)
+}
+
 func (s *ProjectsService) ListAgreements(ctx context.Context, projectID string, asc bool) ([]repository.AgreementRow, error) {
 	return s.repo.ListAgreements(ctx, projectID, asc)
 }

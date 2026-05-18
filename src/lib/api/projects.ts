@@ -39,6 +39,61 @@ export async function softDeleteProject(id: string): Promise<void> {
   });
 }
 
+// ─── Project reads (заменяют supabase.from в src/pages/Projects/) ──────────
+
+export interface ProjectTenderEmbed {
+  id: string;
+  title: string;
+  tender_number: string;
+}
+
+export interface ProjectWithTender {
+  id: string;
+  name: string;
+  client_name: string;
+  contract_cost: number;
+  area: number | null;
+  construction_end_date: string | null;
+  contract_date: string | null;
+  tender_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  tender: ProjectTenderEmbed | null;
+}
+
+/** Активные проекты + tender embed, новые первыми. */
+export async function listProjects(): Promise<ProjectWithTender[]> {
+  const res = await apiFetch<{ data: ProjectWithTender[] }>('/api/v1/projects');
+  return res.data ?? [];
+}
+
+/** Один проект (любой is_active) + tender embed. */
+export async function getProject(id: string): Promise<ProjectWithTender> {
+  const res = await apiFetch<{ data: ProjectWithTender }>(
+    `/api/v1/projects/${encodeURIComponent(id)}`,
+  );
+  return res.data;
+}
+
+/** Все доп. соглашения (клиент маппит по project_id). */
+export async function listAllProjectAgreements(): Promise<ProjectAgreementRow[]> {
+  const res = await apiFetch<{ data: ProjectAgreementRow[] }>('/api/v1/project-agreements');
+  return res.data ?? [];
+}
+
+/** Помесячное выполнение; без projectId — по всем проектам. */
+export async function listProjectMonthlyCompletion(
+  projectId?: string,
+): Promise<ProjectMonthlyCompletionRow[]> {
+  const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
+  const res = await apiFetch<{ data: ProjectMonthlyCompletionRow[] }>(
+    `/api/v1/project-monthly-completion${qs}`,
+  );
+  return res.data ?? [];
+}
+
 // ─── Project additional agreements ─────────────────────────────────────────
 
 export async function listProjectAgreements(

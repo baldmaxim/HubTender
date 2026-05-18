@@ -16,6 +16,10 @@ type projectsServicer interface {
 	Update(ctx context.Context, id string, in repository.ProjectInsert) error
 	SoftDelete(ctx context.Context, id string) error
 	ListActiveTendersForSelect(ctx context.Context) ([]repository.ProjectTenderRow, error)
+	ListProjects(ctx context.Context) ([]repository.ProjectWithTenderRow, error)
+	GetProject(ctx context.Context, id string) (*repository.ProjectWithTenderRow, error)
+	ListAllAgreements(ctx context.Context) ([]repository.AgreementRow, error)
+	ListMonthlyCompletion(ctx context.Context, projectID string) ([]repository.MonthlyCompletionRow, error)
 	ListAgreements(ctx context.Context, projectID string, asc bool) ([]repository.AgreementRow, error)
 	CreateAgreement(ctx context.Context, in repository.AgreementInput) error
 	UpdateAgreement(ctx context.Context, id string, p repository.AgreementPatch) error
@@ -88,6 +92,57 @@ func (h *ProjectsHandler) ListActiveTendersForSelect(w http.ResponseWriter, r *h
 	}
 	if rows == nil {
 		rows = []repository.ProjectTenderRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+func (h *ProjectsHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.svc.ListProjects(r.Context())
+	if err != nil {
+		apierr.InternalError("failed to list projects").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.ProjectWithTenderRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+func (h *ProjectsHandler) GetProject(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing project id").Render(w)
+		return
+	}
+	p, err := h.svc.GetProject(r.Context(), id)
+	if err != nil {
+		apierr.InternalError("failed to load project").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: p})
+}
+
+func (h *ProjectsHandler) ListAllAgreements(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.svc.ListAllAgreements(r.Context())
+	if err != nil {
+		apierr.InternalError("failed to list agreements").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.AgreementRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+func (h *ProjectsHandler) ListMonthlyCompletion(w http.ResponseWriter, r *http.Request) {
+	projectID := r.URL.Query().Get("project_id")
+	rows, err := h.svc.ListMonthlyCompletion(r.Context(), projectID)
+	if err != nil {
+		apierr.InternalError("failed to list monthly completion").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.MonthlyCompletionRow{}
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
 }

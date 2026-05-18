@@ -11,7 +11,11 @@ import {
   Breadcrumb,
 } from 'antd';
 import { ArrowLeftOutlined, SettingOutlined, CalendarOutlined, FileTextOutlined } from '@ant-design/icons';
-import { supabase } from '../../../lib/supabase';
+import {
+  getProject,
+  listProjectAgreements,
+  listProjectMonthlyCompletion,
+} from '../../../lib/api/projects';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { ProjectSettings } from './components/ProjectSettings';
 import { MonthlyCompletion } from './components/MonthlyCompletion';
@@ -40,15 +44,9 @@ const ProjectDetail: React.FC = () => {
 
     setLoading(true);
     try {
-      const { data: projectData, error } = await supabase
-        .from('projects')
-        .select(`*, tender:tenders(id, title, tender_number)`)
-        .eq('id', projectId)
-        .single();
+      const projectData = await getProject(projectId);
 
-      if (error) throw error;
-
-      const typedProject = projectData as {
+      const typedProject = projectData as unknown as {
         id: string;
         name: string;
         client_name: string;
@@ -66,10 +64,7 @@ const ProjectDetail: React.FC = () => {
       };
 
       // Fetch additional agreements sum
-      const { data: agreementsData } = await supabase
-        .from('project_additional_agreements')
-        .select('amount')
-        .eq('project_id', projectId);
+      const agreementsData = await listProjectAgreements(projectId, 'asc');
 
       const agreementsSum = (agreementsData || []).reduce(
         (sum, a) => sum + (Number(a.amount) || 0),
@@ -77,10 +72,7 @@ const ProjectDetail: React.FC = () => {
       );
 
       // Fetch completion total
-      const { data: completionSums } = await supabase
-        .from('project_monthly_completion')
-        .select('actual_amount')
-        .eq('project_id', projectId);
+      const completionSums = await listProjectMonthlyCompletion(projectId);
 
       const completionSum = (completionSums || []).reduce(
         (sum, c) => sum + (Number(c.actual_amount) || 0),
@@ -115,14 +107,7 @@ const ProjectDetail: React.FC = () => {
     if (!projectId) return;
 
     try {
-      const { data, error } = await supabase
-        .from('project_monthly_completion')
-        .select('*')
-        .eq('project_id', projectId)
-        .order('year', { ascending: true })
-        .order('month', { ascending: true });
-
-      if (error) throw error;
+      const data = await listProjectMonthlyCompletion(projectId);
 
       setCompletionData(
         (data || []).map((item) => ({

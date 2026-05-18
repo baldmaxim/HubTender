@@ -11,7 +11,11 @@ import {
   message,
 } from 'antd';
 import dayjs from 'dayjs';
-import { supabase } from '../../../lib/supabase';
+import {
+  listProjectMonthlyCompletion,
+  createProjectMonthlyCompletion,
+  updateProjectMonthlyCompletion,
+} from '../../../lib/api/projects';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { ProjectFull, ProjectCompletion } from '../../../lib/supabase/types';
 
@@ -79,18 +83,11 @@ export const CompletionModal: React.FC<CompletionModalProps> = ({
     if (!year || !month) return;
 
     try {
-      const { data, error } = await supabase
-        .from('project_monthly_completion')
-        .select('*')
-        .eq('project_id', project.id)
-        .eq('year', year)
-        .eq('month', month)
-        .maybeSingle();
-
-      if (error) throw error;
+      const rows = await listProjectMonthlyCompletion(project.id);
+      const data = rows.find((r) => r.year === year && r.month === month) || null;
 
       if (data) {
-        setExistingRecord(data as ProjectCompletion);
+        setExistingRecord(data as unknown as ProjectCompletion);
         form.setFieldsValue({
           actual_amount: Number(data.actual_amount),
           forecast_amount: data.forecast_amount ? Number(data.forecast_amount) : null,
@@ -126,24 +123,15 @@ export const CompletionModal: React.FC<CompletionModalProps> = ({
 
       if (existingRecord) {
         // Update existing record
-        const { error } = await supabase
-          .from('project_monthly_completion')
-          .update({
-            actual_amount: completionData.actual_amount,
-            forecast_amount: completionData.forecast_amount,
-            note: completionData.note,
-          })
-          .eq('id', existingRecord.id);
-
-        if (error) throw error;
+        await updateProjectMonthlyCompletion(existingRecord.id, {
+          actual_amount: completionData.actual_amount,
+          forecast_amount: completionData.forecast_amount,
+          note: completionData.note,
+        });
         message.success('Выполнение обновлено');
       } else {
         // Create new record
-        const { error } = await supabase
-          .from('project_monthly_completion')
-          .insert([completionData]);
-
-        if (error) throw error;
+        await createProjectMonthlyCompletion(completionData);
         message.success('Выполнение добавлено');
       }
 

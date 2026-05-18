@@ -258,3 +258,178 @@ func (r *ProjectsRepo) UpdateMonthlyCompletion(ctx context.Context, id string, p
 	}
 	return nil
 }
+
+// ─── Read side (replacing supabase.from() in src/pages/Projects/) ──────────
+
+// ProjectTenderJoin is the tender:{id,title,tender_number} embed.
+type ProjectTenderJoin struct {
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	TenderNumber string `json:"tender_number"`
+}
+
+// ProjectWithTenderRow mirrors `projects.* + tender:tenders(...)`.
+type ProjectWithTenderRow struct {
+	ID                  string             `json:"id"`
+	Name                string             `json:"name"`
+	ClientName          string             `json:"client_name"`
+	ContractCost        float64            `json:"contract_cost"`
+	Area                *float64           `json:"area"`
+	ConstructionEndDate *string            `json:"construction_end_date"`
+	ContractDate        *string            `json:"contract_date"`
+	TenderID            *string            `json:"tender_id"`
+	IsActive            bool               `json:"is_active"`
+	CreatedAt           *string            `json:"created_at"`
+	UpdatedAt           *string            `json:"updated_at"`
+	CreatedBy           *string            `json:"created_by"`
+	Tender              *ProjectTenderJoin `json:"tender"`
+}
+
+const projectWithTenderCols = `
+	p.id::text, p.name, p.client_name, p.contract_cost, p.area,
+	to_char(p.construction_end_date, 'YYYY-MM-DD'),
+	to_char(p.contract_date, 'YYYY-MM-DD'),
+	p.tender_id::text, p.is_active,
+	to_char(p.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+	to_char(p.updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+	p.created_by::text,
+	t.id::text, t.title, t.tender_number
+`
+
+func scanProjectWithTender(row interface{ Scan(...any) error }) (*ProjectWithTenderRow, error) {
+	var p ProjectWithTenderRow
+	var tID, tTitle, tNumber *string
+	if err := row.Scan(
+		&p.ID, &p.Name, &p.ClientName, &p.ContractCost, &p.Area,
+		&p.ConstructionEndDate, &p.ContractDate,
+		&p.TenderID, &p.IsActive,
+		&p.CreatedAt, &p.UpdatedAt, &p.CreatedBy,
+		&tID, &tTitle, &tNumber,
+	); err != nil {
+		return nil, err
+	}
+	if tID != nil {
+		p.Tender = &ProjectTenderJoin{
+			ID:           *tID,
+			Title:        derefStr(tTitle),
+			TenderNumber: derefStr(tNumber),
+		}
+	}
+	return &p, nil
+}
+
+// ListProjects returns active projects with their tender embed,
+// newest first (mirrors is_active=true, order created_at desc).
+func (r *ProjectsRepo) ListProjects(ctx context.Context) ([]ProjectWithTenderRow, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+projectWithTenderCols+`
+		FROM public.projects p
+		LEFT JOIN public.tenders t ON t.id = p.tender_id
+		WHERE p.is_active = true
+		ORDER BY p.created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("projectsRepo.ListProjects: %w", err)
+	}
+	defer rows.Close()
+	out := make([]ProjectWithTenderRow, 0)
+	for rows.Next() {
+		p, scanErr := scanProjectWithTender(rows)
+		if scanErr != nil {
+			return nil, fmt.Errorf("projectsRepo.ListProjects scan: %w", scanErr)
+		}
+		out = append(out, *p)
+	}
+	return out, rows.Err()
+}
+
+// GetProject returns a single project (any is_active) with tender embed.
+func (r *ProjectsRepo) GetProject(ctx context.Context, id string) (*ProjectWithTenderRow, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT `+projectWithTenderCols+`
+		FROM public.projects p
+		LEFT JOIN public.tenders t ON t.id = p.tender_id
+		WHERE p.id = $1
+	`, id)
+	p, err := scanProjectWithTender(row)
+	if err != nil {
+		return nil, fmt.Errorf("projectsRepo.GetProject: %w", err)
+	}
+	return p, nil
+}
+
+// ListAllAgreements returns every agreement, ordered by agreement_date asc.
+// The Projects list page maps these by project_id client-side.
+func (r *ProjectsRepo) ListAllAgreements(ctx context.Context) ([]AgreementRow, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id::text, project_id::text, agreement_number,
+		       to_char(agreement_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		       amount, description,
+		       to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		       to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM public.project_additional_agreements
+		ORDER BY agreement_date ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("projectsRepo.ListAllAgreements: %w", err)
+	}
+	defer rows.Close()
+	out := make([]AgreementRow, 0)
+	for rows.Next() {
+		var a AgreementRow
+		if err := rows.Scan(&a.ID, &a.ProjectID, &a.AgreementNumber, &a.AgreementDate,
+			&a.Amount, &a.Description, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("projectsRepo.ListAllAgreements scan: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// MonthlyCompletionRow mirrors a project_monthly_completion row.
+type MonthlyCompletionRow struct {
+	ID             string   `json:"id"`
+	ProjectID      string   `json:"project_id"`
+	Year           int      `json:"year"`
+	Month          int      `json:"month"`
+	ActualAmount   float64  `json:"actual_amount"`
+	ForecastAmount *float64 `json:"forecast_amount"`
+	Note           *string  `json:"note"`
+	CreatedAt      *string  `json:"created_at"`
+	UpdatedAt      *string  `json:"updated_at"`
+}
+
+// ListMonthlyCompletion returns monthly completion rows ordered by
+// (year asc, month asc). When projectID is non-empty it filters to one project.
+func (r *ProjectsRepo) ListMonthlyCompletion(ctx context.Context, projectID string) ([]MonthlyCompletionRow, error) {
+	q := `
+		SELECT id::text, project_id::text, year, month,
+		       actual_amount, forecast_amount, note,
+		       to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		       to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM public.project_monthly_completion
+	`
+	args := []any{}
+	if projectID != "" {
+		q += ` WHERE project_id = $1`
+		args = append(args, projectID)
+	}
+	q += ` ORDER BY year ASC, month ASC`
+
+	rows, err := r.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("projectsRepo.ListMonthlyCompletion: %w", err)
+	}
+	defer rows.Close()
+	out := make([]MonthlyCompletionRow, 0)
+	for rows.Next() {
+		var m MonthlyCompletionRow
+		if err := rows.Scan(&m.ID, &m.ProjectID, &m.Year, &m.Month,
+			&m.ActualAmount, &m.ForecastAmount, &m.Note,
+			&m.CreatedAt, &m.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("projectsRepo.ListMonthlyCompletion scan: %w", err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}

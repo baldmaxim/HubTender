@@ -399,12 +399,16 @@ func main() {
 		r.Patch("/api/v1/projects/{id}", projectsH.Update)
 		r.Delete("/api/v1/projects/{id}", projectsH.SoftDelete)
 		r.Get("/api/v1/projects/active-tenders", projectsH.ListActiveTendersForSelect)
+		r.Get("/api/v1/projects", projectsH.ListProjects)
+		r.Get("/api/v1/projects/{id}", projectsH.GetProject)
 
 		r.Get("/api/v1/projects/{id}/agreements", projectsH.ListAgreements)
+		r.Get("/api/v1/project-agreements", projectsH.ListAllAgreements)
 		r.Post("/api/v1/project-agreements", projectsH.CreateAgreement)
 		r.Patch("/api/v1/project-agreements/{id}", projectsH.UpdateAgreement)
 		r.Delete("/api/v1/project-agreements/{id}", projectsH.DeleteAgreement)
 
+		r.Get("/api/v1/project-monthly-completion", projectsH.ListMonthlyCompletion)
 		r.Post("/api/v1/project-monthly-completion", projectsH.CreateMonthlyCompletion)
 		r.Patch("/api/v1/project-monthly-completion/{id}", projectsH.UpdateMonthlyCompletion)
 

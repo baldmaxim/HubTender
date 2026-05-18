@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Form, Input, InputNumber, DatePicker, Select, message } from 'antd';
 import dayjs from 'dayjs';
-import { supabase } from '../../../lib/supabase';
+import { listActiveTendersForProjectSelect } from '../../../lib/api/projects';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { ProjectFull, ProjectInsert, Tender } from '../../../lib/supabase/types';
 
@@ -29,14 +29,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     const loadTenders = async () => {
       setTendersLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('tenders')
-          .select('id, title, tender_number, client_name')
-          .eq('is_archived', false)
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setTenders((data as Tender[]) || []);
+        const data = await listActiveTendersForProjectSelect();
+        setTenders((data as unknown as Tender[]) || []);
       } catch (error) {
         console.error('Error loading tenders:', error);
       } finally {

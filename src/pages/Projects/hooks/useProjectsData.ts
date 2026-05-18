@@ -1,6 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
+import {
+  listProjects,
+  listAllProjectAgreements,
+  listProjectMonthlyCompletion,
+} from '../../../lib/api/projects';
 import type { ProjectFull, ProjectCompletion, ProjectAgreement } from '../../../lib/supabase/types';
 
 // Детали доп соглашений по project_id
@@ -36,21 +40,8 @@ export const useProjectsData = () => {
   const fetchProjects = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch projects with joined tender data
-      const { data: projectsData, error } = await supabase
-        .from('projects')
-        .select(
-          `
-          *,
-          tender:tenders(id, title, tender_number)
-        `
-        )
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const typedProjects = projectsData as ProjectWithTender[] | null;
+      // Go: GET /api/v1/projects (active + tender embed, newest first).
+      const typedProjects = (await listProjects()) as unknown as ProjectWithTender[];
       const projectIds = typedProjects?.map((p) => p.id) || [];
 
       if (projectIds.length === 0) {
@@ -59,12 +50,9 @@ export const useProjectsData = () => {
         return;
       }
 
-      // Fetch additional agreements with full details
-      const { data: agreementsData } = await supabase
-        .from('project_additional_agreements')
-        .select('*')
-        .in('project_id', projectIds)
-        .order('agreement_date', { ascending: true });
+      // Все доп. соглашения (упорядочены по agreement_date asc на сервере);
+      // ниже маппятся по project_id, как и раньше.
+      const agreementsData = await listAllProjectAgreements();
 
       // Build agreements map by project_id
       const newAgreementsMap: AgreementsMap = {};
@@ -75,15 +63,12 @@ export const useProjectsData = () => {
         newAgreementsMap[a.project_id].push({
           ...a,
           amount: Number(a.amount),
-        });
+        } as unknown as ProjectAgreement);
       });
       setAgreementsMap(newAgreementsMap);
 
-      // Fetch completion totals
-      const { data: completionSums } = await supabase
-        .from('project_monthly_completion')
-        .select('project_id, actual_amount')
-        .in('project_id', projectIds);
+      // Fetch completion totals (все строки; суммируются по project_id ниже)
+      const completionSums = await listProjectMonthlyCompletion();
 
       // Calculate derived fields
       const enrichedProjects: ProjectFull[] = (typedProjects || []).map((project) => {
@@ -122,13 +107,7 @@ export const useProjectsData = () => {
 
   const fetchCompletionData = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('project_monthly_completion')
-        .select('*')
-        .order('year', { ascending: true })
-        .order('month', { ascending: true });
-
-      if (error) throw error;
+      const data = await listProjectMonthlyCompletion();
 
       setCompletionData(
         (data || []).map((item) => ({

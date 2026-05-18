@@ -319,6 +319,29 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Projects domain DONE (verified; 4 новых read-эндпоинта + reuse)
+
+`src/pages/Projects/*` (useProjectsData 4, ProjectDetail 4, ProjectModal 1,
+CompletionModal 3 → 0 supabase во всём `src/pages/Projects`). Write-хелперы
+projects.ts уже были; добавлены **net-new READ-эндпоинты** (repo append +
+service + handler + routes):
+
+| Эндпоинт | Заменяет |
+|---|---|
+| `GET /api/v1/projects` | `projects` (is_active, +tender, order created_at desc) |
+| `GET /api/v1/projects/{id}` | `projects` single + tender |
+| `GET /api/v1/project-agreements` | `project_additional_agreements` (все, order agreement_date asc) |
+| `GET /api/v1/project-monthly-completion[?project_id=]` | `project_monthly_completion` (order year,month) |
+
+Reuse: `listProjectAgreements` (per-project, был), `create/updateProjectMonthlyCompletion`
+(были), `listActiveTendersForProjectSelect` (ProjectModal). CompletionModal
+«найти запись за период» теперь `listProjectMonthlyCompletion(project.id)` +
+`.find()` на клиенте (вместо точечного select). Вся клиентская
+enrichment-логика (суммы соглашений/выполнения, completion %) без
+изменений. Дата-поля через `to_char` (ISO/`YYYY-MM-DD`).
+chi: статический `/projects/active-tenders` приоритетнее `/projects/{id}`.
+`go build ./...` 0, `go test ./internal/services` ok, `tsc` 0, `vite build` ✓.
+
 ## P5.3 — TenderTimeline hooks DONE (verified; 3 новых read-эндпоинта)
 
 `src/pages/TenderTimeline/hooks/` — вложенные PostgREST-селекты заменены
