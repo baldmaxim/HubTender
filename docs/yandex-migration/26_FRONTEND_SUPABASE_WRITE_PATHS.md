@@ -319,6 +319,15 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Library/useLibraryData DONE (verified; reuse, без backend)
+
+`src/pages/Library/hooks/useLibraryData.ts` (3 supabase → 0): reuse
+`listWorksLibrary`/`listMaterialsLibrary` (library.ts) +
+`listDetailCostCategoriesWithCategory` (costs.ts; order order_num
+сохранён). Маппинг work_name/material_name/label без изменений
+(array-or-object branch совместим с object-embed). Бэкенд не трогали.
+`tsc` 0, `vite build` ✓.
+
 ## P5.3 — Library/useFolders DONE (verified; library_folders + move)
 
 `src/pages/Library/hooks/useFolders.ts` (5 supabase → 0). library-домен
