@@ -17,6 +17,7 @@ import (
 // userServicer is the interface MeHandler depends on — makes testing easy.
 type userServicer interface {
 	GetMe(ctx context.Context, userID string) (*user.User, error)
+	GetDeadlineExtensions(ctx context.Context, userID string) (json.RawMessage, error)
 }
 
 // MeHandler serves the /me and /me/permissions endpoints.
@@ -100,6 +101,28 @@ func (h *MeHandler) GetPermissions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderJSON(w, r, http.StatusOK, permissionsResponse{AllowedPages: pages})
+}
+
+// GetDeadlineExtensions handles GET /api/v1/me/deadline-extensions.
+// Returns the JWT user's tender_deadline_extensions JSON array.
+func (h *MeHandler) GetDeadlineExtensions(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+
+	raw, err := h.svc.GetDeadlineExtensions(r.Context(), authUser.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			apierr.NotFound("user not found").Render(w)
+			return
+		}
+		apierr.InternalError("failed to load deadline extensions").Render(w)
+		return
+	}
+
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: raw})
 }
 
 // ---------------------------------------------------------------------------

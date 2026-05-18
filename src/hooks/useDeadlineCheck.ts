@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { getTenderById } from '../lib/api/fi';
+import { apiFetch } from '../lib/api/client';
 import { checkTenderDeadline } from '../utils/deadlineCheck';
 import type { DeadlineCheckResult, TenderDeadlineExtension } from '../lib/supabase/types';
 
@@ -33,26 +34,14 @@ export const useDeadlineCheck = (tenderId: string | undefined) => {
       }
 
       try {
-        // Получить дедлайн тендера
-        const { data: tender, error: tenderError } = await supabase
-          .from('tenders')
-          .select('submission_deadline')
-          .eq('id', tenderId)
-          .single();
+        // Дедлайн тендера (Go BFF)
+        const tender = await getTenderById(tenderId);
 
-        if (tenderError) throw tenderError;
-
-        // Получить продления пользователя
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('tender_deadline_extensions')
-          .eq('id', user.id)
-          .single();
-
-        if (userError) throw userError;
-
-        const extensions: TenderDeadlineExtension[] =
-          userData?.tender_deadline_extensions || [];
+        // Продления текущего пользователя (Go BFF, user_id из JWT)
+        const extRes = await apiFetch<{ data: TenderDeadlineExtension[] }>(
+          '/api/v1/me/deadline-extensions',
+        );
+        const extensions: TenderDeadlineExtension[] = extRes.data || [];
 
         const result = checkTenderDeadline(
           tenderId,

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -49,6 +50,19 @@ func (s *UserService) GetMe(ctx context.Context, userID string) (*user.User, err
 
 	s.cache.Set(cacheKey, u, userCacheTTL)
 	return u, nil
+}
+
+// GetDeadlineExtensions returns the raw tender_deadline_extensions JSON for
+// the given user (not cached — small, infrequent).
+func (s *UserService) GetDeadlineExtensions(ctx context.Context, userID string) (json.RawMessage, error) {
+	raw, err := s.repo.GetDeadlineExtensions(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, pgx.ErrNoRows
+		}
+		return nil, fmt.Errorf("userService.GetDeadlineExtensions: %w", err)
+	}
+	return raw, nil
 }
 
 // InvalidateUser removes the cached profile for the given user ID.

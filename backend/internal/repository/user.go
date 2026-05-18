@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -82,4 +83,22 @@ func (r *UserRepo) GetByID(ctx context.Context, userID string) (*user.User, erro
 		AllowedPages:  pages,
 		AccessEnabled: accessEnabled,
 	}, nil
+}
+
+// GetDeadlineExtensions returns the raw tender_deadline_extensions JSONB
+// (defaults to []) for the given user.
+func (r *UserRepo) GetDeadlineExtensions(ctx context.Context, userID string) (json.RawMessage, error) {
+	var raw json.RawMessage
+	err := r.pool.QueryRow(ctx,
+		`SELECT COALESCE(tender_deadline_extensions, '[]'::jsonb)
+		   FROM public.users WHERE id = $1`,
+		userID,
+	).Scan(&raw)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, pgx.ErrNoRows
+		}
+		return nil, fmt.Errorf("userRepo.GetDeadlineExtensions: %w", err)
+	}
+	return raw, nil
 }

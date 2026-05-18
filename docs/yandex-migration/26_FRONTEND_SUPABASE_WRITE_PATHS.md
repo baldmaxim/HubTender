@@ -261,6 +261,17 @@ developer}), `POST /api/v1/tasks`, `PATCH /api/v1/tasks/{id}`,
 `go build ./...` 0, `go test` без новых провалов (calc pre-existing §11),
 `tsc` 0, `vite build` ✓.
 
+## P5.3 — useDeadlineCheck DONE (verified, изолированно)
+
+Новый изолированный `GET /api/v1/me/deadline-extensions` (UserRepo.
+GetDeadlineExtensions → JSONB raw; UserService passthrough;
+MeHandler — **НЕ трогая** user.User/GetMe/cache/AuthContext, минимальный
+blast-radius). Фронт `src/hooks/useDeadlineCheck.ts` → `getTenderById`
+(Go fi.ts) + `apiFetch('/api/v1/me/deadline-extensions')`, 0 supabase.
+`go build ./...` 0, `go test` без новых провалов (calc pre-existing §11),
+`tsc` 0, `vite build` ✓. AuthContext.loadUserData (high-blast-radius
+auth-bridge) НЕ трогался — отдельный осторожный шаг.
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)

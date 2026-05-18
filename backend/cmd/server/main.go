@@ -229,6 +229,7 @@ func main() {
 
 		r.Get("/api/v1/me", meH.GetMe)
 		r.Get("/api/v1/me/permissions", meH.GetPermissions)
+		r.Get("/api/v1/me/deadline-extensions", meH.GetDeadlineExtensions)
 
 		r.Get("/api/v1/references/roles", refH.GetRoles)
 		r.Get("/api/v1/references/units", refH.GetUnits)
