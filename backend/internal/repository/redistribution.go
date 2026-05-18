@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -26,6 +27,71 @@ type RedistributionRepo struct {
 // NewRedistributionRepo creates a RedistributionRepo.
 func NewRedistributionRepo(pool *pgxpool.Pool) *RedistributionRepo {
 	return &RedistributionRepo{pool: pool}
+}
+
+// RedistributionLoad is the loader payload: all result rows for a
+// (tender, tactic) plus the single non-null rules JSONB (if any).
+type RedistributionLoad struct {
+	Results []RedistributionRecord `json:"results"`
+	Rules   json.RawMessage        `json:"redistribution_rules"`
+}
+
+// LoadResults returns every cost_redistribution_results row for the given
+// (tender_id, markup_tactic_id) and the rules JSONB from the single holder
+// row (earliest created_at with non-null rules). Mirrors the legacy
+// Supabase loader (rules from one row + all result rows).
+func (r *RedistributionRepo) LoadResults(
+	ctx context.Context,
+	tenderID, tacticID string,
+) (*RedistributionLoad, error) {
+	out := &RedistributionLoad{Results: []RedistributionRecord{}}
+
+	const rulesQ = `
+		SELECT redistribution_rules
+		FROM public.cost_redistribution_results
+		WHERE tender_id = $1 AND markup_tactic_id = $2
+		  AND redistribution_rules IS NOT NULL
+		ORDER BY created_at ASC
+		LIMIT 1
+	`
+	var rawRules []byte
+	if err := r.pool.QueryRow(ctx, rulesQ, tenderID, tacticID).Scan(&rawRules); err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("redistributionRepo.LoadResults: rules: %w", err)
+		}
+	}
+	if len(rawRules) > 0 {
+		out.Rules = json.RawMessage(rawRules)
+	}
+
+	const resQ = `
+		SELECT boq_item_id::text,
+		       COALESCE(original_work_cost, 0),
+		       deducted_amount,
+		       added_amount,
+		       COALESCE(final_work_cost, 0)
+		FROM public.cost_redistribution_results
+		WHERE tender_id = $1 AND markup_tactic_id = $2
+	`
+	rows, err := r.pool.Query(ctx, resQ, tenderID, tacticID)
+	if err != nil {
+		return nil, fmt.Errorf("redistributionRepo.LoadResults: query: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var rec RedistributionRecord
+		if err := rows.Scan(
+			&rec.BoqItemID, &rec.OriginalWorkCost, &rec.DeductedAmount,
+			&rec.AddedAmount, &rec.FinalWorkCost,
+		); err != nil {
+			return nil, fmt.Errorf("redistributionRepo.LoadResults: scan: %w", err)
+		}
+		out.Results = append(out.Results, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("redistributionRepo.LoadResults: rows: %w", err)
+	}
+	return out, nil
 }
 
 // SaveResults atomically replaces the set of cost_redistribution_results rows

@@ -17,6 +17,7 @@ type redistributionRepoer interface {
 		rulesJSON json.RawMessage,
 		createdBy string,
 	) (int, error)
+	LoadResults(ctx context.Context, tenderID, tacticID string) (*repository.RedistributionLoad, error)
 }
 
 // RedistributionService wraps the repo with cache invalidation.
@@ -50,4 +51,17 @@ func (s *RedistributionService) SaveResults(
 	s.cache.Delete("positions:with_costs:" + tenderID)
 
 	return count, nil
+}
+
+// LoadResults returns the saved redistribution snapshot for (tenderID,
+// tacticID). Read-only — no caching (the loader runs once per page open).
+func (s *RedistributionService) LoadResults(
+	ctx context.Context,
+	tenderID, tacticID string,
+) (*repository.RedistributionLoad, error) {
+	out, err := s.repo.LoadResults(ctx, tenderID, tacticID)
+	if err != nil {
+		return nil, fmt.Errorf("redistributionService.LoadResults: %w", err)
+	}
+	return out, nil
 }

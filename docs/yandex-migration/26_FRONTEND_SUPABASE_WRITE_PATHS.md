@@ -319,6 +319,28 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — CostRedistribution useCostCategories/useSaveResults DONE (verified)
+
+- **useCostCategories.ts** (2 supabase) → costs.ts `listCostCategories` +
+  `listAllDetailCostCategoriesByOrder`. Исходный `.order('name')`
+  воспроизводится клиентским `.sort(byName)` (Go-эндпоинт detail-категорий
+  сортирует по order_num — поэтому пересортировка обязательна для
+  идентичного UI-порядка). Пагинации не было.
+- **useSaveResults.ts** (2 supabase, только `loadSavedResults`) → **новый
+  Go GET-эндпоинт** `GET /api/v1/redistributions?tender_id=&markup_tactic_id=`
+  (repo `LoadResults` + service + handler + route): все строки результата +
+  rules JSONB из единственной holder-строки (earliest created_at,
+  redistribution_rules NOT NULL) — зеркалит легаси-загрузчик. Клиентская
+  1000-строчная пагинация удалена. `saveResults` уже использовал
+  `saveRedistributionResults` (Go); `supabase.auth.getUser()` — auth,
+  допустимо, в multiline-аудит не попадает.
+
+Backend: новый read-эндпоинт (паттерн save). `go build ./...` 0,
+`go test ./internal/services` ok, `tsc` 0, `vite build` ✓. 0 supabase
+(business) в обоих файлах. Остаток CostRedistribution (useRedistributionData
+realtime-channel + reads, CostRedistribution.tsx tender_insurance) — в
+следующих проходах / P5.5.
+
 ## P5.3 — мёртвые diagnostic-утилиты УДАЛЕНЫ (verified)
 
 `src/utils/showGlobalTactic.ts` (2), `checkMarkupSequences.ts` (2),

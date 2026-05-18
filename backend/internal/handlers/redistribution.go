@@ -19,6 +19,7 @@ type redistributionServicer interface {
 		rulesJSON json.RawMessage,
 		createdBy string,
 	) (int, error)
+	LoadResults(ctx context.Context, tenderID, tacticID string) (*repository.RedistributionLoad, error)
 }
 
 // RedistributionHandler handles POST /api/v1/redistributions/save.
@@ -75,4 +76,28 @@ func (h *RedistributionHandler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: saveRedistributionResp{SavedCount: count}})
+}
+
+// Load handles GET /api/v1/redistributions?tender_id=&markup_tactic_id=.
+// Returns the saved snapshot { results: [...], redistribution_rules: ... }.
+func (h *RedistributionHandler) Load(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+
+	tenderID := r.URL.Query().Get("tender_id")
+	tacticID := r.URL.Query().Get("markup_tactic_id")
+	if tenderID == "" || tacticID == "" {
+		apierr.BadRequest("tender_id and markup_tactic_id are required").Render(w)
+		return
+	}
+
+	out, err := h.svc.LoadResults(r.Context(), tenderID, tacticID)
+	if err != nil {
+		apierr.InternalError("failed to load redistribution results").Render(w)
+		return
+	}
+
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: out})
 }

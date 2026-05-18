@@ -312,6 +312,7 @@ func main() {
 
 		// Phase 5: atomic redistribution save (cost_redistribution_results).
 		r.Post("/api/v1/redistributions/save", redistributionH.Save)
+		r.Get("/api/v1/redistributions", redistributionH.Load)
 
 		// Insurance (per-tender).
 		r.Get("/api/v1/tenders/{id}/insurance", insuranceH.Get)

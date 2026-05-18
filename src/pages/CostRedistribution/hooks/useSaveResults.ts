@@ -7,6 +7,7 @@ import { message } from 'antd';
 import { supabase } from '../../../lib/supabase';
 import {
   saveRedistributionResults,
+  loadRedistributionResults,
   type RedistributionRecord as ApiRedistributionRecord,
 } from '../../../lib/api/redistributions';
 import type { RedistributionResult, SourceRule, TargetCost } from '../utils';
@@ -139,57 +140,16 @@ export function useSaveResults() {
       }
 
       try {
-        const { data: rulesRow, error: rulesError } = await supabase
-          .from('cost_redistribution_results')
-          .select('redistribution_rules')
-          .eq('tender_id', tenderId)
-          .eq('markup_tactic_id', tacticId)
-          .not('redistribution_rules', 'is', null)
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
-        if (rulesError) throw rulesError;
-
-        // CRITICAL: Supabase limit 1000 rows - use batching
-        let allResults: Array<{
-          boq_item_id: string;
-          original_work_cost: number;
-          deducted_amount: number;
-          added_amount: number;
-          final_work_cost: number;
-        }> = [];
-        let from = 0;
-        const batchSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data, error } = await supabase
-            .from('cost_redistribution_results')
-            .select('boq_item_id, original_work_cost, deducted_amount, added_amount, final_work_cost')
-            .eq('tender_id', tenderId)
-            .eq('markup_tactic_id', tacticId)
-            .range(from, from + batchSize - 1);
-
-          if (error) throw error;
-
-          if (data && data.length > 0) {
-            allResults = [...allResults, ...data];
-            from += batchSize;
-            hasMore = data.length === batchSize;
-          } else {
-            hasMore = false;
-          }
+        // Go отдаёт всё одним запросом (без 1000-строчной пагинации) +
+        // rules из единственной holder-строки. null, если результатов нет.
+        const loaded = await loadRedistributionResults(tenderId, tacticId);
+        if (!loaded) {
+          return null;
         }
-
-        if (allResults.length > 0) {
-          return {
-            results: allResults,
-            redistributionRules: rulesRow?.redistribution_rules ?? null,
-          };
-        }
-
-        return null;
+        return {
+          results: loaded.results,
+          redistributionRules: loaded.redistribution_rules,
+        };
       } catch (error) {
         console.error('Ошибка загрузки сохраненных результатов:', error);
         return null;

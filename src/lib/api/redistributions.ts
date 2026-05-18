@@ -17,6 +17,33 @@ export interface SaveRedistributionInput {
   createdBy?: string | null;
 }
 
+export interface LoadedRedistribution {
+  results: RedistributionRecord[];
+  redistribution_rules: RedistributionRule | null;
+}
+
+/**
+ * Загрузить сохранённый снимок перераспределения для (tenderId, tacticId).
+ * Go: GET /api/v1/redistributions?tender_id=&markup_tactic_id= — все строки
+ * результата + rules JSONB из единственной holder-строки. Возвращает null,
+ * если результатов нет (сохраняет поведение легаси-загрузчика).
+ */
+export async function loadRedistributionResults(
+  tenderId: string,
+  tacticId: string,
+): Promise<LoadedRedistribution | null> {
+  const res = await apiFetch<{
+    data: { results: RedistributionRecord[]; redistribution_rules: RedistributionRule | null };
+  }>(
+    `/api/v1/redistributions?tender_id=${encodeURIComponent(tenderId)}&markup_tactic_id=${encodeURIComponent(tacticId)}`,
+  );
+  if (!res.data || res.data.results.length === 0) return null;
+  return {
+    results: res.data.results,
+    redistribution_rules: res.data.redistribution_rules ?? null,
+  };
+}
+
 /**
  * Atomically persist a redistribution snapshot.
  *

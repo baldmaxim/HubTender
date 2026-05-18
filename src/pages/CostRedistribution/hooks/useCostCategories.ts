@@ -4,7 +4,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
+import {
+  listCostCategories,
+  listAllDetailCostCategoriesByOrder,
+} from '../../../lib/api/costs';
 import type { CostCategory, DetailCostCategory } from '../types';
 
 export function useCostCategories() {
@@ -19,21 +22,17 @@ export function useCostCategories() {
   const loadCostCategories = async () => {
     setLoading(true);
     try {
-      // Загружаем категории
-      const { data: categoriesData, error: categoriesError } = await supabase
-        .from('cost_categories')
-        .select('id, name')
-        .order('name');
+      // Go отдаёт всё; .order('name') исходника воспроизводим клиентом.
+      const byName = (a: { name: string | null }, b: { name: string | null }) =>
+        (a.name || '').localeCompare(b.name || '');
 
-      if (categoriesError) throw categoriesError;
+      const categoriesData = (await listCostCategories())
+        .slice()
+        .sort(byName) as unknown as CostCategory[];
 
-      // Загружаем детализированные категории
-      const { data: detailData, error: detailError } = await supabase
-        .from('detail_cost_categories')
-        .select('id, cost_category_id, name, location')
-        .order('name');
-
-      if (detailError) throw detailError;
+      const detailData = (await listAllDetailCostCategoriesByOrder())
+        .slice()
+        .sort(byName) as unknown as DetailCostCategory[];
 
       setCategories(categoriesData || []);
 
