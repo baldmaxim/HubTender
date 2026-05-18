@@ -161,13 +161,26 @@ repo/service/handler расширены, routes + DI. Фронт `src/lib/api/ti
 (`getTenderPricingDistribution`, `listSubcontractGrowthExclusionsForTender`,
 `listTenderMarkupPercentages`) — нового backend не потребовалось. `tsc` 0.
 
-**Остаётся `tactics.ts` (13)** — сложная клиент-оркестрация пересчёта
-наценок (read boq/tactic/tender + bulk/per-row commercial update +
-`updatePositionTotals`). План: reads → `getMarkupTactic` /
-`getTenderMarkupTacticId` / `listAllBoqItemsForTender`; writes →
-`bulkUpdateCommercial` (Go); `updatePositionTotals`/per-row fallback —
-кандидаты на удаление, **требуют верификации триггеров пересчёта**
-(`05_triggers.sql`) — критичный pricing-путь, отдельным под-шагом.
+**Остаётся `tactics.ts` (13)** — высокорисковый pricing-путь. ⚠️
+**Верификация триггеров выполнена:** `trg_boq_items_grand_total`
+(`05_triggers.sql:26-29`) = `AFTER ... UPDATE OF total_amount` — НЕ
+срабатывает на commercial-only апдейт (`commercial_markup`/
+`total_commercial_*_cost`). Значит **`updatePositionTotals` НЕ избыточен**:
+client_positions commercial-тоталы НЕ пересчитываются этим триггером при
+markup-пересчёте. Наивное удаление `updatePositionTotals` → молчаливая
+порча коммерческих тоталов позиций.
+
+План tactics.ts (отдельный аккуратный под-шаг, **обязательная проверка**):
+1. Прочитать `trg_boq_items_update_grand_total()` (что именно
+   пересчитывает) и repo/service Go `/api/v1/items/bulk-commercial`
+   (покрывает ли он client_positions commercial-тоталы / grand_total).
+2. reads → `getMarkupTactic` / `getTenderMarkupTacticId` /
+   `listAllBoqItemsForTender` (Go, существуют).
+3. writes (single + batch) → `bulkUpdateCommercial` (Go).
+4. `updatePositionTotals`: если Go-bulk НЕ пересчитывает
+   client_positions commercial — оставить эквивалент (новый Go-эндпоинт
+   recompute позиции, либо расширить bulk-commercial), НЕ удалять слепо.
+5. Поведение пересчёта сверить до/после (значения commercial по позиции).
 
 ## Migrated paths
 
