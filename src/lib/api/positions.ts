@@ -1,9 +1,7 @@
 // Positions-with-costs helper with Go BFF / Supabase fallback (Phase 4d).
 // Routes to GET /api/v1/tenders/:id/positions/with-costs (which ports the
 // public.get_positions_with_costs RPC) when VITE_API_POSITIONS_ENABLED=true.
-import { supabase } from '../supabase';
 import { apiFetch } from './client';
-import { isGoEnabled } from './featureFlags';
 
 // Exported type — consumers usually redefine it inline; this is the authoritative shape.
 export interface PositionWithCostsRow {
@@ -44,26 +42,9 @@ export interface PositionWithCostsRow {
  * Supabase path: paginated RPC calls in 1000-row chunks.
  */
 export async function fetchPositionsWithCosts(tenderId: string): Promise<PositionWithCostsRow[]> {
-  if (isGoEnabled('positions')) {
-    const res = await apiFetch<{ data: PositionWithCostsRow[] }>(
-      `/api/v1/tenders/${encodeURIComponent(tenderId)}/positions/with-costs`,
-      { cacheKey: `positions:${tenderId}` }
-    );
-    return res.data ?? [];
-  }
-
-  // Supabase fallback — paginate via .range() like the original call site.
-  const PAGE = 1000;
-  const all: PositionWithCostsRow[] = [];
-  for (let from = 0; from < 50_000; from += PAGE) {
-    const to = from + PAGE - 1;
-    const { data, error } = await supabase
-      .rpc('get_positions_with_costs', { p_tender_id: tenderId })
-      .range(from, to);
-    if (error) throw error;
-    const rows = (data ?? []) as PositionWithCostsRow[];
-    all.push(...rows);
-    if (rows.length < PAGE) break;
-  }
-  return all;
+  const res = await apiFetch<{ data: PositionWithCostsRow[] }>(
+    `/api/v1/tenders/${encodeURIComponent(tenderId)}/positions/with-costs`,
+    { cacheKey: `positions:${tenderId}` }
+  );
+  return res.data ?? [];
 }

@@ -2,10 +2,8 @@
 // Go path: GET/PUT /api/v1/tenders/:id/insurance.
 // Supabase path: direct table read/upsert on public.tender_insurance.
 
-import { supabase } from '../supabase';
 import type { Tender } from '../supabase';
 import { apiFetch } from './client';
-import { isGoEnabled } from './featureFlags';
 import { fetchTenders } from './tenders';
 
 export interface InsuranceData {
@@ -54,39 +52,21 @@ export async function fetchInsuranceTenders(): Promise<Tender[]> {
 }
 
 export async function loadTenderInsurance(tenderId: string): Promise<InsuranceData | null> {
-  if (isGoEnabled('insurance')) {
-    const res = await apiFetch<{ data: InsuranceData | null }>(
-      `/api/v1/tenders/${encodeURIComponent(tenderId)}/insurance`,
-      { cacheKey: `insurance:${tenderId}` },
-    );
-    return res.data ? normalize(res.data) : null;
-  }
-
-  const { data, error } = await supabase
-    .from('tender_insurance')
-    .select('*')
-    .eq('tender_id', tenderId)
-    .maybeSingle();
-  if (error) throw error;
-  return data ? normalize(data as Partial<InsuranceData>) : null;
+  const res = await apiFetch<{ data: InsuranceData | null }>(
+    `/api/v1/tenders/${encodeURIComponent(tenderId)}/insurance`,
+    { cacheKey: `insurance:${tenderId}` },
+  );
+  return res.data ? normalize(res.data) : null;
 }
 
 export async function upsertTenderInsurance(
   tenderId: string,
   data: InsuranceData,
 ): Promise<void> {
-  if (isGoEnabled('insurance')) {
-    await apiFetch<{ data: InsuranceData }>(
-      `/api/v1/tenders/${encodeURIComponent(tenderId)}/insurance`,
-      { method: 'PUT', body: JSON.stringify(data) },
-    );
-    return;
-  }
-
-  const { error } = await supabase
-    .from('tender_insurance')
-    .upsert({ tender_id: tenderId, ...data }, { onConflict: 'tender_id' });
-  if (error) throw error;
+  await apiFetch<{ data: InsuranceData }>(
+    `/api/v1/tenders/${encodeURIComponent(tenderId)}/insurance`,
+    { method: 'PUT', body: JSON.stringify(data) },
+  );
 }
 
 export const _DEFAULT_INSURANCE: InsuranceData = ZERO_INSURANCE;

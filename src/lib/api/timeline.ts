@@ -1,8 +1,9 @@
 // Timeline helpers with Go BFF / Supabase fallback.
+// NOTE: listTimelineAssignableUsers / createTenderIteration ещё ходят в
+// Supabase напрямую (un-gated, нет Go-эндпоинта) — отмечено в doc 26 для P5.3.
 import { supabase } from '../supabase';
 import type { TimelineUserRef } from '../supabase/types';
 import { apiFetch } from './client';
-import { isGoEnabled } from './featureFlags';
 
 export interface TimelineIterationInput {
   group_id: string;
@@ -41,23 +42,13 @@ export async function setTenderGroupQuality(
   qualityLevel: number | null,
   qualityComment: string | null,
 ): Promise<void> {
-  if (isGoEnabled('timeline')) {
-    await apiFetch<unknown>(`/api/v1/timeline/groups/${encodeURIComponent(groupId)}/quality`, {
-      method: 'POST',
-      body: JSON.stringify({
-        quality_level: qualityLevel,
-        quality_comment: qualityComment,
-      }),
-    });
-    return;
-  }
-
-  const { error } = await supabase.rpc('set_tender_group_quality', {
-    p_group_id: groupId,
-    p_quality_level: qualityLevel,
-    p_quality_comment: qualityComment,
+  await apiFetch<unknown>(`/api/v1/timeline/groups/${encodeURIComponent(groupId)}/quality`, {
+    method: 'POST',
+    body: JSON.stringify({
+      quality_level: qualityLevel,
+      quality_comment: qualityComment,
+    }),
   });
-  if (error) throw error;
 }
 
 /**
@@ -70,21 +61,11 @@ export async function respondTenderIteration(
   managerComment: string,
   approvalStatus: 'pending' | 'approved' | 'rejected',
 ): Promise<void> {
-  if (isGoEnabled('timeline')) {
-    await apiFetch<unknown>(`/api/v1/timeline/iterations/${encodeURIComponent(iterationId)}/respond`, {
-      method: 'POST',
-      body: JSON.stringify({
-        manager_comment: managerComment,
-        approval_status: approvalStatus,
-      }),
-    });
-    return;
-  }
-
-  const { error } = await supabase.rpc('respond_tender_iteration', {
-    p_iteration_id: iterationId,
-    p_manager_comment: managerComment,
-    p_approval_status: approvalStatus,
+  await apiFetch<unknown>(`/api/v1/timeline/iterations/${encodeURIComponent(iterationId)}/respond`, {
+    method: 'POST',
+    body: JSON.stringify({
+      manager_comment: managerComment,
+      approval_status: approvalStatus,
+    }),
   });
-  if (error) throw error;
 }

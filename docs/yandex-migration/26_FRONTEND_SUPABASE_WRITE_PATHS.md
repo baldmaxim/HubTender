@@ -103,6 +103,25 @@ hooks/useRedistributionData.ts:112`, `FinancialIndicators.tsx:124`.
 и cleanup-`removeChannel` недостижим в production-режиме (canal не создаётся),
 и/или закрыть его тем же флагом. TODO verify+gate.
 
+## P5.4 — Go-only gated `src/lib/api/*` (in progress, verified батчами)
+
+`src/lib/api` multiline: ~130/19 → **117/11** (tsc=0, vite build ✓).
+
+- **DONE (Go-only, 0 supabase):** `notifications.ts`, `tenders.ts`,
+  `redistributions.ts`, `users.ts`, `positions.ts`, `boq.ts`,
+  `insurance.ts`, `fi.ts` + (P5.1) `supabaseWithAudit.ts`,
+  `useMassBoqImport.ts`.
+- **timeline.ts** — 2 gated→Go (`setTenderGroupQuality`,
+  `respondTenderIteration`); **2 un-gated остаются** →
+  `listTimelineAssignableUsers` (нужен `GET /api/v1/timeline/
+  assignable-users`), `createTenderIteration` (нужен
+  `POST /api/v1/timeline/iterations`) — **P5.3** (нет Go-эндпоинта).
+- **Остаётся P5.4:** `importLog.ts`(7), `positionFilters.ts`(4),
+  `tenderRegistry.ts`(10), `projects.ts`(10), `costs.ts`(17),
+  `nomenclatures.ts`(21), `markup.ts`(24), `userAdmin.ts`(15),
+  `hooks/useApiReferences.ts`(6) — следующие верифицируемые батчи.
+  (`featureFlags.ts:1` — это комментарий, не вызов.)
+
 ## Migrated paths
 
 ### P5.1 — DONE (verified: `tsc` 0, `vite build` ✓; multiline 479/112 → 473/110)

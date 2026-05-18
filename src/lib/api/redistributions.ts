@@ -1,7 +1,5 @@
-import { supabase } from '../supabase';
 import type { RedistributionRule } from '../supabase';
 import { apiFetch } from './client';
-import { isGoEnabled } from './featureFlags';
 
 export interface RedistributionRecord {
   boq_item_id: string;
@@ -36,32 +34,20 @@ export interface SaveRedistributionInput {
 export async function saveRedistributionResults(
   input: SaveRedistributionInput
 ): Promise<number> {
-  const { tenderId, tacticId, records, rules, createdBy } = input;
+  const { tenderId, tacticId, records, rules } = input;
   if (records.length === 0) return 0;
 
-  if (isGoEnabled('redistributions')) {
-    const res = await apiFetch<{ data: { saved_count: number } }>(
-      '/api/v1/redistributions/save',
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          tender_id: tenderId,
-          markup_tactic_id: tacticId,
-          records,
-          rules,
-        }),
-      }
-    );
-    return res.data.saved_count;
-  }
-
-  const { data, error } = await supabase.rpc('save_redistribution_results', {
-    p_tender_id: tenderId,
-    p_markup_tactic_id: tacticId,
-    p_records: records as unknown as Record<string, unknown>[],
-    p_rules: rules as unknown as Record<string, unknown>,
-    p_created_by: createdBy ?? null,
-  });
-  if (error) throw error;
-  return typeof data === 'number' ? data : records.length;
+  const res = await apiFetch<{ data: { saved_count: number } }>(
+    '/api/v1/redistributions/save',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        tender_id: tenderId,
+        markup_tactic_id: tacticId,
+        records,
+        rules,
+      }),
+    }
+  );
+  return res.data.saved_count;
 }
