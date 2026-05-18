@@ -319,6 +319,30 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — MarkupConstructor DONE (verified; reuse + удаление мёртвого кода)
+
+`src/pages/Admin/MarkupConstructor/hooks/`:
+
+- **useMarkupParameters.ts** (5 supabase) → markup.ts: `listActiveMarkupParameters`,
+  `createMarkupParameter`, `updateMarkupParameter`, `deleteMarkupParameter`.
+  Max order_num считается по актуальному списку с сервера (вместо
+  отдельного DB-запроса). `addParameter` теперь рефрешит список и
+  возвращает созданный параметр (его return нигде не потреблялся).
+- **usePricingDistribution.ts** (4 supabase) → markup.ts:
+  `getTenderPricingDistribution`, `upsertTenderPricingDistribution`
+  (серверный upsert по tender_id вместо клиентского select-then-update/insert).
+- **useMarkupTactics.ts** (7 supabase) → **УДАЛЁН** как мёртвый+сломанный
+  код: `MarkupConstructorProvider` нигде не рендерится, `useMarkupTactics(`
+  нигде не вызывается, единственный потребитель контекста (`SequenceTab`)
+  берёт только `{sequences,parameters,form}`. Плюс ссылался на
+  несуществующие в Yandex-схеме колонки (`markup_tactics.tactic_name`,
+  `markup_tactics.tender_id`, старый shape `markup_parameters`) →
+  pre-existing broken (как clone/costImport). Убран экспорт из
+  `hooks/index.ts` и поле `tactics` из `MarkupConstructorContext`.
+
+0 supabase во всём `src/pages/Admin/MarkupConstructor`. Backend не
+трогали (reuse существующих markup-эндпоинтов). `tsc` 0, `vite build` ✓.
+
 ## P5.3 — Commerce DONE (verified; без нового backend — reuse)
 
 `src/pages/Commerce/hooks/useCommerceData.ts` (7 supabase) +

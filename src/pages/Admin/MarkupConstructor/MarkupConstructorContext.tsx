@@ -1,10 +1,8 @@
 import React, { createContext, useContext } from 'react';
 import { FormInstance } from 'antd';
-import { useMarkupTactics, useMarkupParameters, useMarkupSequences, usePricingDistribution } from './hooks';
+import { useMarkupParameters, useMarkupSequences, usePricingDistribution } from './hooks';
 
 interface MarkupConstructorContextType {
-  // Tactics hook
-  tactics: ReturnType<typeof useMarkupTactics>;
   // Parameters hook
   parameters: ReturnType<typeof useMarkupParameters>;
   // Sequences hook

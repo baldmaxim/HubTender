@@ -1,6 +1,12 @@
 import { useState, useCallback } from 'react';
 import { message } from 'antd';
-import { supabase, MarkupParameter } from '../../../../lib/supabase';
+import type { MarkupParameter } from '../../../../lib/supabase';
+import {
+  listActiveMarkupParameters,
+  createMarkupParameter,
+  updateMarkupParameter,
+  deleteMarkupParameter,
+} from '../../../../lib/api/markup';
 
 /**
  * Хук для работы с глобальным справочником параметров наценок
@@ -19,13 +25,7 @@ export const useMarkupParameters = () => {
   const fetchParameters = useCallback(async () => {
     setLoadingParameters(true);
     try {
-      const { data, error } = await supabase
-        .from('markup_parameters')
-        .select('*')
-        .eq('is_active', true)
-        .order('order_num', { ascending: true });
-
-      if (error) throw error;
+      const data = await listActiveMarkupParameters();
       setMarkupParameters(data || []);
     } catch (error) {
       console.error('Error fetching parameters:', error);
@@ -42,32 +42,23 @@ export const useMarkupParameters = () => {
     default_value?: number;
   }) => {
     try {
-      // Получаем максимальный order_num
-      const { data: existing } = await supabase
-        .from('markup_parameters')
-        .select('order_num')
-        .order('order_num', { ascending: false })
-        .limit(1);
+      // Получаем максимальный order_num по актуальному списку с сервера
+      const existing = await listActiveMarkupParameters();
+      const maxOrder = existing.reduce((m, p) => Math.max(m, p.order_num ?? 0), 0);
 
-      const maxOrder = existing && existing.length > 0 ? existing[0].order_num : 0;
+      await createMarkupParameter({
+        key: parameterData.key,
+        label: parameterData.label,
+        default_value: parameterData.default_value || 0,
+        is_active: true,
+        order_num: maxOrder + 1,
+      });
 
-      const { data, error } = await supabase
-        .from('markup_parameters')
-        .insert({
-          key: parameterData.key,
-          label: parameterData.label,
-          default_value: parameterData.default_value || 0,
-          is_active: true,
-          order_num: maxOrder + 1,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
+      const refreshed = await listActiveMarkupParameters();
+      setMarkupParameters(refreshed);
 
       message.success('Параметр наценки добавлен');
-      setMarkupParameters(prev => [...prev, data]);
-      return data;
+      return refreshed.find(p => p.key === parameterData.key);
     } catch (error) {
       console.error('Error adding parameter:', error);
       message.error('Ошибка добавления параметра наценки');
@@ -78,12 +69,7 @@ export const useMarkupParameters = () => {
   // Удаление параметра из глобального справочника
   const deleteParameter = useCallback(async (parameterId: string) => {
     try {
-      const { error } = await supabase
-        .from('markup_parameters')
-        .delete()
-        .eq('id', parameterId);
-
-      if (error) throw error;
+      await deleteMarkupParameter(parameterId);
 
       message.success('Параметр наценки удален');
       setMarkupParameters(prev => prev.filter(p => p.id !== parameterId));
@@ -99,12 +85,10 @@ export const useMarkupParameters = () => {
     updates: Partial<MarkupParameter>
   ) => {
     try {
-      const { error } = await supabase
-        .from('markup_parameters')
-        .update(updates)
-        .eq('id', parameterId);
-
-      if (error) throw error;
+      await updateMarkupParameter(
+        parameterId,
+        updates as Partial<Pick<MarkupParameter, 'label' | 'default_value' | 'order_num' | 'is_active'>>,
+      );
 
       setMarkupParameters(prev =>
         prev.map(p => (p.id === parameterId ? { ...p, ...updates } : p))

@@ -1,6 +1,10 @@
 import { useState, useCallback } from 'react';
 import { message } from 'antd';
-import { supabase, PricingDistribution, PricingDistributionInsert } from '../../../../lib/supabase';
+import type { PricingDistribution, PricingDistributionInsert } from '../../../../lib/supabase';
+import {
+  getTenderPricingDistribution,
+  upsertTenderPricingDistribution,
+} from '../../../../lib/api/markup';
 
 export const usePricingDistribution = () => {
   const [pricingDistribution, setPricingDistribution] = useState<PricingDistribution | null>(null);
@@ -15,13 +19,7 @@ export const usePricingDistribution = () => {
 
     setLoadingPricing(true);
     try {
-      const { data, error } = await supabase
-        .from('tender_pricing_distribution')
-        .select('*')
-        .eq('tender_id', tenderId)
-        .maybeSingle();
-
-      if (error) throw error;
+      const data = await getTenderPricingDistribution(tenderId);
       setPricingDistribution(data);
     } catch (error) {
       console.error('Error fetching pricing distribution:', error);
@@ -37,36 +35,11 @@ export const usePricingDistribution = () => {
   ) => {
     setSavingPricing(true);
     try {
-      // Проверяем существование записи
-      const { data: existing } = await supabase
-        .from('tender_pricing_distribution')
-        .select('id')
-        .eq('tender_id', tenderId)
-        .maybeSingle();
-
-      let result;
-      if (existing) {
-        // Обновляем существующую запись
-        const { data, error } = await supabase
-          .from('tender_pricing_distribution')
-          .update(distributionData)
-          .eq('tender_id', tenderId)
-          .select()
-          .single();
-
-        if (error) throw error;
-        result = data;
-      } else {
-        // Создаем новую запись
-        const { data, error } = await supabase
-          .from('tender_pricing_distribution')
-          .insert({ ...distributionData, tender_id: tenderId })
-          .select()
-          .single();
-
-        if (error) throw error;
-        result = data;
-      }
+      // Go-эндпоинт делает upsert по tender_id атомарно на сервере.
+      const result = await upsertTenderPricingDistribution({
+        ...distributionData,
+        tender_id: tenderId,
+      });
 
       setPricingDistribution(result);
       message.success('Распределение ценообразования сохранено');
