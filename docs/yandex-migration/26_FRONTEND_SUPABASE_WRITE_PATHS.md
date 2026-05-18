@@ -319,6 +319,16 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — ClientPositions/usePositionDelete DONE (verified; новый bulk-delete)
+
+`src/pages/ClientPositions/hooks/usePositionDelete.ts` (2 supabase → 0):
+двухшаговое батч-удаление (boq_items по client_position_id → client_positions
+по id) заменено новым `POST /api/v1/positions/bulk-delete` (repo
+`BulkDeletePositions` + service + handler + route) — одна pgx.Tx,
+`= ANY($1::uuid[])`, без батчинга/audit (raw delete, как было). Сервис
+инвалидирует tender:overview + positions:with_costs + tender-list.
+`go build` 0, `go test ./internal/services` ok, `tsc` 0, `vite build` ✓.
+
 ## P5.3 — Library ПОЛНОСТЬЮ закрыт (InsertTemplateIntoPositionModal, reuse)
 
 `src/pages/Library/InsertTemplateIntoPositionModal.tsx` (2 supabase → 0):

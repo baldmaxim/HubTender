@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -199,6 +200,37 @@ func (r *PositionRepo) CreatePosition(ctx context.Context, in CreatePositionInpu
 		return nil, fmt.Errorf("positionRepo.CreatePosition: scan: %w", err)
 	}
 	return p, nil
+}
+
+// BulkDeletePositions deletes the given client_positions and all their
+// boq_items in one transaction (replicating the legacy two-step batched
+// delete in usePositionDelete — raw delete, no audit, same as before).
+func (r *PositionRepo) BulkDeletePositions(ctx context.Context, positionIDs []string) error {
+	if len(positionIDs) == 0 {
+		return nil
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("positionRepo.BulkDeletePositions: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM public.boq_items WHERE client_position_id = ANY($1::uuid[])`,
+		positionIDs,
+	); err != nil {
+		return fmt.Errorf("positionRepo.BulkDeletePositions: delete boq_items: %w", err)
+	}
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM public.client_positions WHERE id = ANY($1::uuid[])`,
+		positionIDs,
+	); err != nil {
+		return fmt.Errorf("positionRepo.BulkDeletePositions: delete positions: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("positionRepo.BulkDeletePositions: commit: %w", err)
+	}
+	return nil
 }
 
 // UpdatePosition applies non-nil fields from in to the position with the

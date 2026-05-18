@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
-import { supabase } from '../../../lib/supabase';
+import { bulkDeletePositions } from '../../../lib/api/positions';
 import { pluralize } from '../../../utils/pluralize';
 
 interface ClearModesCallback {
@@ -63,27 +63,9 @@ export const usePositionDelete = (
         setLoading(true);
         try {
           const positionIds = Array.from(selectedPositionDeleteIds);
-          const batchSize = 100;
 
-          // 1. Удалить boq_items батчами
-          for (let i = 0; i < positionIds.length; i += batchSize) {
-            const batch = positionIds.slice(i, i + batchSize);
-            const { error } = await supabase
-              .from('boq_items')
-              .delete()
-              .in('client_position_id', batch);
-            if (error) throw error;
-          }
-
-          // 2. Удалить сами позиции батчами
-          for (let i = 0; i < positionIds.length; i += batchSize) {
-            const batch = positionIds.slice(i, i + batchSize);
-            const { error } = await supabase
-              .from('client_positions')
-              .delete()
-              .in('id', batch);
-            if (error) throw error;
-          }
+          // Go: одна транзакция (delete boq_items → delete client_positions).
+          await bulkDeletePositions(positionIds, selectedTenderId);
 
           // 3. Сброс состояния и обновление таблицы
           setSelectedPositionDeleteIds(new Set());

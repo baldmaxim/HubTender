@@ -14,6 +14,7 @@ type positionRepoer interface {
 	GetPositionByID(ctx context.Context, id string) (*repository.PositionRow, error)
 	CreatePosition(ctx context.Context, in repository.CreatePositionInput) (*repository.PositionRow, error)
 	UpdatePosition(ctx context.Context, id string, in repository.UpdatePositionInput) (*repository.PositionRow, error)
+	BulkDeletePositions(ctx context.Context, positionIDs []string) error
 }
 
 // PositionService provides access to client_positions data.
@@ -78,4 +79,22 @@ func (s *PositionService) UpdatePosition(
 	s.cache.Delete("tender:overview:" + tenderID)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return p, nil
+}
+
+// BulkDeletePositions deletes positions (+their boq_items) atomically and
+// invalidates the affected tender's caches.
+func (s *PositionService) BulkDeletePositions(
+	ctx context.Context,
+	positionIDs []string,
+	tenderID string,
+) error {
+	if err := s.repo.BulkDeletePositions(ctx, positionIDs); err != nil {
+		return fmt.Errorf("positionService.BulkDeletePositions: %w", err)
+	}
+	if tenderID != "" {
+		s.cache.Delete("tender:overview:" + tenderID)
+		s.cache.Delete("positions:with_costs:" + tenderID)
+	}
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	return nil
 }

@@ -20,6 +20,7 @@ type positionWriteServicer interface {
 	GetPositionByID(ctx context.Context, id string) (*repository.PositionRow, error)
 	CreatePosition(ctx context.Context, in repository.CreatePositionInput) (*repository.PositionRow, error)
 	UpdatePosition(ctx context.Context, id string, in repository.UpdatePositionInput, tenderID string) (*repository.PositionRow, error)
+	BulkDeletePositions(ctx context.Context, positionIDs []string, tenderID string) error
 }
 
 // PositionWriteHandler handles mutating position endpoints.
@@ -159,4 +160,33 @@ func (h *PositionWriteHandler) UpdatePosition(w http.ResponseWriter, r *http.Req
 
 	setResourceETag(w, updated.ID, updated.UpdatedAt)
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: updated})
+}
+
+// bulkDeletePositionsReq is the request body for POST /api/v1/positions/bulk-delete.
+type bulkDeletePositionsReq struct {
+	PositionIDs []string `json:"position_ids" validate:"required,min=1,dive,uuid"`
+	TenderID    string   `json:"tender_id" validate:"omitempty,uuid"`
+}
+
+// BulkDeletePositions handles POST /api/v1/positions/bulk-delete — deletes the
+// given client_positions and their boq_items atomically.
+func (h *PositionWriteHandler) BulkDeletePositions(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var req bulkDeletePositionsReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+	if err := h.svc.BulkDeletePositions(r.Context(), req.PositionIDs, req.TenderID); err != nil {
+		apierr.InternalError("failed to delete positions").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

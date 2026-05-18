@@ -48,3 +48,18 @@ export async function fetchPositionsWithCosts(tenderId: string): Promise<Positio
   );
   return res.data ?? [];
 }
+
+/**
+ * Атомарно удалить позиции заказчика вместе с их boq_items.
+ * Go: POST /api/v1/positions/bulk-delete — одна pgx.Tx
+ * (delete boq_items → delete client_positions).
+ */
+export async function bulkDeletePositions(
+  positionIds: string[],
+  tenderId?: string | null,
+): Promise<void> {
+  await apiFetch<undefined>('/api/v1/positions/bulk-delete', {
+    method: 'POST',
+    body: JSON.stringify({ position_ids: positionIds, tender_id: tenderId ?? undefined }),
+  });
+}

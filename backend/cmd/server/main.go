@@ -259,6 +259,7 @@ func main() {
 		r.Patch("/api/v1/tenders/{id}", tenderWH.UpdateTender)
 
 		r.Post("/api/v1/positions", positionWH.CreatePosition)
+		r.Post("/api/v1/positions/bulk-delete", positionWH.BulkDeletePositions)
 		r.Patch("/api/v1/positions/{id}", positionWH.UpdatePosition)
 
 		r.Post("/api/v1/tenders/{id}/positions/{posId}/items", boqWH.CreateBoqItem)
