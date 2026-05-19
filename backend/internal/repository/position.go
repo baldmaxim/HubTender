@@ -317,6 +317,75 @@ func (r *PositionRepo) BulkDeletePositions(ctx context.Context, positionIDs []st
 	return nil
 }
 
+// UpdatePositionsNote sets manual_note on every given position (single or
+// bulk paste of "примечание ГП").
+func (r *PositionRepo) UpdatePositionsNote(ctx context.Context, ids []string, note string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := r.pool.Exec(ctx,
+		`UPDATE public.client_positions SET manual_note = $2, updated_at = NOW()
+		 WHERE id = ANY($1::uuid[])`,
+		ids, note,
+	)
+	if err != nil {
+		return fmt.Errorf("positionRepo.UpdatePositionsNote: %w", err)
+	}
+	return nil
+}
+
+// ClearPositionsBoq deletes all boq_items of the given positions and zeroes
+// their totals — one tx (replicates the legacy delete-then-zero two-step).
+func (r *PositionRepo) ClearPositionsBoq(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("positionRepo.ClearPositionsBoq: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM public.boq_items WHERE client_position_id = ANY($1::uuid[])`,
+		ids,
+	); err != nil {
+		return fmt.Errorf("positionRepo.ClearPositionsBoq: delete boq_items: %w", err)
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE public.client_positions
+		 SET total_material = 0, total_works = 0, updated_at = NOW()
+		 WHERE id = ANY($1::uuid[])`,
+		ids,
+	); err != nil {
+		return fmt.Errorf("positionRepo.ClearPositionsBoq: zero totals: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("positionRepo.ClearPositionsBoq: commit: %w", err)
+	}
+	return nil
+}
+
+// ShiftPositionsLevel adds delta to hierarchy_level (floored at 0) for the
+// given positions, in a single statement (replaces the legacy
+// select-then-loop in handleBulkLevelChange).
+func (r *PositionRepo) ShiftPositionsLevel(ctx context.Context, ids []string, delta int) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := r.pool.Exec(ctx,
+		`UPDATE public.client_positions
+		 SET hierarchy_level = GREATEST(COALESCE(hierarchy_level, 0) + $2, 0),
+		     updated_at = NOW()
+		 WHERE id = ANY($1::uuid[])`,
+		ids, delta,
+	)
+	if err != nil {
+		return fmt.Errorf("positionRepo.ShiftPositionsLevel: %w", err)
+	}
+	return nil
+}
+
 // UpdatePosition applies non-nil fields from in to the position with the
 // given id and returns the updated row.
 func (r *PositionRepo) UpdatePosition(ctx context.Context, id string, in UpdatePositionInput) (*PositionRow, error) {

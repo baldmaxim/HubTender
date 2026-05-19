@@ -261,6 +261,9 @@ func main() {
 		r.Post("/api/v1/positions", positionWH.CreatePosition)
 		r.Post("/api/v1/positions/bulk-delete", positionWH.BulkDeletePositions)
 		r.Post("/api/v1/positions/additional", positionWH.CreateAdditionalPosition)
+		r.Patch("/api/v1/positions/note", positionWH.UpdatePositionsNote)
+		r.Post("/api/v1/positions/clear-boq", positionWH.ClearPositionsBoq)
+		r.Patch("/api/v1/positions/level", positionWH.ShiftPositionsLevel)
 		r.Patch("/api/v1/positions/{id}", positionWH.UpdatePosition)
 
 		r.Post("/api/v1/tenders/{id}/positions/{posId}/items", boqWH.CreateBoqItem)

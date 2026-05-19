@@ -16,6 +16,9 @@ type positionRepoer interface {
 	UpdatePosition(ctx context.Context, id string, in repository.UpdatePositionInput) (*repository.PositionRow, error)
 	BulkDeletePositions(ctx context.Context, positionIDs []string) error
 	CreateAdditionalPosition(ctx context.Context, in repository.CreateAdditionalPositionInput) (string, error)
+	UpdatePositionsNote(ctx context.Context, ids []string, note string) error
+	ClearPositionsBoq(ctx context.Context, ids []string) error
+	ShiftPositionsLevel(ctx context.Context, ids []string, delta int) error
 }
 
 // PositionService provides access to client_positions data.
@@ -114,4 +117,45 @@ func (s *PositionService) CreateAdditionalPosition(
 	s.cache.Delete("positions:with_costs:" + in.TenderID)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return id, nil
+}
+
+func (s *PositionService) invalidateTender(tenderID string) {
+	if tenderID != "" {
+		s.cache.Delete("tender:overview:" + tenderID)
+		s.cache.Delete("positions:with_costs:" + tenderID)
+	}
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+}
+
+// UpdatePositionsNote sets manual_note on the given positions.
+func (s *PositionService) UpdatePositionsNote(
+	ctx context.Context, ids []string, note, tenderID string,
+) error {
+	if err := s.repo.UpdatePositionsNote(ctx, ids, note); err != nil {
+		return fmt.Errorf("positionService.UpdatePositionsNote: %w", err)
+	}
+	s.invalidateTender(tenderID)
+	return nil
+}
+
+// ClearPositionsBoq deletes boq_items + zeroes totals for the given positions.
+func (s *PositionService) ClearPositionsBoq(
+	ctx context.Context, ids []string, tenderID string,
+) error {
+	if err := s.repo.ClearPositionsBoq(ctx, ids); err != nil {
+		return fmt.Errorf("positionService.ClearPositionsBoq: %w", err)
+	}
+	s.invalidateTender(tenderID)
+	return nil
+}
+
+// ShiftPositionsLevel shifts hierarchy_level by delta for the given positions.
+func (s *PositionService) ShiftPositionsLevel(
+	ctx context.Context, ids []string, delta int, tenderID string,
+) error {
+	if err := s.repo.ShiftPositionsLevel(ctx, ids, delta); err != nil {
+		return fmt.Errorf("positionService.ShiftPositionsLevel: %w", err)
+	}
+	s.invalidateTender(tenderID)
+	return nil
 }

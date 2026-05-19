@@ -69,6 +69,49 @@ export async function createAdditionalPosition(input: {
   return res.data.id;
 }
 
+/** Установить manual_note на одну/несколько позиций (вставка примечания ГП). */
+export async function updatePositionsNote(
+  positionIds: string[],
+  manualNote: string,
+  tenderId?: string | null,
+): Promise<void> {
+  await apiFetch<undefined>('/api/v1/positions/note', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      position_ids: positionIds,
+      manual_note: manualNote,
+      tender_id: tenderId ?? undefined,
+    }),
+  });
+}
+
+/** Удалить boq_items позиций и обнулить их итоги (одна pgx.Tx). */
+export async function clearPositionsBoq(
+  positionIds: string[],
+  tenderId?: string | null,
+): Promise<void> {
+  await apiFetch<undefined>('/api/v1/positions/clear-boq', {
+    method: 'POST',
+    body: JSON.stringify({ position_ids: positionIds, tender_id: tenderId ?? undefined }),
+  });
+}
+
+/** Сдвинуть hierarchy_level на delta (пол 0) для позиций. */
+export async function shiftPositionsLevel(
+  positionIds: string[],
+  delta: number,
+  tenderId?: string | null,
+): Promise<void> {
+  await apiFetch<undefined>('/api/v1/positions/level', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      position_ids: positionIds,
+      delta,
+      tender_id: tenderId ?? undefined,
+    }),
+  });
+}
+
 /**
  * Атомарно удалить позиции заказчика вместе с их boq_items.
  * Go: POST /api/v1/positions/bulk-delete — одна pgx.Tx

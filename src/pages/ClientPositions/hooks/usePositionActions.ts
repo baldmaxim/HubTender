@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
-import { supabase, type ClientPosition, type Tender } from '../../../lib/supabase';
+import type { ClientPosition, Tender } from '../../../lib/supabase';
+import {
+  updatePositionsNote,
+  clearPositionsBoq,
+  shiftPositionsLevel,
+  bulkDeletePositions,
+} from '../../../lib/api/positions';
 import { copyBoqItems } from '../../../utils/copyBoqItems';
 import { exportPositionsToExcel } from '../../../utils/excel';
 import { pluralize } from '../../../utils/pluralize';
@@ -170,12 +176,7 @@ export const usePositionActions = (
 
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('client_positions')
-        .update({ manual_note: copiedNoteValue })
-        .eq('id', targetPositionId);
-
-      if (error) throw error;
+      await updatePositionsNote([targetPositionId], copiedNoteValue, selectedTenderId);
 
       // Сбросить состояние
       setCopiedNoteValue(null);
@@ -203,20 +204,13 @@ export const usePositionActions = (
     const results = { success: 0, failed: 0 };
 
     try {
-      for (const targetId of selectedTargetIds) {
-        try {
-          const { error } = await supabase
-            .from('client_positions')
-            .update({ manual_note: copiedNoteValue })
-            .eq('id', targetId);
-
-          if (error) throw error;
-          results.success++;
-        } catch (error) {
-          console.error(`Failed to paste note to ${targetId}:`, error);
-          results.failed++;
-        }
-      }
+      // Go: один атомарный батч-update (= ANY(uuid[])) вместо цикла.
+      await updatePositionsNote(
+        Array.from(selectedTargetIds),
+        copiedNoteValue,
+        selectedTenderId,
+      );
+      results.success = selectedTargetIds.size;
 
       const total = selectedTargetIds.size;
       if (results.failed === 0) {
@@ -294,28 +288,8 @@ export const usePositionActions = (
         setIsBulkDeleting(true);
         setLoading(true);
         try {
-          const positionIds = Array.from(selectedDeleteIds);
-          const batchSize = 100;
-
-          // 1. Удалить boq_items батчами
-          for (let i = 0; i < positionIds.length; i += batchSize) {
-            const batch = positionIds.slice(i, i + batchSize);
-            const { error } = await supabase
-              .from('boq_items')
-              .delete()
-              .in('client_position_id', batch);
-            if (error) throw error;
-          }
-
-          // 2. Обнулить totals батчами
-          for (let i = 0; i < positionIds.length; i += batchSize) {
-            const batch = positionIds.slice(i, i + batchSize);
-            const { error } = await supabase
-              .from('client_positions')
-              .update({ total_material: 0, total_works: 0 })
-              .in('id', batch);
-            if (error) throw error;
-          }
+          // Go: одна pgx.Tx (delete boq_items → обнулить totals).
+          await clearPositionsBoq(Array.from(selectedDeleteIds), selectedTenderId);
 
           // 3. Сброс состояния и обновление таблицы
           setSelectedDeleteIds(new Set());
@@ -358,17 +332,7 @@ export const usePositionActions = (
       onOk: async () => {
         setLoading(true);
         try {
-          const { error: boqError } = await supabase
-            .from('boq_items')
-            .delete()
-            .eq('client_position_id', positionId);
-          if (boqError) throw boqError;
-
-          const { error: updateError } = await supabase
-            .from('client_positions')
-            .update({ total_material: 0, total_works: 0 })
-            .eq('id', positionId);
-          if (updateError) throw updateError;
+          await clearPositionsBoq([positionId], selectedTenderId);
 
           if (selectedTenderId) {
             await fetchClientPositions(selectedTenderId);
@@ -404,21 +368,8 @@ export const usePositionActions = (
       onOk: async () => {
         setLoading(true);
         try {
-          // Сначала удаляем все boq_items для этой позиции
-          const { error: boqError } = await supabase
-            .from('boq_items')
-            .delete()
-            .eq('client_position_id', positionId);
-
-          if (boqError) throw boqError;
-
-          // Затем удаляем саму позицию
-          const { error: posError } = await supabase
-            .from('client_positions')
-            .delete()
-            .eq('id', positionId);
-
-          if (posError) throw posError;
+          // Go: одна pgx.Tx (delete boq_items → delete client_positions).
+          await bulkDeletePositions([positionId], selectedTenderId);
 
           message.success('ДОП работа успешно удалена');
 
@@ -485,28 +436,12 @@ export const usePositionActions = (
         setIsLevelChanging(true);
         setLoading(true);
         try {
-          const positionIds = Array.from(selectedLevelChangeIds);
-
-          // Загружаем текущие уровни позиций
-          const { data: positions, error: fetchError } = await supabase
-            .from('client_positions')
-            .select('id, hierarchy_level')
-            .in('id', positionIds);
-
-          if (fetchError) throw fetchError;
-
-          // Обновляем каждую позицию, понижая уровень на 1 (минимум 0)
-          for (const pos of positions || []) {
-            const currentLevel = pos.hierarchy_level || 0;
-            const newLevel = currentLevel + 1;
-
-            const { error } = await supabase
-              .from('client_positions')
-              .update({ hierarchy_level: newLevel })
-              .eq('id', pos.id);
-
-            if (error) throw error;
-          }
+          // Go: один statement hierarchy_level = GREATEST(coalesce+1,0).
+          await shiftPositionsLevel(
+            Array.from(selectedLevelChangeIds),
+            1,
+            selectedTenderId,
+          );
 
           setSelectedLevelChangeIds(new Set());
           setIsLevelChangeMode(false);

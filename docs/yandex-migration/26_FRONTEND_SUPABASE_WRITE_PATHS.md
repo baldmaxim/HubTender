@@ -319,6 +319,25 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — ClientPositions/usePositionActions DONE (verified; 3 новых + reuse)
+
+`src/pages/ClientPositions/hooks/usePositionActions.ts` (10 supabase → 0):
+6 операций → Go. 3 новых эндпоинта (repo+service+handler+routes):
+
+| Эндпоинт | Заменяет |
+|---|---|
+| `PATCH /api/v1/positions/note` | `client_positions.update(manual_note)` (paste + bulk-paste примечания) |
+| `POST /api/v1/positions/clear-boq` | tx: delete boq_items + zero totals (bulk + single «очистить») |
+| `PATCH /api/v1/positions/level` | `hierarchy_level = GREATEST(coalesce+delta,0)` (понижение уровня; select+loop → 1 statement) |
+
+`handleDeleteAdditionalPosition` → reuse `bulkDeletePositions([id])`.
+`copyBoqItems`/`exportPositionsToExcel` остаются (свои домены, не
+supabase-вызовы в этом файле). ⚠ Поведенческое: bulk-paste-note был
+per-id с подсчётом success/failed; теперь атомарный батч (all-or-nothing)
+— на успех success=total. Все батч-циклы (batchSize 100) убраны →
+`= ANY($1::uuid[])`. `go build` 0, `go test ./internal/services` ok,
+`tsc` 0, `vite build` ✓.
+
 ## P5.3 — ClientPositions/AddAdditionalPositionModal DONE (verified)
 
 `src/pages/ClientPositions/AddAdditionalPositionModal.tsx` (4 supabase → 0):

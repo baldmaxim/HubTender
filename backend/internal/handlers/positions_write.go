@@ -22,6 +22,9 @@ type positionWriteServicer interface {
 	UpdatePosition(ctx context.Context, id string, in repository.UpdatePositionInput, tenderID string) (*repository.PositionRow, error)
 	BulkDeletePositions(ctx context.Context, positionIDs []string, tenderID string) error
 	CreateAdditionalPosition(ctx context.Context, in repository.CreateAdditionalPositionInput) (string, error)
+	UpdatePositionsNote(ctx context.Context, ids []string, note, tenderID string) error
+	ClearPositionsBoq(ctx context.Context, ids []string, tenderID string) error
+	ShiftPositionsLevel(ctx context.Context, ids []string, delta int, tenderID string) error
 }
 
 // PositionWriteHandler handles mutating position endpoints.
@@ -234,4 +237,90 @@ func (h *PositionWriteHandler) CreateAdditionalPosition(w http.ResponseWriter, r
 		return
 	}
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: map[string]string{"id": id}})
+}
+
+// updatePositionsNoteReq is the body for PATCH /api/v1/positions/note.
+type updatePositionsNoteReq struct {
+	PositionIDs []string `json:"position_ids" validate:"required,min=1,dive,uuid"`
+	ManualNote  string   `json:"manual_note"`
+	TenderID    string   `json:"tender_id" validate:"omitempty,uuid"`
+}
+
+// UpdatePositionsNote handles PATCH /api/v1/positions/note.
+func (h *PositionWriteHandler) UpdatePositionsNote(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var req updatePositionsNoteReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+	if err := h.svc.UpdatePositionsNote(r.Context(), req.PositionIDs, req.ManualNote, req.TenderID); err != nil {
+		apierr.InternalError("failed to update positions note").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// clearPositionsBoqReq is the body for POST /api/v1/positions/clear-boq.
+type clearPositionsBoqReq struct {
+	PositionIDs []string `json:"position_ids" validate:"required,min=1,dive,uuid"`
+	TenderID    string   `json:"tender_id" validate:"omitempty,uuid"`
+}
+
+// ClearPositionsBoq handles POST /api/v1/positions/clear-boq.
+func (h *PositionWriteHandler) ClearPositionsBoq(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var req clearPositionsBoqReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+	if err := h.svc.ClearPositionsBoq(r.Context(), req.PositionIDs, req.TenderID); err != nil {
+		apierr.InternalError("failed to clear positions boq").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// shiftPositionsLevelReq is the body for PATCH /api/v1/positions/level.
+type shiftPositionsLevelReq struct {
+	PositionIDs []string `json:"position_ids" validate:"required,min=1,dive,uuid"`
+	Delta       int      `json:"delta" validate:"required"`
+	TenderID    string   `json:"tender_id" validate:"omitempty,uuid"`
+}
+
+// ShiftPositionsLevel handles PATCH /api/v1/positions/level.
+func (h *PositionWriteHandler) ShiftPositionsLevel(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var req shiftPositionsLevelReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+	if err := h.svc.ShiftPositionsLevel(r.Context(), req.PositionIDs, req.Delta, req.TenderID); err != nil {
+		apierr.InternalError("failed to shift positions level").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
