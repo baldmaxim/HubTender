@@ -7,6 +7,9 @@ import {
   type CurrencyType,
   type DeliveryPriceType,
 } from '../../../lib/supabase';
+import { fetchTenders as apiFetchTenders } from '../../../lib/api/tenders';
+import { fetchPositionsWithCosts } from '../../../lib/api/positions';
+import { listAllBoqItemsForTender, getTenderById } from '../../../lib/api/fi';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import { getErrorMessage } from '../../../utils/errors';
 import {
@@ -32,91 +35,21 @@ type RawBoqItem = {
 };
 
 async function loadAllPositions(tenderId: string): Promise<ClientPosition[]> {
-  const all: ClientPosition[] = [];
-  let from = 0;
-
-  for (;;) {
-    const { data, error } = await supabase
-      .from('client_positions')
-      .select('*')
-      .eq('tender_id', tenderId)
-      .order('position_number', { ascending: true })
-      .range(from, from + 999);
-
-    if (error) {
-      throw error;
-    }
-
-    if (!data || data.length === 0) {
-      break;
-    }
-
-    all.push(...data);
-
-    if (data.length < 1000) {
-      break;
-    }
-
-    from += 1000;
-  }
-
-  return all;
+  // Go: /tenders/:id/positions/with-costs (ORDER BY position_number,id);
+  // пагинация больше не нужна — сервер отдаёт всё.
+  const rows = await fetchPositionsWithCosts(tenderId);
+  return rows as unknown as ClientPosition[];
 }
 
 async function loadAllBoqItems(tenderId: string): Promise<RawBoqItem[]> {
-  const all: RawBoqItem[] = [];
-  let from = 0;
-
-  for (;;) {
-    const { data, error } = await supabase
-      .from('boq_items')
-      .select(`
-        client_position_id,
-        boq_item_type,
-        total_amount,
-        quantity,
-        unit_rate,
-        currency_type,
-        delivery_price_type,
-        delivery_amount,
-        consumption_coefficient,
-        parent_work_item_id
-      `)
-      .eq('tender_id', tenderId)
-      .range(from, from + 999);
-
-    if (error) {
-      throw error;
-    }
-
-    if (!data || data.length === 0) {
-      break;
-    }
-
-    all.push(...(data as RawBoqItem[]));
-
-    if (data.length < 1000) {
-      break;
-    }
-
-    from += 1000;
-  }
-
-  return all;
+  // Go: /tenders/:id/boq-items-flat — все boq_items тендера (суперсет
+  // нужных полей; порядок не важен — агрегируется по позициям).
+  const rows = await listAllBoqItemsForTender(tenderId);
+  return rows as unknown as RawBoqItem[];
 }
 
 async function loadTenderById(tenderId: string): Promise<Tender | null> {
-  const { data, error } = await supabase
-    .from('tenders')
-    .select('*')
-    .eq('id', tenderId)
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return (data as Tender) || null;
+  return (await getTenderById(tenderId)) ?? null;
 }
 
 function getCurrencyRate(
@@ -207,15 +140,7 @@ export const useClientPositions = () => {
 
   const fetchTenders = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
+      const data = await apiFetchTenders();
       setTenders((data as Tender[]) || []);
     } catch (error) {
       message.error('Ошибка загрузки тендеров: ' + getErrorMessage(error));

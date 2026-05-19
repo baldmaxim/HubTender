@@ -319,6 +319,27 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — ClientPositions/useClientPositions DONE (verified; reuse, без backend)
+
+`src/pages/ClientPositions/hooks/useClientPositions.ts`: 4 read-callsite →
+0 (остаются 2 realtime — P5.5):
+
+| Было | Стало |
+|---|---|
+| `loadAllPositions` (client_positions paged) | `fetchPositionsWithCosts` (ORDER BY position_number,id) |
+| `loadAllBoqItems` (boq_items paged) | `listAllBoqItemsForTender` (суперсет полей; агрегация по позициям — порядок не важен) |
+| `loadTenderById` (tenders by id) | `getTenderById` |
+| `fetchTenders` (tenders list) | `fetchTenders` (tenders.ts, импорт `apiFetchTenders`) |
+
+Пагинация (range 1000) удалена. Вся calc-логика
+(`calculateBoqItemAmount`/`buildPositionStats`/`computeLeafPositions`,
+SWR-кэш) без изменений. Бэкенд не трогали (pure reuse). **Остаток в
+файле: 2 — `supabase.channel`/`removeChannel` (gated Supabase Realtime
+fallback, `wsActive`), P5.5-scope** (тот же паттерн, что
+FinancialIndicators.tsx и др.). `tsc` 0, `vite build` ✓.
+**Весь `src/pages/ClientPositions` теперь без supabase-`from/rpc`
+(остаются только gated realtime-каналы → P5.5).**
+
 ## P5.3 — ClientPositions/useMassBoqImport DONE (verified; reuse + 1 новый)
 
 `src/pages/ClientPositions/hooks/useMassBoqImport.ts` (9 supabase → 0).
