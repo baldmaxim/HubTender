@@ -252,6 +252,7 @@ func main() {
 		r.Get("/api/v1/tenders", tenderH.GetTenders)
 		r.Get("/api/v1/tenders/{id}/overview", tenderH.GetTenderOverview)
 		r.Get("/api/v1/tenders/{id}/positions", positionH.GetPositions)
+		r.Get("/api/v1/positions/boq-preview", positionH.GetBoqPreview)
 		r.Get("/api/v1/tenders/{id}/positions/{posId}/items", boqH.GetBoqItems)
 
 		// Slice 2: writes with optimistic concurrency.

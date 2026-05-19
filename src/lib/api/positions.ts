@@ -69,6 +69,28 @@ export async function createAdditionalPosition(input: {
   return res.data.id;
 }
 
+export interface BoqPreviewRow {
+  id: string;
+  client_position_id: string;
+  boq_item_type: string | null;
+  quantity: number | null;
+  total_amount: number | null;
+  work_names: { name: string } | null;
+  material_names: { name: string } | null;
+}
+
+/** Существующие boq_items (subset + name embeds) по позициям для предпросмотра. */
+export async function listBoqPreviewByPositions(
+  positionIds: string[],
+): Promise<BoqPreviewRow[]> {
+  if (positionIds.length === 0) return [];
+  const qs = encodeURIComponent(positionIds.join(','));
+  const res = await apiFetch<{ data: BoqPreviewRow[] }>(
+    `/api/v1/positions/boq-preview?position_ids=${qs}`,
+  );
+  return res.data ?? [];
+}
+
 /** Установить manual_note на одну/несколько позиций (вставка примечания ГП). */
 export async function updatePositionsNote(
   positionIds: string[],

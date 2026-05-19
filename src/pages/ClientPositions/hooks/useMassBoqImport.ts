@@ -1,8 +1,17 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
 import { apiFetch } from '../../../lib/api/client';
+import {
+  listWorkNames,
+  listMaterialNames,
+  listActiveUnits,
+  createWorkName,
+  createMaterialName,
+} from '../../../lib/api/nomenclatures';
+import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
+import { fetchPositionsWithCosts, listBoqPreviewByPositions } from '../../../lib/api/positions';
+import { getTenderById } from '../../../lib/api/fi';
 import {
   ParsedBoqItem,
   PositionUpdateData,
@@ -19,35 +28,6 @@ import {
   calculateTotalAmount,
 } from '../utils';
 import { getErrorMessage } from '../../../utils/errors';
-
-const PAGE_SIZE = 1000;
-
-const fetchAllPages = async <T>(
-  queryFactory: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
-): Promise<T[]> => {
-  const items: T[] = [];
-  let from = 0;
-
-  for (;;) {
-    const to = from + PAGE_SIZE - 1;
-    const { data, error } = await queryFactory(from, to);
-
-    if (error) {
-      throw error;
-    }
-
-    const batch = data || [];
-    items.push(...batch);
-
-    if (batch.length < PAGE_SIZE) {
-      break;
-    }
-
-    from += PAGE_SIZE;
-  }
-
-  return items;
-};
 
 // ===========================
 // ОСНОВНОЙ ХУК
@@ -86,48 +66,24 @@ export const useMassBoqImport = () => {
       const [
         worksData,
         materialsData,
-        costsData,
+        costsRows,
         positionsData,
-        unitsResult,
+        unitsRows,
       ] = await Promise.all([
-        fetchAllPages<{ id: string; name: string; unit: string }>((from, to) => (
-          supabase
-            .from('work_names')
-            .select('id, name, unit')
-            .order('name')
-            .range(from, to)
-        )),
-        fetchAllPages<{ id: string; name: string; unit: string }>((from, to) => (
-          supabase
-            .from('material_names')
-            .select('id, name, unit')
-            .order('name')
-            .range(from, to)
-        )),
-        fetchAllPages<{ id: string; name: string; location: string; cost_categories: { name: string }[] | { name: string } | null }>((from, to) => (
-          supabase
-            .from('detail_cost_categories')
-            .select(`
-              id, name, location,
-              cost_categories!inner(name)
-            `)
-            .order('name')
-            .range(from, to)
-        )),
-        fetchAllPages<{ id: string; position_number: string; work_name: string | null }>((from, to) => (
-          supabase
-            .from('client_positions')
-            .select('id, position_number, work_name')
-            .eq('tender_id', tenderId)
-            .order('position_number')
-            .range(from, to)
-        )),
-        supabase
-          .from('units')
-          .select('code, name')
-          .eq('is_active', true)
-          .order('code'),
+        listWorkNames(),
+        listMaterialNames(),
+        listDetailCostCategoriesWithCategory(),
+        fetchPositionsWithCosts(tenderId),
+        listActiveUnits(),
       ]);
+
+      // cost_categories!inner — оставляем только dcc с привязанной категорией.
+      const costsData = costsRows.filter((c) => c.cost_categories != null);
+      const unitsResult = {
+        data: unitsRows
+          .slice()
+          .sort((a, b) => (a.code || '').localeCompare(b.code || '')),
+      };
 
       const worksMap = new Map<string, string>();
       worksData.forEach((w) => {
@@ -261,13 +217,8 @@ export const useMassBoqImport = () => {
   // ===========================
 
   const loadCurrencyRates = async (tenderId: string): Promise<{ usd: number; eur: number; cny: number }> => {
-    const { data: tender, error } = await supabase
-      .from('tenders')
-      .select('usd_rate, eur_rate, cny_rate')
-      .eq('id', tenderId)
-      .single();
-
-    if (error || !tender) {
+    const tender = await getTenderById(tenderId);
+    if (!tender) {
       throw new Error('Не удалось загрузить курсы валют');
     }
 
@@ -443,11 +394,7 @@ export const useMassBoqImport = () => {
 
   const loadExistingItems = async (positionIds: string[]) => {
     if (positionIds.length === 0) return;
-    const { data } = await supabase
-      .from('boq_items')
-      .select('id, boq_item_type, quantity, total_amount, client_position_id, work_names(name), material_names(name)')
-      .in('client_position_id', positionIds)
-      .order('sort_number');
+    const data = await listBoqPreviewByPositions(positionIds);
 
     const map = new Map<string, { id: string; work_names?: { name?: string } | null; material_names?: { name?: string } | null; boq_item_type?: string | null; quantity?: number | null; total_amount?: number | null; client_position_id: string }[]>();
     data?.forEach((item) => {
@@ -495,17 +442,15 @@ export const useMassBoqImport = () => {
         .map(([, value]) => value);
 
       if (uniqueWorksToInsert.length > 0) {
-        const { error } = await supabase
-          .from('work_names')
-          .insert(uniqueWorksToInsert);
-        if (error) throw new Error(`Ошибка добавления работ: ${error.message}`);
+        await Promise.all(
+          uniqueWorksToInsert.map((wkr) => createWorkName({ name: wkr.name, unit: wkr.unit })),
+        );
       }
 
       if (uniqueMaterialsToInsert.length > 0) {
-        const { error } = await supabase
-          .from('material_names')
-          .insert(uniqueMaterialsToInsert);
-        if (error) throw new Error(`Ошибка добавления материалов: ${error.message}`);
+        await Promise.all(
+          uniqueMaterialsToInsert.map((m) => createMaterialName({ name: m.name, unit: m.unit })),
+        );
       }
 
       await loadNomenclature(tenderId);

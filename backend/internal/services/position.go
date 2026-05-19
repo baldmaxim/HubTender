@@ -19,6 +19,7 @@ type positionRepoer interface {
 	UpdatePositionsNote(ctx context.Context, ids []string, note string) error
 	ClearPositionsBoq(ctx context.Context, ids []string) error
 	ShiftPositionsLevel(ctx context.Context, ids []string, delta int) error
+	ListBoqPreviewByPositions(ctx context.Context, positionIDs []string) ([]repository.BoqPreviewRow, error)
 }
 
 // PositionService provides access to client_positions data.
@@ -125,6 +126,17 @@ func (s *PositionService) invalidateTender(tenderID string) {
 		s.cache.Delete("positions:with_costs:" + tenderID)
 	}
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+}
+
+// ListBoqPreviewByPositions returns the existing-items preview for positions.
+func (s *PositionService) ListBoqPreviewByPositions(
+	ctx context.Context, positionIDs []string,
+) ([]repository.BoqPreviewRow, error) {
+	rows, err := s.repo.ListBoqPreviewByPositions(ctx, positionIDs)
+	if err != nil {
+		return nil, fmt.Errorf("positionService.ListBoqPreviewByPositions: %w", err)
+	}
+	return rows, nil
 }
 
 // UpdatePositionsNote sets manual_note on the given positions.

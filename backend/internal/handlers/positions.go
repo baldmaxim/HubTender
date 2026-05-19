@@ -3,8 +3,10 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
@@ -12,6 +14,7 @@ import (
 // positionServicer is the interface PositionHandler depends on.
 type positionServicer interface {
 	ListPositions(ctx context.Context, p repository.PositionListParams) ([]repository.PositionRow, error)
+	ListBoqPreviewByPositions(ctx context.Context, positionIDs []string) ([]repository.BoqPreviewRow, error)
 }
 
 // PositionHandler serves the /api/v1/tenders/:id/positions endpoint.
@@ -72,4 +75,33 @@ func (h *PositionHandler) GetPositions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderJSON(w, r, http.StatusOK, env)
+}
+
+// GetBoqPreview handles GET /api/v1/positions/boq-preview?position_ids=a,b,c
+// — existing boq_items (subset + name embeds) for the mass-import preview.
+func (h *PositionHandler) GetBoqPreview(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	raw := r.URL.Query().Get("position_ids")
+	if raw == "" {
+		renderJSON(w, r, http.StatusOK, dataEnvelope{Data: []repository.BoqPreviewRow{}})
+		return
+	}
+	ids := make([]string, 0)
+	for _, s := range strings.Split(raw, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			ids = append(ids, s)
+		}
+	}
+	rows, err := h.svc.ListBoqPreviewByPositions(r.Context(), ids)
+	if err != nil {
+		apierr.InternalError("failed to load boq preview").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.BoqPreviewRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
 }

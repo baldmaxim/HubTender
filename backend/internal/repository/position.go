@@ -317,6 +317,61 @@ func (r *PositionRepo) BulkDeletePositions(ctx context.Context, positionIDs []st
 	return nil
 }
 
+// BoqNameEmbed mirrors the work_names(name) / material_names(name) embed.
+type BoqNameEmbed struct {
+	Name string `json:"name"`
+}
+
+// BoqPreviewRow is the existing-items preview shape consumed by
+// useMassBoqImport.loadExistingItems.
+type BoqPreviewRow struct {
+	ID               string        `json:"id"`
+	ClientPositionID string        `json:"client_position_id"`
+	BoqItemType      *string       `json:"boq_item_type"`
+	Quantity         *float64      `json:"quantity"`
+	TotalAmount      *float64      `json:"total_amount"`
+	WorkNames        *BoqNameEmbed `json:"work_names"`
+	MaterialNames    *BoqNameEmbed `json:"material_names"`
+}
+
+// ListBoqPreviewByPositions returns boq_items (subset + name embeds) for the
+// given positions, ordered by sort_number.
+func (r *PositionRepo) ListBoqPreviewByPositions(ctx context.Context, positionIDs []string) ([]BoqPreviewRow, error) {
+	if len(positionIDs) == 0 {
+		return []BoqPreviewRow{}, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT bi.id::text, bi.client_position_id::text, bi.boq_item_type::text,
+		       bi.quantity, bi.total_amount, wn.name, mn.name
+		FROM public.boq_items bi
+		LEFT JOIN public.work_names wn ON wn.id = bi.work_name_id
+		LEFT JOIN public.material_names mn ON mn.id = bi.material_name_id
+		WHERE bi.client_position_id = ANY($1::uuid[])
+		ORDER BY bi.sort_number
+	`, positionIDs)
+	if err != nil {
+		return nil, fmt.Errorf("positionRepo.ListBoqPreviewByPositions: %w", err)
+	}
+	defer rows.Close()
+	out := make([]BoqPreviewRow, 0)
+	for rows.Next() {
+		var b BoqPreviewRow
+		var wnName, mnName *string
+		if err := rows.Scan(&b.ID, &b.ClientPositionID, &b.BoqItemType,
+			&b.Quantity, &b.TotalAmount, &wnName, &mnName); err != nil {
+			return nil, fmt.Errorf("positionRepo.ListBoqPreviewByPositions scan: %w", err)
+		}
+		if wnName != nil {
+			b.WorkNames = &BoqNameEmbed{Name: *wnName}
+		}
+		if mnName != nil {
+			b.MaterialNames = &BoqNameEmbed{Name: *mnName}
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
 // UpdatePositionsNote sets manual_note on every given position (single or
 // bulk paste of "примечание ГП").
 func (r *PositionRepo) UpdatePositionsNote(ctx context.Context, ids []string, note string) error {

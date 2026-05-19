@@ -319,6 +319,25 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — ClientPositions/useMassBoqImport DONE (verified; reuse + 1 новый)
+
+`src/pages/ClientPositions/hooks/useMassBoqImport.ts` (9 supabase → 0).
+`insertBoqItems` уже шёл в Go (`/api/v1/imports/boq`). Остальное:
+
+| Было | Стало |
+|---|---|
+| `work_names`/`material_names` paged | `listWorkNames`/`listMaterialNames` |
+| `detail_cost_categories` + `cost_categories!inner` | `listDetailCostCategoriesWithCategory` + фильтр `cost_categories != null` (воспроизводит !inner) |
+| `client_positions` by tender paged | `fetchPositionsWithCosts` |
+| `units` active | `listActiveUnits` (сорт по code на клиенте) |
+| `tenders` rates | `getTenderById` |
+| `boq_items` by positions + name embeds | **новый** `GET /api/v1/positions/boq-preview?position_ids=` (repo `ListBoqPreviewByPositions`+service+handler+route) |
+| insert `work_names`/`material_names` (массив) | `createWorkName`/`createMaterialName` через `Promise.all` |
+
+`fetchAllPages` helper удалён (пагинация больше не нужна). Парсинг/
+валидация/`calculateTotalAmount`/maps без изменений. `go build` 0,
+`go test ./internal/services` ok, `tsc` 0, `vite build` ✓.
+
 ## P5.3 — ClientPositions/usePositionActions DONE (verified; 3 новых + reuse)
 
 `src/pages/ClientPositions/hooks/usePositionActions.ts` (10 supabase → 0):
