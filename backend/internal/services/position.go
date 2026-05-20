@@ -20,6 +20,8 @@ type positionRepoer interface {
 	ClearPositionsBoq(ctx context.Context, ids []string) error
 	ShiftPositionsLevel(ctx context.Context, ids []string, delta int) error
 	ListBoqPreviewByPositions(ctx context.Context, positionIDs []string) ([]repository.BoqPreviewRow, error)
+	RecomputePositionTotals(ctx context.Context, positionID string) error
+	UpdatePositionFields(ctx context.Context, id string, in repository.UpdatePositionFieldsInput) error
 }
 
 // PositionService provides access to client_positions data.
@@ -126,6 +128,28 @@ func (s *PositionService) invalidateTender(tenderID string) {
 		s.cache.Delete("positions:with_costs:" + tenderID)
 	}
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+}
+
+// RecomputePositionTotals re-aggregates boq_items totals onto a position.
+func (s *PositionService) RecomputePositionTotals(
+	ctx context.Context, positionID, tenderID string,
+) error {
+	if err := s.repo.RecomputePositionTotals(ctx, positionID); err != nil {
+		return fmt.Errorf("positionService.RecomputePositionTotals: %w", err)
+	}
+	s.invalidateTender(tenderID)
+	return nil
+}
+
+// UpdatePositionFields patches manual_volume/manual_note/work_name/unit_code.
+func (s *PositionService) UpdatePositionFields(
+	ctx context.Context, id string, in repository.UpdatePositionFieldsInput, tenderID string,
+) error {
+	if err := s.repo.UpdatePositionFields(ctx, id, in); err != nil {
+		return fmt.Errorf("positionService.UpdatePositionFields: %w", err)
+	}
+	s.invalidateTender(tenderID)
+	return nil
 }
 
 // ListBoqPreviewByPositions returns the existing-items preview for positions.

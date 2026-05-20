@@ -25,6 +25,8 @@ type positionWriteServicer interface {
 	UpdatePositionsNote(ctx context.Context, ids []string, note, tenderID string) error
 	ClearPositionsBoq(ctx context.Context, ids []string, tenderID string) error
 	ShiftPositionsLevel(ctx context.Context, ids []string, delta int, tenderID string) error
+	RecomputePositionTotals(ctx context.Context, positionID, tenderID string) error
+	UpdatePositionFields(ctx context.Context, id string, in repository.UpdatePositionFieldsInput, tenderID string) error
 }
 
 // PositionWriteHandler handles mutating position endpoints.
@@ -320,6 +322,77 @@ func (h *PositionWriteHandler) ShiftPositionsLevel(w http.ResponseWriter, r *htt
 	}
 	if err := h.svc.ShiftPositionsLevel(r.Context(), req.PositionIDs, req.Delta, req.TenderID); err != nil {
 		apierr.InternalError("failed to shift positions level").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// recomputePositionTotalsReq carries optional tender_id (for cache invalidation).
+type recomputePositionTotalsReq struct {
+	TenderID string `json:"tender_id" validate:"omitempty,uuid"`
+}
+
+// RecomputePositionTotals handles POST /api/v1/positions/{id}/recompute-totals.
+func (h *PositionWriteHandler) RecomputePositionTotals(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing position id").Render(w)
+		return
+	}
+	var req recomputePositionTotalsReq
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			apierr.BadRequest("invalid JSON body").Render(w)
+			return
+		}
+	}
+	if err := h.svc.RecomputePositionTotals(r.Context(), id, req.TenderID); err != nil {
+		apierr.InternalError("failed to recompute position totals").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// updatePositionFieldsReq is the body for PATCH /api/v1/positions/{id}/fields.
+type updatePositionFieldsReq struct {
+	ManualVolume *float64 `json:"manual_volume"`
+	ManualNote   *string  `json:"manual_note"`
+	WorkName     *string  `json:"work_name" validate:"omitempty,max=1024"`
+	UnitCode     *string  `json:"unit_code"`
+	TenderID     string   `json:"tender_id" validate:"omitempty,uuid"`
+}
+
+// UpdatePositionFields handles PATCH /api/v1/positions/{id}/fields.
+func (h *PositionWriteHandler) UpdatePositionFields(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing position id").Render(w)
+		return
+	}
+	var req updatePositionFieldsReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+	if err := h.svc.UpdatePositionFields(r.Context(), id, repository.UpdatePositionFieldsInput{
+		ManualVolume: req.ManualVolume,
+		ManualNote:   req.ManualNote,
+		WorkName:     req.WorkName,
+		UnitCode:     req.UnitCode,
+	}, req.TenderID); err != nil {
+		apierr.InternalError("failed to update position fields").Render(w)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

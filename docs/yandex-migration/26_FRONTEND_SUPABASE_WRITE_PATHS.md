@@ -319,6 +319,21 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — PositionItems/useItemActions DONE (verified; 3 новых эндпоинта)
+
+`src/pages/PositionItems/hooks/useItemActions.ts` (6 supabase → 0):
+
+| Эндпоинт | Заменяет |
+|---|---|
+| **новый** `POST /api/v1/positions/{id}/recompute-totals` (repo `RecomputePositionTotals`+service+handler+route) | select boq_items + reduce + update client_positions totals (одна UPDATE-FROM на сервере) |
+| **новый** `POST /api/v1/items/{id}/recompute-linked-materials` (BoqRepo `RecomputeLinkedMaterialsForWork`+service+handler+route) | tx: read work qty + tender rates + FOR UPDATE детей + per-child update+audit (`calc.CalculateBoqItemTotalAmount` на сервере) |
+| **новый** `PATCH /api/v1/positions/{id}/fields` (repo `UpdatePositionFields`+service+handler+route) | manual_volume/manual_note/work_name/unit_code (динамический SET по non-nil полям) |
+
+`insertBoqItemWithAudit`/`updateBoqItemWithAudit`/`deleteBoqItemWithAudit`/
+`insertTemplateItems` уже в Go. Calc-формула для каскадного пересчёта
+детей теперь авторитативно на сервере (раньше дублировалась на клиенте).
+`go build` 0, `go test ./internal/services` ok, `tsc` 0, `vite build` ✓.
+
 ## P5.3 — PositionItems audit batch DONE (verified; новый audit-list)
 
 `src/pages/PositionItems/{hooks/useAuditHistory.ts, components/AuditFilters.tsx,

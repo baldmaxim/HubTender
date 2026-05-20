@@ -16,6 +16,7 @@ type boqRepoer interface {
 	UpdateBoqItem(ctx context.Context, id string, in repository.UpdateBoqItemInput) (*repository.BoqItemRow, error)
 	DeleteBoqItem(ctx context.Context, id, changedBy string) (*repository.BoqItemRow, error)
 	InsertTemplateItems(ctx context.Context, templateID, clientPositionID, changedBy string) (*repository.TemplateInsertResult, error)
+	RecomputeLinkedMaterialsForWork(ctx context.Context, workID, changedBy string) (int, error)
 }
 
 // BoqService provides access to boq_items data.
@@ -107,4 +108,17 @@ func (s *BoqService) InsertTemplateItems(
 	s.cache.Delete("tender:overview:" + res.TenderID)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return res, nil
+}
+
+// RecomputeLinkedMaterialsForWork updates quantity + total_amount on every
+// child material of the work, with audit; invalidates caches.
+func (s *BoqService) RecomputeLinkedMaterialsForWork(
+	ctx context.Context, workID, changedBy string,
+) (int, error) {
+	n, err := s.repo.RecomputeLinkedMaterialsForWork(ctx, workID, changedBy)
+	if err != nil {
+		return 0, fmt.Errorf("boqService.RecomputeLinkedMaterialsForWork: %w", err)
+	}
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	return n, nil
 }

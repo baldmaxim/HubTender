@@ -91,6 +91,34 @@ export async function listBoqPreviewByPositions(
   return res.data ?? [];
 }
 
+/** Пересчитать total_material/total_works позиции по её boq_items (idempotent). */
+export async function recomputePositionTotals(
+  positionId: string,
+  tenderId?: string | null,
+): Promise<void> {
+  await apiFetch<undefined>(
+    `/api/v1/positions/${encodeURIComponent(positionId)}/recompute-totals`,
+    { method: 'POST', body: JSON.stringify({ tender_id: tenderId ?? undefined }) },
+  );
+}
+
+/** Точечный PATCH полей позиции: manual_volume/manual_note/work_name/unit_code. */
+export async function updatePositionFields(
+  positionId: string,
+  fields: {
+    manual_volume?: number | null;
+    manual_note?: string | null;
+    work_name?: string | null;
+    unit_code?: string | null;
+  },
+  tenderId?: string | null,
+): Promise<void> {
+  await apiFetch<undefined>(
+    `/api/v1/positions/${encodeURIComponent(positionId)}/fields`,
+    { method: 'PATCH', body: JSON.stringify({ ...fields, tender_id: tenderId ?? undefined }) },
+  );
+}
+
 /** Установить manual_note на одну/несколько позиций (вставка примечания ГП). */
 export async function updatePositionsNote(
   positionIds: string[],

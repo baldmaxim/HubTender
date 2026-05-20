@@ -22,6 +22,7 @@ type boqWriteServicer interface {
 	UpdateBoqItem(ctx context.Context, id string, in repository.UpdateBoqItemInput) (*repository.BoqItemRow, error)
 	DeleteBoqItem(ctx context.Context, id, changedBy string) (*repository.BoqItemRow, error)
 	InsertTemplateItems(ctx context.Context, templateID, clientPositionID, changedBy string) (*repository.TemplateInsertResult, error)
+	RecomputeLinkedMaterialsForWork(ctx context.Context, workID, changedBy string) (int, error)
 }
 
 // BoqWriteHandler handles mutating BOQ item endpoints.
@@ -300,4 +301,30 @@ func (h *BoqWriteHandler) InsertTemplate(w http.ResponseWriter, r *http.Request)
 	}
 
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: res})
+}
+
+// RecomputeLinkedMaterials handles
+// POST /api/v1/items/{id}/recompute-linked-materials — recomputes
+// quantity + total_amount on every child material of the given work.
+func (h *BoqWriteHandler) RecomputeLinkedMaterials(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	workID := chi.URLParam(r, "id")
+	if workID == "" {
+		apierr.BadRequest("missing work id").Render(w)
+		return
+	}
+	n, err := h.svc.RecomputeLinkedMaterialsForWork(r.Context(), workID, authUser.ID)
+	if err != nil {
+		if errors.Is(err, repository.ErrWorkNotFound) {
+			apierr.NotFound(err.Error()).Render(w)
+			return
+		}
+		apierr.InternalError("failed to recompute linked materials").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: map[string]int{"updated": n}})
 }

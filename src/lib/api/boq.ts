@@ -26,6 +26,18 @@ export async function bulkUpdateCommercial(rows: BulkCommercialRow[]): Promise<n
   return res.updated;
 }
 
+/**
+ * Каскадно пересчитать quantity+total_amount у всех materials-детей работы.
+ * Go: одна pgx.Tx с audit-строкой на каждый ребёнок.
+ */
+export async function recomputeLinkedMaterials(workId: string): Promise<number> {
+  const res = await apiFetch<{ data: { updated: number } }>(
+    `/api/v1/items/${encodeURIComponent(workId)}/recompute-linked-materials`,
+    { method: 'POST' },
+  );
+  return res.data.updated;
+}
+
 // ─── audit history ──────────────────────────────────────────────────────────
 
 export interface BoqAuditApiRow {

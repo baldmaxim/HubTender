@@ -1,16 +1,17 @@
 import { message } from 'antd';
-import {
-  supabase,
-  type ClientPosition,
-  type BoqItemInsert,
-  type BoqItemType,
-  type MaterialType,
-  type CurrencyType,
-  type DeliveryPriceType,
-  type WorkLibraryFull,
-  type MaterialLibraryFull,
-  type BoqItemFull,
+import type {
+  ClientPosition,
+  BoqItemInsert,
+  BoqItemType,
+  MaterialType,
+  CurrencyType,
+  DeliveryPriceType,
+  WorkLibraryFull,
+  MaterialLibraryFull,
+  BoqItemFull,
 } from '../../../lib/supabase';
+import { recomputePositionTotals, updatePositionFields } from '../../../lib/api/positions';
+import { recomputeLinkedMaterials } from '../../../lib/api/boq';
 import { insertTemplateItems } from '../../../utils/insertTemplateItems';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
@@ -41,30 +42,8 @@ export const useItemActions = ({
 
   const updateClientPositionTotals = async (positionId: string) => {
     try {
-      const { data: boqItems, error: fetchError } = await supabase
-        .from('boq_items')
-        .select('boq_item_type, total_amount')
-        .eq('client_position_id', positionId);
-
-      if (fetchError) throw fetchError;
-
-      const totalMaterial = (boqItems || [])
-        .filter(item => ['мат', 'суб-мат', 'мат-комп.'].includes(item.boq_item_type))
-        .reduce((sum, item) => sum + (item.total_amount || 0), 0);
-
-      const totalWorks = (boqItems || [])
-        .filter(item => ['раб', 'суб-раб', 'раб-комп.'].includes(item.boq_item_type))
-        .reduce((sum, item) => sum + (item.total_amount || 0), 0);
-
-      const { error } = await supabase
-        .from('client_positions')
-        .update({
-          total_material: totalMaterial,
-          total_works: totalWorks,
-        })
-        .eq('id', positionId);
-
-      if (error) throw error;
+      // Go: одна UPDATE-FROM-агрегация на сервере.
+      await recomputePositionTotals(positionId, position?.tender_id ?? null);
     } catch (error) {
       console.error('Ошибка обновления итогов позиции:', getErrorMessage(error));
     }
@@ -208,45 +187,10 @@ export const useItemActions = ({
 
   const updateLinkedMaterialsQuantity = async (workId: string) => {
     try {
-      const { data: workData, error: workError } = await supabase
-        .from('boq_items')
-        .select('quantity')
-        .eq('id', workId)
-        .single();
-
-      if (workError) throw workError;
-
-      const workQuantity = workData.quantity || 0;
-
-      const { data: linkedMaterials, error: materialsError } = await supabase
-        .from('boq_items')
-        .select('id, conversion_coefficient, consumption_coefficient, unit_rate, currency_type, delivery_price_type, delivery_amount')
-        .eq('parent_work_item_id', workId);
-
-      if (materialsError) throw materialsError;
-
-      for (const material of linkedMaterials || []) {
-        const conversionCoeff = material.conversion_coefficient || 1;
-        const consumptionCoeff = material.consumption_coefficient || 1;
-        const newQuantity = workQuantity * conversionCoeff * consumptionCoeff;
-
-        const unitRate = material.unit_rate || 0;
-        const rate = getCurrencyRate(material.currency_type as CurrencyType);
-        let deliveryPrice = 0;
-
-        if (material.delivery_price_type === 'не в цене') {
-          deliveryPrice = unitRate * rate * 0.03; // Полная точность (5 знаков)
-        } else if (material.delivery_price_type === 'суммой' && material.delivery_amount) {
-          deliveryPrice = material.delivery_amount;
-        }
-
-        const totalAmount = newQuantity * (unitRate * rate + deliveryPrice);
-
-        await updateBoqItemWithAudit(user?.id, material.id, {
-          quantity: newQuantity,
-          total_amount: totalAmount,
-        });
-      }
+      // Go: одна pgx.Tx — читает quantity работы + курсы тендера, обновляет
+      // quantity+total_amount у каждого ребёнка с audit-строкой (calc-формула
+      // на сервере та же, что использовалась на клиенте).
+      await recomputeLinkedMaterials(workId);
     } catch (error) {
       console.error('Ошибка обновления количества материалов:', getErrorMessage(error));
     }
@@ -287,15 +231,11 @@ export const useItemActions = ({
     onSuccess: () => void
   ) => {
     try {
-      const { error } = await supabase
-        .from('client_positions')
-        .update({
-          manual_volume: gpVolume,
-          manual_note: gpNote,
-        })
-        .eq('id', positionId);
-
-      if (error) throw error;
+      await updatePositionFields(
+        positionId,
+        { manual_volume: gpVolume, manual_note: gpNote },
+        position?.tender_id ?? null,
+      );
       onSuccess();
     } catch (error) {
       message.error('Ошибка сохранения данных ГП: ' + getErrorMessage(error));
@@ -309,15 +249,11 @@ export const useItemActions = ({
     onSuccess: () => void
   ) => {
     try {
-      const { error } = await supabase
-        .from('client_positions')
-        .update({
-          work_name: workName,
-          unit_code: unitCode,
-        })
-        .eq('id', positionId);
-
-      if (error) throw error;
+      await updatePositionFields(
+        positionId,
+        { work_name: workName, unit_code: unitCode },
+        position?.tender_id ?? null,
+      );
       onSuccess();
       message.success('Данные дополнительной работы сохранены');
     } catch (error) {
