@@ -9,6 +9,9 @@ type User struct {
 	// Email is the account's email address.
 	Email string `json:"email"`
 
+	// FullName is the user's display name (public.users.full_name).
+	FullName string `json:"full_name"`
+
 	// RoleCode is the raw role identifier, e.g. "engineer", "administrator".
 	RoleCode string `json:"role_code"`
 

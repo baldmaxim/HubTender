@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import type { AuthUser, UserRole } from '../lib/supabase/types';
+import type { AuthUser, UserRole, AccessStatus } from '../lib/supabase/types';
 import { invalidateApiCache } from '../lib/api/client';
+import { getMe } from '../lib/api/users';
 import { dropAll as dropAllPositionsCache } from '../lib/cache/clientPositionsCache';
 import { invalidateAll as dropAllPositionRows } from '../lib/cache/positionRowCache';
 
@@ -19,45 +20,25 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Загрузка профиля + роли одним запросом через embed
+// Загрузка профиля + роли + allowed_pages одним запросом к Go BFF (/api/v1/me).
+// JWT уже задаёт user_id на сервере — клиент не подменит чужой профиль.
 const loadUserData = async (authUserId: string): Promise<AuthUser | null> => {
   try {
     console.log('[AuthContext] Загрузка пользователя:', authUserId);
-
-    const { data, error } = await supabase
-      .from('users')
-      .select(`
-        id, email, full_name, role_code, access_status, allowed_pages, access_enabled,
-        roles:role_code ( name, color )
-      `)
-      .eq('id', authUserId)
-      .maybeSingle();
-
-    if (error) {
-      console.error('[AuthContext] Ошибка загрузки пользователя:', error.message);
-      return null;
-    }
-
-    if (!data) {
-      console.error('[AuthContext] Пользователь не найден в таблице users, ID:', authUserId);
-      return null;
-    }
-
-    const role = Array.isArray(data.roles) ? data.roles[0] : data.roles;
-
+    const me = await getMe();
     return {
-      id: data.id,
-      email: data.email,
-      full_name: data.full_name,
-      role: (role?.name as UserRole) || 'Инженер',
-      role_code: data.role_code,
-      role_color: role?.color,
-      access_status: data.access_status,
-      allowed_pages: data.allowed_pages || [],
-      access_enabled: data.access_enabled,
+      id: me.id,
+      email: me.email,
+      full_name: me.full_name,
+      role: (me.role_name as UserRole) || 'Инженер',
+      role_code: me.role_code,
+      role_color: me.role_color || undefined,
+      access_status: me.access_status as AccessStatus,
+      allowed_pages: me.allowed_pages || [],
+      access_enabled: me.access_enabled,
     };
   } catch (err) {
-    console.error('[AuthContext] Исключение при загрузке пользователя:', err);
+    console.error('[AuthContext] Ошибка загрузки пользователя:', err);
     return null;
   }
 };

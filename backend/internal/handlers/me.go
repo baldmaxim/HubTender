@@ -33,13 +33,15 @@ func NewMeHandler(svc userServicer) *MeHandler {
 
 // meResponse is the JSON shape for GET /api/v1/me.
 type meResponse struct {
-	ID            string `json:"id"`
-	Email         string `json:"email"`
-	RoleCode      string `json:"role_code"`
-	RoleName      string `json:"role_name"`
-	RoleColor     string `json:"role_color"`
-	AccessStatus  string `json:"access_status"`
-	AccessEnabled bool   `json:"access_enabled"`
+	ID            string   `json:"id"`
+	Email         string   `json:"email"`
+	FullName      string   `json:"full_name"`
+	RoleCode      string   `json:"role_code"`
+	RoleName      string   `json:"role_name"`
+	RoleColor     string   `json:"role_color"`
+	AccessStatus  string   `json:"access_status"`
+	AccessEnabled bool     `json:"access_enabled"`
+	AllowedPages  []string `json:"allowed_pages"`
 }
 
 // permissionsResponse is the JSON shape for GET /api/v1/me/permissions.
@@ -68,11 +70,13 @@ func (h *MeHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	resp := meResponse{
 		ID:            u.ID,
 		Email:         u.Email,
+		FullName:      u.FullName,
 		RoleCode:      u.RoleCode,
 		RoleName:      u.RoleName,
 		RoleColor:     u.RoleColor,
 		AccessStatus:  u.AccessStatus,
 		AccessEnabled: u.AccessEnabled,
+		AllowedPages:  u.AllowedPages,
 	}
 
 	renderJSON(w, r, http.StatusOK, resp)

@@ -26,6 +26,7 @@ const getUserByIDQuery = `
 SELECT
     u.id,
     u.email,
+    COALESCE(u.full_name, '') AS full_name,
     u.role_code,
     COALESCE(r.name,  '')  AS role_name,
     COALESCE(r.color, '')  AS role_color,
@@ -58,6 +59,7 @@ func (r *UserRepo) GetByID(ctx context.Context, userID string) (*user.User, erro
 	var (
 		id            string
 		email         string
+		fullName      string
 		roleCode      string
 		roleName      string
 		roleColor     string
@@ -69,6 +71,7 @@ func (r *UserRepo) GetByID(ctx context.Context, userID string) (*user.User, erro
 	err := row.Scan(
 		&id,
 		&email,
+		&fullName,
 		&roleCode,
 		&roleName,
 		&roleColor,
@@ -89,6 +92,7 @@ func (r *UserRepo) GetByID(ctx context.Context, userID string) (*user.User, erro
 	return &user.User{
 		ID:            id,
 		Email:         email,
+		FullName:      fullName,
 		RoleCode:      roleCode,
 		RoleName:      roleName,
 		RoleColor:     roleColor,

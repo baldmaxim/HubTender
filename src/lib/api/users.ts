@@ -1,6 +1,23 @@
 // User-write helpers with Go BFF / Supabase fallback.
 import { apiFetch } from './client';
 
+export interface MeResponse {
+  id: string;
+  email: string;
+  full_name: string;
+  role_code: string;
+  role_name: string;
+  role_color: string;
+  access_status: string;
+  access_enabled: boolean;
+  allowed_pages: string[] | null;
+}
+
+/** GET /api/v1/me — current user's profile + role + access info. */
+export async function getMe(): Promise<MeResponse> {
+  return await apiFetch<MeResponse>('/api/v1/me', { cache: 'no-store' });
+}
+
 export interface RegisterUserInput {
   full_name: string;
   role_code: string;
