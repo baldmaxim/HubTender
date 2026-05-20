@@ -104,3 +104,56 @@ GO_BFF_YANDEX_VERIFY_OK
 > This is verification only — the production runtime cutover (DATABASE_URL /
 > stable CA path / future app-auth) is a separate authorised step and was NOT
 > performed.
+
+---
+
+## Re-verification 2026-05-20 (post-refresh)
+
+After today's full OLD → PROD → Yandex data refresh, the Go BFF was re-verified
+against the freshly-imported Yandex cluster.
+
+- Launch method: local Go binary built from current `backend/` HEAD
+  (`713607a`), launched with `DATABASE_URL=<YANDEX_DATABASE_URL session-pooler>`,
+  `SUPABASE_JWKS_URL` / `SUPABASE_JWT_ISSUER` pointing to PROD Supabase
+  (`ocauafggjrqvopxjihas`), bound to `127.0.0.1:3105`. Temporary process; port
+  freed afterwards. `JWT_CLOCK_SKEW_SECONDS=15` applied to absorb local clock
+  drift on Windows (transient — not a code defect).
+- Yandex DSN / Yandex SSL root cert sourced from
+  `scripts/prod-to-yandex/.env.prod-to-yandex`; values never printed.
+
+### Smoke harness — all 22 checks passed
+
+| Block | Result |
+|---|---|
+| `GET /health` | ✓ 200 |
+| `GET /health/db` (Yandex ping) | ✓ 200 |
+| 401-expected: `/api/v1/me`, `/api/v1/references/units`, `/api/v1/tenders`, `/api/v1/ws`, `POST /api/v1/redistributions/save` | ✓ all 401 |
+| Sign-in via Supabase Auth (`PROD_SUPABASE`) | ✓ JWT obtained |
+| `GET /api/v1/me` | ✓ 200 — shape ok (full_name + allowed_pages present, matches Phase 5 contract) |
+| `GET /api/v1/me/permissions` | ✓ 200 — allowed_pages array present |
+| `GET /api/v1/references/{roles,units,material-names,work-names,cost-categories,detail-cost-categories}` | ✓ 200 × 6 — `data` arrays |
+| `GET /api/v1/tenders?limit=5` | ✓ 200 — `data` array (49 tenders backed by Yandex) |
+| `GET /api/v1/tender-registry` | ✓ 200 — 69 rows |
+| `GET /api/v1/tender-statuses`, `/api/v1/construction-scopes` | ✓ 200 × 2 |
+| `GET /api/v1/tender-registry/{next-sort-order,autocomplete,tender-numbers}` | ✓ 200 × 3 |
+
+### Realtime
+
+`LISTEN/NOTIFY` listener connected at startup against Yandex
+(`listener: connected; listening on channel 'rowchange'`).
+
+### Notes
+
+- Initial smoke run failed with `token has invalid claims: token used before
+  issued` because the local Windows clock was a few seconds behind Supabase
+  Auth's `iat`. Resolved by setting `JWT_CLOCK_SKEW_SECONDS=15` for this
+  verification process. In production this knob is unset (strict) — the
+  finding is local-clock-only, not a backend regression.
+- Smoke harness uses `MIGRATION_SMOKE_*` creds from
+  `scripts/old-to-prod/.env.old-to-prod` (preserved from OLD → PROD verify).
+- Go BFF process was stopped and the temporary binary removed after
+  verification. Port 3105 freed. `.env` not modified.
+
+```
+GO_BFF_YANDEX_VERIFY_OK (2026-05-20)
+```

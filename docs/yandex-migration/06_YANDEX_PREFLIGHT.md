@@ -3,7 +3,7 @@
 > Сгенерировано `scripts/yandex-preflight/00_check_yandex_target.mjs`.
 > Read-only проверка target. Данные в Yandex не импортировались.
 
-- Run (UTC): 2026-05-17T17:10:48.313Z
+- Run (UTC): 2026-05-17T22:02:07.219Z
 - Связано: [00_SOURCE_OF_TRUTH.md](./00_SOURCE_OF_TRUTH.md), [01_YANDEX_TARGET_INVENTORY.md](./01_YANDEX_TARGET_INVENTORY.md), [05_CUTOVER_RULES.md](./05_CUTOVER_RULES.md)
 
 ## Checks
@@ -19,9 +19,9 @@
 | extension pgcrypto | OK | enabled |
 | extension uuid-ossp | OK | enabled |
 | extensions (all) | INFO | pgcrypto, plpgsql, uuid-ossp |
-| public BASE TABLE count | OK | 0 |
-| user tables (non-system) | OK | 0 (empty/ready) |
-| non-system schemas | INFO | public |
+| public BASE TABLE count | WARN | 40 |
+| user tables (non-system) | WARN | auth=2, public=40 |
+| non-system schemas | INFO | auth, public |
 | LISTEN/UNLISTEN rowchange | OK | via YANDEX_DATABASE_URL (host=***.yandexcloud.net, type=pooler) |
 | Pooler connectivity | INFO | YANDEX_POOLER_DATABASE_URL не задан — пропущено |
 
@@ -31,6 +31,7 @@ _нет_
 
 ## Warnings
 
+- ⚠️ Target НЕ пустой: 42 user-таблиц(ы). Ничего не удалялось. Для YANDEX_PREFLIGHT_OK нужна пустая БД.
 - ⚠️ YANDEX_DIRECT_DATABASE_URL не задан — LISTEN проверен на YANDEX_DATABASE_URL (может быть transaction-pooler).
 
 ## Runtime cutover note (direct/session-safe DSN)
