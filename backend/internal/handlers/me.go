@@ -18,6 +18,7 @@ import (
 type userServicer interface {
 	GetMe(ctx context.Context, userID string) (*user.User, error)
 	GetDeadlineExtensions(ctx context.Context, userID string) (json.RawMessage, error)
+	SetMyAccessStatus(ctx context.Context, userID, status string) error
 }
 
 // MeHandler serves the /me and /me/permissions endpoints.
@@ -123,6 +124,22 @@ func (h *MeHandler) GetDeadlineExtensions(w http.ResponseWriter, r *http.Request
 	}
 
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: raw})
+}
+
+// ReapplyAccess handles POST /api/v1/me/reapply-access — sets the calling
+// user's access_status to 'pending' (used by Login when a rejected user
+// re-submits their access request).
+func (h *MeHandler) ReapplyAccess(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	if err := h.svc.SetMyAccessStatus(r.Context(), authUser.ID, "pending"); err != nil {
+		apierr.InternalError("failed to update access status").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ---------------------------------------------------------------------------

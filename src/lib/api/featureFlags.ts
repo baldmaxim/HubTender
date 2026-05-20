@@ -45,7 +45,7 @@ function resolveApiBaseUrl(): string {
 
 export const API_BASE_URL = resolveApiBaseUrl();
 
-// Realtime: true → use native WS hub (Go BFF). Falsy → supabase.channel() direct.
+// Realtime: true → use native WS hub (Go BFF). Falsy → PostgREST channels direct.
 export function isRealtimeEnabled(): boolean {
   return import.meta.env.VITE_API_REALTIME_ENABLED === 'true';
 }

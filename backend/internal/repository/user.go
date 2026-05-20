@@ -37,6 +37,19 @@ LEFT JOIN public.roles r ON r.code = u.role_code
 WHERE u.id = $1
 `
 
+// SetAccessStatus sets users.access_status for the self-service re-apply
+// flow (called from Login when an authed-but-rejected user re-submits).
+func (r *UserRepo) SetAccessStatus(ctx context.Context, userID, status string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE public.users SET access_status = $1, updated_at = NOW() WHERE id = $2`,
+		status, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("userRepo.SetAccessStatus: %w", err)
+	}
+	return nil
+}
+
 // GetByID fetches a user by their UUID, joining in the role data.
 // Returns (nil, pgx.ErrNoRows) if the user does not exist in public.users.
 func (r *UserRepo) GetByID(ctx context.Context, userID string) (*user.User, error) {

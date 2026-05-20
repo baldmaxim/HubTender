@@ -14,6 +14,11 @@ export interface RegisterUserInput {
  * (client cannot register under another user).
  * Supabase path: calls the register_user RPC.
  */
+/** Re-apply for access after rejection (sets users.access_status = 'pending'). */
+export async function reapplyAccess(): Promise<void> {
+  await apiFetch<undefined>('/api/v1/me/reapply-access', { method: 'POST' });
+}
+
 export async function registerUser(input: RegisterUserInput & { user_id: string; email: string }): Promise<void> {
   await apiFetch<void>('/api/v1/users/register', {
     method: 'POST',

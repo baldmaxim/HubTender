@@ -3,6 +3,7 @@ import { Form, Input, Button, Card, message, Typography, Spin, Result } from 'an
 import { UserOutlined, LockOutlined, LoginOutlined, LoadingOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { reapplyAccess } from '../../lib/api/users';
 import { useAuth } from '../../contexts/AuthContext';
 import { HeaderIcon } from '../../components/Icons/HeaderIcon';
 
@@ -256,17 +257,12 @@ const Login: React.FC = () => {
                 key="register"
                 type="primary"
                 onClick={async () => {
-                  // Обновляем статус на pending для повторной заявки
-                  const { error } = await supabase
-                    .from('users')
-                    .update({ access_status: 'pending' })
-                    .eq('id', user.id);
-
-                  if (error) {
-                    message.error('Ошибка при отправке заявки');
-                  } else {
+                  try {
+                    await reapplyAccess();
                     message.success('Заявка на регистрацию отправлена повторно');
                     window.location.reload();
+                  } catch {
+                    message.error('Ошибка при отправке заявки');
                   }
                 }}
               >

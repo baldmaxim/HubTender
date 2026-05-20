@@ -52,6 +52,15 @@ func (s *UserService) GetMe(ctx context.Context, userID string) (*user.User, err
 	return u, nil
 }
 
+// SetMyAccessStatus updates the calling user's access_status (re-apply flow).
+func (s *UserService) SetMyAccessStatus(ctx context.Context, userID, status string) error {
+	if err := s.repo.SetAccessStatus(ctx, userID, status); err != nil {
+		return fmt.Errorf("userService.SetMyAccessStatus: %w", err)
+	}
+	s.cache.Delete("user:" + userID)
+	return nil
+}
+
 // GetDeadlineExtensions returns the raw tender_deadline_extensions JSON for
 // the given user (not cached — small, infrequent).
 func (s *UserService) GetDeadlineExtensions(ctx context.Context, userID string) (json.RawMessage, error) {
