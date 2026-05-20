@@ -7,9 +7,9 @@
 TenderHUB by SU_10 — портал управления тендерами в строительстве для BOQ (Bill of Quantities, ведомости объёмов работ) и биржевых процессов.
 
 - **Языковые конвенции**: русский UI, английский код, русские сообщения коммитов
-- **Стек**: React 18 + Ant Design + Vite + TypeScript на фронте. Go BFF (chi + pgx/v5 + coder/websocket) перед Supabase (Postgres 17 + Auth + JWKS). Supabase Realtime постепенно вытесняется WebSocket-хабом Go BFF.
+- **Стек**: React 18 + Ant Design + Vite + TypeScript на фронте. Go BFF (chi + pgx/v5 + coder/websocket) перед **Yandex Managed PostgreSQL 17**. Supabase Realtime заменён native WebSocket-хабом Go BFF. Supabase Auth остаётся временным bridge для JWT (`docs/NEXT_PHASE_APP_AUTH.md`).
 - **Брендинг**: дизайн-система описана в BRANDING.md
-- **Состояние миграции**: pre-prod Supabase-проект `ocauafggjrqvopxjihas`; старый live-prod `wkywhjljrhewfpedbjzx` в режиме read-only до финального cutover. Полный план — в `C:\Users\Usrr\.claude\plans\keen-toasting-iverson.md`.
+- **Runtime БД**: Yandex Managed PostgreSQL (`rc1d-…mdb.yandexcloud.net:6432/HubTender`, sslmode=verify-full). Cutover выполнен 2026-05-18, Phase 5 frontend migration завершена 2026-05-20, frontend deploy 2026-05-21 (`FRONTEND_DEPLOY_OK`). Архив миграционных материалов: [`archive/migrations/2026-05-db-cutover/`](archive/migrations/2026-05-db-cutover/README.md). Актуальная архитектура: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), env: [`docs/RUNTIME_ENV.md`](docs/RUNTIME_ENV.md).
 
 ## Команды разработки
 
