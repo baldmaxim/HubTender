@@ -269,6 +269,8 @@ const Bsm: React.FC = () => {
     } else {
       setAllItems([]);
     }
+    // fetchBoqItems is stable for our usage; refetch is driven solely by selectedTenderId
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId]);
 
   // Handle inline quote link update

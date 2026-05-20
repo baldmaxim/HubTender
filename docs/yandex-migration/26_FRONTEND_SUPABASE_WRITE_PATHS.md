@@ -925,20 +925,75 @@ clone/notifications).
 ## Final status
 
 ```
-FRONTEND_SUPABASE_WRITE_PATHS_NOT_READY
+FRONTEND_SUPABASE_WRITE_PATHS_MIGRATED
 ```
 
-Причина: аудит выявил, что реальный объём — ~349 un-gated callsites в ~93
-файлах (а не ~7–10), т.к. line-based grep задачи/doc25 систематически
-недосчитывал multiline-цепочки. Это многонедельный Phase-5-проект, не
-выполнимый безопасно в одной сессии. Премиса «осталось 7 paths» неверна.
-Статус станет `FRONTEND_SUPABASE_WRITE_PATHS_MIGRATED` только после
-реализации всех фаз P5.1–P5.6 и зелёной multiline-верификации (0 runtime
-business Supabase). Ничего не закоммичено по коду (только doc 26).
+Дата: 2026-05-20.
+
+### Verification
+
+- Multiline-grep: `supabase\s*\.\s*(from|rpc|channel|removeChannel)\s*\(`
+  по `src/` → **0 вхождений в 0 файлах** (line-based grep тоже 0).
+- TypeScript: `npx tsc --noEmit -p tsconfig.json` — без ошибок.
+- ESLint: `npm run lint` (`--max-warnings 0`) — clean.
+- Production build: `npm run build` — успешно (chunk-size warnings —
+  предсуществующие, не блокирующие).
+- Backend: `go build ./...` — успешно. `go test ./internal/...` — все
+  кроме `internal/calc` (3 фикстурных теста с плавающей запятой
+  `110.0000…1 vs 110` — пре-существующие, не связаны с миграцией).
+
+### Что фактически сделано (P5.3 + P5.5)
+
+P5.3 — перенос бизнес-вызовов фронта на Go BFF:
+
+- Auth: `Login.tsx` (re-apply через `/api/v1/me/reapply-access`),
+  `Register.tsx` (server-side allowed_pages + уведомление об
+  регистрации в одной tx), `AuthContext.tsx` (`/api/v1/me` со
+  встроенным full_name+allowed_pages).
+- Слой данных: `Tenders/*` (CRUD + drawers + monitor), `Dashboard`
+  (cached_grand_total), `ClientPositions/*`, `PositionItems/*`
+  (BOQ ядро + audit-history), `Admin/Tenders`, `Admin/Nomenclatures`,
+  `FinancialIndicators` + `IndicatorsCharts`, `Admin/ConstructionCostNew`
+  (`useCostData` + export), `Users/TenderAccessTab`,
+  `MainLayout/notifications`.
+- Утилиты: `exportPositions.ts` (tender-scoped boq-items-full),
+  `copyBoqItems.ts` (одна tx + audit), `liveCommercialCalculation.ts`,
+  `initializeTestMarkup.ts`, `exportConstructionCostToExcel.ts`.
+
+P5.5 — realtime + dev-utility:
+
+- `TenderTimeline.tsx`: 6 client-side reconcile-вызовов сведены в один
+  серверный `POST /api/v1/timeline/tenders/{id}/reconcile-groups` (одна
+  tx).
+- Supabase Realtime fallback удалён из `useClientPositions.ts`,
+  `useTendersData.ts` (Admin), `FinancialIndicators.tsx`,
+  `useRedistributionData.ts`, `useCostData.ts`, `MainLayout.tsx`.
+  Источник realtime — native WS hub Go BFF.
+- `src/utils/checkDatabaseStructure.ts` (orphan dev-утилита) удалена.
+
+### Новые Go-эндпоинты (сводно, P5.3/P5.5)
+
+- Users/Auth: `POST /api/v1/me/reapply-access`, расширенный
+  `GET /api/v1/me` (+full_name+allowed_pages), серверная регистрация
+  с уведомлением админам.
+- Notifications: `GET /api/v1/notifications`, `DELETE /api/v1/notifications`.
+- Admin/Users › TenderAccess: `GET /api/v1/admin/access-users`,
+  `POST /api/v1/admin/tender-extensions` (bulk upsert/remove в одной tx).
+- Positions: `GET /api/v1/tenders/{id}/boq-items-full`,
+  `POST /api/v1/positions/{id}/copy-from` (полная копия позиции + audit).
+- Construction Cost Volumes:
+  `GET /api/v1/tenders/{id}/construction-cost-volumes`,
+  `POST /api/v1/construction-cost-volumes` (upsert).
+- Timeline: `POST /api/v1/timeline/tenders/{id}/reconcile-groups`.
+
+### Bridge mode
+
+Supabase Auth (`supabase.auth.*`) остаётся как переходный механизм
+выдачи JWT. Удаление — отдельная задача (введение полноценного
+app-auth на Go BFF).
 
 ---
 
-> Статус: `FRONTEND_SUPABASE_WRITE_PATHS_NOT_READY` — полный аудит/
-> категоризация/план зафиксированы; ничего не задеплоено/не запушено; БД/
-> backend-runtime/Yandex/Supabase Auth не трогались. Реализация — поэтапно
-> по §Plan с верификацией на каждом шаге.
+> Статус: `FRONTEND_SUPABASE_WRITE_PATHS_MIGRATED`. Все бизнес-вызовы
+> Supabase (`from`/`rpc`/`channel`/`removeChannel`) из runtime фронта
+> удалены. Supabase Auth — bridge до отдельной миграции app-auth.

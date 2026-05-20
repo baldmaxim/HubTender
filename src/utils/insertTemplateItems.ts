@@ -19,6 +19,7 @@ interface InsertTemplateResult {
 export async function insertTemplateItems(
   templateId: string,
   clientPositionId: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _userId?: string
 ): Promise<InsertTemplateResult> {
   const res = await apiFetch<{ data: InsertTemplateResult }>(

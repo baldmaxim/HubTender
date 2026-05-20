@@ -157,6 +157,7 @@ export async function listTenderMarkupPercentages(tenderId: string): Promise<Ten
   return res.data ?? [];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function deleteTenderMarkupPercentages(_tenderId: string): Promise<void> {
   // No-op on Go: the replace is atomic via insertTenderMarkupPercentages
   // (PUT). Kept for caller compatibility (legacy delete+insert flow).

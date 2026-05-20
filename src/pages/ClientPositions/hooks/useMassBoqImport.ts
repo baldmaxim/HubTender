@@ -239,6 +239,7 @@ export const useMassBoqImport = () => {
   const insertBoqItems = async (
     data: ParsedBoqItem[],
     tenderId: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     userId?: string,
   ): Promise<boolean> => {
     try {

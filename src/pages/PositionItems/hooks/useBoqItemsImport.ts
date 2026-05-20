@@ -87,18 +87,6 @@ interface ValidationResult {
   unknownCosts: Array<{ text: string; rows: number[] }>;
 }
 
-interface WorkNameRecord {
-  id: string;
-  name: string;
-  unit: string;
-}
-
-interface MaterialNameRecord {
-  id: string;
-  name: string;
-  unit: string;
-}
-
 interface CostCategoryRecord {
   id: string;
   name: string;
@@ -106,7 +94,6 @@ interface CostCategoryRecord {
   cost_categories?: { name: string } | { name: string }[] | null;
 }
 
-const PAGE_SIZE = 1000;
 
 // ===========================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -132,33 +119,6 @@ const normalizeForLookup = (str: string): string => {
 
 const buildNomenclatureLookupKey = (name: string, unit: string): string => {
   return `${normalizeForLookup(name)}|${normalizeForLookup(unit)}`;
-};
-
-const fetchAllPages = async <T>(
-  queryFactory: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
-): Promise<T[]> => {
-  const items: T[] = [];
-  let from = 0;
-
-  for (;;) {
-    const to = from + PAGE_SIZE - 1;
-    const { data, error } = await queryFactory(from, to);
-
-    if (error) {
-      throw error;
-    }
-
-    const batch = data || [];
-    items.push(...batch);
-
-    if (batch.length < PAGE_SIZE) {
-      break;
-    }
-
-    from += PAGE_SIZE;
-  }
-
-  return items;
 };
 
 const parseNumber = (value: unknown): number | undefined => {

@@ -75,6 +75,7 @@ export async function fetchAllTendersForFilter(): Promise<ImportLogTender[]> {
  */
 export async function cancelImportSession(
   session: ImportSession,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _cancelledBy: string,
 ): Promise<CancelImportSessionResult> {
   const res = await apiFetch<{ data: CancelImportSessionResult }>(
