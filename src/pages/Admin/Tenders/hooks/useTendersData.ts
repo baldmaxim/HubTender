@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
-import { supabase, type Tender, type HousingClassType, type ConstructionScopeType } from '../../../../lib/supabase';
+import { type Tender, type HousingClassType, type ConstructionScopeType } from '../../../../lib/supabase';
 import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
 import { fetchTenders as apiFetchTenders } from '../../../../lib/api/tenders';
 import dayjs from 'dayjs';
@@ -99,7 +99,10 @@ export const useTendersData = () => {
   // Native WS hub (Go BFF) path. Unlike Supabase Realtime we don't get the full
   // row payload — we just refetch the list on any tenders event. The broker's
   // 200ms debounce collapses bulk mutations.
-  const wsActive = useRealtimeTopic('tenders', (ev) => {
+  // Native WS hub broadcasts to the global `tenders` topic on any row
+  // change. DELETE strips the row in-place; everything else triggers a
+  // refetch (the broker debounces bulk mutations 200 ms).
+  useRealtimeTopic('tenders', (ev) => {
     if (ev.op === 'DELETE') {
       setTendersData((prev) => prev.filter((t) => t.id !== ev.id));
     } else {
@@ -109,45 +112,7 @@ export const useTendersData = () => {
 
   useEffect(() => {
     fetchTenders();
-
-    if (wsActive) return;
-
-    // Supabase Realtime fallback.
-    // Триггер в БД обновляет cached_grand_total при изменении boq_items /
-    // tender_markup_percentage / subcontract_growth_exclusions, что вызывает
-    // UPDATE-событие в tenders — мы обновляем только затронутую запись.
-    const subscription = supabase
-      .channel('tenders_grand_total')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'tenders' },
-        (payload) => {
-          const updated = payload.new as Tender;
-          setTendersData((prev) =>
-            prev.map((t) => (t.id === updated.id ? formatTender(updated) : t))
-          );
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'tenders' },
-        () => {
-          fetchTenders();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'tenders' },
-        (payload) => {
-          setTendersData((prev) => prev.filter((t) => t.id !== payload.old.id));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(subscription);
-    };
-  }, [fetchTenders, wsActive]);
+  }, [fetchTenders]);
 
   return {
     tendersData,

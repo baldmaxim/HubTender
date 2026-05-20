@@ -3,7 +3,6 @@ import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, mes
 import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getVersionColorByTitle } from '../../utils/versionColor';
-import { supabase } from '../../lib/supabase';
 import { getTenderById } from '../../lib/api/fi';
 import { adminPatchTender } from '../../lib/api/tenders';
 import { getErrorMessage } from '../../utils/errors';
@@ -83,8 +82,8 @@ const FinancialIndicators: React.FC = () => {
     }
   }, [selectedTenderId, fetchFinancialIndicators, loadVolumeTitle]);
 
-  // Native WS hub when VITE_API_REALTIME_ENABLED=true.
-  const wsActive = useRealtimeTopic(
+  // Native WS hub (Go BFF) — refetch on tender row change.
+  useRealtimeTopic(
     selectedTenderId ? `tender:${selectedTenderId}` : null,
     () => {
       if (selectedTenderId) {
@@ -93,32 +92,6 @@ const FinancialIndicators: React.FC = () => {
       }
     },
   );
-
-  // Supabase Realtime fallback when WS is disabled.
-  useEffect(() => {
-    if (!selectedTenderId || wsActive) return;
-
-    const channel = supabase
-      .channel(`tender_changes_${selectedTenderId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'tenders',
-          filter: `id=eq.${selectedTenderId}`,
-        },
-        () => {
-          fetchFinancialIndicators(selectedTenderId);
-          loadVolumeTitle(selectedTenderId);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [selectedTenderId, wsActive, fetchFinancialIndicators, loadVolumeTitle]);
 
   const handleUpdateVolumeTitle = async () => {
     if (!selectedTenderId) return;

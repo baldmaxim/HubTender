@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import type { Tender } from '../../../lib/supabase';
 import type { BoqItemWithCosts } from '../utils';
@@ -9,6 +8,10 @@ import {
   loadLiveCommercialCalculationContext,
   resetLiveCommercialCalculationCache,
 } from '../../../utils/boq/liveCommercialCalculation';
+import { fetchTenders as apiFetchTenders } from '../../../lib/api/tenders';
+import { listMarkupTactics } from '../../../lib/api/markup';
+import { listBoqItemsFullByTender } from '../../../lib/api/positions';
+import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 
 export interface MarkupTactic {
   id: string;
@@ -75,8 +78,8 @@ export function useRedistributionData() {
     }
   }, [selectedTenderId, selectedTacticId, tenders]);
 
-  // Native WS hub (Go BFF) path.
-  const wsActive = useRealtimeTopic(
+  // Native WS hub — refetch boq items when the tender row changes.
+  useRealtimeTopic(
     selectedTenderId ? `tender:${selectedTenderId}` : null,
     () => {
       if (selectedTenderId) {
@@ -86,48 +89,13 @@ export function useRedistributionData() {
     !!selectedTenderId,
   );
 
-  // Supabase Realtime fallback.
-  useEffect(() => {
-    if (!selectedTenderId || wsActive) {
-      return;
-    }
-
-    const channel = supabase
-      .channel(`redistribution_tender_${selectedTenderId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'tenders',
-          filter: `id=eq.${selectedTenderId}`,
-        },
-        () => {
-          void loadBoqItems(selectedTenderId, selectedTacticId);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [selectedTenderId, selectedTacticId, wsActive]);
-
   const loadTenders = async () => {
     try {
-      // Страница использует только id/title/version для dropdown и
-      // markup_tactic_id для авто-выбора схемы — узкая проекция
-      // экономит сеть и десериализацию на тендерах с большим JSONB-контентом.
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('id, title, version, markup_tactic_id, created_at')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
-      setTenders((data ?? []) as unknown as Tender[]);
+      const all = await apiFetchTenders();
+      const sorted = [...all].sort((a, b) =>
+        (b.created_at || '').localeCompare(a.created_at || ''),
+      );
+      setTenders(sorted);
     } catch (error) {
       console.error('Ошибка загрузки тендеров:', error);
       message.error('Не удалось загрузить список тендеров');
@@ -136,17 +104,17 @@ export function useRedistributionData() {
 
   const loadMarkupTactics = async () => {
     try {
-      const { data, error } = await supabase
-        .from('markup_tactics')
-        .select('id, name, is_global')
-        .order('is_global', { ascending: false })
-        .order('name');
-
-      if (error) {
-        throw error;
-      }
-
-      setMarkupTactics(data || []);
+      const tactics = await listMarkupTactics();
+      const mapped: MarkupTactic[] = tactics.map((t) => ({
+        id: t.id,
+        name: t.name ?? '',
+        is_global: Boolean(t.is_global),
+      }));
+      mapped.sort((a, b) => {
+        if (a.is_global !== b.is_global) return a.is_global ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      setMarkupTactics(mapped);
     } catch (error) {
       console.error('Ошибка загрузки тактик наценок:', error);
       message.error('Не удалось загрузить список тактик');
@@ -158,62 +126,21 @@ export function useRedistributionData() {
 
     try {
       const calculationContext = await loadLiveCommercialCalculationContext(tenderId, tacticId);
-      const allBoqItems: RedistributionBoqItem[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
       resetLiveCommercialCalculationCache();
 
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('boq_items')
-          .select(`
-            id,
-            client_position_id,
-            detail_cost_category_id,
-            boq_item_type,
-            material_type,
-            quantity,
-            unit_rate,
-            currency_type,
-            delivery_price_type,
-            delivery_amount,
-            consumption_coefficient,
-            parent_work_item_id,
-            total_amount,
-            total_commercial_work_cost,
-            total_commercial_material_cost
-          `)
-          .eq('tender_id', tenderId)
-          .range(from, from + batchSize - 1);
+      const raw = (await listBoqItemsFullByTender(tenderId)) as unknown as RedistributionBoqItem[];
 
-        if (error) {
-          throw error;
-        }
-
-        if (!data || data.length === 0) {
-          hasMore = false;
-          continue;
-        }
-
-        const liveItems = data.map((item) => {
-          const { materialCost, workCost } = calculateLiveCommercialAmounts(
-            item,
-            calculationContext
-          );
-
-          return {
-            ...item,
-            total_commercial_material_cost: materialCost,
-            total_commercial_work_cost: workCost,
-          } as RedistributionBoqItem;
-        });
-
-        allBoqItems.push(...liveItems);
-        from += batchSize;
-        hasMore = data.length === batchSize;
-      }
+      const allBoqItems: RedistributionBoqItem[] = raw.map((item) => {
+        const { materialCost, workCost } = calculateLiveCommercialAmounts(
+          item as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0],
+          calculationContext,
+        );
+        return {
+          ...item,
+          total_commercial_material_cost: materialCost,
+          total_commercial_work_cost: workCost,
+        };
+      });
 
       setBoqItems(allBoqItems);
     } catch (error) {
@@ -226,34 +153,8 @@ export function useRedistributionData() {
 
   const loadClientPositions = async (tenderId: string) => {
     try {
-      const allPositions: ClientPosition[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('client_positions')
-          .select('*')
-          .eq('tender_id', tenderId)
-          .order('position_number', { ascending: true })
-          .range(from, from + batchSize - 1);
-
-        if (error) {
-          throw error;
-        }
-
-        if (!data || data.length === 0) {
-          hasMore = false;
-          continue;
-        }
-
-        allPositions.push(...(data as ClientPosition[]));
-        from += batchSize;
-        hasMore = data.length === batchSize;
-      }
-
-      setClientPositions(allPositions);
+      const rows = await fetchPositionsWithCosts(tenderId);
+      setClientPositions(rows as unknown as ClientPosition[]);
     } catch (error) {
       console.error('Ошибка загрузки позиций заказчика:', error);
       message.error('Не удалось загрузить позиции заказчика');

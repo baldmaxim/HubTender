@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { message } from 'antd';
 import {
-  supabase,
   type Tender,
   type ClientPosition,
   type CurrencyType,
@@ -240,8 +239,8 @@ export const useClientPositions = () => {
     [applyAggregate],
   );
 
-  // Native WS hub (Go BFF) path.
-  const wsActive = useRealtimeTopic(
+  // Native WS hub (Go BFF) — обновляем кеш + позиции при изменении тендера.
+  useRealtimeTopic(
     selectedTender?.id ? `tender:${selectedTender.id}` : null,
     () => {
       if (selectedTender?.id) {
@@ -251,35 +250,6 @@ export const useClientPositions = () => {
       }
     },
   );
-
-  // Supabase Realtime fallback.
-  useEffect(() => {
-    if (!selectedTender?.id || wsActive) {
-      return;
-    }
-
-    const channel = supabase
-      .channel(`client-positions-tender-${selectedTender.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'tenders',
-          filter: `id=eq.${selectedTender.id}`,
-        },
-        () => {
-          dropPositionsCache(selectedTender.id);
-          void fetchTenders();
-          void fetchClientPositions(selectedTender.id);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [fetchClientPositions, fetchTenders, selectedTender?.id, wsActive]);
 
   return {
     tenders,
