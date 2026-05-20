@@ -51,10 +51,10 @@ gate-артефактами. Все gate-статусы зелёные:
 | Переменная | Назначение | Можно использовать | НЕЛЬЗЯ использовать |
 |---|---|---|---|
 | `OLD_SUPABASE_DB_URL` | DSN старого Supabase (`wkywhjljrhewfpedbjzx`) | Только исторический архив / разовые ретро-сверки OLD↔PROD прошлого этапа | ❌ Как source для Yandex migration (любой Yandex export/verify) |
-| `PROD_SUPABASE_DB_URL` | DSN PROD Supabase (`ocauafggjrqvopxjihas`) | ✅ Единственный source для будущего экспорта PROD → Yandex | Не использовать как target; не писать в него на Yandex-этапе |
-| `YANDEX_DATABASE_URL` | Будущий DSN Yandex Managed PG (target) | После активации — target для import/verify Yandex-этапа | До активации — не задаётся, не коммитится, Go BFF на него не указывает |
-| `YANDEX_SSL_ROOT_CERT` | Путь к Yandex root CA (для `sslmode=verify-full`) | После активации — TLS-верификация подключения к Yandex | До активации — не требуется |
-| `DATABASE_URL` | Runtime-DSN Go BFF (сейчас → PROD Supabase) | Сейчас указывает на PROD Supabase | ❌ **Не менять в этом промте.** Переключение на Yandex — отдельный защищённый cutover (см. [05_CUTOVER_RULES.md](./05_CUTOVER_RULES.md)) |
+| `PROD_SUPABASE_DB_URL` | DSN PROD Supabase (`ocauafggjrqvopxjihas`) | ✅ Source для refresh-экспорта PROD → Yandex (`scripts/prod-to-yandex/`); rollback DSN reference | Не active runtime после cutover 2026-05-18; не использовать как target Yandex-импорта |
+| `YANDEX_DATABASE_URL` | DSN Yandex Managed PG | ✅ **Active runtime target** Go BFF и source-of-truth для бизнес-данных | Только в `scripts/prod-to-yandex/.env.prod-to-yandex` (импорт-тулчейн) и в `/etc/hubtender/.env.prod` на prod-сервере; в git не коммитится |
+| `YANDEX_SSL_ROOT_CERT` | Путь к Yandex root CA (для `sslmode=verify-full`) | ✅ Active — TLS-верификация подключения к Yandex (`/certs/yandex-ca.pem` в production контейнере) | Не печатать содержимое CA в логах sandbox |
+| `DATABASE_URL` | Runtime-DSN Go BFF — **сейчас → Yandex Managed PostgreSQL** (cutover 2026-05-18, см. [23_RUNTIME_CUTOVER_RESULT.md](./23_RUNTIME_CUTOVER_RESULT.md), переподтверждён 2026-05-21 после Phase 5 deploy, см. [24_FRONTEND_DEPLOY_RESULT.md](./24_FRONTEND_DEPLOY_RESULT.md)) | Yandex Managed PG (`...mdb.yandexcloud.net:6432/HubTender?sslmode=verify-full&sslrootcert=/certs/yandex-ca.pem`). Хранится в `/etc/hubtender/.env.prod` (`chmod 600`, вне git) | ❌ **Не менять без отдельного cutover/rollback** (см. [05_CUTOVER_RULES.md](./05_CUTOVER_RULES.md)). Предыдущий PROD Supabase DSN — только rollback reference, не active runtime |
 
 ## 5. Связанные документы
 

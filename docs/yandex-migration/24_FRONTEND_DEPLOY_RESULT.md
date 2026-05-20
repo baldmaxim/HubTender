@@ -234,14 +234,141 @@ Frontend is now deployed against Go BFF/Yandex routing. Rollback point remains
 the pre-deploy `/srv/sites/tender.su10.ru/public.backup-*` directory from the
 deploy shell.
 
-### Что НЕ трогалось в этой сессии
+### Что НЕ трогалось в этой sandbox-сессии (локально)
 
-- Production `DATABASE_URL` — без изменений.
-- Supabase Auth — оставлен bridge.
+- Local `.env*` — не менялись и не коммитились.
 - App-auth — не вводился.
-- Backend / DB — без изменений, никаких import/clean/repair.
-- `.env*` файлы — не коммитились.
+- БД / import / clean / repair — не запускались.
+- Backend runtime logic — не менялся sandbox'ом (rebuild на проде по факту
+  выполнен оператором — см. секцию «Deploy executed 2026-05-21» §7 ниже).
+
+> **Важно:** Sandbox-замечания «production `DATABASE_URL` без изменений» из
+> ранних редакций этого документа описывали состояние **sandbox**, а не
+> production. Фактический runtime Go BFF на prod-сервере был переключён на
+> Yandex ещё **2026-05-18** (см. `23_RUNTIME_CUTOVER_RESULT.md`);
+> сегодняшний data-refresh + frontend deploy идут уже поверх Yandex.
+> Подробности runtime DB см. в секции «Deploy executed 2026-05-21» §9 ниже.
 
 > Первичная локальная верификация была сделана против HEAD `61284ad`.
-> Production deploy повторно собран и проверен оператором против HEAD
-> `f2cafdb`.
+> Production deploy пересобран и проверен оператором против HEAD `f2cafdb`.
+
+---
+
+## Deploy executed 2026-05-21 (operator confirmed) — detailed appendix
+
+Расширенная версия секции «Remote deploy (operator-side) — 2026-05-20/21»
+выше: добавляет incident-разбор, runtime DB DSN и follow-ups, которые не
+вошли в короткое summary.
+
+### 1. Final status
+
+```
+FRONTEND_DEPLOY_OK
+```
+
+### 2. nginx proxy
+
+- `nginx -t` ✓
+- `/api/` → `127.0.0.1:3006` (Go BFF контейнер `hubtender-bff`) ✓
+- `/api/v1/ws` — WebSocket upgrade headers ✓
+- SPA fallback на `index.html` интактен ✓
+- `curl -i https://tender.su10.ru/api/v1/me` → 401 без токена (proxy до BFF
+  работает) ✓
+
+### 3. Frontend production build
+
+- Origin: `https://tender.su10.ru`
+- `VITE_API_URL=https://tender.su10.ru` (inline в бандле)
+- `VITE_API_MODE=go`
+- 18 доменных `VITE_API_*_ENABLED=true`
+- `.env.production.yandex` не закоммичен (gitignored)
+
+### 4. Business requests → Go BFF
+
+- 111 различных путей `/api/v1/*` в основном бандле
+- `/rest/v1/` (Supabase PostgREST) — **отсутствует**
+- В Network браузера: все business-запросы летят на
+  `https://tender.su10.ru/api/v1/*`
+
+### 5. Supabase Auth
+
+- Login через `supabase.auth.signInWithPassword` работает ✓
+- JWT выдаётся `https://ocauafggjrqvopxjihas.supabase.co/auth/v1`
+- Go BFF валидирует JWT через JWKS того же issuer
+- Anon key в bundle (public by design — для Auth-клиента)
+- `/auth/v1` Supabase calls присутствуют только в auth-flow, не в
+  business-data flow
+
+### 6. WebSocket
+
+- `/api/v1/ws` подключается через Go BFF
+- Подписка на топики `notifications:<user_id>`, `tender:<tender_id>`,
+  `tenders` работает через native WS hub
+- Source: pg `LISTEN/NOTIFY` от Yandex (триггеры `trg_notify_row_change_*`
+  на 6 таблицах)
+
+### 7. Backend rebuild
+
+- Перед rebuild: фронт `f2cafdb` имел новые эндпоинты (Phase 5), Go BFF на
+  проде — старее → 404 на `/api/v1/redistributions`,
+  `/api/v1/tenders/{id}/boq-items-full` и др.
+- Действие: `git pull origin main` → backend rebuild (docker / go build) →
+  restart `hubtender-bff` контейнера.
+- Подтверждение post-rebuild: 404 → 401 (роут есть, нужен токен) на новых
+  эндпоинтах. Browser smoke оператором: «вроде чётко заработало».
+
+### 8. Incident: frontend ahead of backend
+
+- **Симптом:** в браузере 404 от
+  `GET /api/v1/redistributions?tender_id=…&markup_tactic_id=…` и
+  `GET /api/v1/tenders/{id}/boq-items-full`. Это новые эндпоинты Phase 5
+  (`backend/cmd/server/main.go:262` и `:367`).
+- **Root cause:** фронт `f2cafdb` ушёл вперёд бэкенда — фронт ссылался на
+  эндпоинты, которых в production-бинаре не было.
+- **Fix-forward (не rollback):** пересобрать Go BFF из текущего HEAD и
+  перезапустить контейнер. Альтернатива (rollback фронта на backup) не
+  использовалась.
+- **Verification:** post-rebuild — те же curl возвращают 401, smoke
+  оператора зелёный.
+- **Lesson learned:** в Phase 5+ release деплоит backend и frontend
+  синхронно из одного коммита (см. follow-up «sync release process»).
+
+### 9. Runtime DB
+
+| | |
+|---|---|
+| Active Go BFF container `DATABASE_URL` | `postgres://…@rc1d-m4ubd0uem0j9gqqc.mdb.yandexcloud.net:6432/HubTender?sslmode=verify-full&sslrootcert=/certs/yandex-ca.pem` |
+| sslmode | `verify-full` |
+| sslrootcert (в контейнере) | `/certs/yandex-ca.pem` (mount read-only) |
+| Connection-manager mode | session (port 6432, pooler в session-mode) |
+| `SUPABASE_JWKS_URL` | `https://ocauafggjrqvopxjihas.supabase.co/auth/v1/.well-known/jwks.json` |
+| `SUPABASE_JWT_ISSUER` | `https://ocauafggjrqvopxjihas.supabase.co/auth/v1` |
+| `CORS_ORIGINS` | `https://tender.su10.ru` |
+
+Значение `DATABASE_URL` находится только в `/etc/hubtender/.env.prod` на
+prod-сервере (`chmod 600`, вне git). DSN/пароль никуда не печатаются.
+
+### 10. Remaining bridge
+
+- **Supabase Auth** (`signInWithPassword` / `signOut` / `getSession` /
+  `onAuthStateChange` / JWKS) — единственный оставшийся Supabase runtime.
+- App-auth миграция — **отдельная задача** ([22_APP_AUTH_MIGRATION_PLAN.md](./22_APP_AUTH_MIGRATION_PLAN.md))
+  с планом перехода на app-issued JWT.
+- Никаких других Supabase business calls в runtime фронта или backend нет
+  (см. `26_FRONTEND_SUPABASE_WRITE_PATHS.md`).
+
+### 11. Open follow-ups
+
+- [ ] Мониторить логи `hubtender-bff` (`journalctl -u hubtender-bff -f`) и
+  nginx access/error log первые 24–48ч на регрессии.
+- [ ] Сохранять previous Supabase `DATABASE_URL` как **rollback DSN
+  reference** в защищённом vault на случай экстренного отката (не как
+  active runtime).
+- [ ] App-auth migration (см. doc 22) — отдельная санкционированная сессия.
+- [ ] Не допускать **drift** Supabase Auth runtime сверх accepted policy:
+  никаких новых `supabase.from/rpc/channel` в `src/`, никаких новых
+  PostgREST-вызовов; Auth используется только для login/JWT.
+- [ ] Sync release process: единый bump backend+frontend в одном PR/HEAD,
+  чтобы не повторился incident §8.
+- [ ] Verify Yandex CA path stability: `/certs/yandex-ca.pem` должен быть
+  immutable mount в production контейнере; проверять при ребилде образа.

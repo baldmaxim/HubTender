@@ -1,8 +1,30 @@
-# Yandex Managed PostgreSQL — Target Inventory (preparatory)
+# Yandex Managed PostgreSQL — Target Inventory (historical pre-cutover)
 
-> Этот документ собран **до** подключения Yandex Managed PostgreSQL к проекту HubTender. Yandex-кластер создан, но в runtime не используется. Документ фиксирует список параметров и pre-flight-проверок, которые понадобятся **после** того как PROD Supabase будет признан стабильным и Go BFF подтверждён.
+> **Исторический документ — pre-cutover snapshot.** Был собран **до**
+> подключения Yandex Managed PostgreSQL к runtime. Сейчас Yandex —
+> **active runtime** Go BFF (cutover выполнен 2026-05-18, см.
+> [23_RUNTIME_CUTOVER_RESULT.md](./23_RUNTIME_CUTOVER_RESULT.md);
+> переподтверждено после Phase 5 + data refresh в
+> [24_FRONTEND_DEPLOY_RESULT.md](./24_FRONTEND_DEPLOY_RESULT.md) (FRONTEND_DEPLOY_OK 2026-05-21)).
+> Текст ниже сохранён как pre-cutover snapshot — он описывает состояние
+> ДО переключения и больше не отражает runtime. Для актуального состояния
+> см. ссылки выше + [00_SOURCE_OF_TRUTH.md](./00_SOURCE_OF_TRUTH.md) §4.
 
-## 0. Status: NOT YET ACTIVE
+## 0. Status (current — 2026-05-21)
+
+| | |
+|---|---|
+| Yandex cluster created | ✅ |
+| Yandex used as runtime target | ✅ — `DATABASE_URL` Go BFF указывает на Yandex Managed PG (`...mdb.yandexcloud.net:6432/HubTender`) |
+| `DATABASE_URL` указывает на Yandex | ✅ — `sslmode=verify-full`, `sslrootcert=/certs/yandex-ca.pem` |
+| Migration scripts запущены против Yandex | ✅ — `DATA_IMPORT_OK` + `YANDEX_VERIFY_OK` + `YANDEX_AUTH_VERIFY_OK` (см. doc 27) |
+| Frontend подключен через Go BFF | ✅ — `https://tender.su10.ru/api/v1/*` (см. doc 24, FRONTEND_DEPLOY_OK 2026-05-21) |
+| PROD Supabase DSN | rollback reference only — не active runtime |
+
+## 0a. Status (historical — pre-cutover snapshot)
+
+Следующее описание зафиксировано до 2026-05-18 cutover'а и оставлено для
+истории:
 
 | | |
 |---|---|
@@ -13,7 +35,7 @@
 | Frontend/backend подключены к Yandex | ❌ |
 | Migration scripts запущены против Yandex | ❌ |
 
-**До активации НИКАКИХ изменений** в `DATABASE_URL`, `.env.example`, `db/yandex/sql/`, `backend/`, `src/` не делать.
+**До активации НИКАКИХ изменений** в `DATABASE_URL`, `.env.example`, `db/yandex/sql/`, `backend/`, `src/` не делать. *(Эта инструкция устарела после cutover'а 2026-05-18.)*
 
 ## 1. Activation gate (когда Yandex становится target)
 

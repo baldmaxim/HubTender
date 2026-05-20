@@ -3,10 +3,18 @@
 > Fresh end-to-end refresh after Phase 5 frontend migration. Three legs:
 > **OLD Supabase → PROD Supabase → Yandex PostgreSQL**, followed by Go BFF
 > verification vs Yandex.
-> Production `DATABASE_URL` was **NOT** changed, frontend was **NOT**
-> deployed, Supabase Auth bridge was preserved, app-auth was **NOT**
-> introduced, nothing was pushed. DSN / passwords / tokens / hashes never
-> printed.
+>
+> Sandbox session itself did **not** modify production `DATABASE_URL`,
+> deploy frontend, introduce app-auth, or push (at the time this document
+> was first written). Operator-side actions (frontend deploy, Go BFF
+> rebuild) followed in a separate session and are recorded in
+> [24_FRONTEND_DEPLOY_RESULT.md](./24_FRONTEND_DEPLOY_RESULT.md).
+> Note: production Go BFF runtime `DATABASE_URL` had **already** pointed to
+> Yandex since the 2026-05-18 cutover
+> ([23_RUNTIME_CUTOVER_RESULT.md](./23_RUNTIME_CUTOVER_RESULT.md));
+> today's refresh therefore reloaded data into the already-active runtime
+> target.
+> DSN / passwords / tokens / hashes never printed.
 
 - Date (UTC): 2026-05-20
 - Operator confirmations recorded:
@@ -190,19 +198,23 @@ All six gating tokens green:
 
 ### Frontend deploy
 
-Frontend deploy **may proceed under separate authorisation** — data is
-fresh on Yandex, Go BFF reads it correctly, and Phase 5 has already
-eliminated runtime Supabase business calls. Per the operator's standing
-instruction, deploy was **NOT** performed in this session.
+Frontend deploy proceeded under separate authorisation on 2026-05-21.
+Status: `FRONTEND_DEPLOY_OK` — see
+[24_FRONTEND_DEPLOY_RESULT.md](./24_FRONTEND_DEPLOY_RESULT.md) for full
+post-deploy record (nginx proxy, browser smoke, backend rebuild incident
+fix-forward, runtime Yandex DSN summary).
 
-### What was NOT touched
+### What was NOT touched in the data-refresh sandbox session
 
-- Production `DATABASE_URL` — not modified.
-- Supabase Auth — preserved as bridge.
-- App-auth — not introduced.
-- Frontend deploy — not executed.
-- Git push — not performed.
-- `.env` files — not edited.
+- Sandbox session itself did not modify `.env` files locally.
+- App-auth — not introduced (separate plan: [22_APP_AUTH_MIGRATION_PLAN.md](./22_APP_AUTH_MIGRATION_PLAN.md)).
+- Sandbox session did not perform git push at first write (push happened
+  with explicit operator approval in subsequent step).
+- No `import` / `clean` / `repair` outside of the documented refresh
+  pipeline.
 
-> Доступ Yandex остаётся в **verification mode** до отдельного approve на
-> переключение production runtime `DATABASE_URL`.
+> **Production runtime state (updated):** Go BFF `DATABASE_URL` уже
+> указывало на Yandex Managed PG до начала сегодняшнего refresh'а
+> (cutover 2026-05-18, см. doc 23). Refresh обновил содержимое active
+> runtime БД, а не активировал её впервые. Yandex — active runtime;
+> предыдущий PROD Supabase DSN остаётся только как rollback reference.
