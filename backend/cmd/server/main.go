@@ -275,6 +275,7 @@ func main() {
 		r.Post("/api/v1/positions/{id}/recompute-totals", positionWH.RecomputePositionTotals)
 		r.Patch("/api/v1/positions/{id}/fields", positionWH.UpdatePositionFields)
 		r.Post("/api/v1/items/{id}/recompute-linked-materials", boqWH.RecomputeLinkedMaterials)
+		r.Post("/api/v1/positions/{id}/copy-from", boqWH.CopyPositionItems)
 		r.Patch("/api/v1/positions/{id}", positionWH.UpdatePosition)
 
 		r.Post("/api/v1/tenders/{id}/positions/{posId}/items", boqWH.CreateBoqItem)

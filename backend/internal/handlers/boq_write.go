@@ -23,6 +23,7 @@ type boqWriteServicer interface {
 	DeleteBoqItem(ctx context.Context, id, changedBy string) (*repository.BoqItemRow, error)
 	InsertTemplateItems(ctx context.Context, templateID, clientPositionID, changedBy string) (*repository.TemplateInsertResult, error)
 	RecomputeLinkedMaterialsForWork(ctx context.Context, workID, changedBy string) (int, error)
+	CopyPositionItems(ctx context.Context, sourcePositionID, targetPositionID, changedBy string) (*repository.CopyResult, error)
 }
 
 // BoqWriteHandler handles mutating BOQ item endpoints.
@@ -327,4 +328,43 @@ func (h *BoqWriteHandler) RecomputeLinkedMaterials(w http.ResponseWriter, r *htt
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: map[string]int{"updated": n}})
+}
+
+type copyPositionItemsReq struct {
+	SourcePositionID string `json:"source_position_id" validate:"required,uuid"`
+}
+
+// CopyPositionItems handles POST /api/v1/positions/{id}/copy-from — copies
+// every boq_item from source_position_id into the path's target position id.
+func (h *BoqWriteHandler) CopyPositionItems(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	targetID := chi.URLParam(r, "id")
+	if targetID == "" {
+		apierr.BadRequest("missing target position id").Render(w)
+		return
+	}
+	var req copyPositionItemsReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+	res, err := h.svc.CopyPositionItems(r.Context(), req.SourcePositionID, targetID, authUser.ID)
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrCopyTenderMismatch):
+			apierr.BadRequest(err.Error()).Render(w)
+		default:
+			apierr.InternalError("failed to copy position items").Render(w)
+		}
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: res})
 }

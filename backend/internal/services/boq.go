@@ -17,6 +17,7 @@ type boqRepoer interface {
 	DeleteBoqItem(ctx context.Context, id, changedBy string) (*repository.BoqItemRow, error)
 	InsertTemplateItems(ctx context.Context, templateID, clientPositionID, changedBy string) (*repository.TemplateInsertResult, error)
 	RecomputeLinkedMaterialsForWork(ctx context.Context, workID, changedBy string) (int, error)
+	CopyPositionItems(ctx context.Context, sourcePositionID, targetPositionID, changedBy string) (*repository.CopyResult, error)
 }
 
 // BoqService provides access to boq_items data.
@@ -121,4 +122,18 @@ func (s *BoqService) RecomputeLinkedMaterialsForWork(
 	}
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return n, nil
+}
+
+// CopyPositionItems clones every boq_item from sourcePositionID into
+// targetPositionID in one tx (with audit), refreshes target totals and
+// invalidates the tender list cache.
+func (s *BoqService) CopyPositionItems(
+	ctx context.Context, sourcePositionID, targetPositionID, changedBy string,
+) (*repository.CopyResult, error) {
+	res, err := s.repo.CopyPositionItems(ctx, sourcePositionID, targetPositionID, changedBy)
+	if err != nil {
+		return nil, fmt.Errorf("boqService.CopyPositionItems: %w", err)
+	}
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	return res, nil
 }

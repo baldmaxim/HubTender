@@ -38,6 +38,27 @@ export async function recomputeLinkedMaterials(workId: string): Promise<number> 
   return res.data.updated;
 }
 
+export interface CopyPositionItemsResult {
+  works_count: number;
+  materials_count: number;
+  total_copied: number;
+}
+
+/** Скопировать ВСЕ boq_items из исходной позиции в целевую (одна tx + audit). */
+export async function copyPositionItems(
+  sourcePositionId: string,
+  targetPositionId: string,
+): Promise<CopyPositionItemsResult> {
+  const res = await apiFetch<{ data: CopyPositionItemsResult }>(
+    `/api/v1/positions/${encodeURIComponent(targetPositionId)}/copy-from`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ source_position_id: sourcePositionId }),
+    },
+  );
+  return res.data;
+}
+
 // ─── audit history ──────────────────────────────────────────────────────────
 
 export interface BoqAuditApiRow {
