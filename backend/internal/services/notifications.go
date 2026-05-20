@@ -23,3 +23,18 @@ func (s *NotificationsService) Create(ctx context.Context, in repository.Notific
 	}
 	return nil
 }
+
+func (s *NotificationsService) List(ctx context.Context, limit int) ([]repository.NotificationRow, error) {
+	rows, err := s.repo.List(ctx, limit)
+	if err != nil {
+		return nil, fmt.Errorf("notificationsService.List: %w", err)
+	}
+	return rows, nil
+}
+
+func (s *NotificationsService) DeleteAll(ctx context.Context) error {
+	if err := s.repo.DeleteAll(ctx); err != nil {
+		return fmt.Errorf("notificationsService.DeleteAll: %w", err)
+	}
+	return nil
+}

@@ -39,8 +39,9 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { LogoIcon } from '../Icons';
-import { supabase, type Notification } from '../../lib/supabase';
+import { type Notification } from '../../lib/supabase';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
+import { listNotifications, deleteAllNotifications } from '../../lib/api/notifications';
 import { hasPageAccess } from '../../lib/supabase/types';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -78,46 +79,21 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     token: { colorBgContainer },
   } = theme.useToken();
 
-  // Native WS hub (Go BFF) when VITE_API_REALTIME_ENABLED=true; returns true in that case.
-  const wsActive = useRealtimeTopic(
+  // Native WS hub (Go BFF) — feeds notifications:<user_id> topic.
+  useRealtimeTopic(
     user?.id ? `notifications:${user.id}` : null,
     () => fetchNotifications(),
   );
 
-  // Load initial data + Supabase Realtime fallback when WS is disabled.
   useEffect(() => {
     fetchNotifications();
+  }, []);
 
-    if (wsActive) return;
-
-    const channel = supabase
-      .channel('notifications-channel')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications' },
-        () => fetchNotifications()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [wsActive]);
-
-  // Функция для загрузки уведомлений из базы данных
   const fetchNotifications = async () => {
     try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50); // Загружаем последние 50 уведомлений
-
-      if (error) throw error;
-
-      setNotifications(data || []);
-      // Подсчитываем непрочитанные уведомления
-      const unread = (data || []).filter(n => !n.is_read).length;
+      const rows = await listNotifications(50);
+      setNotifications(rows as unknown as Notification[]);
+      const unread = rows.filter((n) => !n.is_read).length;
       setUnreadCount(unread);
     } catch (error) {
       console.error('Ошибка загрузки уведомлений:', error);
@@ -140,16 +116,9 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     }
   };
 
-  // Функция для очистки всех уведомлений
   const clearAllNotifications = async () => {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // Удаляем все записи
-
-      if (error) throw error;
-
+      await deleteAllNotifications();
       setNotifications([]);
       setUnreadCount(0);
     } catch (error) {

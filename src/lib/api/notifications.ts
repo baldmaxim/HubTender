@@ -1,4 +1,4 @@
-// System notifications helpers with Go BFF / Supabase fallback.
+// System notifications helpers (Go BFF).
 
 import { apiFetch } from './client';
 
@@ -11,11 +11,18 @@ export interface SystemNotificationInput {
   user_id?: string;
 }
 
-/**
- * Insert a notifications row.
- * Go path: POST /api/v1/notifications (returns 204).
- * Supabase path: direct insert.
- */
+export interface NotificationRow {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+/** Insert a notifications row. POST /api/v1/notifications → 204. */
 export async function createSystemNotification(input: SystemNotificationInput): Promise<void> {
   const type = input.type ?? 'info';
 
@@ -28,4 +35,17 @@ export async function createSystemNotification(input: SystemNotificationInput): 
       ...(input.user_id ? { user_id: input.user_id } : {}),
     }),
   });
+}
+
+/** GET /api/v1/notifications?limit=50 — newest first. */
+export async function listNotifications(limit = 50): Promise<NotificationRow[]> {
+  const res = await apiFetch<{ data: NotificationRow[] }>(
+    `/api/v1/notifications?limit=${encodeURIComponent(String(limit))}`,
+  );
+  return res.data ?? [];
+}
+
+/** DELETE /api/v1/notifications — clear all rows. */
+export async function deleteAllNotifications(): Promise<void> {
+  await apiFetch<undefined>('/api/v1/notifications', { method: 'DELETE' });
 }

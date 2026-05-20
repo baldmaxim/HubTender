@@ -368,8 +368,10 @@ func main() {
 		r.Post("/api/v1/tenders/{id}/position-filters/append", positionFiltersH.Append)
 		r.Delete("/api/v1/tenders/{id}/position-filters", positionFiltersH.Clear)
 
-		// Notifications (write).
+		// Notifications.
+		r.Get("/api/v1/notifications", notificationsH.List)
 		r.Post("/api/v1/notifications", notificationsH.Create)
+		r.Delete("/api/v1/notifications", notificationsH.DeleteAll)
 
 		// Tender registry + statuses + scopes.
 		r.Get("/api/v1/tender-registry", tenderRegistryH.List)
