@@ -90,3 +90,4 @@ func (s *UserService) Register(ctx context.Context, in repository.RegisterUserIn
 	s.cache.Delete("user:" + in.UserID)
 	return nil
 }
+

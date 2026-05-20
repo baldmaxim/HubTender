@@ -16,6 +16,8 @@ import (
 // userAdminServicer is the interface UserAdminHandler depends on.
 type userAdminServicer interface {
 	ListTendersForUserAccess(ctx context.Context) ([]repository.TenderForAccessRow, error)
+	ListAccessUsers(ctx context.Context) ([]repository.AccessUserRow, error)
+	SetTenderExtensionForUsers(ctx context.Context, tenderID string, userIDs []string, extendedDeadline string) error
 	ListPendingUsers(ctx context.Context) ([]repository.PendingUserRow, error)
 	ListAllUsers(ctx context.Context) ([]repository.AdminUserRow, error)
 	ApproveUser(ctx context.Context, id string, in repository.ApproveInput) error
@@ -54,6 +56,41 @@ func (h *UserAdminHandler) ListTendersForUserAccess(w http.ResponseWriter, r *ht
 		rows = []repository.TenderForAccessRow{}
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+func (h *UserAdminHandler) ListAccessUsers(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.svc.ListAccessUsers(r.Context())
+	if err != nil {
+		apierr.InternalError("failed to list access users").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.AccessUserRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+type setTenderExtensionReq struct {
+	TenderID         string   `json:"tender_id"`
+	UserIDs          []string `json:"user_ids"`
+	ExtendedDeadline string   `json:"extended_deadline"` // empty = remove
+}
+
+func (h *UserAdminHandler) SetTenderExtension(w http.ResponseWriter, r *http.Request) {
+	var req setTenderExtensionReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if strings.TrimSpace(req.TenderID) == "" || len(req.UserIDs) == 0 {
+		apierr.BadRequest("tender_id and user_ids required").Render(w)
+		return
+	}
+	if err := h.svc.SetTenderExtensionForUsers(r.Context(), req.TenderID, req.UserIDs, req.ExtendedDeadline); err != nil {
+		apierr.InternalError("failed to set tender extension").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ─── Users ──────────────────────────────────────────────────────────────────

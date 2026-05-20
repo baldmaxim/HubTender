@@ -458,6 +458,8 @@ func main() {
 
 		// Admin user / role management.
 		r.Get("/api/v1/admin/tenders-for-access", userAdminH.ListTendersForUserAccess)
+		r.Get("/api/v1/admin/access-users", userAdminH.ListAccessUsers)
+		r.Post("/api/v1/admin/tender-extensions", userAdminH.SetTenderExtension)
 		r.Get("/api/v1/admin/users/pending", userAdminH.ListPending)
 		r.Get("/api/v1/admin/users", userAdminH.ListAll)
 		r.Get("/api/v1/admin/users/count-by-role", userAdminH.CountByRole)

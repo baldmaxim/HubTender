@@ -51,6 +51,31 @@ export async function listTendersForUserAccess(): Promise<TenderListItem[]> {
   return res.data ?? [];
 }
 
+export interface AccessUserRow {
+  id: string;
+  full_name: string;
+  role_code: string;
+  role_name: string;
+  tender_deadline_extensions: { tender_id: string; extended_deadline: string }[];
+}
+
+export async function listAccessUsers(): Promise<AccessUserRow[]> {
+  const res = await apiFetch<{ data: AccessUserRow[] }>('/api/v1/admin/access-users');
+  return res.data ?? [];
+}
+
+/** Upsert (or remove when extendedDeadline === '') the per-tender extension for the given user_ids. */
+export async function setTenderExtensionForUsers(input: {
+  tender_id: string;
+  user_ids: string[];
+  extended_deadline: string;
+}): Promise<void> {
+  await apiFetch<undefined>('/api/v1/admin/tender-extensions', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 // ─── Users ──────────────────────────────────────────────────────────────────
 
 export async function listPendingUsers(): Promise<PendingRequestRow[]> {

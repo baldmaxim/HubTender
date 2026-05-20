@@ -30,6 +30,22 @@ func (s *UserAdminService) ListTendersForUserAccess(ctx context.Context) ([]repo
 	return s.repo.ListTendersForUserAccess(ctx)
 }
 
+func (s *UserAdminService) ListAccessUsers(ctx context.Context) ([]repository.AccessUserRow, error) {
+	return s.repo.ListAccessUsers(ctx)
+}
+
+func (s *UserAdminService) SetTenderExtensionForUsers(
+	ctx context.Context, tenderID string, userIDs []string, extendedDeadline string,
+) error {
+	if err := s.repo.SetTenderExtensionForUsers(ctx, tenderID, userIDs, extendedDeadline); err != nil {
+		return fmt.Errorf("userAdminService.SetTenderExtensionForUsers: %w", err)
+	}
+	for _, id := range userIDs {
+		s.invalidateUser(id)
+	}
+	return nil
+}
+
 func (s *UserAdminService) ListPendingUsers(ctx context.Context) ([]repository.PendingUserRow, error) {
 	return s.repo.ListPendingUsers(ctx)
 }

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Select, DatePicker, message, Space, Tag, Tooltip } from 'antd';
 import { CalendarOutlined, DeleteOutlined } from '@ant-design/icons';
-import { supabase } from '../../../lib/supabase';
 import dayjs from 'dayjs';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { TenderDeadlineExtension } from '../../../lib/supabase/types';
 import { getErrorMessage } from '../../../utils/errors';
+import { fetchTenders } from '../../../lib/api/tenders';
+import { listAccessUsers, setTenderExtensionForUsers } from '../../../lib/api/userAdmin';
 
 interface TenderRecord {
   id: string;
@@ -46,17 +47,21 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [selectedDeleteUserIds, setSelectedDeleteUserIds] = useState<string[]>([]);
 
-  // Загрузка тендеров
   const loadTenders = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('id, tender_number, version, title, submission_deadline')
-        .order('submission_deadline', { ascending: false });
-
-      if (error) throw error;
-      setTenders(data || []);
+      const all = await fetchTenders();
+      const mapped: TenderRecord[] = (all ?? [])
+        .filter((t) => Boolean(t.submission_deadline))
+        .map((t) => ({
+          id: t.id,
+          tender_number: t.tender_number ?? '',
+          version: t.version ?? 1,
+          title: t.title ?? '',
+          submission_deadline: t.submission_deadline as string,
+        }))
+        .sort((a, b) => b.submission_deadline.localeCompare(a.submission_deadline));
+      setTenders(mapped);
     } catch (error) {
       console.error('Ошибка загрузки тендеров:', error);
       message.error('Ошибка загрузки тендеров');
@@ -65,72 +70,27 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
     }
   };
 
-  // Загрузка пользователей (исключая роли с полным доступом)
-  const loadUsers = async () => {
+  // Approved non-privileged users + their per-tender extensions in one fetch.
+  const loadUsersAndExtensions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select(`
-          id,
-          full_name,
-          role_code,
-          roles:role_code (name)
-        `)
-        .not('role_code', 'in', '(administrator,director,developer,veduschiy_inzhener)')
-        .eq('access_status', 'approved')
-        .order('full_name');
-
-      if (error) throw error;
-
-      const formatted = data?.map((u) => ({
+      const rows = await listAccessUsers();
+      const list: UserRecord[] = rows.map((u) => ({
         id: u.id,
         full_name: u.full_name,
         role_code: u.role_code,
-        role_name: (Array.isArray(u.roles) ? u.roles[0] : u.roles)?.name
-      })) || [];
-
-      setUsers(formatted);
+        role_name: u.role_name,
+        tender_deadline_extensions: (u.tender_deadline_extensions || []) as TenderDeadlineExtension[],
+      }));
+      setUsers(list);
+      setAllUsersWithExtensions(list);
     } catch (error) {
       console.error('Ошибка загрузки пользователей:', error);
     }
   };
 
-  // Загрузка всех пользователей с их продлениями
-  const loadAllUsersWithExtensions = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select(`
-          id,
-          full_name,
-          role_code,
-          tender_deadline_extensions,
-          roles:role_code (name)
-        `)
-        .not('role_code', 'in', '(administrator,director,developer,veduschiy_inzhener)')
-        .eq('access_status', 'approved')
-        .order('full_name');
-
-      if (error) throw error;
-
-      const formatted = data?.map((u) => ({
-        id: u.id,
-        full_name: u.full_name,
-        role_code: u.role_code,
-        role_name: (Array.isArray(u.roles) ? u.roles[0] : u.roles)?.name,
-        tender_deadline_extensions: u.tender_deadline_extensions || []
-      })) || [];
-
-      setAllUsersWithExtensions(formatted);
-    } catch (error) {
-      console.error('Ошибка загрузки пользователей с продлениями:', error);
-    }
-  };
-
   useEffect(() => {
     loadTenders();
-    loadUsers();
-    loadAllUsersWithExtensions();
+    loadUsersAndExtensions();
   }, []);
 
   // Открыть модальное окно продления доступа
@@ -141,7 +101,6 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
     setModalVisible(true);
   };
 
-  // Сохранить продленный дедлайн для нескольких пользователей
   const handleSaveExtension = async () => {
     if (selectedUserIds.length === 0 || !selectedTender || !extendedDeadline) {
       message.error('Выберите пользователей и дату');
@@ -149,42 +108,15 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
     }
 
     try {
-      // Обновить каждого выбранного пользователя
-      for (const userId of selectedUserIds) {
-        const { data: userData, error: fetchError } = await supabase
-          .from('users')
-          .select('tender_deadline_extensions')
-          .eq('id', userId)
-          .single();
-
-        if (fetchError) throw fetchError;
-
-        const currentExtensions: TenderDeadlineExtension[] =
-          userData?.tender_deadline_extensions || [];
-
-        const filteredExtensions = currentExtensions.filter(
-          ext => ext.tender_id !== selectedTender.id
-        );
-
-        const newExtensions = [
-          ...filteredExtensions,
-          {
-            tender_id: selectedTender.id,
-            extended_deadline: extendedDeadline.toISOString()
-          }
-        ];
-
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ tender_deadline_extensions: newExtensions })
-          .eq('id', userId);
-
-        if (updateError) throw updateError;
-      }
+      await setTenderExtensionForUsers({
+        tender_id: selectedTender.id,
+        user_ids: selectedUserIds,
+        extended_deadline: extendedDeadline.toISOString(),
+      });
 
       message.success(`Доступ успешно продлен для ${selectedUserIds.length} пользователей`);
       setModalVisible(false);
-      loadAllUsersWithExtensions(); // Перезагрузить данные
+      loadUsersAndExtensions();
     } catch (error) {
       console.error('Ошибка сохранения:', error);
       message.error('Ошибка: ' + getErrorMessage(error));
@@ -222,7 +154,6 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
     setDeleteModalVisible(true);
   };
 
-  // Удалить выбранных пользователей из списка доступа к тендеру
   const handleDeleteSelectedUsers = async () => {
     if (selectedDeleteUserIds.length === 0 || !selectedTender) {
       message.error('Выберите пользователей для удаления');
@@ -230,36 +161,16 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
     }
 
     try {
-      // Для каждого выбранного пользователя удаляем запись для этого тендера
-      for (const userId of selectedDeleteUserIds) {
-        const { data: userData, error: fetchError } = await supabase
-          .from('users')
-          .select('tender_deadline_extensions')
-          .eq('id', userId)
-          .single();
-
-        if (fetchError) throw fetchError;
-
-        const currentExtensions: TenderDeadlineExtension[] =
-          userData?.tender_deadline_extensions || [];
-
-        // Удаляем продление для данного тендера
-        const filteredExtensions = currentExtensions.filter(
-          ext => ext.tender_id !== selectedTender.id
-        );
-
-        const { error: updateError } = await supabase
-          .from('users')
-          .update({ tender_deadline_extensions: filteredExtensions })
-          .eq('id', userId);
-
-        if (updateError) throw updateError;
-      }
+      await setTenderExtensionForUsers({
+        tender_id: selectedTender.id,
+        user_ids: selectedDeleteUserIds,
+        extended_deadline: '',
+      });
 
       message.success(`Удален доступ для ${selectedDeleteUserIds.length} чел.`);
       setDeleteModalVisible(false);
       setSelectedDeleteUserIds([]);
-      loadAllUsersWithExtensions(); // Перезагрузить данные
+      loadUsersAndExtensions();
     } catch (error) {
       console.error('Ошибка удаления:', error);
       message.error('Ошибка: ' + getErrorMessage(error));

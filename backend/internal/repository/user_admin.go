@@ -53,6 +53,93 @@ func (r *UserAdminRepo) ListTendersForUserAccess(ctx context.Context) ([]TenderF
 	return out, rows.Err()
 }
 
+// ─── Access list (TenderAccessTab) ─────────────────────────────────────────
+
+// AccessUserRow is one user row for the admin Users › TenderAccess tab —
+// approved non-privileged user with role name and per-tender extensions.
+type AccessUserRow struct {
+	ID                       string          `json:"id"`
+	FullName                 string          `json:"full_name"`
+	RoleCode                 string          `json:"role_code"`
+	RoleName                 string          `json:"role_name"`
+	TenderDeadlineExtensions json.RawMessage `json:"tender_deadline_extensions"`
+}
+
+// ListAccessUsers returns approved users whose role_code is not one of the
+// privileged "always-on" roles.
+func (r *UserAdminRepo) ListAccessUsers(ctx context.Context) ([]AccessUserRow, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.id::text, u.full_name, u.role_code,
+		       COALESCE(r.name, '') AS role_name,
+		       COALESCE(u.tender_deadline_extensions, '[]'::jsonb) AS extensions
+		FROM public.users u
+		LEFT JOIN public.roles r ON r.code = u.role_code
+		WHERE u.access_status = 'approved'
+		  AND u.role_code NOT IN ('administrator','director','developer','veduschiy_inzhener')
+		ORDER BY u.full_name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("userAdminRepo.ListAccessUsers: %w", err)
+	}
+	defer rows.Close()
+	out := make([]AccessUserRow, 0)
+	for rows.Next() {
+		var u AccessUserRow
+		if err := rows.Scan(&u.ID, &u.FullName, &u.RoleCode, &u.RoleName, &u.TenderDeadlineExtensions); err != nil {
+			return nil, fmt.Errorf("userAdminRepo.ListAccessUsers scan: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// SetTenderExtensionForUsers upserts (when extendedDeadline != "") or
+// removes (when "") a tender_deadline_extensions entry for tenderID across
+// the given userIDs, in one tx. The filter+append happens via jsonb
+// operators so no app-level read-modify-write is needed.
+func (r *UserAdminRepo) SetTenderExtensionForUsers(
+	ctx context.Context, tenderID string, userIDs []string, extendedDeadline string,
+) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("userAdminRepo.SetTenderExtensionForUsers: begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE public.users
+		   SET tender_deadline_extensions = COALESCE((
+		           SELECT jsonb_agg(e)
+		             FROM jsonb_array_elements(COALESCE(tender_deadline_extensions, '[]'::jsonb)) e
+		            WHERE e->>'tender_id' <> $2
+		       ), '[]'::jsonb),
+		       updated_at = NOW()
+		 WHERE id = ANY($1::uuid[])
+	`, userIDs, tenderID); err != nil {
+		return fmt.Errorf("userAdminRepo.SetTenderExtensionForUsers: strip: %w", err)
+	}
+
+	if extendedDeadline != "" {
+		if _, err := tx.Exec(ctx, `
+			UPDATE public.users
+			   SET tender_deadline_extensions = COALESCE(tender_deadline_extensions, '[]'::jsonb)
+			        || jsonb_build_array(jsonb_build_object(
+			               'tender_id', $2::text,
+			               'extended_deadline', $3::text
+			           )),
+			       updated_at = NOW()
+			 WHERE id = ANY($1::uuid[])
+		`, userIDs, tenderID, extendedDeadline); err != nil {
+			return fmt.Errorf("userAdminRepo.SetTenderExtensionForUsers: append: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
 // ─── Users ──────────────────────────────────────────────────────────────────
 
 // PendingUserRow mirrors the projection Users.tsx expects for pending requests.
