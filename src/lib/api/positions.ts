@@ -127,6 +127,14 @@ export async function getPositionWithTender(positionId: string): Promise<Record<
 
 /** boq_items позиции с вложенными embed'ами (work_names, material_names,
  *  parent_work.work_names, detail_cost_categories+cost_categories). */
+export async function listBoqItemsFullByTender(tenderId: string): Promise<Record<string, unknown>[]> {
+  const res = await apiFetch<{ data: Record<string, unknown>[] }>(
+    `/api/v1/tenders/${encodeURIComponent(tenderId)}/boq-items-full`,
+    { cache: 'no-store' },
+  );
+  return res.data ?? [];
+}
+
 export async function listBoqItemsFullByPosition(positionId: string): Promise<Record<string, unknown>[]> {
   const res = await apiFetch<{ data: Record<string, unknown>[] }>(
     `/api/v1/positions/${encodeURIComponent(positionId)}/boq-items-full`,

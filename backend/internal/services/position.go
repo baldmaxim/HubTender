@@ -24,6 +24,7 @@ type positionRepoer interface {
 	UpdatePositionFields(ctx context.Context, id string, in repository.UpdatePositionFieldsInput) error
 	GetPositionWithTender(ctx context.Context, id string) (*repository.PositionWithTenderRow, error)
 	ListBoqItemsFullByPosition(ctx context.Context, positionID string) ([]repository.BoqItemFullRow, error)
+	ListBoqItemsFullByTender(ctx context.Context, tenderID string) ([]repository.BoqItemFullRow, error)
 	BulkInsertPositions(ctx context.Context, rows []repository.BulkPositionInsert) (int, error)
 }
 
@@ -185,6 +186,17 @@ func (s *PositionService) ListBoqItemsFullByPosition(
 	rows, err := s.repo.ListBoqItemsFullByPosition(ctx, positionID)
 	if err != nil {
 		return nil, fmt.Errorf("positionService.ListBoqItemsFullByPosition: %w", err)
+	}
+	return rows, nil
+}
+
+// ListBoqItemsFullByTender returns boq_items + nested embeds for the entire tender.
+func (s *PositionService) ListBoqItemsFullByTender(
+	ctx context.Context, tenderID string,
+) ([]repository.BoqItemFullRow, error) {
+	rows, err := s.repo.ListBoqItemsFullByTender(ctx, tenderID)
+	if err != nil {
+		return nil, fmt.Errorf("positionService.ListBoqItemsFullByTender: %w", err)
 	}
 	return rows, nil
 }

@@ -1,5 +1,4 @@
 import * as XLSX from 'xlsx-js-style';
-import { supabase } from '../../lib/supabase';
 import type { ClientPosition, BoqItemFull, ExportRow } from './types';
 import {
   isWorkType,
@@ -7,6 +6,8 @@ import {
   createBoqItemRow,
 } from './formatters';
 import { calculateBoqItemTotalAmount } from '../boq/calculateBoqAmount';
+import { fetchPositionsWithCosts, listBoqItemsFullByTender } from '../../lib/api/positions';
+import { getTenderById } from '../../lib/api/fi';
 import {
   getCellStyle,
   headerStyle,
@@ -17,98 +18,22 @@ import {
   nameColIndex,
 } from './styles';
 
-/**
- * Загружает все позиции заказчика для тендера с батчингом
- */
 async function loadClientPositions(tenderId: string): Promise<ClientPosition[]> {
-  let allPositions: ClientPosition[] = [];
-  let from = 0;
-  const batchSize = 1000;
-  let hasMore = true;
-
-  // Батчинг для обхода лимита Supabase 1000 rows
-  while (hasMore) {
-    const { data, error } = await supabase
-      .from('client_positions')
-      .select('*')
-      .eq('tender_id', tenderId)
-      .order('position_number', { ascending: true })
-      .range(from, from + batchSize - 1);
-
-    if (error) {
-      throw new Error(`Ошибка загрузки позиций: ${error.message}`);
-    }
-
-    if (data && data.length > 0) {
-      allPositions = [...allPositions, ...data];
-      from += batchSize;
-      hasMore = data.length === batchSize;
-    } else {
-      hasMore = false;
-    }
-  }
-
-  return allPositions;
+  const rows = await fetchPositionsWithCosts(tenderId);
+  return rows as unknown as ClientPosition[];
 }
 
-/**
- * Загружает ВСЕ BOQ items для всего тендера с батчингом
- */
 async function loadAllBoqItemsForTender(tenderId: string): Promise<Map<string, BoqItemFull[]>> {
-  let allItems: BoqItemFull[] = [];
-  let from = 0;
-  const batchSize = 1000;
-  let hasMore = true;
+  const rows = (await listBoqItemsFullByTender(tenderId)) as unknown as BoqItemFull[];
 
-  // Основной запрос с JOIN и двойной сортировкой для стабильности батчинга
-  while (hasMore) {
-    const { data, error } = await supabase
-      .from('boq_items')
-      .select(`
-        *,
-        material_names(name, unit),
-        work_names(name, unit),
-        parent_work:parent_work_item_id(work_names(name)),
-        detail_cost_categories(name, cost_categories(name), location)
-      `)
-      .eq('tender_id', tenderId)
-      .order('sort_number', { ascending: true })
-      .order('id', { ascending: true })
-      .range(from, from + batchSize - 1);
-
-    if (error) {
-      throw new Error(`Ошибка загрузки BOQ items: ${error.message}`);
-    }
-
-    if (data && data.length > 0) {
-      allItems = [...allItems, ...data];
-      from += batchSize;
-      hasMore = data.length === batchSize;
-    } else {
-      hasMore = false;
-    }
-  }
-
-  // Дедуплицировать по ID (LEFT JOIN может возвращать дубликаты)
-  const uniqueItems = new Map<string, BoqItemFull>();
-
-  allItems.forEach((item) => {
-    if (!uniqueItems.has(item.id)) {
-      uniqueItems.set(item.id, item);
-    }
-  });
-
-  // Группировать по client_position_id
   const itemsByPosition = new Map<string, BoqItemFull[]>();
-
-  uniqueItems.forEach((item) => {
+  for (const item of rows) {
     const positionId = item.client_position_id;
     if (!itemsByPosition.has(positionId)) {
       itemsByPosition.set(positionId, []);
     }
-    itemsByPosition.get(positionId)!.push(item as BoqItemFull);
-  });
-
+    itemsByPosition.get(positionId)!.push(item);
+  }
   return itemsByPosition;
 }
 
@@ -117,20 +42,11 @@ async function loadTenderRates(tenderId: string): Promise<{
   eur_rate: number | null;
   cny_rate: number | null;
 }> {
-  const { data, error } = await supabase
-    .from('tenders')
-    .select('usd_rate, eur_rate, cny_rate')
-    .eq('id', tenderId)
-    .single();
-
-  if (error) {
-    throw new Error(`Ошибка загрузки курсов валют: ${error.message}`);
-  }
-
+  const t = await getTenderById(tenderId);
   return {
-    usd_rate: data?.usd_rate || 0,
-    eur_rate: data?.eur_rate || 0,
-    cny_rate: data?.cny_rate || 0,
+    usd_rate: t?.usd_rate || 0,
+    eur_rate: t?.eur_rate || 0,
+    cny_rate: t?.cny_rate || 0,
   };
 }
 

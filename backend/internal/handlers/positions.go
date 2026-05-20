@@ -17,6 +17,7 @@ type positionServicer interface {
 	ListBoqPreviewByPositions(ctx context.Context, positionIDs []string) ([]repository.BoqPreviewRow, error)
 	GetPositionWithTender(ctx context.Context, id string) (*repository.PositionWithTenderRow, error)
 	ListBoqItemsFullByPosition(ctx context.Context, positionID string) ([]repository.BoqItemFullRow, error)
+	ListBoqItemsFullByTender(ctx context.Context, tenderID string) ([]repository.BoqItemFullRow, error)
 }
 
 // PositionHandler serves the /api/v1/tenders/:id/positions endpoint.
@@ -139,6 +140,28 @@ func (h *PositionHandler) ListBoqItemsFullByPosition(w http.ResponseWriter, r *h
 		return
 	}
 	rows, err := h.svc.ListBoqItemsFullByPosition(r.Context(), id)
+	if err != nil {
+		apierr.InternalError("failed to list boq items").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.BoqItemFullRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+// ListBoqItemsFullByTender handles GET /api/v1/tenders/{id}/boq-items-full.
+func (h *PositionHandler) ListBoqItemsFullByTender(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing tender id").Render(w)
+		return
+	}
+	rows, err := h.svc.ListBoqItemsFullByTender(r.Context(), id)
 	if err != nil {
 		apierr.InternalError("failed to list boq items").Render(w)
 		return

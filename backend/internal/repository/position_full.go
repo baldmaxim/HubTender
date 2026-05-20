@@ -146,38 +146,37 @@ type BoqItemFullRow struct {
 	DetailCostCategories        *BoqItemDetailCat `json:"detail_cost_categories"`
 }
 
-// ListBoqItemsFullByPosition returns boq_items + nested embeds for a position.
-func (r *PositionRepo) ListBoqItemsFullByPosition(ctx context.Context, positionID string) ([]BoqItemFullRow, error) {
-	const q = `
-		SELECT bi.id::text, bi.tender_id::text, bi.client_position_id::text,
-		       bi.sort_number, bi.boq_item_type::text, bi.material_type::text,
-		       bi.material_name_id::text, bi.work_name_id::text,
-		       bi.unit_code, bi.quantity, bi.base_quantity,
-		       bi.consumption_coefficient, bi.conversion_coefficient,
-		       bi.delivery_price_type::text, bi.delivery_amount,
-		       bi.currency_type::text, bi.total_amount,
-		       bi.detail_cost_category_id::text, bi.quote_link,
-		       bi.commercial_markup, bi.total_commercial_material_cost,
-		       bi.total_commercial_work_cost, bi.created_at, bi.updated_at,
-		       bi.parent_work_item_id::text, bi.description, bi.unit_rate,
-		       bi.import_session_id::text,
-		       wn.name, wn.unit, mn.name, mn.unit,
-		       (pw.id IS NOT NULL), pwn.name,
-		       (dcc.id IS NOT NULL), dcc.name, dcc.location, cc.name
-		FROM public.boq_items bi
-		LEFT JOIN public.work_names wn ON wn.id = bi.work_name_id
-		LEFT JOIN public.material_names mn ON mn.id = bi.material_name_id
-		LEFT JOIN public.boq_items pw ON pw.id = bi.parent_work_item_id
-		LEFT JOIN public.work_names pwn ON pwn.id = pw.work_name_id
-		LEFT JOIN public.detail_cost_categories dcc ON dcc.id = bi.detail_cost_category_id
-		LEFT JOIN public.cost_categories cc ON cc.id = dcc.cost_category_id
-		WHERE bi.client_position_id = $1
-		ORDER BY bi.sort_number
-	`
-	rows, err := r.pool.Query(ctx, q, positionID)
-	if err != nil {
-		return nil, fmt.Errorf("positionRepo.ListBoqItemsFullByPosition: %w", err)
-	}
+const boqItemsFullSelect = `
+	SELECT bi.id::text, bi.tender_id::text, bi.client_position_id::text,
+	       bi.sort_number, bi.boq_item_type::text, bi.material_type::text,
+	       bi.material_name_id::text, bi.work_name_id::text,
+	       bi.unit_code, bi.quantity, bi.base_quantity,
+	       bi.consumption_coefficient, bi.conversion_coefficient,
+	       bi.delivery_price_type::text, bi.delivery_amount,
+	       bi.currency_type::text, bi.total_amount,
+	       bi.detail_cost_category_id::text, bi.quote_link,
+	       bi.commercial_markup, bi.total_commercial_material_cost,
+	       bi.total_commercial_work_cost, bi.created_at, bi.updated_at,
+	       bi.parent_work_item_id::text, bi.description, bi.unit_rate,
+	       bi.import_session_id::text,
+	       wn.name, wn.unit, mn.name, mn.unit,
+	       (pw.id IS NOT NULL), pwn.name,
+	       (dcc.id IS NOT NULL), dcc.name, dcc.location, cc.name
+	FROM public.boq_items bi
+	LEFT JOIN public.work_names wn ON wn.id = bi.work_name_id
+	LEFT JOIN public.material_names mn ON mn.id = bi.material_name_id
+	LEFT JOIN public.boq_items pw ON pw.id = bi.parent_work_item_id
+	LEFT JOIN public.work_names pwn ON pwn.id = pw.work_name_id
+	LEFT JOIN public.detail_cost_categories dcc ON dcc.id = bi.detail_cost_category_id
+	LEFT JOIN public.cost_categories cc ON cc.id = dcc.cost_category_id
+`
+
+func scanBoqItemsFullRows(rows interface {
+	Next() bool
+	Scan(...any) error
+	Err() error
+	Close()
+}) ([]BoqItemFullRow, error) {
 	defer rows.Close()
 	out := make([]BoqItemFullRow, 0)
 	for rows.Next() {
@@ -204,7 +203,7 @@ func (r *PositionRepo) ListBoqItemsFullByPosition(ctx context.Context, positionI
 			&hasPW, &pwnName,
 			&hasDCC, &dccName, &dccLoc, &ccName,
 		); err != nil {
-			return nil, fmt.Errorf("positionRepo.ListBoqItemsFullByPosition scan: %w", err)
+			return nil, fmt.Errorf("scanBoqItemsFullRows scan: %w", err)
 		}
 		if wnName != nil {
 			b.WorkNames = &NameUnitEmbed{Name: *wnName, Unit: wnUnit}
@@ -229,4 +228,29 @@ func (r *PositionRepo) ListBoqItemsFullByPosition(ctx context.Context, positionI
 		out = append(out, b)
 	}
 	return out, rows.Err()
+}
+
+// ListBoqItemsFullByPosition returns boq_items + nested embeds for a position.
+func (r *PositionRepo) ListBoqItemsFullByPosition(ctx context.Context, positionID string) ([]BoqItemFullRow, error) {
+	rows, err := r.pool.Query(ctx, boqItemsFullSelect+`
+		WHERE bi.client_position_id = $1
+		ORDER BY bi.sort_number
+	`, positionID)
+	if err != nil {
+		return nil, fmt.Errorf("positionRepo.ListBoqItemsFullByPosition: %w", err)
+	}
+	return scanBoqItemsFullRows(rows)
+}
+
+// ListBoqItemsFullByTender returns boq_items + nested embeds for an entire
+// tender. Used by the positions Excel export which loads everything once.
+func (r *PositionRepo) ListBoqItemsFullByTender(ctx context.Context, tenderID string) ([]BoqItemFullRow, error) {
+	rows, err := r.pool.Query(ctx, boqItemsFullSelect+`
+		WHERE bi.tender_id = $1
+		ORDER BY bi.sort_number, bi.id
+	`, tenderID)
+	if err != nil {
+		return nil, fmt.Errorf("positionRepo.ListBoqItemsFullByTender: %w", err)
+	}
+	return scanBoqItemsFullRows(rows)
 }
