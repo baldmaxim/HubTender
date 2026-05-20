@@ -28,6 +28,7 @@ type AdminTenderPatch struct {
 	ConstructionScope  *string    `json:"construction_scope"`
 	IsArchived         *bool      `json:"is_archived"`
 	MarkupTacticID     *string    `json:"markup_tactic_id"`
+	VolumeTitle        *string    `json:"volume_title"`
 }
 
 // AdminPatchTender applies the non-nil fields. Used by the admin tenders page
@@ -102,6 +103,9 @@ func (r *TenderRepo) AdminPatchTender(ctx context.Context, id string, p AdminTen
 	}
 	if p.MarkupTacticID != nil {
 		add("markup_tactic_id", *p.MarkupTacticID)
+	}
+	if p.VolumeTitle != nil {
+		add("volume_title", *p.VolumeTitle)
 	}
 	if setClauses == "" {
 		return nil

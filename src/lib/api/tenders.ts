@@ -87,6 +87,7 @@ export async function createTender(input: CreateTenderInput): Promise<Tender> {
 export type AdminTenderPatch = Partial<CreateTenderInput> & {
   is_archived?: boolean;
   markup_tactic_id?: string;
+  volume_title?: string;
 };
 
 export async function adminPatchTender(id: string, patch: AdminTenderPatch): Promise<void> {

@@ -4,6 +4,8 @@ import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutl
 import { useTheme } from '../../contexts/ThemeContext';
 import { getVersionColorByTitle } from '../../utils/versionColor';
 import { supabase } from '../../lib/supabase';
+import { getTenderById } from '../../lib/api/fi';
+import { adminPatchTender } from '../../lib/api/tenders';
 import { getErrorMessage } from '../../utils/errors';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import dayjs from 'dayjs';
@@ -61,15 +63,8 @@ const FinancialIndicators: React.FC = () => {
 
   const loadVolumeTitle = useCallback(async (tenderId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('volume_title')
-        .eq('id', tenderId)
-        .single();
-
-      if (error) throw error;
-
-      const title = data?.volume_title || 'Полный объём строительства';
+      const data = await getTenderById(tenderId);
+      const title = (data as { volume_title?: string | null })?.volume_title || 'Полный объём строительства';
       setVolumeTitle(title);
       setTempVolumeTitle(title);
     } catch (error) {
@@ -129,13 +124,7 @@ const FinancialIndicators: React.FC = () => {
     if (!selectedTenderId) return;
 
     try {
-      const { error } = await supabase
-        .from('tenders')
-        .update({ volume_title: tempVolumeTitle })
-        .eq('id', selectedTenderId);
-
-      if (error) throw error;
-
+      await adminPatchTender(selectedTenderId, { volume_title: tempVolumeTitle });
       setVolumeTitle(tempVolumeTitle);
       setEditingVolumeTitle(false);
       message.success('Заголовок обновлен');
