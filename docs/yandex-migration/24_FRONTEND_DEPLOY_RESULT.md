@@ -196,29 +196,43 @@ FRONTEND_BUILD_VERIFIED_OK
 
 Артефакт `dist/` готов к ручному rsync-деплою оператором.
 
-### Remote deploy (operator-side — заполняется после исполнения)
+### Remote deploy (operator-side) — 2026-05-20/21
 
-- [ ] Step 5 — `nginx -t` OK, `/api/` → `127.0.0.1:3006`, `/api/v1/ws` upgrade, SPA fallback
-- [ ] Step 5 — `curl -i https://tender.su10.ru/api/v1/me` → 401 без токена
-- [ ] Step 6 — backup `/srv/sites/tender.su10.ru/public.backup-YYYYMMDD-HHMMSS` создан
-- [ ] Step 7 — `rsync -a --delete dist/ /srv/sites/tender.su10.ru/public/` выполнен
-- [ ] Step 8 — browser smoke (login, /me, /me/permissions, references, tenders list, single tender, BOQ, WS, no `/rest/v1/` в Network)
+Production deploy approved after all preconditions were green.
 
-### Финальный статус (заполняется оператором)
+- Deploy host: `hub`, build context `/opt/hubtender-build`.
+- HEAD deployed: `f2cafdb` (`docs: data refresh artifacts + frontend deploy verification`).
+- Build mode: `production.yandex`.
+- `.env.production.yandex`: `VITE_API_MODE=go`,
+  `VITE_API_URL=https://tender.su10.ru`,
+  `VITE_SUPABASE_PUBLISHABLE_KEY` present (`eyJ***`, 208 chars).
+- Bundle verification after build:
+  - `/api/v1` paths: OK.
+  - `/rest/v1`: absent.
+  - `tender.su10.ru`: OK.
+- Pre-deploy checks:
+  - `nginx -t`: OK.
+  - `curl -i https://tender.su10.ru/api/v1/me`: `401 Unauthorized`
+    with `application/problem+json` from Go BFF (expected without token).
+- Static deploy:
+  - backup created under `/srv/sites/tender.su10.ru/public.backup-*`
+    before rsync;
+  - `rsync -a --delete /opt/hubtender-build/dist/ /srv/sites/tender.su10.ru/public/`
+    completed by operator.
+- Browser smoke:
+  - `https://tender.su10.ru` opens;
+  - Supabase Auth bridge login succeeds;
+  - operator confirmed "все работает".
 
-При успехе всех Steps 5–8:
+### Финальный статус
 
 ```
 FRONTEND_DEPLOY_OK
 ```
 
-При фейле — rollback static:
-
-```
-FRONTEND_DEPLOY_FAILED_ROLLED_BACK
-```
-
-с указанием причины и подтверждением восстановления из backup.
+Frontend is now deployed against Go BFF/Yandex routing. Rollback point remains
+the pre-deploy `/srv/sites/tender.su10.ru/public.backup-*` directory from the
+deploy shell.
 
 ### Что НЕ трогалось в этой сессии
 
@@ -226,9 +240,8 @@ FRONTEND_DEPLOY_FAILED_ROLLED_BACK
 - Supabase Auth — оставлен bridge.
 - App-auth — не вводился.
 - Backend / DB — без изменений, никаких import/clean/repair.
-- `git push` — не выполнен (ожидается явное разрешение).
-- `.env*` файлы — не менялись.
+- `.env*` файлы — не коммитились.
 
-> Локальный артефакт собран против HEAD `61284ad`. Если оператор будет
-> деплоить с другого коммита (после push'ей), повторить шаги
-> typecheck/lint/build/grep/bundle-verify локально.
+> Первичная локальная верификация была сделана против HEAD `61284ad`.
+> Production deploy повторно собран и проверен оператором против HEAD
+> `f2cafdb`.
