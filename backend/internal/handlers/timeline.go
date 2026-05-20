@@ -24,6 +24,7 @@ type timelineServicer interface {
 	ListGroupIterations(ctx context.Context, groupID, userID string) ([]repository.TimelineIterationWithRefs, error)
 	ListTenderGroups(ctx context.Context, tenderID string) ([]repository.TimelineGroupWithRelations, error)
 	ListTimelineTenders(ctx context.Context) (*repository.TimelineTendersPayload, error)
+	ReconcileTenderGroups(ctx context.Context, tenderID string, excludedUserIDs []string, expected []repository.ExpectedGroup) error
 }
 
 // TimelineHandler serves the timeline mutation endpoints.
@@ -265,4 +266,32 @@ func (h *TimelineHandler) CreateIteration(w http.ResponseWriter, r *http.Request
 	}
 
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: it})
+}
+
+type reconcileGroupsReq struct {
+	ExcludedUserIDs []string                   `json:"excluded_user_ids"`
+	ExpectedGroups  []repository.ExpectedGroup `json:"expected_groups"`
+}
+
+// ReconcileGroups handles POST /api/v1/timeline/tenders/{tenderId}/reconcile-groups.
+func (h *TimelineHandler) ReconcileGroups(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	tenderID := chi.URLParam(r, "tenderId")
+	if tenderID == "" {
+		apierr.BadRequest("missing tender id").Render(w)
+		return
+	}
+	var req reconcileGroupsReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.svc.ReconcileTenderGroups(r.Context(), tenderID, req.ExcludedUserIDs, req.ExpectedGroups); err != nil {
+		apierr.InternalError("failed to reconcile tender groups").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

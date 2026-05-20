@@ -20,8 +20,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { CloseOutlined } from '@ant-design/icons';
-import { supabase } from '../../lib/supabase';
-import { setTenderGroupQuality } from '../../lib/api/timeline';
+import { reconcileTenderGroups, setTenderGroupQuality } from '../../lib/api/timeline';
 import { useAuth } from '../../contexts/AuthContext';
 import UserTimeline from './components/UserTimeline';
 import { useTenderAssignableUsers } from './hooks/useTenderAssignableUsers';
@@ -314,144 +313,18 @@ const TenderTimeline: React.FC = () => {
       syncInFlightRef.current = true;
 
       try {
-        const existingByName = new Map(groups.map((group) => [group.name, group]));
-        let hasChanges = false;
-
-        for (const expectedGroup of autoExpectedGroups) {
-          let currentGroup = existingByName.get(expectedGroup.name) || null;
-
-          if (!currentGroup) {
-            const { data, error } = await supabase
-              .from('tender_groups')
-              .upsert(
-                {
-                  tender_id: selectedTenderId,
-                  name: expectedGroup.name,
-                  color: expectedGroup.color,
-                  sort_order: expectedGroup.sortOrder,
-                },
-                { onConflict: 'tender_id,name' }
-              )
-              .select('id')
-              .single();
-
-            if (error) {
-              throw error;
-            }
-
-            currentGroup = {
-              id: data.id,
-              tender_id: selectedTenderId,
-              name: expectedGroup.name,
-              color: expectedGroup.color,
-              sort_order: expectedGroup.sortOrder,
-              created_at: '',
-              updated_at: '',
-              members: [],
-              iterationsCount: 0,
-              qualityScore: 0,
-              qualityLevel: null,
-              iterationUserIds: [],
-              status: 'pending',
-            };
-            existingByName.set(expectedGroup.name, currentGroup);
-            hasChanges = true;
-          } else if (
-            currentGroup.color !== expectedGroup.color ||
-            currentGroup.sort_order !== expectedGroup.sortOrder
-          ) {
-            const { error } = await supabase
-              .from('tender_groups')
-              .update({
-                color: expectedGroup.color,
-                sort_order: expectedGroup.sortOrder,
-              })
-              .eq('id', currentGroup.id);
-
-            if (error) {
-              throw error;
-            }
-
-            hasChanges = true;
-          }
-
-          const currentMemberIds = currentGroup.members.map((member) => member.user_id);
-          const cleanupUserIds = Array.from(new Set([...currentMemberIds, ...currentGroup.iterationUserIds])).filter(
-            (userId) => excludedTimelineUserIds.includes(userId)
-          );
-
-          if (cleanupUserIds.length > 0) {
-            const { error: deleteIterationsError } = await supabase
-              .from('tender_iterations')
-              .delete()
-              .eq('group_id', currentGroup.id)
-              .in('user_id', cleanupUserIds);
-
-            if (deleteIterationsError) {
-              throw deleteIterationsError;
-            }
-
-            const { error: deleteMembersError } = await supabase
-              .from('tender_group_members')
-              .delete()
-              .eq('group_id', currentGroup.id)
-              .in('user_id', cleanupUserIds);
-
-            if (deleteMembersError) {
-              throw deleteMembersError;
-            }
-
-            hasChanges = true;
-          }
-
-          const sanitizedCurrentMemberIds = currentMemberIds.filter((userId) => !cleanupUserIds.includes(userId));
-          const sanitizedIterationUserIds = currentGroup.iterationUserIds.filter(
-            (userId) => !cleanupUserIds.includes(userId)
-          );
-          const toAdd = expectedGroup.userIds.filter((userId) => !sanitizedCurrentMemberIds.includes(userId));
-          const protectedIds = new Set(sanitizedIterationUserIds);
-          const toRemove = sanitizedCurrentMemberIds.filter(
-            (userId) => !expectedGroup.userIds.includes(userId) && !protectedIds.has(userId)
-          );
-
-          if (toAdd.length > 0) {
-            const { error } = await supabase
-              .from('tender_group_members')
-              .upsert(
-                toAdd.map((userId) => ({
-                  group_id: currentGroup.id,
-                  user_id: userId,
-                })),
-                { onConflict: 'group_id,user_id' }
-              );
-
-            if (error) {
-              throw error;
-            }
-
-            hasChanges = true;
-          }
-
-          if (toRemove.length > 0) {
-            const { error } = await supabase
-              .from('tender_group_members')
-              .delete()
-              .eq('group_id', currentGroup.id)
-              .in('user_id', toRemove);
-
-            if (error) {
-              throw error;
-            }
-
-            hasChanges = true;
-          }
-        }
+        await reconcileTenderGroups(selectedTenderId, {
+          excluded_user_ids: excludedTimelineUserIds,
+          expected_groups: autoExpectedGroups.map((g) => ({
+            name: g.name,
+            color: g.color,
+            sort_order: g.sortOrder,
+            user_ids: g.userIds,
+          })),
+        });
 
         lastSyncSignatureRef.current = expectedSignature;
-
-        if (hasChanges) {
-          await Promise.all([refetchGroups(), refetchTenders()]);
-        }
+        await Promise.all([refetchGroups(), refetchTenders()]);
       } catch (err) {
         message.error(err instanceof Error ? err.message : 'Не удалось автоматически синхронизировать команды');
       } finally {

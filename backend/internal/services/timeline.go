@@ -32,6 +32,7 @@ type timelineRepoer interface {
 	ListGroupIterations(ctx context.Context, groupID, userID string) ([]repository.TimelineIterationWithRefs, error)
 	ListTenderGroups(ctx context.Context, tenderID string) ([]repository.TimelineGroupWithRelations, error)
 	ListTimelineTenders(ctx context.Context) (*repository.TimelineTendersPayload, error)
+	ReconcileTenderGroups(ctx context.Context, tenderID string, excludedUserIDs []string, expected []repository.ExpectedGroup) error
 }
 
 // TimelineService handles tender timeline mutations.
@@ -151,6 +152,16 @@ func (s *TimelineService) ListTimelineTenders(
 		return nil, fmt.Errorf("timelineService.ListTimelineTenders: %w", err)
 	}
 	return out, nil
+}
+
+// ReconcileTenderGroups applies the expected group layout for a tender.
+func (s *TimelineService) ReconcileTenderGroups(
+	ctx context.Context, tenderID string, excludedUserIDs []string, expected []repository.ExpectedGroup,
+) error {
+	if err := s.repo.ReconcileTenderGroups(ctx, tenderID, excludedUserIDs, expected); err != nil {
+		return fmt.Errorf("timelineService.ReconcileTenderGroups: %w", err)
+	}
+	return nil
 }
 
 // ErrForbidden is returned when the caller's role is not in the privilege list.

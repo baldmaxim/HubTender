@@ -99,3 +99,25 @@ export async function respondTenderIteration(
     }),
   });
 }
+
+export interface ExpectedTimelineGroup {
+  name: string;
+  color: string;
+  sort_order: number;
+  user_ids: string[];
+}
+
+/**
+ * Reconcile tender groups to the desired layout in a single tx on the server.
+ * Excluded users are stripped from iterations + memberships, missing members
+ * are added (iteration owners are protected from removal).
+ */
+export async function reconcileTenderGroups(
+  tenderId: string,
+  input: { excluded_user_ids: string[]; expected_groups: ExpectedTimelineGroup[] },
+): Promise<void> {
+  await apiFetch<undefined>(
+    `/api/v1/timeline/tenders/${encodeURIComponent(tenderId)}/reconcile-groups`,
+    { method: 'POST', body: JSON.stringify(input) },
+  );
+}

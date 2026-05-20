@@ -300,6 +300,7 @@ func main() {
 		r.Post("/api/v1/timeline/iterations", timelineH.CreateIteration)
 		r.Get("/api/v1/timeline/tenders", timelineH.ListTimelineTenders)
 		r.Get("/api/v1/timeline/tenders/{tenderId}/groups", timelineH.ListTenderGroups)
+		r.Post("/api/v1/timeline/tenders/{tenderId}/reconcile-groups", timelineH.ReconcileGroups)
 		r.Get("/api/v1/timeline/groups/{groupId}/iterations", timelineH.ListGroupIterations)
 
 		// Slice 3b: remaining simple RPCs.
