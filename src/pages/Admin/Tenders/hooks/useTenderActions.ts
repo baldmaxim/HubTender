@@ -1,6 +1,17 @@
 import { useState } from 'react';
 import { Form, Modal, message } from 'antd';
-import { supabase, type Tender, type TenderInsert, type MarkupParameter, type TenderMarkupPercentageInsert } from '../../../../lib/supabase';
+import type { Tender, TenderMarkupPercentageInsert } from '../../../../lib/supabase';
+import {
+  createTender,
+  adminPatchTender,
+  deleteTender,
+} from '../../../../lib/api/tenders';
+import {
+  listActiveMarkupParameters,
+  insertTenderMarkupPercentages,
+  findGlobalMarkupTacticByName,
+  setTenderMarkupTacticId,
+} from '../../../../lib/api/markup';
 import dayjs from 'dayjs';
 import type { TenderRecord } from './useTendersData';
 
@@ -49,21 +60,12 @@ export const useTenderActions = (onRefresh: () => void) => {
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
         try {
-          const { error } = await supabase
-            .from('tenders')
-            .delete()
-            .eq('id', record.id);
-
-          if (error) {
-            console.error('Ошибка удаления тендера:', error);
-            message.error('Не удалось удалить тендер');
-          } else {
-            message.success(`Тендер "${record.tender}" успешно удален`);
-            await onRefresh();
-          }
+          await deleteTender(record.id);
+          message.success(`Тендер "${record.tender}" успешно удален`);
+          await onRefresh();
         } catch (error) {
           console.error('Ошибка при удалении тендера:', error);
-          message.error('Произошла ошибка при удалении тендера');
+          message.error('Не удалось удалить тендер');
         }
       },
     });
@@ -79,15 +81,11 @@ export const useTenderActions = (onRefresh: () => void) => {
       cancelText: 'Отмена',
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
-        const { error } = await supabase
-          .from('tenders')
-          .update({ is_archived: true })
-          .eq('id', record.id);
-
-        if (!error) {
+        try {
+          await adminPatchTender(record.id, { is_archived: true });
           message.success(`Тендер "${record.tender}" перемещен в архив`);
           await onRefresh();
-        } else {
+        } catch {
           message.error('Не удалось переместить тендер в архив');
         }
       },
@@ -104,15 +102,11 @@ export const useTenderActions = (onRefresh: () => void) => {
       cancelText: 'Отмена',
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
-        const { error } = await supabase
-          .from('tenders')
-          .update({ is_archived: false })
-          .eq('id', record.id);
-
-        if (!error) {
+        try {
+          await adminPatchTender(record.id, { is_archived: false });
           message.success(`Тендер "${record.tender}" возвращен в работу`);
           await onRefresh();
-        } else {
+        } catch {
           message.error('Не удалось вернуть тендер из архива');
         }
       },
@@ -130,7 +124,7 @@ export const useTenderActions = (onRefresh: () => void) => {
     try {
       const values = await form.validateFields();
 
-      const tenderData: TenderInsert = {
+      const tenderData = {
         title: values.title,
         description: values.description || null,
         client_name: values.client_name,
@@ -148,77 +142,38 @@ export const useTenderActions = (onRefresh: () => void) => {
         qa_form_link: values.qa_form_link || null,
         project_folder_link: values.project_folder_link || null,
         housing_class: values.housing_class || null,
-        construction_scope: values.construction_scope || null
+        construction_scope: values.construction_scope || null,
       };
 
       if (isEditMode && editingTender) {
-        const { data, error } = await supabase
-          .from('tenders')
-          .update(tenderData)
-          .eq('id', editingTender.id)
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Ошибка обновления тендера:', error);
-          message.error(`Ошибка при обновлении тендера: ${error.message}`);
-        } else if (data) {
+        try {
+          await adminPatchTender(editingTender.id, tenderData);
           message.success(`Тендер "${values.title}" успешно обновлен`);
           form.resetFields();
           setIsModalVisible(false);
           setIsEditMode(false);
           setEditingTender(null);
           await onRefresh();
+        } catch (err) {
+          console.error('Ошибка обновления тендера:', err);
+          message.error('Ошибка при обновлении тендера');
         }
       } else {
-        const { data, error } = await supabase
-          .from('tenders')
-          .insert([tenderData])
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Ошибка сохранения тендера:', error);
-          message.error(`Ошибка при создании тендера: ${error.message}`);
-        } else if (data) {
+        try {
+          const data = await createTender(tenderData);
           try {
-            const { data: markupParams, error: paramsError } = await supabase
-              .from('markup_parameters')
-              .select('*')
-              .eq('is_active', true);
-
-            if (!paramsError && markupParams && markupParams.length > 0) {
-              const markupRecords: TenderMarkupPercentageInsert[] = markupParams.map((param: MarkupParameter) => ({
+            const markupParams = await listActiveMarkupParameters();
+            if (markupParams.length > 0) {
+              const markupRecords: TenderMarkupPercentageInsert[] = markupParams.map((param) => ({
                 tender_id: data.id,
                 markup_parameter_id: param.id,
                 value: param.default_value || 0,
               }));
-
-              const { error: insertError } = await supabase
-                .from('tender_markup_percentage')
-                .insert(markupRecords);
-
-              if (insertError) {
-                console.error('Ошибка копирования базовых процентов:', insertError);
-              }
+              await insertTenderMarkupPercentages(markupRecords);
             }
-
-            const { data: baseTactic, error: tacticError } = await supabase
-              .from('markup_tactics')
-              .select('id')
-              .eq('name', 'Базовая схема')
-              .eq('is_global', true)
-              .single();
-
-            if (!tacticError && baseTactic) {
-              const { error: updateError } = await supabase
-                .from('tenders')
-                .update({ markup_tactic_id: baseTactic.id })
-                .eq('id', data.id);
-
-              if (updateError) {
-                console.error('Ошибка установки базовой схемы наценок:', updateError);
-              }
+            const baseTactic = await findGlobalMarkupTacticByName('Базовая схема');
+            if (baseTactic) {
+              await setTenderMarkupTacticId(data.id, baseTactic.id);
             }
           } catch (markupError) {
             console.error('Ошибка при копировании базовых процентов:', markupError);
@@ -228,6 +183,9 @@ export const useTenderActions = (onRefresh: () => void) => {
           form.resetFields();
           setIsModalVisible(false);
           await onRefresh();
+        } catch (err) {
+          console.error('Ошибка сохранения тендера:', err);
+          message.error('Ошибка при создании тендера');
         }
       }
     } catch (error) {

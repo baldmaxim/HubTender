@@ -91,6 +91,32 @@ export async function listBoqPreviewByPositions(
   return res.data ?? [];
 }
 
+/** Атомарная bulk-вставка позиций (BOQ-upload). */
+export interface BulkPositionInsert {
+  tender_id: string;
+  position_number: number;
+  work_name: string;
+  unit_code?: string | null;
+  volume?: number | null;
+  client_note?: string | null;
+  item_no?: string | null;
+  hierarchy_level?: number | null;
+  is_additional?: boolean | null;
+  parent_position_id?: string | null;
+}
+
+export async function bulkInsertPositions(
+  tenderId: string,
+  positions: BulkPositionInsert[],
+): Promise<number> {
+  if (positions.length === 0) return 0;
+  const res = await apiFetch<{ data: { inserted: number } }>('/api/v1/positions/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ tender_id: tenderId, positions }),
+  });
+  return res.data.inserted;
+}
+
 /** Одна позиция + tenders(usd_rate,eur_rate,cny_rate) embed. */
 export async function getPositionWithTender(positionId: string): Promise<Record<string, unknown>> {
   const res = await apiFetch<{ data: Record<string, unknown> }>(

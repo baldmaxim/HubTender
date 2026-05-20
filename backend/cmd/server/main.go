@@ -260,10 +260,13 @@ func main() {
 		// Slice 2: writes with optimistic concurrency.
 		r.Post("/api/v1/tenders", tenderWH.CreateTender)
 		r.Patch("/api/v1/tenders/{id}", tenderWH.UpdateTender)
+		r.Patch("/api/v1/tenders/{id}/admin-fields", tenderWH.AdminPatchTender)
+		r.Delete("/api/v1/tenders/{id}", tenderWH.DeleteTender)
 
 		r.Post("/api/v1/positions", positionWH.CreatePosition)
 		r.Post("/api/v1/positions/bulk-delete", positionWH.BulkDeletePositions)
 		r.Post("/api/v1/positions/additional", positionWH.CreateAdditionalPosition)
+		r.Post("/api/v1/positions/bulk", positionWH.BulkInsertPositions)
 		r.Patch("/api/v1/positions/note", positionWH.UpdatePositionsNote)
 		r.Post("/api/v1/positions/clear-boq", positionWH.ClearPositionsBoq)
 		r.Patch("/api/v1/positions/level", positionWH.ShiftPositionsLevel)

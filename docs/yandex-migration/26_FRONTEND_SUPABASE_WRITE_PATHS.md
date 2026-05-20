@@ -319,6 +319,27 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Admin/Tenders DONE (verified; 3 новых эндпоинта + 1 в Positions)
+
+`src/pages/Admin/Tenders/`:
+- `useBoqUpload.ts` (3 supabase → 0): units → `listActiveUnitsFull`,
+  max position_number → `fetchPositionsWithCosts` + reduce, batched
+  insert client_positions → новый `POST /api/v1/positions/bulk`
+  (repo `BulkInsertPositions` + svc + handler + route, одна pgx.Tx).
+- `useTenderActions.ts` (9 supabase → 0): delete/archive/unarchive/modal
+  update/create + markup setup. Новые: `DELETE /api/v1/tenders/{id}`,
+  `PATCH /api/v1/tenders/{id}/admin-fields` (no-ETag dynamic SET для всех
+  admin-полей, включая is_archived/markup_tactic_id). Create — reuse
+  `POST /api/v1/tenders`. Markup setup — reuse `listActiveMarkupParameters`,
+  `insertTenderMarkupPercentages`, `findGlobalMarkupTacticByName`,
+  `setTenderMarkupTacticId`.
+- `VersionMatch/useVersionMatching.ts` (1 supabase → 0): client_positions
+  paged → `fetchPositionsWithCosts` + клиентский filter
+  `is_additional=false`. Удалён QueryBuilder/PAGE_SIZE-helper.
+
+Остаётся только `useTendersData` (2 gated realtime → P5.5). `go build` 0,
+`tsc` 0, `vite build` (background).
+
 ## P5.3 — PositionItems/useBoqItemsImport DONE (PositionItems закрыт)
 
 `src/pages/PositionItems/hooks/useBoqItemsImport.ts` (10 supabase → 0):

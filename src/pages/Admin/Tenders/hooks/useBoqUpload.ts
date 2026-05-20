@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { message } from 'antd';
-import { supabase, type ClientPositionInsert } from '../../../../lib/supabase';
+import { listActiveUnitsFull } from '../../../../lib/api/costs';
+import {
+  fetchPositionsWithCosts,
+  bulkInsertPositions,
+  type BulkPositionInsert,
+} from '../../../../lib/api/positions';
 
 export interface ParsedRow {
   item_no: string;
@@ -42,20 +47,17 @@ export const useBoqUpload = () => {
   // Загрузка существующих единиц измерения из БД
   const fetchExistingUnits = async () => {
     try {
-      const { data, error } = await supabase
-        .from('units')
-        .select('code, name, description')
-        .eq('is_active', true)
-        .order('sort_order');
-
-      if (error) {
-        console.error('Ошибка загрузки единиц измерения:', error);
-        message.error('Не удалось загрузить единицы измерения');
-      } else if (data) {
-        setExistingUnits(data);
-      }
+      const data = await listActiveUnitsFull();
+      setExistingUnits(
+        data.map((u) => ({
+          code: u.code,
+          name: u.name,
+          description: u.description ?? undefined,
+        })),
+      );
     } catch (error) {
       console.error('Ошибка при загрузке единиц:', error);
+      message.error('Не удалось загрузить единицы измерения');
     }
   };
 
@@ -217,65 +219,35 @@ export const useBoqUpload = () => {
     setUploadProgress(0);
 
     try {
-      // Получаем максимальный position_number среди существующих строк тендера
-      const { data: existingPositions } = await supabase
-        .from('client_positions')
-        .select('position_number')
-        .eq('tender_id', tenderId)
-        .order('position_number', { ascending: false })
-        .limit(1);
+      // Максимальный position_number среди существующих строк тендера.
+      const existing = await fetchPositionsWithCosts(tenderId);
+      const maxNum = existing.reduce<number>(
+        (m, p) => (typeof p.position_number === 'number' && p.position_number > m ? p.position_number : m),
+        0,
+      );
+      const startNumber = existing.length > 0 ? Math.floor(maxNum) + 1 : 1;
 
-      const startNumber = existingPositions && existingPositions.length > 0
-        ? Math.floor(Number(existingPositions[0].position_number)) + 1
-        : 1;
-
-      const positions: ClientPositionInsert[] = parsedData.map((row, index) => {
+      const positions: BulkPositionInsert[] = parsedData.map((row, index) => {
         const finalUnitCode = getFinalUnitCode(row.unit_code);
-
         return {
           tender_id: tenderId,
           position_number: startNumber + index,
-          // Только устанавливаем unit_code если есть валидный код
-          ...(finalUnitCode ? { unit_code: finalUnitCode } : {}),
-          volume: row.volume || undefined,
-          client_note: row.client_note || undefined,
-          item_no: row.item_no || undefined,
           work_name: row.work_name,
+          unit_code: finalUnitCode || null,
+          volume: row.volume || null,
+          client_note: row.client_note || null,
+          item_no: row.item_no || null,
           hierarchy_level: row.hierarchy_level || 0,
           is_additional: false,
-          manual_volume: undefined,
-          manual_note: undefined,
-          parent_position_id: undefined,
-          total_material: 0,
-          total_works: 0,
-          material_cost_per_unit: 0,
-          work_cost_per_unit: 0,
-          total_commercial_material: 0,
-          total_commercial_work: 0,
-          total_commercial_material_per_unit: 0,
-          total_commercial_work_per_unit: 0,
         };
       });
 
-      const batchSize = 100;
-      const totalBatches = Math.ceil(positions.length / batchSize);
+      // Go: один атомарный bulk-insert (батчинг убран; схема-defaults на стороне БД).
+      setUploadProgress(50);
+      const inserted = await bulkInsertPositions(tenderId, positions);
+      setUploadProgress(100);
 
-      for (let i = 0; i < totalBatches; i++) {
-        const batch = positions.slice(i * batchSize, (i + 1) * batchSize);
-
-        const { error } = await supabase
-          .from('client_positions')
-          .insert(batch);
-
-        if (error) {
-          console.error('Ошибка вставки данных:', error);
-          throw new Error(`Ошибка при сохранении данных: ${error.message}`);
-        }
-
-        setUploadProgress(Math.round(((i + 1) / totalBatches) * 100));
-      }
-
-      message.success(`Успешно загружено ${positions.length} позиций`);
+      message.success(`Успешно загружено ${inserted} позиций`);
       return true;
     } catch (error) {
       console.error('Ошибка загрузки:', error);

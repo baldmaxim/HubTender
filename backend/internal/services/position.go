@@ -24,6 +24,7 @@ type positionRepoer interface {
 	UpdatePositionFields(ctx context.Context, id string, in repository.UpdatePositionFieldsInput) error
 	GetPositionWithTender(ctx context.Context, id string) (*repository.PositionWithTenderRow, error)
 	ListBoqItemsFullByPosition(ctx context.Context, positionID string) ([]repository.BoqItemFullRow, error)
+	BulkInsertPositions(ctx context.Context, rows []repository.BulkPositionInsert) (int, error)
 }
 
 // PositionService provides access to client_positions data.
@@ -152,6 +153,18 @@ func (s *PositionService) UpdatePositionFields(
 	}
 	s.invalidateTender(tenderID)
 	return nil
+}
+
+// BulkInsertPositions inserts BOQ-upload positions atomically.
+func (s *PositionService) BulkInsertPositions(
+	ctx context.Context, rows []repository.BulkPositionInsert, tenderID string,
+) (int, error) {
+	n, err := s.repo.BulkInsertPositions(ctx, rows)
+	if err != nil {
+		return 0, fmt.Errorf("positionService.BulkInsertPositions: %w", err)
+	}
+	s.invalidateTender(tenderID)
+	return n, nil
 }
 
 // GetPositionWithTender returns one position + tender rates embed.

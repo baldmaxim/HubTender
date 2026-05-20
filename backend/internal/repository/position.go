@@ -204,6 +204,54 @@ func (r *PositionRepo) CreatePosition(ctx context.Context, in CreatePositionInpu
 	return p, nil
 }
 
+// BulkPositionInsert is one row of the BOQ upload (initial tender positions).
+type BulkPositionInsert struct {
+	TenderID         string   `json:"tender_id"`
+	PositionNumber   float64  `json:"position_number"`
+	WorkName         string   `json:"work_name"`
+	UnitCode         *string  `json:"unit_code"`
+	Volume           *float64 `json:"volume"`
+	ClientNote       *string  `json:"client_note"`
+	ItemNo           *string  `json:"item_no"`
+	HierarchyLevel   *int     `json:"hierarchy_level"`
+	IsAdditional     *bool    `json:"is_additional"`
+	ParentPositionID *string  `json:"parent_position_id"`
+}
+
+// BulkInsertPositions atomically inserts every input row. Defaults for the
+// schema-default columns (totals, *_per_unit) are left to PostgreSQL.
+func (r *PositionRepo) BulkInsertPositions(ctx context.Context, rows []BulkPositionInsert) (int, error) {
+	if len(rows) == 0 {
+		return 0, nil
+	}
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, fmt.Errorf("positionRepo.BulkInsertPositions: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	const q = `
+		INSERT INTO public.client_positions
+			(tender_id, position_number, work_name, unit_code, volume,
+			 client_note, item_no, hierarchy_level, is_additional, parent_position_id)
+		VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, COALESCE($8, 0),
+		        COALESCE($9, false), $10::uuid)
+	`
+	for _, row := range rows {
+		if _, err := tx.Exec(ctx, q,
+			row.TenderID, row.PositionNumber, row.WorkName, row.UnitCode, row.Volume,
+			row.ClientNote, row.ItemNo, row.HierarchyLevel,
+			row.IsAdditional, row.ParentPositionID,
+		); err != nil {
+			return 0, fmt.Errorf("positionRepo.BulkInsertPositions: insert: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("positionRepo.BulkInsertPositions: commit: %w", err)
+	}
+	return len(rows), nil
+}
+
 // ErrParentPositionNotFound is returned when the parent position is missing.
 var ErrParentPositionNotFound = errors.New("родительская позиция не найдена")
 

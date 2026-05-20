@@ -4,15 +4,13 @@
 
 import { useReducer, useCallback, useEffect, useMemo } from 'react';
 import { message } from 'antd';
-import { supabase } from '../../../../../lib/supabase';
 import type { Tender, ClientPosition } from '../../../../../lib/supabase';
+import { fetchPositionsWithCosts } from '../../../../../lib/api/positions';
 import type { ParsedRow } from '../../../../../utils/matching';
 import { findBestMatches } from '../../../../../utils/matching';
 import { executeVersionTransfer } from '../../../../../utils/versionTransfer';
 import { matchReducer, initialMatchState, type MatchPair, type VersionMatchState } from '../types';
 import { getErrorMessage } from '../../../../../utils/errors';
-
-const PAGE_SIZE = 1000;
 
 export interface UseVersionMatchingProps {
   sourceTender: Tender | null;
@@ -47,63 +45,22 @@ export function useVersionMatching({
     [newPositions]
   );
 
-  interface QueryBuilder {
-    eq(column: string, value: string | boolean): QueryBuilder;
-    order(column: string, opts: { ascending: boolean }): QueryBuilder;
-    range(from: number, to: number): PromiseLike<{ data: ClientPosition[] | null; error: unknown }>;
-  }
-
-  const fetchAllClientPositions = useCallback(async (
-    filters: (query: QueryBuilder) => QueryBuilder
-  ) => {
-    const items: ClientPosition[] = [];
-    let from = 0;
-
-    for (;;) {
-      const to = from + PAGE_SIZE - 1;
-      const query = filters(
-        supabase
-          .from('client_positions')
-          .select('*') as unknown as QueryBuilder
-      );
-
-      const { data, error } = await query.range(from, to);
-
-      if (error) {
-        throw error;
-      }
-
-      const batch = data || [];
-      items.push(...batch);
-
-      if (batch.length < PAGE_SIZE) {
-        break;
-      }
-
-      from += PAGE_SIZE;
-    }
-
-    return items;
-  }, []);
-
   const loadOldPositions = useCallback(async (tenderId: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
 
     try {
-      const data = await fetchAllClientPositions((query) => query
-        .eq('tender_id', tenderId)
-        .eq('is_additional', false)
-        .order('position_number', { ascending: true })
-      );
-
-      dispatch({ type: 'SET_OLD_POSITIONS', payload: data || [] });
+      // Go: ORDER BY position_number,id — пагинация не нужна.
+      // is_additional=false фильтруем на клиенте.
+      const all = await fetchPositionsWithCosts(tenderId);
+      const data = (all as unknown as ClientPosition[]).filter((p) => !p.is_additional);
+      dispatch({ type: 'SET_OLD_POSITIONS', payload: data });
     } catch (error) {
       console.error('Ошибка загрузки старых позиций:', error);
       message.error(`Не удалось загрузить позиции: ${getErrorMessage(error)}`);
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [fetchAllClientPositions]);
+  }, []);
 
   useEffect(() => {
     if (!sourceTender) {

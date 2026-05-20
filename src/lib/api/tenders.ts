@@ -52,3 +52,53 @@ export async function fetchTendersByIds(ids: string[]): Promise<Tender[]> {
   const set = new Set(ids);
   return all.filter(t => set.has(t.id));
 }
+
+/** Создать тендер. Возвращает созданную строку. */
+export interface CreateTenderInput {
+  title: string;
+  description?: string | null;
+  client_name: string;
+  tender_number: string;
+  submission_deadline?: string | null;
+  version?: number;
+  area_client?: number | null;
+  area_sp?: number | null;
+  usd_rate?: number | null;
+  eur_rate?: number | null;
+  cny_rate?: number | null;
+  upload_folder?: string | null;
+  bsm_link?: string | null;
+  tz_link?: string | null;
+  qa_form_link?: string | null;
+  project_folder_link?: string | null;
+  housing_class?: string | null;
+  construction_scope?: string | null;
+}
+
+export async function createTender(input: CreateTenderInput): Promise<Tender> {
+  const res = await apiFetch<{ data: Tender }>('/api/v1/tenders', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return res.data;
+}
+
+/** Точечный PATCH полей тендера для админ-страницы (без ETag-проверки). */
+export type AdminTenderPatch = Partial<CreateTenderInput> & {
+  is_archived?: boolean;
+  markup_tactic_id?: string;
+};
+
+export async function adminPatchTender(id: string, patch: AdminTenderPatch): Promise<void> {
+  await apiFetch<undefined>(`/api/v1/tenders/${encodeURIComponent(id)}/admin-fields`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
+/** Удалить тендер. */
+export async function deleteTender(id: string): Promise<void> {
+  await apiFetch<undefined>(`/api/v1/tenders/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}

@@ -21,6 +21,8 @@ type tenderWriteServicer interface {
 	GetTenderByID(ctx context.Context, id string) (*repository.TenderRow, error)
 	CreateTender(ctx context.Context, in repository.CreateTenderInput) (*repository.TenderRow, error)
 	UpdateTender(ctx context.Context, id string, in repository.UpdateTenderInput) (*repository.TenderRow, error)
+	AdminPatchTender(ctx context.Context, id string, p repository.AdminTenderPatch) error
+	DeleteTender(ctx context.Context, id string) error
 }
 
 // TenderWriteHandler handles mutating tender endpoints.
@@ -167,4 +169,46 @@ func (h *TenderWriteHandler) UpdateTender(w http.ResponseWriter, r *http.Request
 
 	setResourceETag(w, updated.ID, updated.UpdatedAt)
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: updated})
+}
+
+// AdminPatchTender handles PATCH /api/v1/tenders/{id}/admin-fields — admin
+// tenders page (no ETag check; small dedicated path).
+func (h *TenderWriteHandler) AdminPatchTender(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing tender id").Render(w)
+		return
+	}
+	var p repository.AdminTenderPatch
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.svc.AdminPatchTender(r.Context(), id, p); err != nil {
+		apierr.InternalError("failed to patch tender").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// DeleteTender handles DELETE /api/v1/tenders/{id}.
+func (h *TenderWriteHandler) DeleteTender(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing tender id").Render(w)
+		return
+	}
+	if err := h.svc.DeleteTender(r.Context(), id); err != nil {
+		apierr.InternalError("failed to delete tender").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

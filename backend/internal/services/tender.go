@@ -27,6 +27,8 @@ type tenderRepoer interface {
 	GetTenderByID(ctx context.Context, id string) (*repository.TenderRow, error)
 	CreateTender(ctx context.Context, in repository.CreateTenderInput) (*repository.TenderRow, error)
 	UpdateTender(ctx context.Context, id string, in repository.UpdateTenderInput) (*repository.TenderRow, error)
+	AdminPatchTender(ctx context.Context, id string, p repository.AdminTenderPatch) error
+	DeleteTender(ctx context.Context, id string) error
 }
 
 // TenderService provides cached access to tender data.
@@ -178,4 +180,26 @@ func (s *TenderService) UpdateTender(
 	s.cache.Delete("tender:overview:" + id)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return t, nil
+}
+
+// AdminPatchTender applies a no-ETag patch (admin tenders page).
+func (s *TenderService) AdminPatchTender(
+	ctx context.Context, id string, p repository.AdminTenderPatch,
+) error {
+	if err := s.repo.AdminPatchTender(ctx, id, p); err != nil {
+		return fmt.Errorf("tenderService.AdminPatchTender: %w", err)
+	}
+	s.cache.Delete("tender:overview:" + id)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	return nil
+}
+
+// DeleteTender removes a tender; cache invalidated.
+func (s *TenderService) DeleteTender(ctx context.Context, id string) error {
+	if err := s.repo.DeleteTender(ctx, id); err != nil {
+		return fmt.Errorf("tenderService.DeleteTender: %w", err)
+	}
+	s.cache.Delete("tender:overview:" + id)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	return nil
 }

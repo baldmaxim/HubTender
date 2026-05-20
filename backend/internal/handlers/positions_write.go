@@ -27,6 +27,7 @@ type positionWriteServicer interface {
 	ShiftPositionsLevel(ctx context.Context, ids []string, delta int, tenderID string) error
 	RecomputePositionTotals(ctx context.Context, positionID, tenderID string) error
 	UpdatePositionFields(ctx context.Context, id string, in repository.UpdatePositionFieldsInput, tenderID string) error
+	BulkInsertPositions(ctx context.Context, rows []repository.BulkPositionInsert, tenderID string) (int, error)
 }
 
 // PositionWriteHandler handles mutating position endpoints.
@@ -364,6 +365,35 @@ type updatePositionFieldsReq struct {
 	WorkName     *string  `json:"work_name" validate:"omitempty,max=1024"`
 	UnitCode     *string  `json:"unit_code"`
 	TenderID     string   `json:"tender_id" validate:"omitempty,uuid"`
+}
+
+// bulkInsertPositionsReq is the body for POST /api/v1/positions/bulk.
+type bulkInsertPositionsReq struct {
+	TenderID  string                          `json:"tender_id" validate:"required,uuid"`
+	Positions []repository.BulkPositionInsert `json:"positions" validate:"required,min=1,dive"`
+}
+
+// BulkInsertPositions handles POST /api/v1/positions/bulk.
+func (h *PositionWriteHandler) BulkInsertPositions(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var req bulkInsertPositionsReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+	n, err := h.svc.BulkInsertPositions(r.Context(), req.Positions, req.TenderID)
+	if err != nil {
+		apierr.InternalError("failed to bulk-insert positions").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: map[string]int{"inserted": n}})
 }
 
 // UpdatePositionFields handles PATCH /api/v1/positions/{id}/fields.
