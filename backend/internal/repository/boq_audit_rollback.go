@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -84,4 +85,85 @@ func (r *BoqAuditRollbackRepo) RollbackDeleted(ctx context.Context, auditID stri
 		return "", fmt.Errorf("boqAuditRollbackRepo: re-insert: %w", err)
 	}
 	return newID, nil
+}
+
+// ─── audit list (useAuditHistory) ───────────────────────────────────────────
+
+// AuditUserEmbed mirrors the user:changed_by(id,full_name,email) embed.
+type AuditUserEmbed struct {
+	ID       string  `json:"id"`
+	FullName *string `json:"full_name"`
+	Email    *string `json:"email"`
+}
+
+// BoqAuditRow is one boq_items_audit row + user embed.
+type BoqAuditRow struct {
+	ID            string          `json:"id"`
+	BoqItemID     string          `json:"boq_item_id"`
+	OperationType string          `json:"operation_type"`
+	ChangedAt     string          `json:"changed_at"`
+	ChangedBy     *string         `json:"changed_by"`
+	ChangedFields []string        `json:"changed_fields"`
+	OldData       json.RawMessage `json:"old_data"`
+	NewData       json.RawMessage `json:"new_data"`
+	User          *AuditUserEmbed `json:"user"`
+}
+
+// BoqAuditListFilter holds the optional query params for ListByPosition.
+type BoqAuditListFilter struct {
+	PositionID    string
+	DateFrom      *string
+	DateTo        *string
+	UserID        *string
+	OperationType *string
+}
+
+// ListByPosition returns boq_items_audit rows where the audited row's
+// client_position_id (in new_data or old_data JSONB) matches positionID.
+func (r *BoqAuditRollbackRepo) ListByPosition(ctx context.Context, f BoqAuditListFilter) ([]BoqAuditRow, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT bia.id::text, bia.boq_item_id::text, bia.operation_type,
+		       to_char(bia.changed_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+		       bia.changed_by::text, bia.changed_fields,
+		       bia.old_data, bia.new_data,
+		       u.id::text, u.full_name, u.email
+		FROM public.boq_items_audit bia
+		LEFT JOIN public.users u ON u.id = bia.changed_by
+		WHERE (
+		    (bia.new_data->>'client_position_id') = $1
+		    OR (bia.old_data->>'client_position_id') = $1
+		)
+		  AND ($2::timestamptz IS NULL OR bia.changed_at >= $2::timestamptz)
+		  AND ($3::timestamptz IS NULL OR bia.changed_at <= $3::timestamptz)
+		  AND ($4::uuid        IS NULL OR bia.changed_by      = $4::uuid)
+		  AND ($5::text        IS NULL OR bia.operation_type  = $5)
+		ORDER BY bia.changed_at DESC
+	`, f.PositionID, f.DateFrom, f.DateTo, f.UserID, f.OperationType)
+	if err != nil {
+		return nil, fmt.Errorf("boqAuditRollbackRepo.ListByPosition: %w", err)
+	}
+	defer rows.Close()
+	out := make([]BoqAuditRow, 0)
+	for rows.Next() {
+		var a BoqAuditRow
+		var uID, uName, uEmail *string
+		var oldData, newData []byte
+		if err := rows.Scan(&a.ID, &a.BoqItemID, &a.OperationType,
+			&a.ChangedAt, &a.ChangedBy, &a.ChangedFields,
+			&oldData, &newData,
+			&uID, &uName, &uEmail); err != nil {
+			return nil, fmt.Errorf("boqAuditRollbackRepo.ListByPosition scan: %w", err)
+		}
+		if len(oldData) > 0 {
+			a.OldData = json.RawMessage(oldData)
+		}
+		if len(newData) > 0 {
+			a.NewData = json.RawMessage(newData)
+		}
+		if uID != nil {
+			a.User = &AuditUserEmbed{ID: *uID, FullName: uName, Email: uEmail}
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }

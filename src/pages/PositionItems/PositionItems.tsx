@@ -11,7 +11,7 @@ import AddItemForm from './components/AddItemForm';
 import TemplateSelectModal from './components/TemplateSelectModal';
 import AuditHistoryTab from './components/AuditHistoryTab';
 import { BoqItemsImportModal } from './components/BoqItemsImportModal';
-import { supabase } from '../../lib/supabase';
+import { clearPositionsBoq } from '../../lib/api/positions';
 import { useDeadlineCheck } from '../../hooks/useDeadlineCheck';
 import { useAuth } from '../../contexts/AuthContext';
 import { deleteBoqItemWithAudit, updateBoqItemWithAudit } from '../../lib/supabaseWithAudit';
@@ -178,15 +178,10 @@ const PositionItems: React.FC = () => {
           }
 
           if (positionId) {
-            const { error } = await supabase
-              .from('client_positions')
-              .update({
-                total_material: 0,
-                total_works: 0,
-              })
-              .eq('id', positionId);
-
-            if (error) throw error;
+            // delete уже выполнен через deleteBoqItemWithAudit (с аудитом),
+            // здесь только обнуляем итоги позиции. clearPositionsBoq делает
+            // delete (no-op — рядов уже нет) + zero totals одной tx.
+            await clearPositionsBoq([positionId]);
           }
 
           // Обновляем состояние

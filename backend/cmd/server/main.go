@@ -306,6 +306,7 @@ func main() {
 
 		// Phase 5: restore a DELETE'd BOQ item from its audit record.
 		r.Post("/api/v1/boq-audit/{auditId}/rollback", boqAuditRollbackH.Rollback)
+		r.Get("/api/v1/boq-audit", boqAuditRollbackH.ListByPosition)
 
 		// Phase 5: tasks (user_tasks) + per-user work settings.
 		r.Get("/api/v1/tasks", tasksH.List)

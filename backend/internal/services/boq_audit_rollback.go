@@ -11,6 +11,7 @@ import (
 // boqAuditRollbackRepoer is the interface BoqAuditRollbackService depends on.
 type boqAuditRollbackRepoer interface {
 	RollbackDeleted(ctx context.Context, auditID string) (string, error)
+	ListByPosition(ctx context.Context, f repository.BoqAuditListFilter) ([]repository.BoqAuditRow, error)
 }
 
 // BoqAuditRollbackService restores a deleted BOQ item from its audit row and
@@ -34,4 +35,15 @@ func (s *BoqAuditRollbackService) RollbackDeleted(ctx context.Context, auditID s
 	}
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return newID, nil
+}
+
+// ListByPosition is a thin passthrough for the audit history reader.
+func (s *BoqAuditRollbackService) ListByPosition(
+	ctx context.Context, f repository.BoqAuditListFilter,
+) ([]repository.BoqAuditRow, error) {
+	rows, err := s.repo.ListByPosition(ctx, f)
+	if err != nil {
+		return nil, fmt.Errorf("boqAuditRollbackService.ListByPosition: %w", err)
+	}
+	return rows, nil
 }

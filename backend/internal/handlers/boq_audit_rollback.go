@@ -14,6 +14,7 @@ import (
 // boqAuditRollbackServicer is the interface the handler depends on.
 type boqAuditRollbackServicer interface {
 	RollbackDeleted(ctx context.Context, auditID string) (string, error)
+	ListByPosition(ctx context.Context, f repository.BoqAuditListFilter) ([]repository.BoqAuditRow, error)
 }
 
 // BoqAuditRollbackHandler handles POST /api/v1/boq-audit/{auditId}/rollback.
@@ -65,4 +66,42 @@ func (h *BoqAuditRollbackHandler) Rollback(w http.ResponseWriter, r *http.Reques
 	}
 
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: map[string]string{"id": newID}})
+}
+
+// strOrNil returns a *string from a query param: nil if empty.
+func strOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// ListByPosition handles
+// GET /api/v1/boq-audit?position_id=&date_from=&date_to=&user_id=&operation_type=.
+func (h *BoqAuditRollbackHandler) ListByPosition(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	q := r.URL.Query()
+	positionID := q.Get("position_id")
+	if positionID == "" {
+		apierr.BadRequest("position_id is required").Render(w)
+		return
+	}
+	rows, err := h.svc.ListByPosition(r.Context(), repository.BoqAuditListFilter{
+		PositionID:    positionID,
+		DateFrom:      strOrNil(q.Get("date_from")),
+		DateTo:        strOrNil(q.Get("date_to")),
+		UserID:        strOrNil(q.Get("user_id")),
+		OperationType: strOrNil(q.Get("operation_type")),
+	})
+	if err != nil {
+		apierr.InternalError("failed to list boq audit").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.BoqAuditRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
 }

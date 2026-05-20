@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../../lib/supabase';
+import { listBoqAuditByPosition } from '../../../lib/api/boq';
+import { listWorkNames, listMaterialNames } from '../../../lib/api/nomenclatures';
+import { listAllDetailCostCategoriesByOrder } from '../../../lib/api/costs';
 import type { BoqItemAudit, AuditFilters } from '../../../types/audit';
 
 interface UseAuditHistoryReturn {
@@ -34,43 +36,19 @@ export function useAuditHistory(
     setError(null);
 
     try {
-      // Загрузить audit записи напрямую по client_position_id из JSON полей
-      // Это позволяет видеть записи DELETE (удаленные элементы больше не в boq_items)
-      let query = supabase
-        .from('boq_items_audit')
-        .select(
-          `
-          *,
-          user:changed_by(id, full_name, email)
-        `
-        )
-        .or(`new_data->>client_position_id.eq.${positionId},old_data->>client_position_id.eq.${positionId}`)
-        .order('changed_at', { ascending: false });
+      // Go: GET /api/v1/boq-audit?position_id=…&… — JSONB-filter
+      // (new_data->>client_position_id OR old_data->>client_position_id) +
+      // user embed + optional date/user/operation filters.
+      const data = await listBoqAuditByPosition({
+        positionId,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        userId: filters.userId,
+        operationType: filters.operationType,
+      });
 
-      // Применить фильтры
-      if (filters.dateFrom) {
-        query = query.gte('changed_at', filters.dateFrom);
-      }
-
-      if (filters.dateTo) {
-        query = query.lte('changed_at', filters.dateTo);
-      }
-
-      if (filters.userId) {
-        query = query.eq('changed_by', filters.userId);
-      }
-
-      if (filters.operationType) {
-        query = query.eq('operation_type', filters.operationType);
-      }
-
-      const { data, error: auditError } = await query;
-
-      if (auditError) throw auditError;
-
-      // Трансформация данных: user из joined объекта
       let transformedData: BoqItemAudit[] = (data || []).map((record) => ({
-        ...record,
+        ...(record as unknown as BoqItemAudit),
         user: Array.isArray(record.user) ? record.user[0] : record.user,
       }));
 
@@ -102,46 +80,29 @@ export function useAuditHistory(
         }
       });
 
-      // Загрузить названия работ
+      // Имена/категории — Go-helpers отдают полные списки, фильтруем по ids
+      // на клиенте (выборки маленькие, audit-модал открывается редко).
       const workNamesMap = new Map<string, string>();
       if (workNameIds.size > 0) {
-        const { data: workNames } = await supabase
-          .from('work_names')
-          .select('id, name')
-          .in('id', Array.from(workNameIds));
-
-        workNames?.forEach((wn) => {
-          workNamesMap.set(wn.id, wn.name);
+        const allWorks = await listWorkNames();
+        allWorks.forEach((wn) => {
+          if (workNameIds.has(wn.id)) workNamesMap.set(wn.id, wn.name);
         });
       }
 
-      // Загрузить названия материалов
       const materialNamesMap = new Map<string, string>();
       if (materialNameIds.size > 0) {
-        const { data: materialNames } = await supabase
-          .from('material_names')
-          .select('id, name')
-          .in('id', Array.from(materialNameIds));
-
-        materialNames?.forEach((mn) => {
-          materialNamesMap.set(mn.id, mn.name);
+        const allMaterials = await listMaterialNames();
+        allMaterials.forEach((mn) => {
+          if (materialNameIds.has(mn.id)) materialNamesMap.set(mn.id, mn.name);
         });
       }
 
-      // Загрузить названия затрат
       const costCategoriesMap = new Map<string, string>();
       if (costCategoryIds.size > 0) {
-        const { data: costCategories, error: costCategoriesError } = await supabase
-          .from('detail_cost_categories')
-          .select('id, name')
-          .in('id', Array.from(costCategoryIds));
-
-        if (costCategoriesError) {
-          console.error('[useAuditHistory] Error loading cost categories:', costCategoriesError);
-        }
-
-        costCategories?.forEach((cc) => {
-          costCategoriesMap.set(cc.id, cc.name);
+        const allCategories = await listAllDetailCostCategoriesByOrder();
+        allCategories.forEach((cc) => {
+          if (costCategoryIds.has(cc.id)) costCategoriesMap.set(cc.id, cc.name);
         });
       }
 

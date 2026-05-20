@@ -319,6 +319,21 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — PositionItems audit batch DONE (verified; новый audit-list)
+
+`src/pages/PositionItems/{hooks/useAuditHistory.ts, components/AuditFilters.tsx,
+PositionItems.tsx}` (4+1+1 → 0):
+
+| Эндпоинт/хелпер | Заменяет |
+|---|---|
+| **новый** `GET /api/v1/boq-audit?position_id=&date_from=&date_to=&user_id=&operation_type=` (repo `ListByPosition`+service+handler+route на BoqAuditRollbackRepo) | `boq_items_audit` + user embed + JSONB-filter `new_data->>client_position_id OR old_data->>client_position_id` + optional date/user/op filters; one query, NULL-or-param trick |
+| `listWorkNames`/`listMaterialNames`/`listAllDetailCostCategoriesByOrder` (фильтр по ids на клиенте) | три точечных `WHERE id IN (...)` |
+| `listTimelineAssignableUsers` | `users WHERE access_enabled=true` (теряем email — был fallback-label, full_name остаётся) |
+| `clearPositionsBoq([positionId])` | `client_positions.update(totals=0)` после audited-delete-loop (idempotent на уже-удалённых) |
+
+`go build` 0, `go test ./internal/services` ok, `tsc` 0, `vite build` ✓.
+Остаток PositionItems: `useBoqItems`12/`useBoqItemsImport`10/`useItemActions`6.
+
 ## P5.3 — ClientPositions/useClientPositions DONE (verified; reuse, без backend)
 
 `src/pages/ClientPositions/hooks/useClientPositions.ts`: 4 read-callsite →

@@ -3,7 +3,7 @@ import { Row, Col, DatePicker, Select, Button } from 'antd';
 import { FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
-import { supabase } from '../../../lib/supabase';
+import { listTimelineAssignableUsers } from '../../../lib/api/timeline';
 import type { AuditFilters, AuditOperationType } from '../../../types/audit';
 
 const { RangePicker } = DatePicker;
@@ -26,21 +26,23 @@ const AuditFiltersComponent: React.FC<AuditFiltersProps> = ({ filters, onChange 
   const [users, setUsers] = useState<User[]>([]);
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
 
-  // Загрузка списка пользователей
+  // Загрузка списка пользователей (reuse timeline assignable-users:
+  // {id,full_name,role_code}; email теряем — он использовался лишь как
+  // fallback-label в dropdown).
   useEffect(() => {
     const fetchUsers = async () => {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, full_name, email')
-        .eq('access_enabled', true)
-        .order('full_name', { ascending: true });
-
-      if (error) {
-        console.error('[AuditFilters] Ошибка загрузки пользователей:', error);
-        return;
+      try {
+        const data = await listTimelineAssignableUsers();
+        setUsers(
+          data.map((u) => ({
+            id: u.id,
+            full_name: u.full_name ?? '',
+            email: '',
+          })),
+        );
+      } catch (err) {
+        console.error('[AuditFilters] Ошибка загрузки пользователей:', err);
       }
-
-      setUsers(data || []);
     };
 
     fetchUsers();
