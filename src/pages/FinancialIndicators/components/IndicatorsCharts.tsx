@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Typography, Table, Button, Spin } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { supabase } from '../../../lib/supabase';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 import {
   calculateLiveCommercialAmounts,
   loadLiveCommercialCalculationContext,
   resetLiveCommercialCalculationCache,
 } from '../../../utils/boq/liveCommercialCalculation';
+import { getTenderById } from '../../../lib/api/fi';
+import { listBoqItemsFullByTender } from '../../../lib/api/positions';
+import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
+import { listConstructionCostVolumes } from '../../../lib/api/constructionCostVolumes';
 
 const { Text, Title } = Typography;
 import { Bar, Doughnut } from 'react-chartjs-2';
@@ -78,18 +81,14 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   });
 
   const loadTenderRates = async (): Promise<TenderRates> => {
-    const { data, error } = await supabase
-      .from('tenders')
-      .select('usd_rate, eur_rate, cny_rate')
-      .eq('id', selectedTenderId)
-      .single();
-
-    if (error) throw error;
-
+    if (!selectedTenderId) {
+      return { usd_rate: 0, eur_rate: 0, cny_rate: 0 };
+    }
+    const t = await getTenderById(selectedTenderId);
     return {
-      usd_rate: data?.usd_rate || 0,
-      eur_rate: data?.eur_rate || 0,
-      cny_rate: data?.cny_rate || 0,
+      usd_rate: t?.usd_rate || 0,
+      eur_rate: t?.eur_rate || 0,
+      cny_rate: t?.cny_rate || 0,
     };
   };
 
@@ -457,47 +456,34 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           boqItemTypes = [];
       }
 
-      // Один запрос с вложенной структурой - получаем категорию, вид и локализацию
-      const { data: boqItems, error } = await supabase
-        .from('boq_items')
-        .select(`
-          boq_item_type,
-          total_amount,
-          quantity,
-          unit_rate,
-          currency_type,
-          delivery_price_type,
-          delivery_amount,
-          consumption_coefficient,
-          parent_work_item_id,
-          detail_cost_category:detail_cost_categories(
-            id,
-            name,
-            location,
-            cost_category:cost_categories(id, name)
-          ),
-          client_position:client_positions!inner(tender_id)
-        `)
-        .eq('client_position.tender_id', selectedTenderId)
-        .in('boq_item_type', boqItemTypes);
+      const allBoqItems = await listBoqItemsFullByTender(selectedTenderId);
+      const typeSet = new Set(boqItemTypes);
+      const boqItems = (allBoqItems as unknown as Array<{
+        boq_item_type: string | null;
+        total_amount: number | null;
+        quantity: number | null;
+        unit_rate: number | null;
+        currency_type: string | null;
+        delivery_price_type: string | null;
+        delivery_amount: number | null;
+        consumption_coefficient: number | null;
+        parent_work_item_id: string | null;
+        detail_cost_categories: { name?: string | null; location?: string | null; cost_categories: { name?: string | null } | null } | null;
+      }>).filter((i) => i.boq_item_type && typeSet.has(i.boq_item_type));
 
-      if (error) throw error;
-
-      if (!boqItems || boqItems.length === 0) {
+      if (boqItems.length === 0) {
         setBreakdownData([]);
         return;
       }
 
-      // Группировка по категории + вид + локализация
       const categoryMap = new Map<string, CategoryBreakdown>();
 
       boqItems.forEach(item => {
-        const detailCategory = Array.isArray(item.detail_cost_category) ? item.detail_cost_category[0] : item.detail_cost_category;
-        const costCategory = detailCategory?.cost_category;
-        const categoryObj = Array.isArray(costCategory) ? costCategory[0] : costCategory;
+        const detailCategory = item.detail_cost_categories;
+        const categoryObj = detailCategory?.cost_categories || null;
 
         const vatMultiplier = (isVatInConstructor && vatCoefficient > 0) ? (1 + vatCoefficient / 100) : 1;
-        const amount = calculateBoqItemTotalAmount(item, tenderRates) * vatMultiplier;
+        const amount = calculateBoqItemTotalAmount(item as unknown as Parameters<typeof calculateBoqItemTotalAmount>[0], tenderRates) * vatMultiplier;
         const isWork = item.boq_item_type === 'раб' || item.boq_item_type === 'суб-раб' || item.boq_item_type === 'раб-комп.';
 
         // Для строки 4 (запас на сдачу) группируем по виду затрат
@@ -580,33 +566,19 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
 
     try {
       const calculationContext = await loadLiveCommercialCalculationContext(selectedTenderId);
-      // 1. Загружаем detail_cost_categories с именами категорий
-      const { data: categories, error: catError } = await supabase
-        .from('detail_cost_categories')
-        .select('id, cost_categories(name)');
+      const categories = await listDetailCostCategoriesWithCategory();
 
-      if (catError) throw catError;
-
-      // Маппинг detail_cost_category_id → cost_category name
       const detailToCategoryName = new Map<string, string>();
-      (categories || []).forEach((cat) => {
-        const cc = Array.isArray(cat.cost_categories) ? cat.cost_categories[0] : cat.cost_categories;
-        const name = cc?.name || '';
+      categories.forEach((cat) => {
+        const name = cat.cost_categories?.name || '';
         if (name) detailToCategoryName.set(cat.id, name);
       });
 
-      // 2. Загружаем ВСЕ объёмы из construction_cost_volumes (и group, и detail)
-      const { data: volumes, error: volError } = await supabase
-        .from('construction_cost_volumes')
-        .select('detail_cost_category_id, group_key, volume')
-        .eq('tender_id', selectedTenderId);
-
-      if (volError) throw volError;
-
+      const volumes = await listConstructionCostVolumes(selectedTenderId);
       const groupVolumes = new Map<string, number>();
       const detailVolumes = new Map<string, number>();
 
-      (volumes || []).forEach((v) => {
+      volumes.forEach((v) => {
         if (v.group_key) {
           groupVolumes.set(v.group_key, v.volume || 0);
         } else if (v.detail_cost_category_id) {
@@ -639,42 +611,28 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         'ФАСАДНЫЕ РАБОТЫ',
       ]);
 
-      // Коммерческие и базовые стоимости по категориям
       const commercialCostByCategory = new Map<string, number>();
       const baseCostByCategory = new Map<string, number>();
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
 
       resetLiveCommercialCalculationCache();
 
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('boq_items')
-          .select('detail_cost_category_id, total_amount, quantity, unit_rate, currency_type, delivery_price_type, delivery_amount, consumption_coefficient, parent_work_item_id, total_commercial_material_cost, total_commercial_work_cost, client_positions!inner(tender_id)')
-          .eq('client_positions.tender_id', selectedTenderId)
-          .range(from, from + batchSize - 1);
+      const boqRows = (await listBoqItemsFullByTender(selectedTenderId)) as unknown as Array<{
+        detail_cost_category_id: string | null;
+      }>;
+      boqRows.forEach((rawItem) => {
+        const item = rawItem as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0];
+        const categoryName = rawItem.detail_cost_category_id
+          ? detailToCategoryName.get(rawItem.detail_cost_category_id) || ''
+          : '';
+        if (!targetCategories.has(categoryName)) return;
 
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          data.forEach((rawItem) => {
-            const item = rawItem as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0];
-            const categoryName = detailToCategoryName.get(rawItem.detail_cost_category_id) || '';
-            if (!targetCategories.has(categoryName)) return;
-
-            const { commercialTotal, baseAmount } = calculateLiveCommercialAmounts(item, calculationContext);
-            commercialCostByCategory.set(categoryName, (commercialCostByCategory.get(categoryName) || 0) + commercialTotal);
-
-            const baseCost = baseAmount;
-            baseCostByCategory.set(categoryName, (baseCostByCategory.get(categoryName) || 0) + baseCost);
-          });
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
+        const { commercialTotal, baseAmount } = calculateLiveCommercialAmounts(item, calculationContext);
+        commercialCostByCategory.set(
+          categoryName,
+          (commercialCostByCategory.get(categoryName) || 0) + commercialTotal,
+        );
+        baseCostByCategory.set(categoryName, (baseCostByCategory.get(categoryName) || 0) + baseAmount);
+      });
 
       // 4. Рассчитываем цену за единицу КП
       // Используем коммерческие стоимости, если они заполнены, иначе базовые
