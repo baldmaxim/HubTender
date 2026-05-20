@@ -15,6 +15,8 @@ import (
 type positionServicer interface {
 	ListPositions(ctx context.Context, p repository.PositionListParams) ([]repository.PositionRow, error)
 	ListBoqPreviewByPositions(ctx context.Context, positionIDs []string) ([]repository.BoqPreviewRow, error)
+	GetPositionWithTender(ctx context.Context, id string) (*repository.PositionWithTenderRow, error)
+	ListBoqItemsFullByPosition(ctx context.Context, positionID string) ([]repository.BoqItemFullRow, error)
 }
 
 // PositionHandler serves the /api/v1/tenders/:id/positions endpoint.
@@ -102,6 +104,47 @@ func (h *PositionHandler) GetBoqPreview(w http.ResponseWriter, r *http.Request) 
 	}
 	if rows == nil {
 		rows = []repository.BoqPreviewRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+// GetPositionWithTender handles GET /api/v1/positions/{id}/with-tender.
+func (h *PositionHandler) GetPositionWithTender(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing position id").Render(w)
+		return
+	}
+	p, err := h.svc.GetPositionWithTender(r.Context(), id)
+	if err != nil {
+		apierr.InternalError("failed to load position").Render(w)
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: p})
+}
+
+// ListBoqItemsFullByPosition handles GET /api/v1/positions/{id}/boq-items-full.
+func (h *PositionHandler) ListBoqItemsFullByPosition(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing position id").Render(w)
+		return
+	}
+	rows, err := h.svc.ListBoqItemsFullByPosition(r.Context(), id)
+	if err != nil {
+		apierr.InternalError("failed to list boq items").Render(w)
+		return
+	}
+	if rows == nil {
+		rows = []repository.BoqItemFullRow{}
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
 }

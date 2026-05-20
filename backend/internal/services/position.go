@@ -22,6 +22,8 @@ type positionRepoer interface {
 	ListBoqPreviewByPositions(ctx context.Context, positionIDs []string) ([]repository.BoqPreviewRow, error)
 	RecomputePositionTotals(ctx context.Context, positionID string) error
 	UpdatePositionFields(ctx context.Context, id string, in repository.UpdatePositionFieldsInput) error
+	GetPositionWithTender(ctx context.Context, id string) (*repository.PositionWithTenderRow, error)
+	ListBoqItemsFullByPosition(ctx context.Context, positionID string) ([]repository.BoqItemFullRow, error)
 }
 
 // PositionService provides access to client_positions data.
@@ -150,6 +152,28 @@ func (s *PositionService) UpdatePositionFields(
 	}
 	s.invalidateTender(tenderID)
 	return nil
+}
+
+// GetPositionWithTender returns one position + tender rates embed.
+func (s *PositionService) GetPositionWithTender(
+	ctx context.Context, id string,
+) (*repository.PositionWithTenderRow, error) {
+	p, err := s.repo.GetPositionWithTender(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("positionService.GetPositionWithTender: %w", err)
+	}
+	return p, nil
+}
+
+// ListBoqItemsFullByPosition returns boq_items + nested embeds.
+func (s *PositionService) ListBoqItemsFullByPosition(
+	ctx context.Context, positionID string,
+) ([]repository.BoqItemFullRow, error) {
+	rows, err := s.repo.ListBoqItemsFullByPosition(ctx, positionID)
+	if err != nil {
+		return nil, fmt.Errorf("positionService.ListBoqItemsFullByPosition: %w", err)
+	}
+	return rows, nil
 }
 
 // ListBoqPreviewByPositions returns the existing-items preview for positions.

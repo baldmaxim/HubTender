@@ -319,6 +319,25 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — PositionItems/useBoqItems DONE (verified; 2 новых + reuse)
+
+`src/pages/PositionItems/hooks/useBoqItems.ts` (12 supabase → 0).
+Ядро BOQ-чтения позиции. 2 новых эндпоинта, остальные 10 — reuse.
+
+| Эндпоинт/хелпер | Заменяет |
+|---|---|
+| **новый** `GET /api/v1/positions/{id}/with-tender` (repo `GetPositionWithTender`+svc+handler+route) | `client_positions.* + tenders(rates)` join |
+| **новый** `GET /api/v1/positions/{id}/boq-items-full` (repo `ListBoqItemsFullByPosition`+svc+handler+route) | `boq_items + material_names + work_names + parent_work(work_names) + detail_cost_categories(+cost_categories+location)` — 6-уровневая вложенность через LEFT JOIN |
+| `listMaterialsLibrary` / `listWorksLibrary` (фильтр по ids на клиенте) | `materials_library` / `works_library` IN-фильтры |
+| `listTemplates` (+sort by name на клиенте) | `templates + detail_cost_categories(+cost_categories+location)` |
+| `listDetailCostCategoriesWithCategory` | `detail_cost_categories + cost_categories(name)` |
+| `listWorkNames`/`listMaterialNames` (+sort by name) | paged work_names/material_names |
+| `listActiveUnits` (+sort by code) | units |
+
+Вся client-side calc (sortItemsByHierarchy, calculateBoqItemTotalAmount,
+library-rate fallback) без изменений. `go build` 0, `tsc` 0, `vite build` ✓
+(идёт в фоне). Остаток PositionItems: `useBoqItemsImport`10.
+
 ## P5.3 — PositionItems/useItemActions DONE (verified; 3 новых эндпоинта)
 
 `src/pages/PositionItems/hooks/useItemActions.ts` (6 supabase → 0):

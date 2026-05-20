@@ -1,15 +1,29 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
-import {
-  supabase,
-  type ClientPosition,
-  type BoqItemFull,
-  type WorkLibraryFull,
-  type MaterialLibraryFull,
-  type CurrencyType,
-  type WorkName,
-  type MaterialName,
+import type {
+  ClientPosition,
+  BoqItemFull,
+  WorkLibraryFull,
+  MaterialLibraryFull,
+  CurrencyType,
+  WorkName,
+  MaterialName,
 } from '../../../lib/supabase';
+import {
+  getPositionWithTender,
+  listBoqItemsFullByPosition,
+} from '../../../lib/api/positions';
+import {
+  listWorksLibrary,
+  listMaterialsLibrary,
+  listTemplates,
+} from '../../../lib/api/library';
+import {
+  listWorkNames,
+  listMaterialNames,
+  listActiveUnits,
+} from '../../../lib/api/nomenclatures';
+import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 import { getErrorMessage } from '../../../utils/errors';
 import { getRow as getCachedPositionRow } from '../../../lib/cache/positionRowCache';
@@ -64,15 +78,13 @@ export const useBoqItems = (positionId: string | undefined) => {
   };
 
   const fetchPositionData = async () => {
+    if (!positionId) return;
     try {
-      const { data, error } = await supabase
-        .from('client_positions')
-        .select('*, tenders(usd_rate, eur_rate, cny_rate)')
-        .eq('id', positionId)
-        .single();
-
-      if (error) throw error;
-      setPosition(data);
+      const data = (await getPositionWithTender(positionId)) as unknown as
+        (ClientPosition & {
+          tenders?: { usd_rate?: number; eur_rate?: number; cny_rate?: number } | null;
+        });
+      setPosition(data as ClientPosition);
 
       setGpVolume(data.manual_volume || 0);
       setGpNote(data.manual_note || '');
@@ -150,21 +162,16 @@ export const useBoqItems = (positionId: string | undefined) => {
   };
 
   const fetchItems = async () => {
+    if (!positionId) return;
     setLoading(true);
     try {
       let rates = currencyRates;
 
-      const { data: positionRatesData, error: positionRatesError } = await supabase
-        .from('client_positions')
-        .select('tenders(usd_rate, eur_rate, cny_rate)')
-        .eq('id', positionId)
-        .single();
-
-      if (positionRatesError) throw positionRatesError;
-
-      const tenderRates = Array.isArray(positionRatesData?.tenders)
-        ? positionRatesData.tenders[0]
-        : positionRatesData?.tenders;
+      // Go: одна запросом одновременно с rates (positions/{id}/with-tender)
+      const positionFull = (await getPositionWithTender(positionId)) as unknown as {
+        tenders?: { usd_rate?: number; eur_rate?: number; cny_rate?: number } | null;
+      };
+      const tenderRates = positionFull.tenders ?? null;
 
       if (tenderRates) {
         rates = {
@@ -175,19 +182,24 @@ export const useBoqItems = (positionId: string | undefined) => {
         setCurrencyRates(rates);
       }
 
-      const { data, error } = await supabase
-        .from('boq_items')
-        .select(`
-          *,
-          material_names(name, unit),
-          work_names(name, unit),
-          parent_work:parent_work_item_id(work_names(name)),
-          detail_cost_categories(name, cost_categories(name), location)
-        `)
-        .eq('client_position_id', positionId)
-        .order('sort_number', { ascending: true });
-
-      if (error) throw error;
+      // Loose shape mirroring the Go nested-embed JSON; field-by-field
+      // access below preserves the original supabase-PostgREST mapping.
+      type RawBoqItemJoin = {
+        id: string;
+        material_name_id?: string | null;
+        work_name_id?: string | null;
+        unit_rate?: number | null;
+        material_names?: { name?: string; unit?: string } | null;
+        work_names?: { name?: string; unit?: string } | null;
+        parent_work?: { work_names?: { name?: string } | null } | null;
+        detail_cost_categories?: {
+          name?: string;
+          location?: string | null;
+          cost_categories?: { name?: string } | null;
+        } | null;
+        [k: string]: unknown;
+      };
+      const data = (await listBoqItemsFullByPosition(positionId)) as unknown as RawBoqItemJoin[];
 
       // Логирование первых 3 элементов для отладки порядка
       if (data && data.length > 0) {
@@ -212,31 +224,31 @@ export const useBoqItems = (positionId: string | undefined) => {
       let materialRates: Record<string, number> = {};
       let workRates: Record<string, number> = {};
 
+      // Go: один listMaterialsLibrary / listWorksLibrary (полные списки) —
+      // строим словари ставок на клиенте по ids.
       if (materialIds.length > 0) {
-        const { data: matData } = await supabase
-          .from('materials_library')
-          .select('material_name_id, unit_rate')
-          .in('material_name_id', materialIds);
-
-        materialRates = (matData || []).reduce((acc, item) => {
-          acc[item.material_name_id] = item.unit_rate;
+        const matIdSet = new Set(materialIds);
+        const matData = await listMaterialsLibrary();
+        materialRates = matData.reduce((acc, item) => {
+          if (item.material_name_id && matIdSet.has(item.material_name_id)) {
+            acc[item.material_name_id] = item.unit_rate;
+          }
           return acc;
         }, {} as Record<string, number>);
       }
 
       if (workIds.length > 0) {
-        const { data: workData } = await supabase
-          .from('works_library')
-          .select('work_name_id, unit_rate')
-          .in('work_name_id', workIds);
-
-        workRates = (workData || []).reduce((acc, item) => {
-          acc[item.work_name_id] = item.unit_rate;
+        const workIdSet = new Set(workIds);
+        const workData = await listWorksLibrary();
+        workRates = workData.reduce((acc, item) => {
+          if (item.work_name_id && workIdSet.has(item.work_name_id)) {
+            acc[item.work_name_id] = item.unit_rate;
+          }
           return acc;
         }, {} as Record<string, number>);
       }
 
-      const formattedItems: BoqItemFull[] = (data || []).map((item) => {
+      const formattedItems = (data || []).map((item) => {
         let detailCostCategoryFull = '-';
         if (item.detail_cost_categories) {
           const categoryName = item.detail_cost_categories.cost_categories?.name || '';
@@ -244,6 +256,16 @@ export const useBoqItems = (positionId: string | undefined) => {
           const location = item.detail_cost_categories.location || '';
           detailCostCategoryFull = `${categoryName} / ${detailName} / ${location}`;
         }
+        const fallbackRate =
+          item.material_name_id
+            ? materialRates[item.material_name_id]
+            : item.work_name_id
+              ? workRates[item.work_name_id]
+              : undefined;
+        const effectiveUnitRate =
+          item.unit_rate !== null && item.unit_rate !== undefined
+            ? item.unit_rate
+            : fallbackRate;
 
         return {
           ...item,
@@ -253,28 +275,13 @@ export const useBoqItems = (positionId: string | undefined) => {
           work_unit: item.work_names?.unit,
           parent_work_name: item.parent_work?.work_names?.name,
           detail_cost_category_full: detailCostCategoryFull,
-          unit_rate: (item.unit_rate !== null && item.unit_rate !== undefined)
-            ? item.unit_rate
-            : (item.material_name_id
-              ? materialRates[item.material_name_id]
-              : workRates[item.work_name_id]),
+          unit_rate: effectiveUnitRate,
           total_amount: calculateBoqItemTotalAmount(
-            {
-              ...item,
-              unit_rate: (item.unit_rate !== null && item.unit_rate !== undefined)
-                ? item.unit_rate
-                : (item.material_name_id
-                  ? materialRates[item.material_name_id]
-                  : workRates[item.work_name_id]),
-            },
-            {
-              usd_rate: rates.usd,
-              eur_rate: rates.eur,
-              cny_rate: rates.cny,
-            }
+            { ...(item as unknown as BoqItemFull), unit_rate: effectiveUnitRate },
+            { usd_rate: rates.usd, eur_rate: rates.eur, cny_rate: rates.cny },
           ),
         };
-      });
+      }) as unknown as BoqItemFull[];
 
       const sortedItems = sortItemsByHierarchy(formattedItems);
       setItems(sortedItems);
@@ -287,19 +294,12 @@ export const useBoqItems = (positionId: string | undefined) => {
 
   const fetchWorks = async () => {
     try {
-      const { data, error } = await supabase
-        .from('works_library')
-        .select('*, work_names(name, unit)')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const formatted: WorkLibraryFull[] = (data || []).map((item) => ({
+      const data = await listWorksLibrary();
+      const formatted = (data || []).map((item) => ({
         ...item,
         work_name: item.work_names?.name,
         unit: item.work_names?.unit,
-      }));
-
+      })) as unknown as WorkLibraryFull[];
       setWorks(formatted);
     } catch (error) {
       message.error('Ошибка загрузки работ: ' + getErrorMessage(error));
@@ -308,19 +308,12 @@ export const useBoqItems = (positionId: string | undefined) => {
 
   const fetchMaterials = async () => {
     try {
-      const { data, error } = await supabase
-        .from('materials_library')
-        .select('*, material_names(name, unit)')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const formatted: MaterialLibraryFull[] = (data || []).map((item) => ({
+      const data = await listMaterialsLibrary();
+      const formatted = (data || []).map((item) => ({
         ...item,
         material_name: item.material_names?.name,
         unit: item.material_names?.unit,
-      }));
-
+      })) as unknown as MaterialLibraryFull[];
       setMaterials(formatted);
     } catch (error) {
       message.error('Ошибка загрузки материалов: ' + getErrorMessage(error));
@@ -329,32 +322,20 @@ export const useBoqItems = (positionId: string | undefined) => {
 
   const fetchTemplates = async () => {
     try {
-      // Загружаем шаблоны с категориями затрат
-      const { data: templatesData, error: templatesError } = await supabase
-        .from('templates')
-        .select(`
-          id,
-          name,
-          detail_cost_category_id,
-          detail_cost_categories(name, location, cost_categories(name))
-        `)
-        .order('name', { ascending: true });
+      const templatesData = await listTemplates();
+      // Сервер сортирует по created_at DESC; исходный код ожидал .order('name' asc) —
+      // воспроизводим клиентом.
+      templatesData.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-      if (templatesError) throw templatesError;
-
-      // Преобразуем данные, добавляя detail_cost_category_full
-      const templatesWithCategories = (templatesData || []).map((template) => {
-        let detailCostCategoryFull = null;
-
+      const templatesWithCategories = templatesData.map((template) => {
+        let detailCostCategoryFull: string | null = null;
         if (template.detail_cost_categories) {
-          const dcc = Array.isArray(template.detail_cost_categories) ? template.detail_cost_categories[0] : template.detail_cost_categories;
-          const cc = Array.isArray(dcc?.cost_categories) ? dcc.cost_categories[0] : dcc?.cost_categories;
-          const categoryName = cc?.name || '';
-          const detailName = dcc?.name || '';
-          const location = dcc?.location || '';
+          const dcc = template.detail_cost_categories;
+          const categoryName = dcc.cost_categories?.name || '';
+          const detailName = dcc.name || '';
+          const location = dcc.location || '';
           detailCostCategoryFull = `${categoryName} / ${detailName} / ${location}`;
         }
-
         return {
           id: template.id,
           name: template.name,
@@ -371,19 +352,7 @@ export const useBoqItems = (positionId: string | undefined) => {
 
   const fetchCostCategories = async () => {
     try {
-      const { data, error } = await supabase
-        .from('detail_cost_categories')
-        .select(`
-          id,
-          name,
-          cost_category_id,
-          location,
-          cost_categories(name)
-        `)
-        .order('order_num', { ascending: true });
-
-      if (error) throw error;
-
+      const data = await listDetailCostCategoriesWithCategory();
       const options = (data || []).map((item) => {
         const ccat = Array.isArray(item.cost_categories) ? item.cost_categories[0] : item.cost_categories;
         return {
@@ -393,7 +362,6 @@ export const useBoqItems = (positionId: string | undefined) => {
           location: item.location || '',
         };
       });
-
       setCostCategories(options);
     } catch (error) {
       message.error('Ошибка загрузки категорий затрат: ' + getErrorMessage(error));
@@ -402,30 +370,10 @@ export const useBoqItems = (positionId: string | undefined) => {
 
   const fetchWorkNames = async () => {
     try {
-      let allWorks: WorkName[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('work_names')
-          .select('*')
-          .order('name', { ascending: true })
-          .range(from, from + batchSize - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allWorks = [...allWorks, ...data];
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
-
-      setWorkNames(allWorks);
+      // Go отдаёт все work_names одним запросом; пагинация убрана.
+      const data = await listWorkNames();
+      const sorted = [...data].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setWorkNames(sorted as unknown as WorkName[]);
     } catch (error) {
       message.error('Ошибка загрузки наименований работ: ' + getErrorMessage(error));
     }
@@ -433,30 +381,9 @@ export const useBoqItems = (positionId: string | undefined) => {
 
   const fetchMaterialNames = async () => {
     try {
-      let allMaterials: MaterialName[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('material_names')
-          .select('*')
-          .order('name', { ascending: true })
-          .range(from, from + batchSize - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allMaterials = [...allMaterials, ...data];
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
-
-      setMaterialNames(allMaterials);
+      const data = await listMaterialNames();
+      const sorted = [...data].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setMaterialNames(sorted as unknown as MaterialName[]);
     } catch (error) {
       message.error('Ошибка загрузки наименований материалов: ' + getErrorMessage(error));
     }
@@ -464,13 +391,9 @@ export const useBoqItems = (positionId: string | undefined) => {
 
   const fetchUnits = async () => {
     try {
-      const { data, error } = await supabase
-        .from('units')
-        .select('code, name')
-        .order('code', { ascending: true });
-
-      if (error) throw error;
-      setUnits(data || []);
+      const data = await listActiveUnits();
+      const sorted = [...data].sort((a, b) => (a.code || '').localeCompare(b.code || ''));
+      setUnits(sorted as unknown as Array<{ code: string; name: string }>);
     } catch (error) {
       console.error('Ошибка загрузки единиц измерения:', error);
     }

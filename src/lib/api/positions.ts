@@ -91,6 +91,23 @@ export async function listBoqPreviewByPositions(
   return res.data ?? [];
 }
 
+/** Одна позиция + tenders(usd_rate,eur_rate,cny_rate) embed. */
+export async function getPositionWithTender(positionId: string): Promise<Record<string, unknown>> {
+  const res = await apiFetch<{ data: Record<string, unknown> }>(
+    `/api/v1/positions/${encodeURIComponent(positionId)}/with-tender`,
+  );
+  return res.data;
+}
+
+/** boq_items позиции с вложенными embed'ами (work_names, material_names,
+ *  parent_work.work_names, detail_cost_categories+cost_categories). */
+export async function listBoqItemsFullByPosition(positionId: string): Promise<Record<string, unknown>[]> {
+  const res = await apiFetch<{ data: Record<string, unknown>[] }>(
+    `/api/v1/positions/${encodeURIComponent(positionId)}/boq-items-full`,
+  );
+  return res.data ?? [];
+}
+
 /** Пересчитать total_material/total_works позиции по её boq_items (idempotent). */
 export async function recomputePositionTotals(
   positionId: string,
