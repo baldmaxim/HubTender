@@ -8,9 +8,6 @@ import { HeaderIcon } from '../../components/Icons/HeaderIcon';
 
 const { Title, Text } = Typography;
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const DEFAULT_ROLE_PAGES = [];
-
 interface RegisterFormValues {
   full_name: string;
   email: string;
@@ -27,7 +24,6 @@ const Register: React.FC = () => {
     setLoading(true);
 
     try {
-      // 1. Создаем пользователя в auth.users через Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
@@ -49,69 +45,24 @@ const Register: React.FC = () => {
         return;
       }
 
-      // 2. Получаем allowed_pages для роли инженера
-      const { data: engineerRole } = await supabase
-        .from('roles')
-        .select('allowed_pages')
-        .eq('code', 'engineer')
-        .single();
-
-      // 3. Создаем запись в public.users со статусом pending через helper,
-      // который при VITE_API_USERS_ENABLED=true идёт на Go BFF (user_id и
-      // email в этом случае приходят из JWT — клиент не подменит их).
+      // Создаём запись public.users + рассылку уведомления админам в одной
+      // транзакции на Go BFF (allowed_pages подтягивается из roles, email и
+      // userID — из подтверждённого JWT, клиент их подменить не может).
       try {
         await apiRegisterUser({
-          user_id: authData.user.id,
           full_name: values.full_name,
-          email: values.email,
           role_code: 'engineer',
-          allowed_pages: engineerRole?.allowed_pages || [],
         });
       } catch (userInsertError) {
         const err = userInsertError as { message?: string };
         console.error('Ошибка создания записи пользователя:', userInsertError);
-
-        // Выходим из созданной сессии (auth.users останется, но пользователь не сможет войти без public.users)
         await supabase.auth.signOut();
-
         message.error(`Ошибка при создании профиля: ${err.message ?? 'unknown'}`);
         return;
       }
 
-      // 3. Получаем всех администраторов, руководителей и разработчиков для отправки уведомлений
-      const { data: admins } = await supabase
-        .from('users')
-        .select('id')
-        .in('role', ['Администратор', 'Руководитель', 'Разработчик'])
-        .eq('access_status', 'approved');
-
-      // 4. Создаем уведомления для администраторов, руководителей и разработчиков
-      const userId = authData.user?.id;
-      if (admins && admins.length > 0 && userId && authData.user) {
-        const notifications = admins.map((admin) => ({
-          user_id: admin.id,
-          type: 'pending' as const,
-          title: 'Новый запрос на регистрацию',
-          message: `${values.full_name} (${values.email}) запросил доступ к системе`,
-          related_entity_type: 'registration_request',
-          related_entity_id: userId,
-          is_read: false,
-        }));
-
-        const { error: notificationError } = await supabase
-          .from('notifications')
-          .insert(notifications);
-
-        if (notificationError) {
-          console.error('Ошибка создания уведомлений:', notificationError);
-          // Не прерываем процесс регистрации, если не удалось создать уведомления
-        }
-      }
-
-      // 5. Выходим из системы (пользователь должен дождаться одобрения)
       await supabase.auth.signOut();
 
-      // 6. Показываем успешное сообщение и перенаправляем на страницу входа
       message.success(
         'Запрос на регистрацию отправлен! После одобрения администратором вы сможете войти в систему.',
         5
