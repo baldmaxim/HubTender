@@ -300,6 +300,114 @@ func (r *TenderRegistryRepo) Update(ctx context.Context, id string, in TenderReg
 	return nil
 }
 
+// TenderRegistryPatch is the admin-modal patch shape — all fields the
+// Tenders/* UI surfaces; only non-nil pointer fields are applied.
+type TenderRegistryPatch struct {
+	TenderNumber          *string          `json:"tender_number"`
+	Title                 *string          `json:"title"`
+	ClientName            *string          `json:"client_name"`
+	ObjectAddress         *string          `json:"object_address"`
+	ObjectCoordinates     *string          `json:"object_coordinates"`
+	ConstructionScopeID   *string          `json:"construction_scope_id"`
+	Area                  *float64         `json:"area"`
+	SubmissionDate        *string          `json:"submission_date"`
+	ChronologyItems       *json.RawMessage `json:"chronology_items"`
+	ConstructionStartDate *string          `json:"construction_start_date"`
+	SiteVisitDate         *string          `json:"site_visit_date"`
+	SiteVisitPhotoURL     *string          `json:"site_visit_photo_url"`
+	TenderPackageItems    *json.RawMessage `json:"tender_package_items"`
+	InvitationDate        *string          `json:"invitation_date"`
+	StatusID              *string          `json:"status_id"`
+	CommissionDate        *string          `json:"commission_date"`
+	DashboardStatus       *string          `json:"dashboard_status"`
+	ManualTotalCost       *float64         `json:"manual_total_cost"`
+	IsArchived            *bool            `json:"is_archived"`
+	SortOrder             *int             `json:"sort_order"`
+}
+
+// PatchFields applies non-nil fields to a tender_registry row.
+func (r *TenderRegistryRepo) PatchFields(ctx context.Context, id string, p TenderRegistryPatch) error {
+	args := []any{}
+	setClauses := ""
+	add := func(col string, val any) {
+		if setClauses != "" {
+			setClauses += ", "
+		}
+		setClauses += fmt.Sprintf("%s = $%d", col, len(args)+1)
+		args = append(args, val)
+	}
+	if p.TenderNumber != nil {
+		add("tender_number", *p.TenderNumber)
+	}
+	if p.Title != nil {
+		add("title", *p.Title)
+	}
+	if p.ClientName != nil {
+		add("client_name", *p.ClientName)
+	}
+	if p.ObjectAddress != nil {
+		add("object_address", *p.ObjectAddress)
+	}
+	if p.ObjectCoordinates != nil {
+		add("object_coordinates", *p.ObjectCoordinates)
+	}
+	if p.ConstructionScopeID != nil {
+		add("construction_scope_id", *p.ConstructionScopeID)
+	}
+	if p.Area != nil {
+		add("area", *p.Area)
+	}
+	if p.SubmissionDate != nil {
+		add("submission_date", *p.SubmissionDate)
+	}
+	if p.ChronologyItems != nil {
+		add("chronology_items", []byte(*p.ChronologyItems))
+	}
+	if p.ConstructionStartDate != nil {
+		add("construction_start_date", *p.ConstructionStartDate)
+	}
+	if p.SiteVisitDate != nil {
+		add("site_visit_date", *p.SiteVisitDate)
+	}
+	if p.SiteVisitPhotoURL != nil {
+		add("site_visit_photo_url", *p.SiteVisitPhotoURL)
+	}
+	if p.TenderPackageItems != nil {
+		add("tender_package_items", []byte(*p.TenderPackageItems))
+	}
+	if p.InvitationDate != nil {
+		add("invitation_date", *p.InvitationDate)
+	}
+	if p.StatusID != nil {
+		add("status_id", *p.StatusID)
+	}
+	if p.CommissionDate != nil {
+		add("commission_date", *p.CommissionDate)
+	}
+	if p.DashboardStatus != nil {
+		add("dashboard_status", *p.DashboardStatus)
+	}
+	if p.ManualTotalCost != nil {
+		add("manual_total_cost", *p.ManualTotalCost)
+	}
+	if p.IsArchived != nil {
+		add("is_archived", *p.IsArchived)
+	}
+	if p.SortOrder != nil {
+		add("sort_order", *p.SortOrder)
+	}
+	if setClauses == "" {
+		return nil
+	}
+	setClauses += ", updated_at = NOW()"
+	args = append(args, id)
+	q := fmt.Sprintf(`UPDATE public.tender_registry SET %s WHERE id = $%d`, setClauses, len(args))
+	if _, err := r.pool.Exec(ctx, q, args...); err != nil {
+		return fmt.Errorf("tenderRegistryRepo.PatchFields: %w", err)
+	}
+	return nil
+}
+
 // ListTenderStatuses returns rows from public.tender_statuses ordered by name.
 func (r *TenderRegistryRepo) ListTenderStatuses(ctx context.Context) ([]NamedRefRow, error) {
 	return r.listNamedRef(ctx, `SELECT id::text, name FROM public.tender_statuses ORDER BY name`)

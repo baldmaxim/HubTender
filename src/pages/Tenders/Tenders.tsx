@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { App, Button, Space } from 'antd';
 import { PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { supabase } from '../../lib/supabase';
+import { patchTenderRegistryFields } from '../../lib/api/tenderRegistry';
 import type { TenderRegistryWithRelations } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -172,13 +172,10 @@ const Tenders: React.FC = () => {
     const chronologyItems = tender.chronology_items || [];
     const updatedItems = [...chronologyItems, buildCallFollowUpItem(dayjs().toISOString())];
 
-    const { error } = await supabase
-      .from('tender_registry')
-      .update({ chronology_items: updatedItems })
-      .eq('id', tender.id);
-
-    if (error) {
-      message.error(error.message);
+    try {
+      await patchTenderRegistryFields(tender.id, { chronology_items: updatedItems });
+    } catch (err) {
+      message.error((err as Error).message);
       return;
     }
 

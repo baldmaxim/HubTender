@@ -18,6 +18,7 @@ type tenderRegistryServicer interface {
 	Autocomplete(ctx context.Context) ([]repository.AutocompleteRow, error)
 	Create(ctx context.Context, in repository.TenderRegistryCreateInput) error
 	Update(ctx context.Context, id string, in repository.TenderRegistryUpdateInput) error
+	PatchFields(ctx context.Context, id string, p repository.TenderRegistryPatch) error
 	ListTenderStatuses(ctx context.Context) ([]repository.NamedRefRow, error)
 	ListConstructionScopes(ctx context.Context) ([]repository.NamedRefRow, error)
 	TenderNumbers(ctx context.Context) ([]string, error)
@@ -102,6 +103,26 @@ func (h *TenderRegistryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.svc.Update(r.Context(), id, in); err != nil {
 		apierr.InternalError("failed to update tender registry row").Render(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// PatchFields handles PATCH /api/v1/tender-registry/{id}/fields — generic
+// non-ETag dynamic SET on the tender_registry row.
+func (h *TenderRegistryHandler) PatchFields(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing id").Render(w)
+		return
+	}
+	var p repository.TenderRegistryPatch
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.svc.PatchFields(r.Context(), id, p); err != nil {
+		apierr.InternalError("failed to patch tender registry row").Render(w)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -3,7 +3,7 @@ import { Input, DatePicker, Select, Tag, message, Button } from 'antd';
 import { EditOutlined, CalendarOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { TenderRegistryWithRelations, TenderStatus, ConstructionScope, ChronologyItem, TenderPackageItem } from '../../../lib/supabase';
-import { supabase } from '../../../lib/supabase';
+import { patchTenderRegistryFields } from '../../../lib/api/tenderRegistry';
 import { getStatusBadge } from '../utils/design';
 import { useTheme } from '../../../contexts/ThemeContext';
 
@@ -779,16 +779,8 @@ export const TenderDrawerModern: React.FC<TenderDrawerModernProps> = ({
   if (!tender) return null;
 
   const updateField = async (field: string, value: unknown) => {
-    const { error } = await supabase
-      .from('tender_registry')
-      .update({ [field]: value })
-      .eq('id', tender.id);
-
-    if (!error) {
-      onUpdate();
-    } else {
-      throw error;
-    }
+    await patchTenderRegistryFields(tender.id, { [field]: value });
+    onUpdate();
   };
 
   const handleSavePhoto = async () => {

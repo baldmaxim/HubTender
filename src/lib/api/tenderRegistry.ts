@@ -91,6 +91,17 @@ export async function updateTenderRegistrySortOrder(id: string, sortOrder: numbe
   });
 }
 
+/** Generic non-ETag patch of any tender_registry fields supported by the modal forms. */
+export async function patchTenderRegistryFields(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  await apiFetch<undefined>(`/api/v1/tender-registry/${encodeURIComponent(id)}/fields`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
 export async function archiveTenderRegistry(id: string): Promise<void> {
   await apiFetch<undefined>(`/api/v1/tender-registry/${encodeURIComponent(id)}`, {
     method: 'PATCH',

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Drawer, Descriptions, Form, Input, InputNumber, AutoComplete, Select, DatePicker, Button, Space, message } from 'antd';
 import { EditOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { supabase } from '../../../lib/supabase';
+import { patchTenderRegistryFields } from '../../../lib/api/tenderRegistry';
 import type { TenderRegistryWithRelations, TenderStatus, ConstructionScope } from '../../../lib/supabase';
 import { ChronologyList, TenderPackageList } from './DynamicList';
 
@@ -100,16 +100,12 @@ export const TenderDrawer: React.FC<TenderDrawerProps> = ({
         invitation_date: values.invitation_date?.toISOString() || null,
       };
 
-      const { error } = await supabase
-        .from('tender_registry')
-        .update(payload)
-        .eq('id', tender!.id);
-
-      if (!error) {
+      try {
+        await patchTenderRegistryFields(tender!.id, payload);
         message.success('Тендер обновлен');
         setIsEditing(false);
         onUpdate();
-      } else {
+      } catch {
         message.error('Ошибка обновления');
       }
     } catch (error) {

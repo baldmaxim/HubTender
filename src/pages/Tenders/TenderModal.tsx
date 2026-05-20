@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Input, Select, DatePicker, message, AutoComplete } from 'antd';
-import { supabase, type TenderRegistry, type TenderStatus, type ConstructionScope } from '../../lib/supabase';
+import type { TenderRegistry, TenderStatus, ConstructionScope } from '../../lib/supabase';
+import { fetchTenders } from '../../lib/api/tenders';
+import {
+  patchTenderRegistryFields,
+  createTenderRegistry,
+  getNextTenderRegistrySortOrder,
+} from '../../lib/api/tenderRegistry';
 import dayjs from 'dayjs';
 
 interface TenderModalProps {
@@ -51,19 +57,17 @@ const TenderModal: React.FC<TenderModalProps> = ({
   }, [open, tender, form]);
 
   const fetchAutocompleteData = async () => {
-    const { data, error } = await supabase
-      .from('tenders')
-      .select('title, client_name, area_sp')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      const uniqueTitles = Array.from(new Set(data.map(t => t.title).filter(Boolean)));
-      const uniqueClients = Array.from(new Set(data.map(t => t.client_name).filter(Boolean)));
-      const uniqueAreas = Array.from(new Set(data.map(t => t.area_sp).filter(Boolean)));
+    try {
+      const data = await fetchTenders();
+      const uniqueTitles = Array.from(new Set(data.map(t => t.title).filter(Boolean) as string[]));
+      const uniqueClients = Array.from(new Set(data.map(t => t.client_name).filter(Boolean) as string[]));
+      const uniqueAreas = Array.from(new Set(data.map(t => t.area_sp).filter((a): a is number => a != null)));
 
       setTenderTitles(uniqueTitles);
       setClientNames(uniqueClients);
       setAreas(uniqueAreas);
+    } catch (error) {
+      console.error('autocomplete fetch error:', error);
     }
   };
 
@@ -87,36 +91,20 @@ const TenderModal: React.FC<TenderModalProps> = ({
         chronology: values.chronology || null,
       };
 
-      let error;
-      if (tender) {
-        // Обновление
-        ({ error } = await supabase
-          .from('tender_registry')
-          .update(payload)
-          .eq('id', tender.id));
-      } else {
-        // Создание - получить максимальный sort_order
-        const { data: maxData } = await supabase
-          .from('tender_registry')
-          .select('sort_order')
-          .order('sort_order', { ascending: false })
-          .limit(1);
-
-        const nextSortOrder = maxData && maxData.length > 0 ? maxData[0].sort_order + 1 : 1;
-
-        ({ error } = await supabase
-          .from('tender_registry')
-          .insert({ ...payload, sort_order: nextSortOrder }));
-      }
-
-      setLoading(false);
-
-      if (error) {
-        message.error('Ошибка сохранения: ' + error.message);
-      } else {
+      try {
+        if (tender) {
+          await patchTenderRegistryFields(tender.id, payload);
+        } else {
+          const nextSortOrder = await getNextTenderRegistrySortOrder();
+          await createTenderRegistry({ ...payload, sort_order: nextSortOrder });
+        }
+        setLoading(false);
         message.success(tender ? 'Тендер обновлен' : 'Тендер добавлен');
         form.resetFields();
         onSuccess();
+      } catch (err) {
+        setLoading(false);
+        message.error('Ошибка сохранения: ' + (err as Error).message);
       }
     } catch (error) {
       setLoading(false);

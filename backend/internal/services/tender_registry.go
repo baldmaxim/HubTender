@@ -56,6 +56,14 @@ func (s *TenderRegistryService) Update(ctx context.Context, id string, in reposi
 	return nil
 }
 
+// PatchFields applies an admin-modal patch (subset of tender_registry columns).
+func (s *TenderRegistryService) PatchFields(ctx context.Context, id string, p repository.TenderRegistryPatch) error {
+	if err := s.repo.PatchFields(ctx, id, p); err != nil {
+		return fmt.Errorf("tenderRegistryService.PatchFields: %w", err)
+	}
+	return nil
+}
+
 func (s *TenderRegistryService) ListTenderStatuses(ctx context.Context) ([]repository.NamedRefRow, error) {
 	rows, err := s.repo.ListTenderStatuses(ctx)
 	if err != nil {

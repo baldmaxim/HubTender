@@ -378,6 +378,7 @@ func main() {
 		r.Get("/api/v1/tender-registry/related-tenders", tenderRegistryH.RelatedTenders)
 		r.Post("/api/v1/tender-registry", tenderRegistryH.Create)
 		r.Patch("/api/v1/tender-registry/{id}", tenderRegistryH.Update)
+		r.Patch("/api/v1/tender-registry/{id}/fields", tenderRegistryH.PatchFields)
 		r.Get("/api/v1/tender-statuses", tenderRegistryH.ListTenderStatuses)
 		r.Get("/api/v1/construction-scopes", tenderRegistryH.ListConstructionScopes)
 

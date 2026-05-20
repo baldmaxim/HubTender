@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, DatePicker, Input, InputNumber, Modal, Select, Space, Tag, Typography, message } from 'antd';
 import { CloseOutlined, DeleteOutlined, EditOutlined, PhoneOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { supabase } from '../../../lib/supabase';
+import { patchTenderRegistryFields } from '../../../lib/api/tenderRegistry';
 import type {
   ChronologyItem,
   ConstructionScope,
@@ -94,13 +94,10 @@ function EditableMonitorField({
 
       const updatePayload = buildUpdatePayload ? buildUpdatePayload(payload) : { [field]: payload };
 
-      const { error } = await supabase
-        .from('tender_registry')
-        .update(updatePayload)
-        .eq('id', tenderId);
-
-      if (error) {
-        message.error(error.message);
+      try {
+        await patchTenderRegistryFields(tenderId, updatePayload);
+      } catch (err) {
+        message.error((err as Error).message);
         return;
       }
 
@@ -266,13 +263,10 @@ function EditableChronologySection({ tenderId, items, palette, onUpdated }: Edit
         }))
         .filter((item) => item.text);
 
-      const { error } = await supabase
-        .from('tender_registry')
-        .update({ chronology_items: chronologyItems })
-        .eq('id', tenderId);
-
-      if (error) {
-        message.error(error.message);
+      try {
+        await patchTenderRegistryFields(tenderId, { chronology_items: chronologyItems });
+      } catch (err) {
+        message.error((err as Error).message);
         return;
       }
 
@@ -386,13 +380,10 @@ function EditablePackageSection({ tenderId, items, palette, onUpdated }: Editabl
         }))
         .filter((item) => item.text);
 
-      const { error } = await supabase
-        .from('tender_registry')
-        .update({ tender_package_items: tenderPackageItems })
-        .eq('id', tenderId);
-
-      if (error) {
-        message.error(error.message);
+      try {
+        await patchTenderRegistryFields(tenderId, { tender_package_items: tenderPackageItems });
+      } catch (err) {
+        message.error((err as Error).message);
         return;
       }
 

@@ -3,7 +3,11 @@ import { Modal, Upload, message, Table, Alert } from 'antd';
 import type { UploadFile } from 'antd/es/upload';
 import { InboxOutlined } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
-import { supabase, type ConstructionScope, type TenderStatus } from '../../lib/supabase';
+import type { ConstructionScope, TenderStatus } from '../../lib/supabase';
+import {
+  createTenderRegistry,
+  getNextTenderRegistrySortOrder,
+} from '../../lib/api/tenderRegistry';
 import dayjs from 'dayjs';
 
 interface ImportTendersModalProps {
@@ -118,14 +122,7 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
     setLoading(true);
 
     try {
-      // Получить максимальный sort_order
-      const { data: maxData } = await supabase
-        .from('tender_registry')
-        .select('sort_order')
-        .order('sort_order', { ascending: false })
-        .limit(1);
-
-      let nextSortOrder = maxData && maxData.length > 0 ? maxData[0].sort_order + 1 : 1;
+      let nextSortOrder = await getNextTenderRegistrySortOrder();
 
       // Создаем маппинг для объемов строительства
       const scopeMap = new Map(
@@ -176,17 +173,21 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
         };
       });
 
-      const { error } = await supabase
-        .from('tender_registry')
-        .insert(tendersToInsert);
-
-      if (error) {
-        message.error('Ошибка импорта: ' + error.message);
-      } else {
+      // Go: один createTenderRegistry на запись (импорт — обычно небольшой).
+      try {
+        // chronology_items.type — broader literal в legacy-парсере; на
+        // сервере поле jsonb, кастуем для прохождения TS-проверки.
+        await Promise.all(
+          tendersToInsert.map((row) =>
+            createTenderRegistry(row as unknown as Parameters<typeof createTenderRegistry>[0]),
+          ),
+        );
         message.success(`Успешно импортировано ${tendersToInsert.length} тендеров`);
         setParsedData([]);
         setFileList([]);
         onSuccess();
+      } catch (err) {
+        message.error('Ошибка импорта: ' + (err as Error).message);
       }
     } catch (error) {
       message.error('Ошибка при импорте: ' + (error as Error).message);

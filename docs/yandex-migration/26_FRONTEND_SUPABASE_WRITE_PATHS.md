@@ -319,6 +319,18 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Tenders/* модалки DONE (Tenders закрыт)
+
+`src/pages/Tenders/{Tenders.tsx, TenderModal.tsx, ImportTendersModal.tsx,
+components/{TenderMonitorModal.tsx, TenderDrawer.tsx, TenderDrawerModern.tsx}}`
+(1+4+2+3+1+1 → 0). Новый универсальный
+`PATCH /api/v1/tender-registry/{id}/fields` (repo `PatchFields`+svc+handler+route):
+non-ETag dynamic SET по всем колонкам tender_registry (chronology_items
+/tender_package_items как jsonb; field-by-name в TenderDrawerModern).
+Create/list — reuse `createTenderRegistry`/`getNextTenderRegistrySortOrder`/
+`fetchTenders`. **Весь `src/pages/Tenders/*` теперь 0 supabase.**
+`go build` 0, `tsc` 0, `vite build` (background).
+
 ## P5.3 — Admin/Tenders DONE (verified; 3 новых эндпоинта + 1 в Positions)
 
 `src/pages/Admin/Tenders/`:
