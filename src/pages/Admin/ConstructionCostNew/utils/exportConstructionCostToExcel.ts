@@ -6,8 +6,8 @@
 import * as XLSX from 'xlsx-js-style';
 import dayjs from 'dayjs';
 import { message } from 'antd';
-import { supabase } from '../../../../lib/supabase';
 import { getErrorMessage } from '../../../../utils/errors';
+import { listBoqItemsFullByTender } from '../../../../lib/api/positions';
 import type { CostRow } from '../hooks/useCostData';
 
 interface ExportParams {
@@ -37,22 +37,12 @@ async function fetchOppositeCosts(
 ): Promise<Map<string, OppositeCosts>> {
   const oppositeType = currentCostType === 'base' ? 'commercial' : 'base';
 
-  const { data: oppositeBOQItems, error: oppError } = await supabase
-    .from('boq_items')
-    .select(`
-      detail_cost_category_id,
-      boq_item_type,
-      ${oppositeType === 'base' ? 'total_amount' : 'total_commercial_material_cost, total_commercial_work_cost'},
-      client_positions!inner(tender_id)
-    `)
-    .eq('client_positions.tender_id', tenderId);
-
-  if (oppError) throw oppError;
+  const oppositeBOQItems = await listBoqItemsFullByTender(tenderId);
 
   const oppositeCostMap = new Map<string, OppositeCosts>();
 
   type OppItem = { detail_cost_category_id: string | null; boq_item_type: string | null; total_amount?: number | null; total_commercial_material_cost?: number | null; total_commercial_work_cost?: number | null };
-  (oppositeBOQItems as unknown as OppItem[] || []).forEach((item) => {
+  (oppositeBOQItems as unknown as OppItem[]).forEach((item) => {
     const catId = item.detail_cost_category_id;
     if (!catId) return;
 

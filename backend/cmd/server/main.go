@@ -144,6 +144,7 @@ func main() {
 	userAdminRepo := repository.NewUserAdminRepo(pool)
 	markupRepo := repository.NewMarkupRepo(pool)
 	fiRepo := repository.NewFIRepo(pool)
+	ccvRepo := repository.NewConstructionCostVolumesRepo(pool)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -175,6 +176,7 @@ func main() {
 	userAdminSvc := services.NewUserAdminService(userAdminRepo, inMemCache)
 	markupSvc := services.NewMarkupService(markupRepo, inMemCache)
 	fiSvc := services.NewFIService(fiRepo)
+	ccvSvc := services.NewConstructionCostVolumesService(ccvRepo)
 
 	healthH := handlers.NewHealthHandler(pool, inMemCache)
 	meH := handlers.NewMeHandler(userSvc)
@@ -211,6 +213,7 @@ func main() {
 	userAdminH := handlers.NewUserAdminHandler(userAdminSvc)
 	markupH := handlers.NewMarkupHandler(markupSvc)
 	fiH := handlers.NewFIHandler(fiSvc)
+	ccvH := handlers.NewConstructionCostVolumesHandler(ccvSvc)
 	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
 
 	// -------------------------------------------------------------------------
@@ -257,6 +260,8 @@ func main() {
 		r.Get("/api/v1/positions/{id}/with-tender", positionH.GetPositionWithTender)
 		r.Get("/api/v1/positions/{id}/boq-items-full", positionH.ListBoqItemsFullByPosition)
 		r.Get("/api/v1/tenders/{id}/boq-items-full", positionH.ListBoqItemsFullByTender)
+		r.Get("/api/v1/tenders/{id}/construction-cost-volumes", ccvH.ListByTender)
+		r.Post("/api/v1/construction-cost-volumes", ccvH.Upsert)
 		r.Get("/api/v1/tenders/{id}/positions/{posId}/items", boqH.GetBoqItems)
 
 		// Slice 2: writes with optimistic concurrency.

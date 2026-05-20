@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
-import { supabase, type Tender } from '../../../../lib/supabase';
+import { type Tender } from '../../../../lib/supabase';
+import { fetchTenders as apiFetchTenders } from '../../../../lib/api/tenders';
+import { listDetailCostCategoriesWithCategory } from '../../../../lib/api/costs';
+import { listBoqItemsFullByTender } from '../../../../lib/api/positions';
+import {
+  listConstructionCostVolumes,
+  upsertConstructionCostVolume,
+} from '../../../../lib/api/constructionCostVolumes';
 
 interface BoqItemForCost {
   detail_cost_category_id: string | null;
@@ -125,13 +132,11 @@ export const useCostData = () => {
 
   const fetchTenders = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setTenders(data || []);
+      const all = await apiFetchTenders();
+      const sorted = [...all].sort((a, b) =>
+        (b.created_at || '').localeCompare(a.created_at || ''),
+      );
+      setTenders(sorted);
     } catch (error) {
       message.error('Ошибка загрузки тендеров: ' + getErrorMessage(error));
     }
@@ -142,84 +147,30 @@ export const useCostData = () => {
 
     setLoading(true);
     try {
-      const { data: categories, error: catError } = await supabase
-        .from('detail_cost_categories')
-        .select(`
-          id,
-          name,
-          unit,
-          location,
-          order_num,
-          cost_categories (name)
-        `)
-        .order('order_num', { ascending: true });
+      const categoriesWithJoined = await listDetailCostCategoriesWithCategory();
+      const categories = [...categoriesWithJoined].sort(
+        (a, b) => (a.order_num ?? 0) - (b.order_num ?? 0),
+      );
 
-      if (catError) throw catError;
+      const volumes = await listConstructionCostVolumes(selectedTenderId);
 
-      const { data: volumes, error: volError } = await supabase
-        .from('construction_cost_volumes')
-        .select('*')
-        .eq('tender_id', selectedTenderId);
-
-      if (volError) throw volError;
-
-      // Разделяем объемы деталей и групп
       const volumeMap = new Map<string, number>();
       const groupVolumesMap = new Map<string, number>();
 
-      (volumes || []).forEach(v => {
+      volumes.forEach((v) => {
         if (v.detail_cost_category_id) {
-          // Объем детали
           volumeMap.set(v.detail_cost_category_id, v.volume || 0);
         } else if (v.group_key) {
-          // Объем группы
           groupVolumesMap.set(v.group_key, v.volume || 0);
         }
       });
 
       console.log('Loaded group volumes from DB:', Array.from(groupVolumesMap.entries()));
 
-      // Загружаем ВСЕ BOQ элементы с батчингом (Supabase лимит 1000 строк)
-      let boqItems: BoqItemForCost[] = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
       const calculationContext = await loadLiveCommercialCalculationContext(selectedTenderId);
-
       resetLiveCommercialCalculationCache();
 
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('boq_items')
-          .select(`
-            detail_cost_category_id,
-            boq_item_type,
-            material_type,
-            quantity,
-            unit_rate,
-            currency_type,
-            delivery_price_type,
-            delivery_amount,
-            consumption_coefficient,
-            parent_work_item_id,
-            total_amount,
-            total_commercial_material_cost,
-            total_commercial_work_cost,
-            client_positions!inner(tender_id)
-          `)
-          .eq('client_positions.tender_id', selectedTenderId)
-          .range(from, from + batchSize - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          boqItems = [...boqItems, ...(data as unknown as BoqItemForCost[])];
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
+      const boqItems = (await listBoqItemsFullByTender(selectedTenderId)) as unknown as BoqItemForCost[];
 
       const costMap = new Map<string, {
         materials: number;
@@ -330,7 +281,7 @@ export const useCostData = () => {
           works_comp_cost: costs.worksComp,
           total_cost: totalCost,
           cost_per_unit: costPerUnit,
-          order_num: cat.order_num,
+          order_num: cat.order_num ?? undefined,
         };
 
         // Собираем строки по категориям
@@ -675,117 +626,44 @@ export const useCostData = () => {
     if (value === null || value === record.volume) return;
 
     try {
-      // Для деталей - сохраняем в базу с detail_cost_category_id
       if (record.detail_cost_category_id) {
-        // Проверяем существование записи
-        const { data: existing } = await supabase
-          .from('construction_cost_volumes')
-          .select('id')
-          .eq('tender_id', selectedTenderId!)
-          .eq('detail_cost_category_id', record.detail_cost_category_id)
-          .single();
+        await upsertConstructionCostVolume({
+          tender_id: selectedTenderId!,
+          detail_cost_category_id: record.detail_cost_category_id,
+          volume: value,
+        });
 
-        let error;
-        if (existing) {
-          // Обновляем существующую запись
-          ({ error } = await supabase
-            .from('construction_cost_volumes')
-            .update({ volume: value })
-            .eq('tender_id', selectedTenderId!)
-            .eq('detail_cost_category_id', record.detail_cost_category_id));
-        } else {
-          // Создаем новую запись
-          ({ error } = await supabase
-            .from('construction_cost_volumes')
-            .insert({
-              tender_id: selectedTenderId!,
-              detail_cost_category_id: record.detail_cost_category_id,
-              volume: value,
-            }));
-        }
-
-        if (error) throw error;
-
-        // Обновляем локально без перезагрузки
-        setData(prevData => {
-          const updateVolume = (rows: CostRow[]): CostRow[] => {
-            return rows.map(row => {
-              if (row.key === record.key) {
-                return { ...row, volume: value };
-              }
-              if (row.children) {
-                return { ...row, children: updateVolume(row.children) };
-              }
+        setData((prevData) => {
+          const updateVolume = (rows: CostRow[]): CostRow[] =>
+            rows.map((row) => {
+              if (row.key === record.key) return { ...row, volume: value };
+              if (row.children) return { ...row, children: updateVolume(row.children) };
               return row;
             });
-          };
           return updateVolume(prevData);
         });
 
         message.success('Объем сохранен');
-      }
-      // Для категорий и локализаций - сохраняем в базу с group_key
-      else if (record.is_category || record.is_location) {
-        console.log('Saving group volume:', { key: record.key, value, tenderId: selectedTenderId });
+      } else if (record.is_category || record.is_location) {
+        await upsertConstructionCostVolume({
+          tender_id: selectedTenderId!,
+          group_key: record.key,
+          volume: value,
+        });
 
-        // Проверяем существование записи
-        const { data: existing } = await supabase
-          .from('construction_cost_volumes')
-          .select('id')
-          .eq('tender_id', selectedTenderId!)
-          .eq('group_key', record.key)
-          .maybeSingle();
-
-        console.log('Existing record:', existing);
-
-        let error;
-        if (existing) {
-          // Обновляем существующую запись
-          console.log('Updating existing record');
-          ({ error } = await supabase
-            .from('construction_cost_volumes')
-            .update({ volume: value })
-            .eq('tender_id', selectedTenderId!)
-            .eq('group_key', record.key));
-        } else {
-          // Создаем новую запись
-          console.log('Creating new record');
-          ({ error } = await supabase
-            .from('construction_cost_volumes')
-            .insert({
-              tender_id: selectedTenderId!,
-              group_key: record.key,
-              volume: value,
-            }));
-        }
-
-        if (error) {
-          console.error('Save error:', error);
-          throw error;
-        }
-
-        console.log('Group volume saved successfully');
-
-        // Сохраняем в Map
-        setGroupVolumes(prev => {
+        setGroupVolumes((prev) => {
           const newMap = new Map(prev);
           newMap.set(record.key, value);
           return newMap;
         });
 
-        // Обновляем в данных
-        setData(prevData => {
-          const updateVolume = (rows: CostRow[]): CostRow[] => {
-            return rows.map(row => {
-              if (row.key === record.key) {
-                return { ...row, volume: value };
-              }
-              if (row.children) {
-                return { ...row, children: updateVolume(row.children) };
-              }
+        setData((prevData) => {
+          const updateVolume = (rows: CostRow[]): CostRow[] =>
+            rows.map((row) => {
+              if (row.key === record.key) return { ...row, volume: value };
+              if (row.children) return { ...row, children: updateVolume(row.children) };
               return row;
             });
-          };
           return updateVolume(prevData);
         });
         message.success('Объем группы сохранен');
@@ -808,40 +686,13 @@ export const useCostData = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId, costType]);
 
-  // Native WS hub (Go BFF) path.
-  const wsActive = useRealtimeTopic(
+  // Native WS hub (Go BFF) — invalidate-and-refetch on tender row change.
+  useRealtimeTopic(
     selectedTenderId ? `tender:${selectedTenderId}` : null,
     () => {
       void fetchConstructionCosts();
     },
   );
-
-  // Supabase Realtime fallback.
-  useEffect(() => {
-    if (!selectedTenderId || wsActive) return;
-
-    const channel = supabase
-      .channel(`construction_costs_${selectedTenderId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'tenders',
-          filter: `id=eq.${selectedTenderId}`,
-        },
-        () => {
-          void fetchConstructionCosts();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-    // fetchConstructionCosts is defined outside this effect; intentionally excluded to avoid refetch loop
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTenderId, costType, wsActive]);
 
   return {
     tenders,
