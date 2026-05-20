@@ -1,5 +1,6 @@
-import { supabase } from '../../lib/supabase';
 import type { BoqItemFull, Tender } from '../../lib/supabase';
+import { getMarkupTactic } from '../../lib/api/markup';
+import { getTenderById } from '../../lib/api/fi';
 import {
   calculateBoqItemCost,
   loadMarkupParameters,
@@ -43,32 +44,20 @@ async function loadMarkupTacticById(tacticId: string | null | undefined): Promis
     return null;
   }
 
-  const { data, error } = await supabase
-    .from('markup_tactics')
-    .select('*')
-    .eq('id', tacticId)
-    .maybeSingle();
-
-  if (error || !data?.sequences) {
+  try {
+    const tactic = await getMarkupTactic(tacticId);
+    if (!tactic?.sequences) return null;
+    return tactic as unknown as CalculationTactic;
+  } catch {
     return null;
   }
-
-  return data as CalculationTactic;
 }
 
 export async function loadLiveCommercialCalculationContext(
   tenderId: string,
   tacticIdOverride?: string | null
 ): Promise<LiveCommercialCalculationContext> {
-  const { data, error } = await supabase
-    .from('tenders')
-    .select('usd_rate, eur_rate, cny_rate, markup_tactic_id')
-    .eq('id', tenderId)
-    .single();
-
-  if (error) {
-    throw error;
-  }
+  const data = await getTenderById(tenderId);
 
   const tenderRates: TenderRates = {
     usd_rate: data?.usd_rate || 0,

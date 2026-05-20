@@ -4,7 +4,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Tabs, message } from 'antd';
-import { supabase } from '../../lib/supabase';
+import { loadTenderInsurance } from '../../lib/api/insurance';
 import { RedistributionHeader } from './components/RedistributionHeader';
 import { TabSetup } from './components/TabSetup';
 import { TabResults } from './components/TabResults';
@@ -200,12 +200,8 @@ const CostRedistribution: React.FC = () => {
   // Загрузка страхования от судимостей при смене тендера
   useEffect(() => {
     if (!selectedTenderId) { setInsuranceTotal(0); return; }
-    supabase
-      .from('tender_insurance')
-      .select('judicial_pct, total_pct, apt_price_m2, apt_area, parking_price_m2, parking_area, storage_price_m2, storage_area')
-      .eq('tender_id', selectedTenderId)
-      .maybeSingle()
-      .then(({ data }) => {
+    loadTenderInsurance(selectedTenderId)
+      .then((data) => {
         if (!data) { setInsuranceTotal(0); return; }
         const apt = (data.apt_price_m2 || 0) * (data.apt_area || 0);
         const park = (data.parking_price_m2 || 0) * (data.parking_area || 0);

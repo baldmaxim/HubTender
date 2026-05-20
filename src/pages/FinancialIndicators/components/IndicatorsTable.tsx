@@ -4,7 +4,7 @@ import { DownloadOutlined, EditOutlined, CheckOutlined, CloseOutlined } from '@a
 import type { ColumnsType } from 'antd/es/table';
 import type { IndicatorRow } from '../hooks/useFinancialData';
 import { exportFinancialIndicatorsToExcel } from '../utils/exportToExcel';
-import { supabase } from '../../../lib/supabase';
+import { adminPatchTender } from '../../../lib/api/tenders';
 import { getErrorMessage } from '../../../utils/errors';
 
 const { Text } = Typography;
@@ -43,12 +43,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
 
   const handleUpdateArea = async (field: 'area_sp' | 'area_client', value: number) => {
     try {
-      const { error } = await supabase
-        .from('tenders')
-        .update({ [field]: value })
-        .eq('id', tenderId);
-
-      if (error) throw error;
+      await adminPatchTender(tenderId, { [field]: value });
 
       message.success('Площадь обновлена');
       setEditingSp(false);
