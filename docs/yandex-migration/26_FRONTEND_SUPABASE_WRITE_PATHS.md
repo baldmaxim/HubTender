@@ -319,6 +319,22 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — PositionItems/useBoqItemsImport DONE (PositionItems закрыт)
+
+`src/pages/PositionItems/hooks/useBoqItemsImport.ts` (10 supabase → 0):
+- справочники (work_names/material_names/detail_cost_categories) → reuse
+  `listWorkNames`/`listMaterialNames`/`listDetailCostCategoriesWithCategory`
+  (фильтр `cost_categories != null` воспроизводит `!inner`);
+- мёртвая дублирующая ветка legacy-загрузки удалена (после
+  `return true` в активном блоке);
+- курсы валют → `getTenderById`;
+- max sort_number позиции → `listBoqItemsFullByPosition` + reduce;
+- insert work_names/material_names → `createWorkName`/`createMaterialName`
+  через `Promise.all`. `insertBoqItemWithAudit` уже в Go.
+
+**Весь `src/pages/PositionItems` теперь 0 supabase.** `go build` 0,
+`tsc` 0, `vite build` (background).
+
 ## P5.3 — PositionItems/useBoqItems DONE (verified; 2 новых + reuse)
 
 `src/pages/PositionItems/hooks/useBoqItems.ts` (12 supabase → 0).

@@ -1,9 +1,17 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { message } from 'antd';
-import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { insertBoqItemWithAudit } from '../../../lib/supabaseWithAudit';
+import {
+  listWorkNames,
+  listMaterialNames,
+  createWorkName,
+  createMaterialName,
+} from '../../../lib/api/nomenclatures';
+import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
+import { getTenderById } from '../../../lib/api/fi';
+import { listBoqItemsFullByPosition } from '../../../lib/api/positions';
 import { getErrorMessage } from '../../../utils/errors';
 
 // ===========================
@@ -291,34 +299,14 @@ export const useBoqItemsImport = () => {
   const loadNomenclature = async () => {
     try {
       {
-      const [allWorks, allMaterials, allCosts] = await Promise.all([
-        fetchAllPages<WorkNameRecord>((from, to) => (
-          supabase
-            .from('work_names')
-            .select('id, name, unit')
-            .order('name')
-            .range(from, to)
-        )),
-        fetchAllPages<MaterialNameRecord>((from, to) => (
-          supabase
-            .from('material_names')
-            .select('id, name, unit')
-            .order('name')
-            .range(from, to)
-        )),
-        fetchAllPages<CostCategoryRecord>((from, to) => (
-          supabase
-            .from('detail_cost_categories')
-            .select(`
-              id,
-              name,
-              location,
-              cost_categories!inner(name)
-            `)
-            .order('name')
-            .range(from, to)
-        )),
+      const [allWorks, allMaterials, allCostsRaw] = await Promise.all([
+        listWorkNames(),
+        listMaterialNames(),
+        listDetailCostCategoriesWithCategory(),
       ]);
+      // cost_categories!inner — оставляем только dcc с привязанной категорией.
+      const allCosts = (allCostsRaw as unknown as CostCategoryRecord[])
+        .filter((c) => c.cost_categories != null);
 
       const nextWorksMap = new Map<string, string>();
       allWorks.forEach((work) => {
@@ -365,86 +353,6 @@ export const useBoqItemsImport = () => {
 
       return true;
       }
-      // Загрузка work_names
-      const { data: works, error: worksError } = await supabase
-        .from('work_names')
-        .select('id, name, unit')
-        .order('name');
-
-      if (worksError) throw worksError;
-
-      // Загрузка material_names
-      const { data: materials, error: materialsError } = await supabase
-        .from('material_names')
-        .select('id, name, unit')
-        .order('name');
-
-      if (materialsError) throw materialsError;
-
-      // Загрузка detail_cost_categories с JOIN
-      const { data: costs, error: costsError } = await supabase
-        .from('detail_cost_categories')
-        .select(`
-          id,
-          name,
-          location,
-          cost_categories!inner(name)
-        `)
-        .order('name');
-
-      if (costsError) throw costsError;
-
-      // Создание Map для быстрого поиска
-      const worksMap = new Map<string, string>();
-      works?.forEach((w: WorkNameRecord) => {
-        const key = `${normalizeString(w.name)}|${w.unit}`;
-        worksMap.set(key, w.id);
-      });
-
-      const materialsMap = new Map<string, string>();
-      materials?.forEach((m: MaterialNameRecord) => {
-        const key = `${normalizeString(m.name)}|${m.unit}`;
-        materialsMap.set(key, m.id);
-      });
-
-      const costsMap = new Map<string, string>();
-      let costLogCount = 0;
-      costs?.forEach((c: CostCategoryRecord) => {
-        const ccc = Array.isArray(c.cost_categories) ? c.cost_categories[0] : c.cost_categories;
-        const costCategoryName = ccc?.name || '';
-        // Основной ключ - раздельные части
-        const key = `${normalizeString(costCategoryName)}|${normalizeString(c.name)}|${normalizeString(c.location)}`;
-        costsMap.set(key, c.id);
-
-        // Альтернативный ключ - полная строка в формате Excel "category / detail / location"
-        // Это позволяет находить затраты когда категория содержит слэши
-        const fullPath = normalizeString(`${costCategoryName} / ${c.name} / ${c.location}`);
-        costsMap.set(fullPath, c.id);
-
-        // Логирование первых 5 затрат и затрат со слэшами в названии
-        if (costLogCount < 5 || c.name.includes('/') || costCategoryName.includes('/')) {
-          console.log('[CostCategory] Загружена затрата:', {
-            category: costCategoryName,
-            detail: c.name,
-            location: c.location,
-            key,
-            fullPath,
-          });
-          costLogCount++;
-        }
-      });
-
-      setWorkNamesMap(worksMap);
-      setMaterialNamesMap(materialsMap);
-      setCostCategoriesMap(costsMap);
-
-      console.log('[BoqImport] Загружено справочников:', {
-        works: worksMap.size,
-        materials: materialsMap.size,
-        costs: costsMap.size,
-      });
-
-      return true;
     } catch (error) {
       console.error('Ошибка загрузки справочников:', error);
       return false;
@@ -897,17 +805,7 @@ export const useBoqItemsImport = () => {
 
   const loadCurrencyRates = async (tenderId: string): Promise<{ usd: number; eur: number; cny: number }> => {
     try {
-      const { data: tender, error } = await supabase
-        .from('tenders')
-        .select('usd_rate, eur_rate, cny_rate')
-        .eq('id', tenderId)
-        .single();
-
-      if (error) {
-        console.error('[BoqImport] Ошибка загрузки курсов валют:', error);
-        throw new Error(`Не удалось загрузить курсы валют из тендера: ${error.message}`);
-      }
-
+      const tender = await getTenderById(tenderId);
       if (!tender) {
         console.error('[BoqImport] Тендер не найден:', tenderId);
         throw new Error('Тендер не найден');
@@ -946,15 +844,13 @@ export const useBoqItemsImport = () => {
       // Загружаем курсы валют из tender
       const rates = await loadCurrencyRates(tenderId);
 
-      // Получаем максимальный sort_number из существующих записей
-      const { data: existingItems } = await supabase
-        .from('boq_items')
-        .select('sort_number')
-        .eq('client_position_id', positionId)
-        .order('sort_number', { ascending: false })
-        .limit(1);
-
-      const maxSortNumber = existingItems?.[0]?.sort_number ?? -1;
+      // Получаем максимальный sort_number из существующих записей.
+      // Go: одна выборка boq_items позиции; max считаем на клиенте.
+      const existingItems = await listBoqItemsFullByPosition(positionId);
+      const maxSortNumber = existingItems.reduce<number>((m, it) => {
+        const sn = (it as { sort_number?: number | null }).sort_number;
+        return typeof sn === 'number' && sn > m ? sn : m;
+      }, -1);
       console.log('[BoqImport] Максимальный sort_number:', maxSortNumber);
 
       const totalItems = data.length;
@@ -1090,23 +986,15 @@ export const useBoqItemsImport = () => {
         .map(([, value]) => value);
 
       if (uniqueWorksToInsert.length > 0) {
-        const { error } = await supabase
-          .from('work_names')
-          .insert(uniqueWorksToInsert);
-
-        if (error) {
-          throw new Error(`РћС€РёР±РєР° РґРѕР±Р°РІР»РµРЅРёСЏ СЂР°Р±РѕС‚: ${error.message}`);
-        }
+        await Promise.all(
+          uniqueWorksToInsert.map((wkr) => createWorkName({ name: wkr.name, unit: wkr.unit })),
+        );
       }
 
       if (uniqueMaterialsToInsert.length > 0) {
-        const { error } = await supabase
-          .from('material_names')
-          .insert(uniqueMaterialsToInsert);
-
-        if (error) {
-          throw new Error(`РћС€РёР±РєР° РґРѕР±Р°РІР»РµРЅРёСЏ РјР°С‚РµСЂРёР°Р»РѕРІ: ${error.message}`);
-        }
+        await Promise.all(
+          uniqueMaterialsToInsert.map((m) => createMaterialName({ name: m.name, unit: m.unit })),
+        );
       }
 
       await loadNomenclature();
