@@ -319,6 +319,19 @@ cost_category_id+name), `location` как TEXT. Фронт парсит Excel и
 один payload. 0 supabase. `go build ./...` 0, `go test` без новых
 провалов (calc pre-existing §11), `tsc` 0, `vite build` ✓.
 
+## P5.3 — Dashboard + Admin/Nomenclatures DONE (reuse, без backend)
+
+- **Dashboard.tsx** (2→0): `fetchTenders` + N×batched `boq_items` →
+  `apiFetchTenders` + `tender.cached_grand_total` (поддерживается триггером
+  — server-authoritative, убирает N запросов).
+- **Admin/Nomenclatures/useNomenclatureUpload.ts** (4→0): units →
+  `listActiveUnitsFull`; material/work_names paged → `listMaterialNames`/
+  `listWorkNames` (пагинация убрана); insert units → `createUnit`
+  (23505/unique игнорируем); insert names батчами → loop
+  `createMaterialName`/`createWorkName` с прогрессом.
+
+`tsc` 0, `vite build` (background).
+
 ## P5.3 — Tenders/* модалки DONE (Tenders закрыт)
 
 `src/pages/Tenders/{Tenders.tsx, TenderModal.tsx, ImportTendersModal.tsx,

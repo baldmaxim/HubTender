@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { message } from 'antd';
-import { supabase } from '../../../../lib/supabase';
+import { listActiveUnitsFull } from '../../../../lib/api/costs';
+import {
+  listWorkNames,
+  listMaterialNames,
+  createWorkName,
+  createMaterialName,
+  createUnit,
+} from '../../../../lib/api/nomenclatures';
 
 export interface ParsedNomenclatureRow {
   name: string;
@@ -63,50 +70,25 @@ export const useNomenclatureUpload = () => {
   // Загрузка существующих единиц измерения из БД
   const fetchExistingUnits = async () => {
     try {
-      const { data, error } = await supabase
-        .from('units')
-        .select('code, name, description')
-        .eq('is_active', true)
-        .order('sort_order');
-
-      if (error) {
-        console.error('Ошибка загрузки единиц измерения:', error);
-        message.error('Не удалось загрузить единицы измерения');
-      } else if (data) {
-        setExistingUnits(data);
-      }
+      const data = await listActiveUnitsFull();
+      setExistingUnits(
+        data.map((u) => ({ code: u.code, name: u.name, description: u.description ?? undefined })),
+      );
     } catch (error) {
       console.error('Ошибка при загрузке единиц:', error);
+      message.error('Не удалось загрузить единицы измерения');
     }
   };
 
   // Загрузка существующих материалов/работ из БД
   const fetchExistingRecords = async (mode: 'materials' | 'works') => {
     try {
-      const tableName = mode === 'materials' ? 'material_names' : 'work_names';
-
-      // Загружаем все записи батчами
-      let allRecords: Array<{ name: string; unit: string }> = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from(tableName)
-          .select('name, unit')
-          .range(from, from + batchSize - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allRecords = [...allRecords, ...data];
-          from += batchSize;
-          hasMore = data.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
+      // Go: list-хелперы отдают всё одним запросом без 1000-стр. пагинации.
+      const rows = mode === 'materials' ? await listMaterialNames() : await listWorkNames();
+      const allRecords: Array<{ name: string; unit: string }> = rows.map((r) => ({
+        name: r.name,
+        unit: r.unit,
+      }));
 
       // Создаем Map с ключом: normalized_name + unit
       const recordsMap = new Map<string, { name: string; unit: string }>();
@@ -330,18 +312,20 @@ export const useNomenclatureUpload = () => {
       const unitsToCreate = unitMappings.filter(m => m.action === 'create');
 
       for (const unitMapping of unitsToCreate) {
-        const { error } = await supabase
-          .from('units')
-          .insert({
+        try {
+          await createUnit({
             code: unitMapping.originalCode,
             name: unitMapping.originalCode,
             category: 'custom',
             sort_order: 999,
-            is_active: true
+            is_active: true,
           });
-
-        if (error && error.code !== '23505') {
-          throw new Error(`Ошибка создания единицы измерения: ${error.message}`);
+        } catch (err) {
+          // 23505 (unique_violation) — игнорируем (юнит уже существует).
+          const msg = (err as Error).message || '';
+          if (!/23505|unique|already exists/i.test(msg)) {
+            throw new Error(`Ошибка создания единицы измерения: ${msg}`);
+          }
         }
       }
 
@@ -354,28 +338,17 @@ export const useNomenclatureUpload = () => {
         unit_code: getFinalUnitCode(row.unit_code)
       }));
 
-      // 4. Вставка в БД
-      const tableName = mode === 'materials' ? 'material_names' : 'work_names';
-
-      const batchSize = 100;
-      const totalBatches = Math.ceil(recordsWithMappedUnits.length / batchSize);
-
-      for (let i = 0; i < totalBatches; i++) {
-        const batch = recordsWithMappedUnits.slice(i * batchSize, (i + 1) * batchSize);
-
-        const { error } = await supabase
-          .from(tableName)
-          .insert(batch.map(r => ({
-            name: r.name,
-            ...(r.unit_code ? { unit: r.unit_code } : {})
-          })));
-
-        if (error) {
-          console.error('Ошибка вставки данных:', error);
-          throw new Error(`Ошибка при сохранении данных: ${error.message}`);
+      // 4. Вставка в БД через Go-хелперы createWorkName/createMaterialName
+      // (Promise.all-параллелизм). Прогресс — по проценту обработанного.
+      const createFn = mode === 'materials' ? createMaterialName : createWorkName;
+      const total = recordsWithMappedUnits.length;
+      let done = 0;
+      for (const r of recordsWithMappedUnits) {
+        if (r.unit_code) {
+          await createFn({ name: r.name, unit: r.unit_code });
         }
-
-        setUploadProgress(Math.round(((i + 1) / totalBatches) * 100));
+        done++;
+        setUploadProgress(Math.round((done / total) * 100));
       }
 
       message.success(`Успешно загружено ${recordsWithMappedUnits.length} уникальных записей`);

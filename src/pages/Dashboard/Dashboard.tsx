@@ -8,7 +8,8 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
-import { supabase, Tender } from '../../lib/supabase';
+import type { Tender } from '../../lib/supabase';
+import { fetchTenders as apiFetchTenders } from '../../lib/api/tenders';
 import { formatNumberWithSpaces } from '../../utils/numberFormat';
 import { getVersionColorByTitle } from '../../utils/versionColor';
 import dayjs from 'dayjs';
@@ -52,37 +53,14 @@ const Dashboard: React.FC = () => {
   const fetchTenders = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('tenders')
-        .select('*')
-        .eq('is_archived', false)
-        .order('created_at', { ascending: false });
+      // Активные тендеры + cached_grand_total (поддерживается триггером
+      // на boq_items/tender_markup_percentage/subcontract_growth_exclusions —
+      // server-authoritative; убирает N batched-запросов к boq_items).
+      const all = await apiFetchTenders();
+      const data = all.filter((t: Tender) => !t.is_archived);
 
-      if (error) throw error;
-
-      // Для каждого тендера загружаем стоимость BOQ
-      const formattedData: TenderTableData[] = await Promise.all((data || []).map(async (tender: Tender) => {
-        // Рассчитываем итоговую стоимость BOQ напрямую из boq_items по tender_id с батчингом
-        let boqCost = 0;
-        let from = 0;
-        const batchSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data: boqData } = await supabase
-            .from('boq_items')
-            .select('total_amount')
-            .eq('tender_id', tender.id)
-            .range(from, from + batchSize - 1);
-
-          if (boqData && boqData.length > 0) {
-            boqCost += boqData.reduce((sum, item) => sum + (Number(item.total_amount) || 0), 0);
-            from += batchSize;
-            hasMore = boqData.length === batchSize;
-          } else {
-            hasMore = false;
-          }
-        }
+      const formattedData: TenderTableData[] = (data || []).map((tender: Tender) => {
+        const boqCost = tender.cached_grand_total || 0;
 
         // Рассчитываем стоимость за м²
         const constructionArea = tender.area_sp || 0;
@@ -103,7 +81,7 @@ const Dashboard: React.FC = () => {
           client: tender.client_name || '',
           created_at: tender.created_at || '',
         };
-      }));
+      });
 
       setTenders(formattedData);
       setFilteredTenders(formattedData);
