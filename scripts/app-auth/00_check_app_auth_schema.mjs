@@ -239,6 +239,8 @@ async function main() {
   for (const c of checks) {
     lines.push(`| \`${c.name}\` | ${c.status} | ${c.detail || ''} |`);
   }
+  lines.push('');
+  lines.push(`Final status: ${failed.length === 0 ? 'APP_AUTH_SCHEMA_VERIFY_OK' : 'APP_AUTH_SCHEMA_VERIFY_FAIL'}`);
   writeReport(lines);
 
   if (failed.length === 0) {

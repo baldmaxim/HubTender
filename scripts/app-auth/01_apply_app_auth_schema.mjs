@@ -115,6 +115,8 @@ async function main() {
       '',
       'Refused to apply. Hits:',
       ...hits.map((h) => `- \`${h.name}\``),
+      '',
+      'Final status: APP_AUTH_SCHEMA_APPLY_FAIL',
     ].join('\n'));
     process.exit(1);
   }
@@ -134,6 +136,8 @@ async function main() {
       `- Forbidden-pattern scan: **OK** (0 hits)`,
       `- Summary: ${stats.createSchema} CREATE SCHEMA, ${stats.createTable} CREATE TABLE, ${stats.createIndex} CREATE INDEX, ${stats.commentOn} COMMENT ON (${stats.bytes} bytes)`,
       `- DB connection: skipped (dry-run).`,
+      '',
+      'Final status: APP_AUTH_SCHEMA_APPLY_DRYRUN_OK',
     ].join('\n'));
     console.log('[dry-run] No DB connection made. Real apply requires ALLOW_APPLY_APP_AUTH_SCHEMA=true.');
     process.exit(0);
@@ -187,6 +191,8 @@ async function main() {
       `- Started:  ${startedAt.toISOString()}`,
       `- Finished: ${finishedAt.toISOString()}`,
       `- Error: ${err.message}`,
+      '',
+      'Final status: APP_AUTH_SCHEMA_APPLY_FAIL',
     ].join('\n'));
     await client.end().catch(() => {});
     process.exit(1);
@@ -205,6 +211,8 @@ async function main() {
     `- Summary: ${stats.createSchema} CREATE SCHEMA, ${stats.createTable} CREATE TABLE, ${stats.createIndex} CREATE INDEX, ${stats.commentOn} COMMENT ON (${stats.bytes} bytes)`,
     `- Status: **${committed ? 'COMMITTED' : 'NOT COMMITTED'}**`,
     `- Next: run \`npm run app-auth:check-schema\` to verify.`,
+    '',
+    `Final status: ${committed ? 'APP_AUTH_SCHEMA_APPLY_OK' : 'APP_AUTH_SCHEMA_APPLY_FAIL'}`,
   ].join('\n'));
 }
 
