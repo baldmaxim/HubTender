@@ -15,8 +15,24 @@ type Config struct {
 	DatabaseURL string
 
 	// JWKS configuration for Supabase JWT verification.
+	// Required when AuthMode is "supabase" or "dual"; optional in "app" mode.
 	SupabaseJWKSURL   string
 	SupabaseJWTIssuer string
+
+	// AuthMode is one of "supabase" | "dual" | "app".
+	// supabase = legacy single-issuer (Supabase JWKS only).
+	// dual     = accept both Supabase JWT and app JWT (cutover window).
+	// app      = accept only app-issued JWT.
+	AuthMode string
+
+	// App-issued JWT configuration. Required when AuthMode is "app" or "dual".
+	AppJWTIssuer         string
+	AppJWTAudience       string
+	AppJWTKeyID          string
+	AppJWTPrivateKeyPath string
+	AppJWTPrivateKeyB64  string
+	AppAccessTokenTTL    time.Duration
+	AppRefreshTokenTTL   time.Duration
 
 	// HTTP server settings.
 	BindHost string
@@ -52,20 +68,57 @@ func Load() (*Config, error) {
 	v.SetDefault("DB_MAX_CONNS", 20)
 	v.SetDefault("DB_MIN_CONNS", 2)
 	v.SetDefault("DB_MAX_CONN_IDLE_TIME", "5m")
+	v.SetDefault("AUTH_MODE", "supabase")
+	v.SetDefault("APP_ACCESS_TOKEN_TTL_MINUTES", 15)
+	v.SetDefault("APP_REFRESH_TOKEN_TTL_DAYS", 30)
 
 	dbURL := v.GetString("DATABASE_URL")
 	if dbURL == "" {
 		return nil, fmt.Errorf("config: DATABASE_URL is required but not set")
 	}
 
-	jwksURL := v.GetString("SUPABASE_JWKS_URL")
-	if jwksURL == "" {
-		return nil, fmt.Errorf("config: SUPABASE_JWKS_URL is required but not set")
+	authMode := strings.ToLower(strings.TrimSpace(v.GetString("AUTH_MODE")))
+	if authMode == "" {
+		authMode = "supabase"
+	}
+	switch authMode {
+	case "supabase", "dual", "app":
+	default:
+		return nil, fmt.Errorf("config: AUTH_MODE must be one of supabase|dual|app, got %q", authMode)
 	}
 
+	jwksURL := v.GetString("SUPABASE_JWKS_URL")
 	jwtIssuer := v.GetString("SUPABASE_JWT_ISSUER")
-	if jwtIssuer == "" {
-		return nil, fmt.Errorf("config: SUPABASE_JWT_ISSUER is required but not set")
+	if authMode == "supabase" || authMode == "dual" {
+		if jwksURL == "" {
+			return nil, fmt.Errorf("config: SUPABASE_JWKS_URL is required when AUTH_MODE=%s", authMode)
+		}
+		if jwtIssuer == "" {
+			return nil, fmt.Errorf("config: SUPABASE_JWT_ISSUER is required when AUTH_MODE=%s", authMode)
+		}
+	}
+
+	appIssuer := v.GetString("APP_JWT_ISSUER")
+	appAudience := v.GetString("APP_JWT_AUDIENCE")
+	appKID := v.GetString("APP_JWT_KEY_ID")
+	appKeyPath := v.GetString("APP_JWT_PRIVATE_KEY_PATH")
+	appKeyB64 := v.GetString("APP_JWT_PRIVATE_KEY_B64")
+	accessMins := v.GetInt("APP_ACCESS_TOKEN_TTL_MINUTES")
+	refreshDays := v.GetInt("APP_REFRESH_TOKEN_TTL_DAYS")
+
+	if authMode == "app" || authMode == "dual" {
+		if appIssuer == "" {
+			return nil, fmt.Errorf("config: APP_JWT_ISSUER is required when AUTH_MODE=%s", authMode)
+		}
+		if appKeyPath == "" && appKeyB64 == "" {
+			return nil, fmt.Errorf("config: APP_JWT_PRIVATE_KEY_PATH or APP_JWT_PRIVATE_KEY_B64 is required when AUTH_MODE=%s", authMode)
+		}
+		if accessMins < 1 {
+			return nil, fmt.Errorf("config: APP_ACCESS_TOKEN_TTL_MINUTES must be >= 1, got %d", accessMins)
+		}
+		if refreshDays < 1 {
+			return nil, fmt.Errorf("config: APP_REFRESH_TOKEN_TTL_DAYS must be >= 1, got %d", refreshDays)
+		}
 	}
 
 	rawOrigins := v.GetString("CORS_ORIGINS")
@@ -91,17 +144,25 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		DatabaseURL:         dbURL,
-		SupabaseJWKSURL:     jwksURL,
-		SupabaseJWTIssuer:   jwtIssuer,
-		BindHost:            v.GetString("BIND_HOST"),
-		Port:                v.GetString("PORT"),
-		LogLevel:            v.GetString("LOG_LEVEL"),
-		CORSOrigins:         origins,
-		JWKSRefreshInterval: time.Hour,
-		DBMaxConns:          maxConns,
-		DBMinConns:          minConns,
-		DBMaxConnIdleTime:   maxIdle,
+		DatabaseURL:          dbURL,
+		SupabaseJWKSURL:      jwksURL,
+		SupabaseJWTIssuer:    jwtIssuer,
+		AuthMode:             authMode,
+		AppJWTIssuer:         appIssuer,
+		AppJWTAudience:       appAudience,
+		AppJWTKeyID:          appKID,
+		AppJWTPrivateKeyPath: appKeyPath,
+		AppJWTPrivateKeyB64:  appKeyB64,
+		AppAccessTokenTTL:    time.Duration(accessMins) * time.Minute,
+		AppRefreshTokenTTL:   time.Duration(refreshDays) * 24 * time.Hour,
+		BindHost:             v.GetString("BIND_HOST"),
+		Port:                 v.GetString("PORT"),
+		LogLevel:             v.GetString("LOG_LEVEL"),
+		CORSOrigins:          origins,
+		JWKSRefreshInterval:  time.Hour,
+		DBMaxConns:           maxConns,
+		DBMinConns:           minConns,
+		DBMaxConnIdleTime:    maxIdle,
 	}
 
 	return cfg, nil

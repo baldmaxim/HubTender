@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MicahParks/keyfunc/v3"
 	"github.com/coder/websocket"
 	"github.com/rs/zerolog"
 
@@ -17,7 +16,7 @@ import (
 )
 
 const (
-	wsMaxMessageBytes = 4 * 1024       // 4 KB — enough for subscribe frames
+	wsMaxMessageBytes = 4 * 1024 // 4 KB — enough for subscribe frames
 	wsReadDeadline    = 60 * time.Second
 	wsWriteDeadline   = 10 * time.Second
 	wsPingInterval    = 30 * time.Second
@@ -32,21 +31,20 @@ type wsFrame struct {
 
 // WsHandler serves GET /api/v1/ws and manages the WebSocket lifecycle.
 type WsHandler struct {
-	hub    *realtime.Hub
-	kf     keyfunc.Keyfunc
-	issuer string
-	logger zerolog.Logger
+	hub       *realtime.Hub
+	verifyCfg middleware.VerifyConfig
+	logger    zerolog.Logger
 }
 
-// NewWsHandler constructs a WsHandler. kf and issuer are the same values used
-// by the JWTAuth middleware — the handler does its own token verification
-// because the browser WebSocket API cannot set an Authorization header.
-func NewWsHandler(hub *realtime.Hub, kf keyfunc.Keyfunc, issuer string, logger zerolog.Logger) *WsHandler {
+// NewWsHandler constructs a WsHandler. The verifyCfg is the same dual-mode
+// configuration the JWTAuth middleware uses — the handler does its own
+// token verification because the browser WebSocket API cannot set an
+// Authorization header.
+func NewWsHandler(hub *realtime.Hub, verifyCfg middleware.VerifyConfig, logger zerolog.Logger) *WsHandler {
 	return &WsHandler{
-		hub:    hub,
-		kf:     kf,
-		issuer: issuer,
-		logger: logger.With().Str("component", "ws_handler").Logger(),
+		hub:       hub,
+		verifyCfg: verifyCfg,
+		logger:    logger.With().Str("component", "ws_handler").Logger(),
 	}
 }
 
@@ -61,7 +59,7 @@ func (h *WsHandler) Serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authed, err := middleware.VerifyToken(h.kf, h.issuer, raw)
+	authed, err := middleware.VerifyToken(h.verifyCfg, raw)
 	if err != nil {
 		h.logger.Warn().Err(err).Msg("JWT verification failed")
 		apierr.Unauthorized("invalid or expired token").Render(w)

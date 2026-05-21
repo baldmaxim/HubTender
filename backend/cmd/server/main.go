@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,10 +18,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/su10/hubtender/backend/internal/auth"
 	"github.com/su10/hubtender/backend/internal/cache"
 	"github.com/su10/hubtender/backend/internal/config"
-	infradb "github.com/su10/hubtender/backend/internal/infrastructure/db"
 	"github.com/su10/hubtender/backend/internal/handlers"
+	infradb "github.com/su10/hubtender/backend/internal/infrastructure/db"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/realtime"
 	"github.com/su10/hubtender/backend/internal/repository"
@@ -102,11 +104,56 @@ func main() {
 	go listener.Run(rootCtx)
 
 	// -------------------------------------------------------------------------
-	// 7. JWKS keyfunc (auto-refreshes every 1 h)
+	// 7. Auth verification setup.
+	//
+	// VerifyConfig encapsulates the dual-mode JWT acceptance policy.
+	// Depending on cfg.AuthMode we load none/one/both of the issuer-specific
+	// helpers (Supabase JWKS, app signing key). The Supabase keyfunc is
+	// reused by the WS handler; the app issuer is reused by the auth
+	// service for minting access/refresh tokens.
 	// -------------------------------------------------------------------------
-	kf, err := keyfunc.NewDefault([]string{cfg.SupabaseJWKSURL})
+	authMode, err := middleware.ParseAuthMode(cfg.AuthMode)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to initialise JWKS keyfunc")
+		log.Fatal().Err(err).Msg("invalid AUTH_MODE")
+	}
+
+	var kf keyfunc.Keyfunc
+	if authMode == middleware.AuthModeSupabase || authMode == middleware.AuthModeDual {
+		kf, err = keyfunc.NewDefault([]string{cfg.SupabaseJWKSURL})
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to initialise Supabase JWKS keyfunc")
+		}
+	}
+
+	var authH *auth.Handler
+	verifyCfg := middleware.VerifyConfig{
+		Mode:            authMode,
+		SupabaseKeyfunc: kf,
+		SupabaseIssuer:  cfg.SupabaseJWTIssuer,
+	}
+	if authMode == middleware.AuthModeApp || authMode == middleware.AuthModeDual {
+		signingKey, err := loadAppSigningKey(cfg)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to load app JWT signing key")
+		}
+		appIssuer, err := auth.NewIssuer(auth.IssuerConfig{
+			SigningKey: signingKey,
+			Issuer:     cfg.AppJWTIssuer,
+			Audience:   cfg.AppJWTAudience,
+			AccessTTL:  cfg.AppAccessTokenTTL,
+			RefreshTTL: cfg.AppRefreshTokenTTL,
+		})
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to construct app JWT issuer")
+		}
+		authRepo := auth.NewRepository(pool)
+		authSvc := auth.NewService(authRepo, appIssuer)
+		authH = auth.NewHandler(authSvc)
+
+		verifyCfg.AppPublicKey = &signingKey.Private.PublicKey
+		verifyCfg.AppIssuer = cfg.AppJWTIssuer
+		verifyCfg.AppAudience = cfg.AppJWTAudience
+		log.Info().Str("kid", signingKey.KID).Str("iss", cfg.AppJWTIssuer).Msg("app JWT issuer ready")
 	}
 
 	// -------------------------------------------------------------------------
@@ -214,7 +261,7 @@ func main() {
 	markupH := handlers.NewMarkupHandler(markupSvc)
 	fiH := handlers.NewFIHandler(fiSvc)
 	ccvH := handlers.NewConstructionCostVolumesHandler(ccvSvc)
-	wsH := handlers.NewWsHandler(hub, kf, cfg.SupabaseJWTIssuer, logger)
+	wsH := handlers.NewWsHandler(hub, verifyCfg, logger)
 
 	// -------------------------------------------------------------------------
 	// 9. Router
@@ -233,8 +280,17 @@ func main() {
 	r.Get("/health/db", healthH.CheckDB)
 	r.Get("/health/cache", healthH.CacheStats)
 
-	// Authenticated API routes.
-	authMW := middleware.JWTAuth(kf, cfg.SupabaseJWTIssuer)
+	// Public auth routes — login / refresh do NOT require an existing JWT.
+	// JWKS is served public so any RP can verify our access tokens.
+	if authH != nil {
+		r.Post("/api/v1/auth/login", authH.Login)
+		r.Post("/api/v1/auth/refresh", authH.Refresh)
+		r.Post("/api/v1/auth/logout", authH.Logout)
+		r.Get("/.well-known/jwks.json", authH.JWKS)
+	}
+
+	// Authenticated API routes — dual-mode JWT (see VerifyConfig).
+	authMW := middleware.JWTAuth(verifyCfg)
 
 	r.Group(func(r chi.Router) {
 		r.Use(authMW)
@@ -243,6 +299,13 @@ func main() {
 		r.Get("/api/v1/me/permissions", meH.GetPermissions)
 		r.Get("/api/v1/me/deadline-extensions", meH.GetDeadlineExtensions)
 		r.Post("/api/v1/me/reapply-access", meH.ReapplyAccess)
+
+		// Phase 6 app-auth: /me equivalent that returns a UserPayload shape
+		// identical to the login response (so the frontend can use one type
+		// across login/refresh/me).
+		if authH != nil {
+			r.Get("/api/v1/auth/me", authH.Me)
+		}
 
 		r.Get("/api/v1/references/roles", refH.GetRoles)
 		r.Get("/api/v1/references/units", refH.GetUnits)
@@ -609,6 +672,42 @@ func runHealthcheck() {
 	}
 	os.Exit(0)
 }
+
+// loadAppSigningKey reads the RSA PEM private key for the app JWT issuer
+// from either APP_JWT_PRIVATE_KEY_PATH (filesystem) or APP_JWT_PRIVATE_KEY_B64
+// (base64-encoded PEM env var). Path takes precedence when both are set —
+// makes Docker / k8s mounts the obvious choice.
+func loadAppSigningKey(cfg *config.Config) (*auth.SigningKey, error) {
+	var pemBytes []byte
+	switch {
+	case cfg.AppJWTPrivateKeyPath != "":
+		b, err := os.ReadFile(cfg.AppJWTPrivateKeyPath)
+		if err != nil {
+			return nil, err
+		}
+		pemBytes = b
+	case cfg.AppJWTPrivateKeyB64 != "":
+		b, err := base64.StdEncoding.DecodeString(cfg.AppJWTPrivateKeyB64)
+		if err != nil {
+			return nil, err
+		}
+		pemBytes = b
+	default:
+		// Should never happen: config.Load already validated this; defensive.
+		return nil, errMissingAppKey
+	}
+	return auth.LoadSigningKey(pemBytes)
+}
+
+// errMissingAppKey is exposed as a package-level sentinel so the failure
+// shows up cleanly in logs (rather than a fresh fmt.Errorf each load).
+var errMissingAppKey = newSentinel("config: neither APP_JWT_PRIVATE_KEY_PATH nor APP_JWT_PRIVATE_KEY_B64 set")
+
+func newSentinel(msg string) error { return &sentinelErr{msg: msg} }
+
+type sentinelErr struct{ msg string }
+
+func (e *sentinelErr) Error() string { return e.msg }
 
 // corsMiddleware returns a minimal CORS handler that allows the configured
 // origins. It does not depend on any external library.

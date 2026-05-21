@@ -1,0 +1,318 @@
+package auth
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/su10/hubtender/backend/internal/access"
+)
+
+// Repository is the pgx-backed persistence layer for the app-auth package.
+// Pure data access; no business logic, no hashing, no token minting.
+type Repository struct {
+	pool *pgxpool.Pool
+}
+
+// NewRepository wires a Repository to the given pool.
+func NewRepository(pool *pgxpool.Pool) *Repository {
+	return &Repository{pool: pool}
+}
+
+// ---------------------------------------------------------------------------
+// auth.users / public.users reads
+// ---------------------------------------------------------------------------
+
+// GetAuthUserByEmail looks up the auth.users bridge row by case-insensitive
+// email. Returns (nil, ErrInvalidCredentials) when no row matches — the
+// caller has no business knowing whether the email was wrong or whether the
+// password verification would fail.
+func (r *Repository) GetAuthUserByEmail(ctx context.Context, email string) (*AuthUserRow, error) {
+	const q = `
+SELECT id::text, COALESCE(email,''), COALESCE(encrypted_password,'')
+FROM auth.users
+WHERE LOWER(email) = LOWER($1)
+LIMIT 1
+`
+	var row AuthUserRow
+	err := r.pool.QueryRow(ctx, q, email).Scan(&row.ID, &row.Email, &row.EncryptedPassword)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, fmt.Errorf("authRepo.GetAuthUserByEmail: %w", err)
+	}
+	return &row, nil
+}
+
+// GetAuthUserByID returns the auth.users row for a known user id. Used by
+// Refresh / Me to surface the current email in the access-token claim and
+// the user payload even though both endpoints don't know the email up front.
+func (r *Repository) GetAuthUserByID(ctx context.Context, userID string) (*AuthUserRow, error) {
+	const q = `
+SELECT id::text, COALESCE(email,''), COALESCE(encrypted_password,'')
+FROM auth.users
+WHERE id = $1::uuid
+LIMIT 1
+`
+	var row AuthUserRow
+	err := r.pool.QueryRow(ctx, q, userID).Scan(&row.ID, &row.Email, &row.EncryptedPassword)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAccountMissing
+		}
+		return nil, fmt.Errorf("authRepo.GetAuthUserByID: %w", err)
+	}
+	return &row, nil
+}
+
+// GetPublicUserByID returns the public.users + roles projection needed to
+// build the login response payload (full_name, role_code, access_status,
+// access_enabled, allowed_pages — same shape as the existing /me handler).
+//
+// Returns (nil, ErrAccountMissing) if auth.users had a row but public.users
+// does not — a half-provisioned state. Login refuses such accounts.
+func (r *Repository) GetPublicUserByID(ctx context.Context, userID string) (*PublicUserRow, error) {
+	const q = `
+SELECT
+    u.id::text,
+    COALESCE(u.full_name, '') AS full_name,
+    u.role_code,
+    COALESCE(u.access_status::text, '') AS access_status,
+    COALESCE(u.access_enabled, false) AS access_enabled,
+    u.allowed_pages
+FROM public.users u
+WHERE u.id = $1
+LIMIT 1
+`
+	var (
+		id            string
+		fullName      string
+		roleCode      string
+		accessStatus  string
+		accessEnabled bool
+		allowedPages  []byte
+	)
+	err := r.pool.QueryRow(ctx, q, userID).Scan(&id, &fullName, &roleCode, &accessStatus, &accessEnabled, &allowedPages)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAccountMissing
+		}
+		return nil, fmt.Errorf("authRepo.GetPublicUserByID: %w", err)
+	}
+	return &PublicUserRow{
+		ID:            id,
+		FullName:      fullName,
+		RoleCode:      roleCode,
+		AccessStatus:  accessStatus,
+		AccessEnabled: accessEnabled,
+		AllowedPages:  access.GetAllowedPages(roleCode, allowedPages),
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// refresh_tokens
+// ---------------------------------------------------------------------------
+
+// InsertRefreshToken writes a new refresh-token row. tokenFamilyID groups
+// rotation chains; pass uuid.Nil-equivalent ("") to mint a fresh family
+// (used at login time — see Service.Login). Returns the assigned id.
+//
+// userAgent / ipAddress are best-effort; empty strings store SQL NULL.
+func (r *Repository) InsertRefreshToken(
+	ctx context.Context,
+	userID, tokenHash, tokenFamilyID string,
+	issuedAt, expiresAt time.Time,
+	sess SessionContext,
+) (string, error) {
+	const q = `
+INSERT INTO app_auth.refresh_tokens
+    (user_id, token_hash, token_family_id, issued_at, expires_at, user_agent, ip_address)
+VALUES
+    ($1::uuid, $2, $3::uuid, $4, $5, NULLIF($6,''), NULLIF($7,'')::inet)
+RETURNING id::text
+`
+	var id string
+	err := r.pool.QueryRow(ctx, q,
+		userID,
+		tokenHash,
+		tokenFamilyID,
+		issuedAt,
+		expiresAt,
+		sess.UserAgent,
+		sess.IPAddress,
+	).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("authRepo.InsertRefreshToken: %w", err)
+	}
+	return id, nil
+}
+
+// FindRefreshTokenByHash returns the row whose token_hash matches. Returns
+// ErrRefreshNotFound if no match — leaks no information about whether the
+// hash was ever issued.
+func (r *Repository) FindRefreshTokenByHash(ctx context.Context, tokenHash string) (*RefreshTokenRow, error) {
+	const q = `
+SELECT
+    id::text,
+    user_id::text,
+    token_hash,
+    token_family_id::text,
+    issued_at,
+    expires_at,
+    revoked_at,
+    replaced_by::text
+FROM app_auth.refresh_tokens
+WHERE token_hash = $1
+LIMIT 1
+`
+	var (
+		row         RefreshTokenRow
+		revokedAt   *time.Time
+		replacedBy  *string
+		replacedRaw *string // separate sentinel since pgx scans uuid::text NULL into *string
+	)
+	err := r.pool.QueryRow(ctx, q, tokenHash).Scan(
+		&row.ID,
+		&row.UserID,
+		&row.TokenHash,
+		&row.TokenFamilyID,
+		&row.IssuedAt,
+		&row.ExpiresAt,
+		&revokedAt,
+		&replacedRaw,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrRefreshNotFound
+		}
+		return nil, fmt.Errorf("authRepo.FindRefreshTokenByHash: %w", err)
+	}
+	row.RevokedAt = revokedAt
+	if replacedRaw != nil && *replacedRaw != "" {
+		v := *replacedRaw
+		replacedBy = &v
+	}
+	row.ReplacedBy = replacedBy
+	return &row, nil
+}
+
+// RevokeRefreshToken sets revoked_at = now() for a single row. Idempotent —
+// safe to call on an already-revoked token (no rows updated, no error).
+func (r *Repository) RevokeRefreshToken(ctx context.Context, id string) error {
+	const q = `
+UPDATE app_auth.refresh_tokens
+SET revoked_at = now()
+WHERE id = $1::uuid AND revoked_at IS NULL
+`
+	if _, err := r.pool.Exec(ctx, q, id); err != nil {
+		return fmt.Errorf("authRepo.RevokeRefreshToken: %w", err)
+	}
+	return nil
+}
+
+// RevokeTokenFamily revokes every NON-revoked row in a family in one round
+// trip. Used by reuse detection — if any rotated-chain token is re-presented,
+// the whole family is compromised.
+func (r *Repository) RevokeTokenFamily(ctx context.Context, familyID string) error {
+	const q = `
+UPDATE app_auth.refresh_tokens
+SET revoked_at = now()
+WHERE token_family_id = $1::uuid AND revoked_at IS NULL
+`
+	if _, err := r.pool.Exec(ctx, q, familyID); err != nil {
+		return fmt.Errorf("authRepo.RevokeTokenFamily: %w", err)
+	}
+	return nil
+}
+
+// RotateRefreshToken atomically:
+//  1. Marks the old row revoked_at = now(), replaced_by = new.id.
+//  2. Inserts the new row with the same token_family_id.
+//
+// Runs in a single pgx.Tx so reuse-detection lookups in another request
+// cannot see a half-rotated state. Returns the id of the newly inserted row.
+func (r *Repository) RotateRefreshToken(
+	ctx context.Context,
+	oldID, userID, newTokenHash, tokenFamilyID string,
+	issuedAt, expiresAt time.Time,
+	sess SessionContext,
+) (string, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return "", fmt.Errorf("authRepo.RotateRefreshToken: begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	const insertNew = `
+INSERT INTO app_auth.refresh_tokens
+    (user_id, token_hash, token_family_id, issued_at, expires_at, user_agent, ip_address)
+VALUES
+    ($1::uuid, $2, $3::uuid, $4, $5, NULLIF($6,''), NULLIF($7,'')::inet)
+RETURNING id::text
+`
+	var newID string
+	if err := tx.QueryRow(ctx, insertNew,
+		userID, newTokenHash, tokenFamilyID, issuedAt, expiresAt,
+		sess.UserAgent, sess.IPAddress,
+	).Scan(&newID); err != nil {
+		return "", fmt.Errorf("authRepo.RotateRefreshToken: insert: %w", err)
+	}
+
+	const revokeOld = `
+UPDATE app_auth.refresh_tokens
+SET revoked_at = now(), replaced_by = $2::uuid
+WHERE id = $1::uuid AND revoked_at IS NULL
+`
+	if _, err := tx.Exec(ctx, revokeOld, oldID, newID); err != nil {
+		return "", fmt.Errorf("authRepo.RotateRefreshToken: revoke: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("authRepo.RotateRefreshToken: commit: %w", err)
+	}
+	return newID, nil
+}
+
+// ---------------------------------------------------------------------------
+// auth_events
+// ---------------------------------------------------------------------------
+
+// LogAuthEvent appends to app_auth.auth_events. Non-fatal: callers log the
+// error but do NOT fail the auth operation if event-recording fails.
+//
+// metadata is marshalled to JSON; pass nil for an empty object. The schema
+// constraint guarantees plaintext tokens / passwords MUST never be passed in
+// here — the call sites in service.go obey this.
+func (r *Repository) LogAuthEvent(
+	ctx context.Context,
+	userID, eventType string,
+	sess SessionContext,
+	metadata map[string]any,
+) error {
+	var meta []byte
+	if metadata != nil {
+		b, err := json.Marshal(metadata)
+		if err != nil {
+			return fmt.Errorf("authRepo.LogAuthEvent: marshal metadata: %w", err)
+		}
+		meta = b
+	} else {
+		meta = []byte(`{}`)
+	}
+
+	const q = `
+INSERT INTO app_auth.auth_events
+    (user_id, event_type, ip_address, user_agent, metadata)
+VALUES
+    (NULLIF($1,'')::uuid, $2, NULLIF($3,'')::inet, NULLIF($4,''), $5::jsonb)
+`
+	if _, err := r.pool.Exec(ctx, q, userID, eventType, sess.IPAddress, sess.UserAgent, meta); err != nil {
+		return fmt.Errorf("authRepo.LogAuthEvent: %w", err)
+	}
+	return nil
+}
