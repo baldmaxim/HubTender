@@ -12,6 +12,8 @@
     "test": "playwright test",
     "test:go": "cd backend && go test ./...",
     "smoke": "node scripts/smoke/go-bff.mjs",
+    "app-auth:schema": "node scripts/app-auth/01_apply_app_auth_schema.mjs",
+    "app-auth:check-schema": "node scripts/app-auth/00_check_app_auth_schema.mjs",
     "gen:types": "supabase gen types typescript --project-id ocauafggjrqvopxjihas > src/lib/supabase/database.types.ts",
     "gen:schema": "supabase db dump --project-ref ocauafggjrqvopxjihas --schema public > supabase/schemas/prod.sql"
   },

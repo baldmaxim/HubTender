@@ -73,6 +73,7 @@ web_modules/
 !.env.yandex-preflight.example
 !.env.prod-to-yandex.example
 !.env.production.yandex.example
+!.env.app-auth.example
 
 # OLD → PROD migration introspection output
 .old-to-prod-export/
