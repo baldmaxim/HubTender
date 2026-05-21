@@ -79,7 +79,10 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw Object.assign(new Error(body.title ?? res.statusText), {
+    // Предпочитаем `detail` (RFC 7807) — там приходит конкретное сообщение
+    // от Go-handler/SQL, иначе откатываемся на `title` или statusText.
+    const messageText = body.detail || body.title || res.statusText;
+    throw Object.assign(new Error(messageText), {
       status: res.status,
       body,
     });
@@ -87,7 +90,12 @@ export async function apiFetch<T>(
 
   if (res.status === 204) return undefined as T;
 
-  const body = (await res.json()) as T;
+  // Некоторые batch-эндпоинты Go BFF отвечают 201/200 с пустым телом.
+  // res.json() на пустом body кидает SyntaxError — поэтому читаем как текст
+  // и парсим только при непустом содержимом.
+  const text = await res.text();
+  if (!text) return undefined as T;
+  const body = JSON.parse(text) as T;
 
   if (cacheKey) {
     const etag = res.headers.get('ETag');

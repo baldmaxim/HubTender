@@ -36,6 +36,9 @@ type FITenderRow struct {
 	CachedGrandTotal   *float64 `json:"cached_grand_total,omitempty"`
 	HousingClass       *string  `json:"housing_class,omitempty"`
 	ConstructionScope  *string  `json:"construction_scope,omitempty"`
+	Area               *float64 `json:"area,omitempty"`
+	AreaSP             *float64 `json:"area_sp,omitempty"`
+	AreaClient         *float64 `json:"area_client,omitempty"`
 }
 
 func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, error) {
@@ -45,12 +48,14 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 		       tender_number, client_name, version, is_archived,
 		       usd_rate, eur_rate, cny_rate,
 		       markup_tactic_id::text, cached_grand_total,
-		       housing_class::text, construction_scope::text
+		       housing_class::text, construction_scope::text,
+		       area, area_sp, area_client
 		FROM public.tenders
 		WHERE id = $1
 	`, id).Scan(&t.ID, &t.Title, &t.TenderNumber, &t.ClientName, &t.Version, &t.IsArchived,
 		&t.USDRate, &t.EURRate, &t.CNYRate, &t.MarkupTacticID, &t.CachedGrandTotal,
-		&t.HousingClass, &t.ConstructionScope)
+		&t.HousingClass, &t.ConstructionScope,
+		&t.Area, &t.AreaSP, &t.AreaClient)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

@@ -850,6 +850,7 @@ export interface RedistributionRule {
     detail_cost_category_id?: string;
     category_name: string;
     percentage: number;
+    boq_item_types?: string[];
   }>;
   targets: Array<{
     level: 'category' | 'detail';

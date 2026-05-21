@@ -3,11 +3,20 @@
  */
 
 import React, { useState } from 'react';
-import { Form, InputNumber, Button, Card } from 'antd';
+import { Form, InputNumber, Button, Card, Select } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { CategoryDetailSelector } from '../../shared/CategoryDetailSelector';
 import type { CostCategory, DetailCostCategory } from '../../../types';
 import type { SourceRule } from '../../../utils';
+
+const BOQ_TYPE_OPTIONS = [
+  { value: 'раб', label: 'раб (основная работа)' },
+  { value: 'суб-раб', label: 'суб-раб (субподряд)' },
+  { value: 'раб-комп.', label: 'раб-комп. (компонент)' },
+  { value: 'мат', label: 'мат (основной материал)' },
+  { value: 'суб-мат', label: 'суб-мат (субподряд)' },
+  { value: 'мат-комп.', label: 'мат-комп. (компонент)' },
+];
 
 interface SourceRuleFormProps {
   categories: CostCategory[];
@@ -37,6 +46,7 @@ export const SourceRuleForm: React.FC<SourceRuleFormProps> = ({
   const handleAdd = () => {
     form.validateFields().then(() => {
       const percentage = form.getFieldValue('percentage');
+      const boqItemTypes: string[] | undefined = form.getFieldValue('boq_item_types');
 
       if (!selectedCategoryId) {
         return;
@@ -67,6 +77,7 @@ export const SourceRuleForm: React.FC<SourceRuleFormProps> = ({
         category_name: selectedCategoryName,
         percentage,
         level: selectedLevel,
+        boq_item_types: boqItemTypes && boqItemTypes.length > 0 ? boqItemTypes : undefined,
       };
 
       onAdd(rule);
@@ -108,6 +119,19 @@ export const SourceRuleForm: React.FC<SourceRuleFormProps> = ({
             precision={5}
             addonAfter="%"
             decimalSeparator=","
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="Типы элементов (опционально)"
+          name="boq_item_types"
+          help="Если не выбрано — правило применяется ко всем типам в категории. Чтобы перераспределять только работы, выберите 'раб', 'суб-раб' и 'раб-комп.'"
+        >
+          <Select
+            mode="multiple"
+            placeholder="Все типы"
+            options={BOQ_TYPE_OPTIONS}
+            allowClear
           />
         </Form.Item>
 

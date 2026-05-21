@@ -342,7 +342,6 @@ func copyAdditionalBoqItems(
 		RETURNING id::text
 	`
 
-	localOldToNew := make(map[string]string, len(sources))
 	newIDs := make([]string, len(sources))
 
 	for i, s := range sources {
@@ -360,7 +359,6 @@ func copyAdditionalBoqItems(
 		).Scan(&newItemID); err != nil {
 			return 0, 0, fmt.Errorf("transferRepo: insert additional BOQ item: %w", err)
 		}
-		localOldToNew[s.oldItemID] = newItemID
 		oldItemIDToNew[s.oldItemID] = newItemID
 		newIDs[i] = newItemID
 	}
@@ -370,7 +368,9 @@ func copyAdditionalBoqItems(
 		if s.parentWorkItemID == nil {
 			continue
 		}
-		newParentID, ok := localOldToNew[*s.parentWorkItemID]
+		// Используем глобальный oldItemIDToNew — родитель материала может быть
+		// в сматченной (основной) позиции, а не только в текущей ДОП.
+		newParentID, ok := oldItemIDToNew[*s.parentWorkItemID]
 		if !ok {
 			continue
 		}

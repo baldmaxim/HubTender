@@ -9,6 +9,7 @@ import type {
   WorkName,
   MaterialName,
 } from '../../../lib/supabase';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import {
   getPositionWithTender,
   listBoqItemsFullByPosition,
@@ -428,6 +429,15 @@ export const useBoqItems = (positionId: string | undefined) => {
     // fetch functions are stable; intentionally excluded to avoid refetch loop on positionId change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positionId]);
+
+  // Native WS hub (Go BFF) — рефетч элементов при изменении boq_items тендера.
+  useRealtimeTopic(
+    position?.tender_id ? `tender:${position.tender_id}` : null,
+    () => {
+      void fetchItems();
+      void fetchPositionData();
+    },
+  );
 
   return {
     position,

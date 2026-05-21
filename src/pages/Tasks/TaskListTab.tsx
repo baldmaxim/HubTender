@@ -88,10 +88,15 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
   };
 
   const handleToggleTaskStatus = async (taskId: string, newStatus: TaskStatus) => {
+    const prev = tasks;
+    setTasks(curr =>
+      curr.map(t => (t.id === taskId ? { ...t, task_status: newStatus } : t)),
+    );
     try {
       await updateUserTask(taskId, { task_status: newStatus });
-      fetchTasks();
+      await fetchTasks();
     } catch (err) {
+      setTasks(prev);
       message.error(
         'Ошибка обновления статуса задачи: ' +
           (err instanceof Error ? err.message : 'неизвестная ошибка'),
@@ -145,6 +150,7 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
       width: 19,
       render: (_: unknown, record: UserTaskWithRelations) => {
         const isRunning = record.task_status === 'running';
+        const wasPaused = record.task_status === 'paused';
 
         return (
           <Space>
@@ -152,7 +158,7 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
               style={isRunning ? { backgroundColor: '#fffbe6', borderColor: '#ffd666', color: '#000' } : {}}
               onClick={() => handleToggleTaskStatus(record.id, isRunning ? 'paused' : 'running')}
             >
-              {isRunning ? 'Остановить' : 'Запустить'}
+              {isRunning ? 'Остановить' : wasPaused ? 'Возобновить' : 'Запустить'}
             </Button>
 
             <Button danger onClick={() => handleCompleteTask(record.id)}>

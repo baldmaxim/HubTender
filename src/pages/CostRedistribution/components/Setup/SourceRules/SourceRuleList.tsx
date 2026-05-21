@@ -36,6 +36,18 @@ export const SourceRuleList: React.FC<SourceRuleListProps> = ({ rules, onRemove 
       render: (value) => `${value}%`,
     },
     {
+      title: 'Типы',
+      dataIndex: 'boq_item_types',
+      key: 'boq_item_types',
+      width: 220,
+      render: (types: string[] | undefined) => {
+        if (!types || types.length === 0) {
+          return <Tag>все типы</Tag>;
+        }
+        return types.map(t => <Tag key={t} color="geekblue">{t}</Tag>);
+      },
+    },
+    {
       title: 'Действия',
       key: 'actions',
       width: 100,

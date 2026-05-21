@@ -9,6 +9,7 @@ import {
 import { fetchTenders as apiFetchTenders } from '../../../lib/api/tenders';
 import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 import { listAllBoqItemsForTender, getTenderById } from '../../../lib/api/fi';
+import { invalidateApiCache } from '../../../lib/api/client';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import { getErrorMessage } from '../../../utils/errors';
 import {
@@ -209,7 +210,10 @@ export const useClientPositions = () => {
       const fetchedRecently = recentTs !== undefined && Date.now() - recentTs < RECENT_FETCH_MS;
 
       if (fetchedRecently) {
+        // Свежий refetch: дропаем и module-cache, и apiFetch ETag (иначе
+        // GET вернёт 304 со старым телом после только что прошедшей мутации).
         dropPositionsCache(tenderId);
+        invalidateApiCache(`positions:${tenderId}`);
         setLoading(true);
       } else {
         const cached = readPositionsCache<ClientPosition[], RawBoqItem[], Tender | null>(tenderId);
@@ -245,6 +249,7 @@ export const useClientPositions = () => {
     () => {
       if (selectedTender?.id) {
         dropPositionsCache(selectedTender.id);
+        invalidateApiCache(`positions:${selectedTender.id}`);
         void fetchTenders();
         void fetchClientPositions(selectedTender.id);
       }

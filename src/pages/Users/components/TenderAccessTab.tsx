@@ -116,7 +116,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
 
       message.success(`Доступ успешно продлен для ${selectedUserIds.length} пользователей`);
       setModalVisible(false);
-      loadUsersAndExtensions();
+      await loadUsersAndExtensions();
     } catch (error) {
       console.error('Ошибка сохранения:', error);
       message.error('Ошибка: ' + getErrorMessage(error));
@@ -170,7 +170,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
       message.success(`Удален доступ для ${selectedDeleteUserIds.length} чел.`);
       setDeleteModalVisible(false);
       setSelectedDeleteUserIds([]);
-      loadUsersAndExtensions();
+      await loadUsersAndExtensions();
     } catch (error) {
       console.error('Ошибка удаления:', error);
       message.error('Ошибка: ' + getErrorMessage(error));

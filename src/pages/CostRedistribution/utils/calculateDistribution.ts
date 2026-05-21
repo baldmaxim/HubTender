@@ -8,6 +8,9 @@ export interface SourceRule {
   category_name: string;
   percentage: number;
   level: 'category' | 'detail'; // Уровень выбора
+  // Опциональный фильтр по типу элемента (раб / суб-раб / раб-комп. и т.д.).
+  // Если undefined или [] — применяется ко всем типам (обратная совместимость).
+  boq_item_types?: string[];
 }
 
 export interface TargetCost {
@@ -97,6 +100,13 @@ export function calculateDeductions(
     } else if (rule.level === 'category' && rule.category_id) {
       // Выбрана вся категория - все items под её detail-ами уже преиндексированы
       itemsInCategory = idx.byCategoryId.get(rule.category_id) ?? [];
+    }
+
+    // Фильтр по типу элемента, если задан в правиле. Пустой/undefined фильтр
+    // означает «все типы» (обратная совместимость со старыми правилами).
+    if (rule.boq_item_types && rule.boq_item_types.length > 0) {
+      const allowed = new Set(rule.boq_item_types);
+      itemsInCategory = itemsInCategory.filter(item => allowed.has(item.boq_item_type));
     }
 
     if (itemsInCategory.length === 0) {

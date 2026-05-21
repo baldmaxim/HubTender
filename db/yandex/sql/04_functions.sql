@@ -1990,13 +1990,15 @@ begin
     component_material_base_target, component_material_markup_target,
     component_work_base_target, component_work_markup_target
   from public.tender_pricing_distribution
-  where tender_id = p_source_tender_id;
+  where tender_id = p_source_tender_id
+  on conflict (tender_id, markup_tactic_id) do nothing;
   get diagnostics v_pricing_distribution_copied = row_count;
 
   insert into public.tender_markup_percentage (tender_id, markup_parameter_id, value)
   select v_new.id, markup_parameter_id, value
   from public.tender_markup_percentage
-  where tender_id = p_source_tender_id;
+  where tender_id = p_source_tender_id
+  on conflict (tender_id, markup_parameter_id) do nothing;
   get diagnostics v_markup_percentage_copied = row_count;
 
   insert into public.tender_documents (

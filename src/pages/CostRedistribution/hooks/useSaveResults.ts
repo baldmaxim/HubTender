@@ -85,6 +85,9 @@ export function useSaveResults() {
             detail_cost_category_id: rule.detail_cost_category_id,
             category_name: rule.category_name,
             percentage: rule.percentage,
+            ...(rule.boq_item_types && rule.boq_item_types.length > 0
+              ? { boq_item_types: rule.boq_item_types }
+              : {}),
           })),
           targets: targetCosts.map((target) => ({
             level: target.level,
