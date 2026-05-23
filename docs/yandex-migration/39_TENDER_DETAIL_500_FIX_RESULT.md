@@ -130,6 +130,38 @@ bash scripts/deploy-production.sh backend
 
 Frontend redeploy is NOT required (no frontend code touched in this PR).
 
+## Production deploy result (post-deploy update)
+
+**Deployed**: 2026-05-23, release `hubtender-api@7f543ef`.
+
+Operator-driven deploy log highlights:
+- `git fetch origin main`: `74f399a..7f543ef` ✓
+- `bash scripts/deploy-server.sh --check`: preflight OK (hostname=hub, env files present, docker 29.1.3, node v22.22.2, rsync)
+- `docker build -t hubtender-api:prod ./backend`: OK (`Successfully built 3059fc896abf`)
+- `systemctl restart hubtender-bff.service`: OK
+- New BFF log lines:
+  - `sentry initialised env=production release=hubtender-api@7f543ef`
+  - `app JWT issuer ready kid=gpJuRL85-…`
+  - `port=3005 server listening`
+- `GET http://127.0.0.1:3006/health` → 200 `{"status":"ok"}`
+- `GET http://127.0.0.1:3006/health/db` → 200 `{"status":"ok"}`
+
+### Post-deploy public smoke (read-only)
+
+```
+POST /api/v1/auth/login                       → 200 (Bearer JWT, user dev/approved)
+GET  /api/v1/tenders?limit=5                  → 200 (5 tenders)
+GET  /api/v1/tenders/<id-1..5>                → 5/5 × 200
+GET  /api/v1/tenders/e8c3a228-…               → 200
+     body: {title:"Событие 6.1", area_sp:67106, area_client:67106.03,
+            housing_class:"бизнес", construction_scope:"генподряд", …}
+     'area' field absent (as designed)
+```
+
+**Production smoke: OK.** Endpoint восстановлен на проде, фронт получает
+ожидаемый payload, `area_sp`/`area_client` присутствуют, `area` отсутствует
+(graceful на фронте).
+
 ## Rollback note
 
 If the fix introduces a regression (very unlikely — strictly removes a

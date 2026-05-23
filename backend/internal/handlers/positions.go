@@ -63,7 +63,7 @@ func (h *PositionHandler) GetPositions(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.svc.ListPositions(r.Context(), p)
 	if err != nil {
-		apierr.InternalError("failed to list positions").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list positions", "tender_id", tenderID)
 		return
 	}
 

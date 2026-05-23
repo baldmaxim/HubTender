@@ -41,7 +41,8 @@ type tenderListEnvelope struct {
 
 // GetTenders handles GET /api/v1/tenders.
 // Query params: cursor, limit (1-200), is_archived (true/false),
-//               housing_class, search.
+//
+//	housing_class, search.
 func (h *TenderHandler) GetTenders(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
@@ -108,7 +109,7 @@ func (h *TenderHandler) GetTenderOverview(w http.ResponseWriter, r *http.Request
 			apierr.NotFound("tender not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to load tender overview").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load tender overview", "tender_id", tenderID)
 		return
 	}
 

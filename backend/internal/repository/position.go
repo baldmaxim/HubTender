@@ -46,10 +46,17 @@ type UpdatePositionInput struct {
 // ---------------------------------------------------------------------------
 
 // PositionRow mirrors the columns returned by ListPositions.
+//
+// PositionNumber is float64 because public.client_positions.position_number
+// is `numeric` and ~0.7% of real rows (e.g. 4.10, 794.10, 1099.10) are
+// fractional — used as a dotted hierarchy notation by the BOQ-builder. The
+// PrevPhase 6 default int caused pgx scan errors (cannot convert &{… exp=-2}
+// to integer) on every tender that contained such positions. See
+// docs/yandex-migration/40_TENDER_POSITIONS_OVERVIEW_FIX_RESULT.md.
 type PositionRow struct {
 	ID               string    `json:"id"`
 	TenderID         string    `json:"tender_id"`
-	PositionNumber   int       `json:"position_number"`
+	PositionNumber   float64   `json:"position_number"`
 	WorkName         string    `json:"work_name"`
 	UnitCode         *string   `json:"unit_code"`
 	Volume           *float64  `json:"volume"`

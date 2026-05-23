@@ -15,34 +15,34 @@ import (
 // TenderRow mirrors the full public.tenders row — returned by ListTenders.
 // Must stay aligned with Database['public']['Tables']['tenders']['Row'] on the frontend.
 type TenderRow struct {
-	ID                              string     `json:"id"`
-	TenderNumber                    string     `json:"tender_number"`
-	Title                           string     `json:"title"`
-	ClientName                      string     `json:"client_name"`
-	Description                     *string    `json:"description"`
-	HousingClass                    *string    `json:"housing_class"`
-	ConstructionScope               *string    `json:"construction_scope"`
-	IsArchived                      bool       `json:"is_archived"`
-	CachedGrandTotal                float64    `json:"cached_grand_total"`
-	USDRate                         *float64   `json:"usd_rate"`
-	EURRate                         *float64   `json:"eur_rate"`
-	CNYRate                         *float64   `json:"cny_rate"`
-	AreaClient                      *float64   `json:"area_client"`
-	AreaSP                          *float64   `json:"area_sp"`
-	SubmissionDeadline              *string    `json:"submission_deadline"`
-	Version                         *int64     `json:"version"`
-	VolumeTitle                     *string    `json:"volume_title"`
-	MarkupTacticID                  *string    `json:"markup_tactic_id"`
-	UploadFolder                    *string    `json:"upload_folder"`
-	BsmLink                         *string    `json:"bsm_link"`
-	TzLink                          *string    `json:"tz_link"`
-	QaFormLink                      *string    `json:"qa_form_link"`
-	ProjectFolderLink               *string    `json:"project_folder_link"`
-	ApplySubcontractMaterialsGrowth *bool      `json:"apply_subcontract_materials_growth"`
-	ApplySubcontractWorksGrowth     *bool      `json:"apply_subcontract_works_growth"`
-	CreatedBy                       *string    `json:"created_by"`
-	CreatedAt                       time.Time  `json:"created_at"`
-	UpdatedAt                       time.Time  `json:"updated_at"`
+	ID                              string    `json:"id"`
+	TenderNumber                    string    `json:"tender_number"`
+	Title                           string    `json:"title"`
+	ClientName                      string    `json:"client_name"`
+	Description                     *string   `json:"description"`
+	HousingClass                    *string   `json:"housing_class"`
+	ConstructionScope               *string   `json:"construction_scope"`
+	IsArchived                      bool      `json:"is_archived"`
+	CachedGrandTotal                float64   `json:"cached_grand_total"`
+	USDRate                         *float64  `json:"usd_rate"`
+	EURRate                         *float64  `json:"eur_rate"`
+	CNYRate                         *float64  `json:"cny_rate"`
+	AreaClient                      *float64  `json:"area_client"`
+	AreaSP                          *float64  `json:"area_sp"`
+	SubmissionDeadline              *string   `json:"submission_deadline"`
+	Version                         *int64    `json:"version"`
+	VolumeTitle                     *string   `json:"volume_title"`
+	MarkupTacticID                  *string   `json:"markup_tactic_id"`
+	UploadFolder                    *string   `json:"upload_folder"`
+	BsmLink                         *string   `json:"bsm_link"`
+	TzLink                          *string   `json:"tz_link"`
+	QaFormLink                      *string   `json:"qa_form_link"`
+	ProjectFolderLink               *string   `json:"project_folder_link"`
+	ApplySubcontractMaterialsGrowth *bool     `json:"apply_subcontract_materials_growth"`
+	ApplySubcontractWorksGrowth     *bool     `json:"apply_subcontract_works_growth"`
+	CreatedBy                       *string   `json:"created_by"`
+	CreatedAt                       time.Time `json:"created_at"`
+	UpdatedAt                       time.Time `json:"updated_at"`
 }
 
 // TenderOverviewRow is the aggregate returned by GetTenderOverview.
@@ -192,6 +192,14 @@ func (r *TenderRepo) ListTenders(ctx context.Context, p TenderListParams) ([]Ten
 
 // GetTenderOverview fetches header columns plus aggregate counts for one tender.
 func (r *TenderRepo) GetTenderOverview(ctx context.Context, tenderID string) (*TenderOverviewRow, error) {
+	// Two scalar subqueries instead of LEFT JOIN + COUNT(DISTINCT) + GROUP BY.
+	// The original LEFT-JOIN form built a Cartesian product
+	// (#positions × #boq_items per tender) and then deduplicated via
+	// COUNT DISTINCT — on a real tender with 1181 positions and 5362
+	// boq_items that meant 6.3 M intermediate rows, a 359 MB on-disk sort,
+	// and ~13 s execution. Two indexed scalar counts return in single-digit
+	// milliseconds because both tables have a tender_id index.
+	// See docs/yandex-migration/40_TENDER_POSITIONS_OVERVIEW_FIX_RESULT.md.
 	const q = `
 		SELECT
 		    t.id::text,
@@ -205,15 +213,12 @@ func (r *TenderRepo) GetTenderOverview(ctx context.Context, tenderID string) (*T
 		    t.usd_rate,
 		    t.eur_rate,
 		    t.cny_rate,
-		    COUNT(DISTINCT cp.id)  AS position_count,
-		    COUNT(DISTINCT bi.id)  AS boq_item_count,
+		    (SELECT COUNT(*) FROM public.client_positions cp WHERE cp.tender_id = t.id) AS position_count,
+		    (SELECT COUNT(*) FROM public.boq_items        bi WHERE bi.tender_id = t.id) AS boq_item_count,
 		    COALESCE(t.created_at, NOW()),
 		    COALESCE(t.updated_at, NOW())
 		FROM public.tenders t
-		LEFT JOIN public.client_positions cp ON cp.tender_id = t.id
-		LEFT JOIN public.boq_items        bi ON bi.tender_id = t.id
 		WHERE t.id = $1
-		GROUP BY t.id
 	`
 
 	row := r.pool.QueryRow(ctx, q, tenderID)
