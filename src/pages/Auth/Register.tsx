@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, message, Result, Typography } from 'antd';
-import { UserOutlined, LockOutlined, MailOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Card, message, Typography } from 'antd';
+import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { registerUser as apiRegisterUser } from '../../lib/api/users';
 import { HeaderIcon } from '../../components/Icons/HeaderIcon';
 import { AUTH_MODE } from '../../lib/auth/mode';
+import { registerWithPassword as appAuthRegister } from '../../lib/auth/client';
+import type { AppAuthError } from '../../lib/auth/types';
 
 const { Title, Text } = Typography;
 
@@ -21,53 +23,41 @@ const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Phase 6 app-auth: register endpoint is not yet implemented in the Go BFF.
-  // Show a controlled message instead of a half-broken form. The supabase
-  // branch below stays untouched so legacy builds still work.
-  if (AUTH_MODE === 'app') {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          padding: 24,
-        }}
-      >
-        <Card
-          style={{
-            width: '100%',
-            maxWidth: 500,
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
-            borderRadius: 8,
-          }}
-        >
-          <Result
-            status="info"
-            title="Регистрация временно недоступна"
-            subTitle={
-              <Text type="secondary">
-                Сейчас регистрация новых пользователей возможна только через администратора.
-                Обратитесь к нему для получения доступа.
-              </Text>
-            }
-            extra={
-              <Link to="/login">
-                <Button type="primary">
-                  <ArrowLeftOutlined /> Вернуться к входу
-                </Button>
-              </Link>
-            }
-          />
-        </Card>
-      </div>
-    );
-  }
-
   const handleRegister = async (values: RegisterFormValues) => {
     setLoading(true);
+
+    if (AUTH_MODE === 'app') {
+      // Phase 6 app-auth: one POST /api/v1/auth/register creates both
+      // auth.users + public.users + admin notification in a single
+      // transaction. No session is issued — fresh users land in
+      // access_status=pending and must wait for admin approval.
+      try {
+        await appAuthRegister({
+          email: values.email,
+          password: values.password,
+          full_name: values.full_name,
+        });
+        message.success(
+          'Запрос на регистрацию отправлен! После одобрения администратором вы сможете войти в систему.',
+          5,
+        );
+        navigate('/login');
+      } catch (err) {
+        const e = err as AppAuthError;
+        if (e.status === 409) {
+          message.error('Пользователь с таким email уже зарегистрирован');
+        } else if (e.status === 400) {
+          message.error(e.message || 'Проверьте корректность данных');
+        } else if (e.code === 'network') {
+          message.error('Сервис недоступен. Проверьте соединение');
+        } else {
+          message.error(`Ошибка регистрации: ${e.message}`);
+        }
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({

@@ -115,6 +115,138 @@ LIMIT 1
 }
 
 // ---------------------------------------------------------------------------
+// Registration
+// ---------------------------------------------------------------------------
+
+// RegisterInput carries the values RegisterUser writes. password_hash MUST
+// be a bcrypt $2a$10$… string produced by auth.HashPassword (we never
+// accept a plaintext password at the repository layer).
+type RegisterInput struct {
+	Email        string
+	PasswordHash string
+	FullName     string
+}
+
+// RegisterResultDB is the DB-side outcome of RegisterUser. AccessStatus
+// is computed inside the transaction (first-privileged-user → approved;
+// otherwise pending) — so the caller learns whether an admin notification
+// was fanned out.
+type RegisterResultDB struct {
+	UserID       string
+	AccessStatus string
+}
+
+// RegisterUser provisions a brand-new user in a single transaction:
+//
+//  1. duplicate-email guard against auth.users (LOWER comparison).
+//  2. INSERT auth.users — id (uuid), email, encrypted_password,
+//     email_confirmed_at=NOW(). Token / change string columns rely on
+//     their schema-level DEFAULTs (”), see db/yandex/sql/01_auth_compat….
+//  3. allowed_pages = roles.allowed_pages for the pinned 'engineer' role
+//     (server-side; client cannot override).
+//  4. first-user check + privileged-role check (mirrors legacy
+//     repository/user_register.go).
+//  5. INSERT public.users — pending by default, approved iff first user is
+//     somehow being created with a privileged role (kept for parity, but
+//     the new endpoint pins role_code='engineer', so this branch will only
+//     fire if an operator changes the pinned role later).
+//  6. INSERT public.notifications fan-out to admins (when access_status=pending).
+//
+// Returns ErrEmailAlreadyExists on duplicate — handler maps to 409.
+func (r *Repository) RegisterUser(ctx context.Context, in RegisterInput) (*RegisterResultDB, error) {
+	const roleCode = "engineer" // pinned server-side — no privilege escalation via the public sign-up form
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("authRepo.RegisterUser: begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// 1. Duplicate guard.
+	var existingID *string
+	if err := tx.QueryRow(ctx,
+		`SELECT id::text FROM auth.users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+		in.Email,
+	).Scan(&existingID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("authRepo.RegisterUser: dup check: %w", err)
+	}
+	if existingID != nil {
+		return nil, ErrEmailAlreadyExists
+	}
+
+	// 2. INSERT auth.users — generate uuid via gen_random_uuid().
+	var userID string
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data)
+		VALUES (gen_random_uuid(), $1, $2, NOW(), '{}'::jsonb, '{}'::jsonb)
+		RETURNING id::text
+	`, in.Email, in.PasswordHash).Scan(&userID); err != nil {
+		return nil, fmt.Errorf("authRepo.RegisterUser: insert auth.users: %w", err)
+	}
+
+	// 3. allowed_pages from role default; fall back to '[]'.
+	var pages []byte
+	if err := tx.QueryRow(ctx,
+		`SELECT allowed_pages FROM public.roles WHERE code = $1`,
+		roleCode,
+	).Scan(&pages); err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("authRepo.RegisterUser: role pages: %w", err)
+		}
+		pages = []byte(`[]`)
+	}
+	if len(pages) == 0 {
+		pages = []byte(`[]`)
+	}
+
+	// 4. First-user check.
+	var isFirstUser bool
+	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS (SELECT 1 FROM public.users LIMIT 1)`).Scan(&isFirstUser); err != nil {
+		return nil, fmt.Errorf("authRepo.RegisterUser: first-user check: %w", err)
+	}
+	privileged := roleCode == "administrator" || roleCode == "director" || roleCode == "developer"
+	approved := isFirstUser && privileged
+
+	// 5. INSERT public.users.
+	accessStatus := "pending"
+	if approved {
+		accessStatus = "approved"
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO public.users (id, full_name, email, role_code, access_status, allowed_pages, approved_by, approved_at)
+			VALUES ($1::uuid, $2, $3, $4, 'approved', $5, $1::uuid, NOW())
+		`, userID, in.FullName, in.Email, roleCode, pages); err != nil {
+			return nil, fmt.Errorf("authRepo.RegisterUser: insert public.users (approved): %w", err)
+		}
+	} else {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO public.users (id, full_name, email, role_code, access_status, allowed_pages)
+			VALUES ($1::uuid, $2, $3, $4, 'pending', $5)
+		`, userID, in.FullName, in.Email, roleCode, pages); err != nil {
+			return nil, fmt.Errorf("authRepo.RegisterUser: insert public.users (pending): %w", err)
+		}
+	}
+
+	// 6. Admin notification (only when pending — same shape as legacy
+	//    register flow, so the existing admin UI keeps working unchanged).
+	if !approved {
+		title := "Новый запрос на регистрацию"
+		msg := fmt.Sprintf("%s (%s) запросил доступ к системе", in.FullName, in.Email)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO public.notifications
+			    (type, title, message, related_entity_type, related_entity_id, is_read)
+			VALUES ('pending', $1, $2, 'registration_request', $3::uuid, false)
+		`, title, msg, userID); err != nil {
+			return nil, fmt.Errorf("authRepo.RegisterUser: notify: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("authRepo.RegisterUser: commit: %w", err)
+	}
+	return &RegisterResultDB{UserID: userID, AccessStatus: accessStatus}, nil
+}
+
+// ---------------------------------------------------------------------------
 // refresh_tokens
 // ---------------------------------------------------------------------------
 

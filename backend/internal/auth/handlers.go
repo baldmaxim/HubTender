@@ -63,6 +63,50 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/v1/auth/register
+// ---------------------------------------------------------------------------
+
+// Register handles POST /api/v1/auth/register. Public route (no Bearer).
+// Maps domain errors to HTTP codes:
+//
+//	ErrInvalidEmail / ErrFullNameRequired / ErrPasswordTooShort -> 400
+//	ErrEmailAlreadyExists                                      -> 409
+//	anything else                                              -> 500
+//
+// On success returns 201 Created with {user_id, email, access_status}.
+// We deliberately do NOT issue tokens here: fresh users land in
+// access_status="pending" and must wait for admin approval before login.
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	var req RegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	defer r.Body.Close() //nolint:errcheck
+
+	sess := sessionFromRequest(r)
+	result, err := h.svc.Register(r.Context(), req, sess)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidEmail):
+			apierr.BadRequest("invalid email").Render(w)
+		case errors.Is(err, ErrFullNameRequired):
+			apierr.BadRequest("full_name is required").Render(w)
+		case errors.Is(err, ErrPasswordTooShort):
+			apierr.BadRequest("password too short (min 6 chars)").Render(w)
+		case errors.Is(err, ErrEmailAlreadyExists):
+			apierr.Conflict("email already registered").Render(w)
+		default:
+			log.Error().Err(err).Msg("auth: register failed unexpectedly")
+			apierr.InternalError("registration failed").Render(w)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, result)
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/v1/auth/refresh
 // ---------------------------------------------------------------------------
 

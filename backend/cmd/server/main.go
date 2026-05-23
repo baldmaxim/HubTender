@@ -308,10 +308,12 @@ func main() {
 	r.Get("/health/db", healthH.CheckDB)
 	r.Get("/health/cache", healthH.CacheStats)
 
-	// Public auth routes — login / refresh do NOT require an existing JWT.
-	// JWKS is served public so any RP can verify our access tokens.
+	// Public auth routes — login / register / refresh do NOT require an
+	// existing JWT. JWKS is served public so any RP can verify our access
+	// tokens.
 	if authH != nil {
 		r.Post("/api/v1/auth/login", authH.Login)
+		r.Post("/api/v1/auth/register", authH.Register)
 		r.Post("/api/v1/auth/refresh", authH.Refresh)
 		r.Post("/api/v1/auth/logout", authH.Logout)
 		r.Get("/.well-known/jwks.json", authH.JWKS)

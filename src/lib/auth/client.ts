@@ -81,6 +81,57 @@ export async function signInWithPassword(email: string, password: string): Promi
   return session;
 }
 
+// RegisterPayload is the JSON body of POST /api/v1/auth/register.
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  full_name: string;
+}
+
+// RegisterResult mirrors the server response. access_status will be
+// 'pending' for normal sign-ups (operator must approve) or 'approved' in
+// the empty-DB bootstrap-admin edge case.
+export interface RegisterResult {
+  user_id: string;
+  email: string;
+  access_status: string;
+}
+
+// registerWithPassword posts to /api/v1/auth/register. It does NOT create
+// a session — the new account lands in access_status='pending' and the
+// user must wait for admin approval before login (an admin notification is
+// fanned out on the server side). UI calls signInWithPassword separately
+// after approval. The plaintext password leaves the browser exactly once
+// (this POST) and is never stored locally.
+export async function registerWithPassword(payload: RegisterPayload): Promise<RegisterResult> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch((err) => {
+    throw makeError(`network: ${(err as Error).message}`, undefined, 'network');
+  });
+
+  if (!res.ok) {
+    if (res.status === 409) throw makeError('email already registered', 409, 'invalid_credentials');
+    if (res.status === 400) {
+      // Surface server-side validation detail (RFC 7807) when present so
+      // the Register form can show "пароль слишком короткий" etc.
+      let detail = 'invalid registration data';
+      try {
+        const body = await res.json();
+        if (body?.detail) detail = body.detail;
+      } catch {
+        /* ignore */
+      }
+      throw makeError(detail, 400, 'invalid_credentials');
+    }
+    throw makeError(`register failed (${res.status})`, res.status, 'unknown');
+  }
+
+  return (await res.json()) as RegisterResult;
+}
+
 // signOut posts to /api/v1/auth/logout (best-effort) and unconditionally
 // clears local state. We do NOT propagate logout errors — the user wanted
 // out, and the server can sweep dangling tokens on the next refresh attempt.

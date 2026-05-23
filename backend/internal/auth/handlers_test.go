@@ -127,6 +127,72 @@ func TestHandler_Logout_AlwaysNoContent(t *testing.T) {
 	}
 }
 
+func TestHandler_Register_Created(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u-existing", "existing@b.com", "pwd123456")
+	h := newTestHandler(t, repo)
+
+	w := doJSON(t, http.HandlerFunc(h.Register), http.MethodPost, "/api/v1/auth/register", RegisterRequest{
+		Email: "fresh@b.com", Password: "valid-password", FullName: "Fresh User",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status: %d, body=%s", w.Code, w.Body.String())
+	}
+	var got RegisterResult
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.UserID == "" || got.Email != "fresh@b.com" {
+		t.Fatalf("unexpected register result: %+v", got)
+	}
+	if got.AccessStatus != "pending" {
+		t.Fatalf("expected pending access_status, got %q", got.AccessStatus)
+	}
+}
+
+func TestHandler_Register_DuplicateEmail_Returns409(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "dup@b.com", "pwd123456")
+	h := newTestHandler(t, repo)
+	w := doJSON(t, http.HandlerFunc(h.Register), http.MethodPost, "/api/v1/auth/register", RegisterRequest{
+		Email: "dup@b.com", Password: "valid-password", FullName: "X",
+	})
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Register_WeakPassword_Returns400(t *testing.T) {
+	repo := newFakeRepo()
+	h := newTestHandler(t, repo)
+	w := doJSON(t, http.HandlerFunc(h.Register), http.MethodPost, "/api/v1/auth/register", RegisterRequest{
+		Email: "weak@b.com", Password: "12345", FullName: "X",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandler_Register_DoesNotReturnPasswordOrHash(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u-existing", "existing@b.com", "pwd123456")
+	h := newTestHandler(t, repo)
+	password := "secret-pwd-1234"
+	w := doJSON(t, http.HandlerFunc(h.Register), http.MethodPost, "/api/v1/auth/register", RegisterRequest{
+		Email: "reg@b.com", Password: password, FullName: "X",
+	})
+	body := w.Body.String()
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status: %d body=%s", w.Code, body)
+	}
+	if bytes.Contains([]byte(body), []byte(password)) {
+		t.Fatalf("response body leaked the plaintext password")
+	}
+	if bytes.Contains([]byte(body), []byte("$2a$")) {
+		t.Fatalf("response body contained a bcrypt hash prefix")
+	}
+}
+
 func TestHandler_JWKS_ServesPublicKey(t *testing.T) {
 	repo := newFakeRepo()
 	h := newTestHandler(t, repo)

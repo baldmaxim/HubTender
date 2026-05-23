@@ -8,6 +8,29 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// RegisterRequest is the JSON body for POST /api/v1/auth/register.
+// Server-controlled: role_code, access_status, allowed_pages are NOT
+// accepted from the client — they are pinned to the default sign-up
+// role ("engineer") to prevent self-elevation. The first-user / privileged-
+// role auto-approve carries over from the legacy register flow inside
+// the repository.
+type RegisterRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	FullName string `json:"full_name"`
+}
+
+// RegisterResult is the success-side response of /api/v1/auth/register.
+// We deliberately do NOT return a session — fresh registrations land in
+// access_status="pending" by default and must wait for admin approval
+// before login. The frontend redirects to /login and surfaces the
+// "request submitted, await approval" toast.
+type RegisterResult struct {
+	UserID       string `json:"user_id"`
+	Email        string `json:"email"`
+	AccessStatus string `json:"access_status"`
+}
+
 // RefreshRequest is the JSON body for POST /api/v1/auth/refresh.
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`

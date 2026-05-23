@@ -37,4 +37,19 @@ var (
 	// else is using a successor in the same family. This is the classic
 	// reuse-detection signal; the service revokes the whole family on this.
 	ErrRefreshReuse = errors.New("auth: refresh token reuse detected")
+
+	// ErrEmailAlreadyExists: registration found an existing auth.users row
+	// with the same case-insensitive email. Maps to 409 Conflict.
+	ErrEmailAlreadyExists = errors.New("auth: email already registered")
+
+	// ErrPasswordTooShort: registration policy minimum (6 chars, same as the
+	// frontend form rule). Maps to 400 Bad Request.
+	ErrPasswordTooShort = errors.New("auth: password too short")
+
+	// ErrInvalidEmail: registration received an empty / malformed email.
+	// Maps to 400 Bad Request.
+	ErrInvalidEmail = errors.New("auth: invalid email")
+
+	// ErrFullNameRequired: registration policy requires a non-empty full_name.
+	ErrFullNameRequired = errors.New("auth: full_name required")
 )

@@ -22,6 +22,7 @@ type repo interface {
 	RevokeTokenFamily(ctx context.Context, familyID string) error
 	RotateRefreshToken(ctx context.Context, oldID, userID, newTokenHash, tokenFamilyID string, issuedAt, expiresAt time.Time, sess SessionContext) (string, error)
 	LogAuthEvent(ctx context.Context, userID, eventType string, sess SessionContext, metadata map[string]any) error
+	RegisterUser(ctx context.Context, in RegisterInput) (*RegisterResultDB, error)
 }
 
 // Service is the orchestration layer for the app-auth package — it knows
@@ -236,6 +237,55 @@ func (s *Service) Logout(ctx context.Context, refreshToken string, sess SessionC
 		"family_id": row.TokenFamilyID,
 	})
 	return nil
+}
+
+// Register implements POST /api/v1/auth/register.
+//
+// Validation:
+//   - email: lowercased + trimmed; ErrInvalidEmail if empty (the handler
+//     additionally enforces RFC-style format via go-playground/validator).
+//   - full_name: trimmed; ErrFullNameRequired if empty after trim.
+//   - password: minimum 6 chars (matches frontend Form rule); hashed via
+//     auth.HashPassword (bcrypt cost 10, Supabase-compatible $2a$10$).
+//
+// The plaintext password is hashed inside this function and never logged.
+// Only EventLoginFailed/Success-style events are recorded by the rest of
+// the package; register itself doesn't emit an auth_event (it's a sign-up,
+// not an authentication). The admin notification fan-out done by the repo
+// surfaces the new request in the admin UI.
+func (s *Service) Register(ctx context.Context, req RegisterRequest, sess SessionContext) (*RegisterResult, error) {
+	_ = sess // currently unused; kept on the signature so future audit-trail can record IP / UA
+
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if email == "" || !strings.Contains(email, "@") {
+		return nil, ErrInvalidEmail
+	}
+	fullName := strings.TrimSpace(req.FullName)
+	if fullName == "" {
+		return nil, ErrFullNameRequired
+	}
+	if len(req.Password) < 6 {
+		return nil, ErrPasswordTooShort
+	}
+
+	hash, err := HashPassword(req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("authService.Register: hash: %w", err)
+	}
+
+	res, err := s.r.RegisterUser(ctx, RegisterInput{
+		Email:        email,
+		PasswordHash: hash,
+		FullName:     fullName,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &RegisterResult{
+		UserID:       res.UserID,
+		Email:        email,
+		AccessStatus: res.AccessStatus,
+	}, nil
 }
 
 // Me returns the public profile for the calling user (sourced from
