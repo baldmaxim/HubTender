@@ -20,6 +20,7 @@ type fakeRepo struct {
 	pub         map[string]*PublicUserRow
 	tokens      map[string]*RefreshTokenRow // keyed by ID
 	byHash      map[string]string           // token_hash -> token ID
+	resetByHash map[string]*ResetTokenRow   // password reset tokens keyed by hash
 	events      []event
 
 	failInsert bool
@@ -38,6 +39,7 @@ func newFakeRepo() *fakeRepo {
 		pub:         map[string]*PublicUserRow{},
 		tokens:      map[string]*RefreshTokenRow{},
 		byHash:      map[string]string{},
+		resetByHash: map[string]*ResetTokenRow{},
 	}
 }
 
@@ -138,6 +140,65 @@ func (f *fakeRepo) RotateRefreshToken(_ context.Context, oldID, userID, newHash,
 
 func (f *fakeRepo) LogAuthEvent(_ context.Context, userID, eventType string, _ SessionContext, metadata map[string]any) error {
 	f.events = append(f.events, event{UserID: userID, EventType: eventType, Metadata: metadata})
+	return nil
+}
+
+func (f *fakeRepo) LookupAuthUserIDByEmail(_ context.Context, email string) (string, bool, error) {
+	row, ok := f.authByEmail[strings.ToLower(strings.TrimSpace(email))]
+	if !ok {
+		return "", false, nil
+	}
+	return row.ID, true, nil
+}
+
+func (f *fakeRepo) InsertResetToken(_ context.Context, userID, tokenHash string, requestedAt, expiresAt time.Time, _ SessionContext) (string, error) {
+	id := "rst-" + tokenHash[:8]
+	f.resetByHash[tokenHash] = &ResetTokenRow{
+		ID:          id,
+		UserID:      userID,
+		TokenHash:   tokenHash,
+		RequestedAt: requestedAt,
+		ExpiresAt:   expiresAt,
+	}
+	return id, nil
+}
+
+func (f *fakeRepo) FindResetTokenByHash(_ context.Context, tokenHash string) (*ResetTokenRow, error) {
+	row, ok := f.resetByHash[tokenHash]
+	if !ok {
+		return nil, ErrResetTokenNotFound
+	}
+	cp := *row
+	return &cp, nil
+}
+
+func (f *fakeRepo) MarkResetTokenUsed(_ context.Context, id string) error {
+	for _, row := range f.resetByHash {
+		if row.ID == id && row.UsedAt == nil {
+			t := time.Now().UTC()
+			row.UsedAt = &t
+		}
+	}
+	return nil
+}
+
+func (f *fakeRepo) UpdateEncryptedPassword(_ context.Context, userID, passwordHash string) error {
+	row, ok := f.authByID[userID]
+	if !ok {
+		return ErrAccountMissing
+	}
+	row.EncryptedPassword = passwordHash
+	return nil
+}
+
+func (f *fakeRepo) RevokeAllUserRefreshTokens(_ context.Context, userID string) error {
+	now := time.Now().UTC()
+	for _, row := range f.tokens {
+		if row.UserID == userID && row.RevokedAt == nil {
+			t := now
+			row.RevokedAt = &t
+		}
+	}
 	return nil
 }
 
@@ -518,6 +579,207 @@ func TestRegister_EmptyFullName(t *testing.T) {
 	if !errors.Is(err, ErrFullNameRequired) {
 		t.Fatalf("expected ErrFullNameRequired, got %v", err)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Forgot / Reset / ChangePassword
+// ---------------------------------------------------------------------------
+
+func TestForgot_UnknownEmailGenericSuccess(t *testing.T) {
+	svc := newTestService(t, newFakeRepo()).WithAppEnv("development")
+	res, err := svc.Forgot(context.Background(), "nobody@nowhere.com", SessionContext{})
+	if err != nil {
+		t.Fatalf("Forgot: %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("expected Success=true for anti-enumeration")
+	}
+	if res.ResetURL != "" {
+		t.Fatalf("ResetURL leaked for unknown email: %q", res.ResetURL)
+	}
+}
+
+func TestForgot_KnownEmail_NonProdReturnsResetURL(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "a@b.com", "password1")
+	svc := newTestService(t, repo).WithAppEnv("development").WithAppBaseURL("https://test.local")
+	res, err := svc.Forgot(context.Background(), "A@b.com", SessionContext{})
+	if err != nil {
+		t.Fatalf("Forgot: %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("expected Success=true")
+	}
+	if res.ResetURL == "" {
+		t.Fatalf("expected ResetURL in dev mode")
+	}
+	if !strings.HasPrefix(res.ResetURL, "https://test.local/reset-password?token=") {
+		t.Fatalf("unexpected reset URL: %q", res.ResetURL)
+	}
+	// Token is stored only as hash. Find any stored token and compare.
+	if len(repo.resetByHash) != 1 {
+		t.Fatalf("expected 1 reset token stored, got %d", len(repo.resetByHash))
+	}
+	var stored *ResetTokenRow
+	for _, v := range repo.resetByHash {
+		stored = v
+	}
+	if stored.TokenHash == "" {
+		t.Fatalf("expected non-empty token hash")
+	}
+	// The plaintext token MUST NOT equal its hash representation.
+	if strings.Contains(res.ResetURL, stored.TokenHash) {
+		t.Fatalf("response URL contains the hash itself, expected plaintext token")
+	}
+}
+
+func TestForgot_KnownEmail_ProdHidesResetURL(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "a@b.com", "password1")
+	svc := newTestService(t, repo).WithAppEnv("production")
+	res, err := svc.Forgot(context.Background(), "a@b.com", SessionContext{})
+	if err != nil {
+		t.Fatalf("Forgot: %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("expected Success=true")
+	}
+	if res.ResetURL != "" {
+		t.Fatalf("ResetURL must NEVER appear in prod, got %q", res.ResetURL)
+	}
+}
+
+func TestReset_OK_RevokesRefreshTokensAndAcceptsNewPassword(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "a@b.com", "oldpassword")
+	svc := newTestService(t, repo).WithAppEnv("development").WithAppBaseURL("https://test.local")
+
+	// Issue a reset token via Forgot.
+	res, err := svc.Forgot(context.Background(), "a@b.com", SessionContext{})
+	if err != nil || res.ResetURL == "" {
+		t.Fatalf("Forgot: err=%v url=%q", err, res.ResetURL)
+	}
+	token := extractTokenFromURL(t, res.ResetURL)
+
+	// Issue an existing refresh-token first so we can verify it gets revoked.
+	login, err := svc.Login(context.Background(), "a@b.com", "oldpassword", SessionContext{})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	rtID := repo.byHash[HashRefreshToken(login.RefreshToken)]
+	if repo.tokens[rtID].RevokedAt != nil {
+		t.Fatalf("pre-reset refresh token unexpectedly already revoked")
+	}
+
+	// Reset.
+	if err := svc.Reset(context.Background(), token, "newpassword", SessionContext{}); err != nil {
+		t.Fatalf("Reset: %v", err)
+	}
+	// Old password rejected.
+	if _, err := svc.Login(context.Background(), "a@b.com", "oldpassword", SessionContext{}); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("expected ErrInvalidCredentials with old password, got %v", err)
+	}
+	// New password accepted.
+	if _, err := svc.Login(context.Background(), "a@b.com", "newpassword", SessionContext{}); err != nil {
+		t.Fatalf("expected new password to authenticate, got %v", err)
+	}
+	// Refresh token revoked.
+	if repo.tokens[rtID].RevokedAt == nil {
+		t.Fatalf("expected pre-reset refresh token to be revoked after Reset")
+	}
+}
+
+func TestReset_TokenSingleUse(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "a@b.com", "oldpassword")
+	svc := newTestService(t, repo).WithAppEnv("development").WithAppBaseURL("https://test.local")
+	res, _ := svc.Forgot(context.Background(), "a@b.com", SessionContext{})
+	token := extractTokenFromURL(t, res.ResetURL)
+	if err := svc.Reset(context.Background(), token, "first-new-pwd", SessionContext{}); err != nil {
+		t.Fatalf("first Reset: %v", err)
+	}
+	if err := svc.Reset(context.Background(), token, "second-new-pwd", SessionContext{}); !errors.Is(err, ErrResetTokenUsed) {
+		t.Fatalf("expected ErrResetTokenUsed on replay, got %v", err)
+	}
+}
+
+func TestReset_ExpiredTokenFails(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "a@b.com", "oldpassword")
+	// 1 ns TTL → token expires by the time Reset() runs.
+	svc := newTestService(t, repo).WithAppEnv("development").WithAppBaseURL("https://test.local").WithResetTokenTTL(time.Nanosecond)
+	res, _ := svc.Forgot(context.Background(), "a@b.com", SessionContext{})
+	token := extractTokenFromURL(t, res.ResetURL)
+	time.Sleep(2 * time.Millisecond)
+	if err := svc.Reset(context.Background(), token, "newpwd", SessionContext{}); !errors.Is(err, ErrResetTokenExpired) {
+		t.Fatalf("expected ErrResetTokenExpired, got %v", err)
+	}
+}
+
+func TestReset_UnknownTokenFails(t *testing.T) {
+	svc := newTestService(t, newFakeRepo()).WithAppEnv("development")
+	if err := svc.Reset(context.Background(), "no-such-token", "newpwd", SessionContext{}); !errors.Is(err, ErrResetTokenNotFound) {
+		t.Fatalf("expected ErrResetTokenNotFound, got %v", err)
+	}
+}
+
+func TestReset_WeakPasswordFails(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "a@b.com", "oldpassword")
+	svc := newTestService(t, repo).WithAppEnv("development").WithAppBaseURL("https://test.local")
+	res, _ := svc.Forgot(context.Background(), "a@b.com", SessionContext{})
+	token := extractTokenFromURL(t, res.ResetURL)
+	if err := svc.Reset(context.Background(), token, "12345", SessionContext{}); !errors.Is(err, ErrPasswordTooShort) {
+		t.Fatalf("expected ErrPasswordTooShort, got %v", err)
+	}
+}
+
+func TestChangePassword_OK_RevokesRefreshTokens(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "a@b.com", "oldpassword")
+	svc := newTestService(t, repo)
+	login, _ := svc.Login(context.Background(), "a@b.com", "oldpassword", SessionContext{})
+	rtID := repo.byHash[HashRefreshToken(login.RefreshToken)]
+	if err := svc.ChangePassword(context.Background(), "u1", "oldpassword", "brand-new-pwd", SessionContext{}); err != nil {
+		t.Fatalf("ChangePassword: %v", err)
+	}
+	if repo.tokens[rtID].RevokedAt == nil {
+		t.Fatalf("expected refresh tokens revoked after ChangePassword")
+	}
+	if _, err := svc.Login(context.Background(), "a@b.com", "brand-new-pwd", SessionContext{}); err != nil {
+		t.Fatalf("expected new password to authenticate, got %v", err)
+	}
+	if _, err := svc.Login(context.Background(), "a@b.com", "oldpassword", SessionContext{}); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("expected old password rejected, got %v", err)
+	}
+}
+
+func TestChangePassword_WrongCurrentFails(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "a@b.com", "oldpassword")
+	svc := newTestService(t, repo)
+	if err := svc.ChangePassword(context.Background(), "u1", "wrong-current", "newpwd123", SessionContext{}); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
+	}
+}
+
+func TestChangePassword_WeakNewFails(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "a@b.com", "oldpassword")
+	svc := newTestService(t, repo)
+	if err := svc.ChangePassword(context.Background(), "u1", "oldpassword", "123", SessionContext{}); !errors.Is(err, ErrPasswordTooShort) {
+		t.Fatalf("expected ErrPasswordTooShort, got %v", err)
+	}
+}
+
+// extractTokenFromURL parses the ?token= param out of a reset URL.
+func extractTokenFromURL(t *testing.T, raw string) string {
+	t.Helper()
+	idx := strings.Index(raw, "token=")
+	if idx == -1 {
+		t.Fatalf("no token in URL: %q", raw)
+	}
+	return raw[idx+len("token="):]
 }
 
 // ---------------------------------------------------------------------------

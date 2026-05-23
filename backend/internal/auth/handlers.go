@@ -11,6 +11,115 @@ import (
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
 
+// ---------------------------------------------------------------------------
+// POST /api/v1/auth/forgot-password
+// ---------------------------------------------------------------------------
+
+// ForgotPassword handles POST /api/v1/auth/forgot-password.
+// ALWAYS returns 200 with {success: true} — anti-enumeration.
+// In dev environments (APP_ENV != "production") with no SMTP configured
+// the body additionally carries `reset_url` so operators can complete the
+// flow without an email round-trip; in prod this field is always omitted.
+func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req ForgotPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Even malformed body → generic success. Don't reveal anything.
+		writeJSON(w, http.StatusOK, ForgotPasswordResult{Success: true})
+		return
+	}
+	defer r.Body.Close() //nolint:errcheck
+
+	sess := sessionFromRequest(r)
+	res, err := h.svc.Forgot(r.Context(), req.Email, sess)
+	if err != nil {
+		// Should never happen — Forgot() swallows everything to nil — but
+		// fall back to generic success for safety.
+		log.Error().Err(err).Msg("auth: forgot-password unexpected error")
+		writeJSON(w, http.StatusOK, ForgotPasswordResult{Success: true})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/auth/reset-password
+// ---------------------------------------------------------------------------
+
+// ResetPassword handles POST /api/v1/auth/reset-password.
+//
+// Maps:
+//
+//	ErrResetTokenNotFound / ErrResetTokenUsed / ErrResetTokenExpired -> 401 (same generic message)
+//	ErrPasswordTooShort                                              -> 400
+//	anything else                                                    -> 500
+//
+// On success returns 204 No Content (no body). Client redirects to /login.
+func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	defer r.Body.Close() //nolint:errcheck
+
+	sess := sessionFromRequest(r)
+	if err := h.svc.Reset(r.Context(), req.Token, req.NewPassword, sess); err != nil {
+		switch {
+		case errors.Is(err, ErrPasswordTooShort):
+			apierr.BadRequest("password too short (min 6 chars)").Render(w)
+		case errors.Is(err, ErrResetTokenNotFound),
+			errors.Is(err, ErrResetTokenUsed),
+			errors.Is(err, ErrResetTokenExpired):
+			apierr.Unauthorized("invalid or expired reset token").Render(w)
+		default:
+			log.Error().Err(err).Msg("auth: reset-password failed unexpectedly")
+			apierr.InternalError("reset failed").Render(w)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/auth/change-password
+// ---------------------------------------------------------------------------
+
+// ChangePassword handles POST /api/v1/auth/change-password.
+// Requires the request to have an authenticated middleware-attached
+// AuthUser (Bearer JWT). user_id is taken from the JWT — body cannot
+// substitute another user. On success returns 204; ALL refresh tokens of
+// the user are revoked (forced re-login).
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	au := middleware.UserFromContext(r.Context())
+	if au == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var req ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	defer r.Body.Close() //nolint:errcheck
+
+	sess := sessionFromRequest(r)
+	if err := h.svc.ChangePassword(r.Context(), au.ID, req.CurrentPassword, req.NewPassword, sess); err != nil {
+		switch {
+		case errors.Is(err, ErrPasswordTooShort):
+			apierr.BadRequest("password too short (min 6 chars)").Render(w)
+		case errors.Is(err, ErrInvalidCredentials):
+			apierr.Unauthorized("current password is incorrect").Render(w)
+		case errors.Is(err, ErrAccountMissing):
+			apierr.Forbidden("account access disabled").Render(w)
+		default:
+			log.Error().Err(err).Msg("auth: change-password failed unexpectedly")
+			apierr.InternalError("change failed").Render(w)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // Handler exposes the HTTP layer for the app-auth package — login, refresh,
 // logout, me, plus the JWKS endpoint. The middleware that protects /me /
 // /logout is wired up in main.go (so we don't import the middleware package

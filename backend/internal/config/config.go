@@ -59,6 +59,25 @@ type Config struct {
 	SentryDSN         string
 	SentryEnvironment string
 	SentryRelease     string
+
+	// AppEnv — "development" | "staging" | "production". Used by the
+	// password-recovery flow: when empty SMTP_HOST AND AppEnv != "production",
+	// /forgot-password returns the reset URL inline (test convenience). In
+	// production an unset SMTP_HOST means recovery emails are silently
+	// dropped — the operator must set SMTP creds. AppEnv falls back to "development".
+	AppEnv string
+
+	// AppBaseURL is the public origin used to build password-reset links
+	// e.g. https://tender.su10.ru. Required when SMTP is configured.
+	AppBaseURL string
+
+	// SMTP. Empty SMTPHost → email sending becomes a no-op. Used by the
+	// password-recovery email flow only; nothing else in the BFF sends mail.
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+	SMTPFrom     string
 }
 
 // Load reads configuration from environment variables via Viper.
@@ -76,6 +95,8 @@ func Load() (*Config, error) {
 	v.SetDefault("AUTH_MODE", "supabase")
 	v.SetDefault("APP_ACCESS_TOKEN_TTL_MINUTES", 15)
 	v.SetDefault("APP_REFRESH_TOKEN_TTL_DAYS", 30)
+	v.SetDefault("APP_ENV", "development")
+	v.SetDefault("SMTP_PORT", 587)
 
 	dbURL := v.GetString("DATABASE_URL")
 	if dbURL == "" {
@@ -171,6 +192,13 @@ func Load() (*Config, error) {
 		SentryDSN:            v.GetString("SENTRY_DSN"),
 		SentryEnvironment:    v.GetString("SENTRY_ENVIRONMENT"),
 		SentryRelease:        v.GetString("SENTRY_RELEASE"),
+		AppEnv:               strings.ToLower(strings.TrimSpace(v.GetString("APP_ENV"))),
+		AppBaseURL:           strings.TrimRight(strings.TrimSpace(v.GetString("APP_BASE_URL")), "/"),
+		SMTPHost:             v.GetString("SMTP_HOST"),
+		SMTPPort:             v.GetInt("SMTP_PORT"),
+		SMTPUser:             v.GetString("SMTP_USER"),
+		SMTPPassword:         v.GetString("SMTP_PASSWORD"),
+		SMTPFrom:             v.GetString("SMTP_FROM"),
 	}
 
 	return cfg, nil

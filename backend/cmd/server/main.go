@@ -169,8 +169,23 @@ func main() {
 			log.Fatal().Err(err).Msg("failed to construct app JWT issuer")
 		}
 		authRepo := auth.NewRepository(pool)
-		authSvc := auth.NewService(authRepo, appIssuer)
+		mailer := auth.NewSMTPMailer(auth.SMTPConfig{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			User:     cfg.SMTPUser,
+			Password: cfg.SMTPPassword,
+			From:     cfg.SMTPFrom,
+		})
+		authSvc := auth.NewService(authRepo, appIssuer).
+			WithMailer(mailer).
+			WithAppEnv(cfg.AppEnv).
+			WithAppBaseURL(cfg.AppBaseURL)
 		authH = auth.NewHandler(authSvc)
+		log.Info().
+			Bool("mailer_configured", mailer.IsConfigured()).
+			Str("app_env", cfg.AppEnv).
+			Str("app_base_url", cfg.AppBaseURL).
+			Msg("password-recovery flow configured")
 
 		verifyCfg.AppPublicKey = &signingKey.Private.PublicKey
 		verifyCfg.AppIssuer = cfg.AppJWTIssuer
@@ -308,14 +323,16 @@ func main() {
 	r.Get("/health/db", healthH.CheckDB)
 	r.Get("/health/cache", healthH.CacheStats)
 
-	// Public auth routes — login / register / refresh do NOT require an
-	// existing JWT. JWKS is served public so any RP can verify our access
-	// tokens.
+	// Public auth routes — login / register / refresh / forgot / reset do
+	// NOT require an existing JWT. JWKS is served public so any RP can
+	// verify our access tokens.
 	if authH != nil {
 		r.Post("/api/v1/auth/login", authH.Login)
 		r.Post("/api/v1/auth/register", authH.Register)
 		r.Post("/api/v1/auth/refresh", authH.Refresh)
 		r.Post("/api/v1/auth/logout", authH.Logout)
+		r.Post("/api/v1/auth/forgot-password", authH.ForgotPassword)
+		r.Post("/api/v1/auth/reset-password", authH.ResetPassword)
 		r.Get("/.well-known/jwks.json", authH.JWKS)
 	}
 
@@ -335,6 +352,7 @@ func main() {
 		// across login/refresh/me).
 		if authH != nil {
 			r.Get("/api/v1/auth/me", authH.Me)
+			r.Post("/api/v1/auth/change-password", authH.ChangePassword)
 		}
 
 		r.Get("/api/v1/references/roles", refH.GetRoles)

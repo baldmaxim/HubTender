@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,22 +24,57 @@ type repo interface {
 	RotateRefreshToken(ctx context.Context, oldID, userID, newTokenHash, tokenFamilyID string, issuedAt, expiresAt time.Time, sess SessionContext) (string, error)
 	LogAuthEvent(ctx context.Context, userID, eventType string, sess SessionContext, metadata map[string]any) error
 	RegisterUser(ctx context.Context, in RegisterInput) (*RegisterResultDB, error)
+	LookupAuthUserIDByEmail(ctx context.Context, email string) (string, bool, error)
+	InsertResetToken(ctx context.Context, userID, tokenHash string, requestedAt, expiresAt time.Time, sess SessionContext) (string, error)
+	FindResetTokenByHash(ctx context.Context, tokenHash string) (*ResetTokenRow, error)
+	MarkResetTokenUsed(ctx context.Context, id string) error
+	UpdateEncryptedPassword(ctx context.Context, userID, passwordHash string) error
+	RevokeAllUserRefreshTokens(ctx context.Context, userID string) error
 }
 
 // Service is the orchestration layer for the app-auth package — it knows
 // the rules ("a blocked user cannot log in", "refresh reuse revokes the
 // family") and stitches the issuer + password + repo together.
 type Service struct {
-	r      repo
-	issuer *Issuer
+	r        repo
+	issuer   *Issuer
+	mailer   Mailer
+	appEnv   string // "development" | "staging" | "production"
+	appBase  string // public origin for reset-link assembly, e.g. https://tender.su10.ru
+	resetTTL time.Duration
 }
 
 // NewService wires a Service. The Issuer is the same one main.go feeds the
 // JWKS handler — there is intentionally only one signing key in the
 // process so JWKS clients converge on the kid we issue.
+//
+// mailer may be NoopMailer (when SMTP_HOST is empty) — Forgot() then
+// returns the reset URL inline in non-prod environments and silently logs
+// the unsent mail in prod.
 func NewService(r repo, iss *Issuer) *Service {
-	return &Service{r: r, issuer: iss}
+	return &Service{r: r, issuer: iss, mailer: NoopMailer{}, appEnv: "development", resetTTL: 60 * time.Minute}
 }
+
+// WithMailer attaches an outbound email sender. Defaults to NoopMailer.
+func (s *Service) WithMailer(m Mailer) *Service { s.mailer = m; return s }
+
+// WithAppEnv sets APP_ENV used by the recovery flow's reset-URL exposure
+// gate. Anything other than "production" is treated as non-prod.
+func (s *Service) WithAppEnv(env string) *Service {
+	s.appEnv = strings.ToLower(strings.TrimSpace(env))
+	return s
+}
+
+// WithAppBaseURL sets the public origin used to build reset links.
+// Trailing slash trimmed.
+func (s *Service) WithAppBaseURL(base string) *Service {
+	s.appBase = strings.TrimRight(strings.TrimSpace(base), "/")
+	return s
+}
+
+// WithResetTokenTTL overrides the default 60-minute lifetime of password
+// reset tokens (test helper).
+func (s *Service) WithResetTokenTTL(d time.Duration) *Service { s.resetTTL = d; return s }
 
 // Login implements POST /api/v1/auth/login.
 //
@@ -287,6 +323,194 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest, sess Sessio
 		AccessStatus: res.AccessStatus,
 	}, nil
 }
+
+// Forgot implements POST /api/v1/auth/forgot-password.
+//
+// Always returns nil error + a ForgotPasswordResult with Success=true
+// regardless of whether the email exists — the wire-level response MUST
+// NOT differentiate (anti-enumeration). When the email IS known:
+//  1. mint a fresh 256-bit opaque reset token (same generator as refresh)
+//  2. persist only its SHA-256 hash with expires_at = now + resetTTL
+//  3. send the email containing the reset URL (or, in non-prod with no
+//     mailer configured, return the URL inline so the operator can test)
+//
+// All logging keys/values are safe (event_type, redacted family/token ids).
+// Plaintext reset token leaves the process only in the email body or, in
+// dev, in the in-response ResetURL field — NEVER in logs.
+func (s *Service) Forgot(ctx context.Context, email string, sess SessionContext) (*ForgotPasswordResult, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	res := &ForgotPasswordResult{Success: true}
+	if email == "" || !strings.Contains(email, "@") {
+		// Same generic answer — don't leak invalid-email feedback.
+		return res, nil
+	}
+
+	userID, found, err := s.r.LookupAuthUserIDByEmail(ctx, email)
+	if err != nil {
+		// Log + still return success to preserve anti-enumeration semantics.
+		log.Error().Err(err).Str("email_sha8", sha8(email)).Msg("auth: forgot: lookup error")
+		return res, nil
+	}
+	if !found {
+		s.tryLogEvent(ctx, "", "password_reset_requested_unknown_email", sess, map[string]any{"email_sha8": sha8(email)})
+		return res, nil
+	}
+
+	// Mint a fresh opaque reset token.
+	issued, err := s.issuer.IssueRefreshToken() // same 256-bit CSPRNG generator — repurposed
+	if err != nil {
+		log.Error().Err(err).Str("user_id", userID).Msg("auth: forgot: mint failed")
+		return res, nil
+	}
+	now := time.Now().UTC()
+	expires := now.Add(s.resetTTL)
+	hash := HashRefreshToken(issued.Token)
+	if _, err := s.r.InsertResetToken(ctx, userID, hash, now, expires, sess); err != nil {
+		log.Error().Err(err).Str("user_id", userID).Msg("auth: forgot: persist failed")
+		return res, nil
+	}
+
+	resetURL := s.buildResetURL(issued.Token)
+
+	// Attempt to send mail. The mailer may be NoopMailer (SMTP not
+	// configured) — that's expected in dev.
+	if s.mailer.IsConfigured() {
+		subject := "Восстановление пароля TenderHUB"
+		body := fmt.Sprintf(
+			"Здравствуйте!\n\nДля восстановления пароля перейдите по ссылке:\n%s\n\nСсылка действительна %d минут. Если вы не запрашивали восстановление, просто проигнорируйте это письмо.\n\n— TenderHUB",
+			resetURL, int(s.resetTTL.Minutes()),
+		)
+		if err := s.mailer.Send(email, subject, body); err != nil {
+			log.Error().Err(err).Str("user_id", userID).Msg("auth: forgot: email send failed")
+			// Still return success — anti-enumeration. Operator sees the warning in logs.
+		}
+	} else if s.appEnv != "production" {
+		// Non-prod convenience: expose the URL so the operator can test the
+		// flow end-to-end without SMTP. NEVER do this in prod.
+		res.ResetURL = resetURL
+	} else {
+		// Prod with no mailer configured. Drop silently with a loud server-log
+		// warning so the operator notices and configures SMTP.
+		log.Warn().
+			Str("user_id", userID).
+			Msg("auth: forgot-password called but mailer is not configured in production — reset email NOT sent")
+	}
+
+	s.tryLogEvent(ctx, userID, "password_reset_requested", sess, nil)
+	return res, nil
+}
+
+// Reset implements POST /api/v1/auth/reset-password.
+//
+// On success:
+//   - bcrypt-hashes the new password (cost 10, Supabase-compatible)
+//   - updates auth.users.encrypted_password
+//   - marks the reset row used (single-use)
+//   - revokes ALL existing refresh tokens for the user (forced re-login)
+//   - logs password_reset_success
+//
+// Maps:
+//   - empty token / new_password too short    -> ErrPasswordTooShort / ErrInvalidEmail-style 400
+//   - token not found / used / expired        -> ErrResetTokenNotFound (generic, handler 401)
+func (s *Service) Reset(ctx context.Context, token, newPassword string, sess SessionContext) error {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ErrResetTokenNotFound
+	}
+	if len(newPassword) < 6 {
+		return ErrPasswordTooShort
+	}
+
+	row, err := s.r.FindResetTokenByHash(ctx, HashRefreshToken(token))
+	if err != nil {
+		return err // ErrResetTokenNotFound
+	}
+	now := time.Now().UTC()
+	if row.UsedAt != nil {
+		return ErrResetTokenUsed
+	}
+	if !row.ExpiresAt.After(now) {
+		return ErrResetTokenExpired
+	}
+
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("authService.Reset: hash: %w", err)
+	}
+	if err := s.r.UpdateEncryptedPassword(ctx, row.UserID, hash); err != nil {
+		return fmt.Errorf("authService.Reset: update password: %w", err)
+	}
+	if err := s.r.MarkResetTokenUsed(ctx, row.ID); err != nil {
+		// Non-fatal for the user — they have the new password — but log.
+		log.Warn().Err(err).Str("user_id", row.UserID).Msg("auth: reset: mark used failed")
+	}
+	if err := s.r.RevokeAllUserRefreshTokens(ctx, row.UserID); err != nil {
+		log.Warn().Err(err).Str("user_id", row.UserID).Msg("auth: reset: revoke refresh tokens failed")
+	}
+	s.tryLogEvent(ctx, row.UserID, "password_reset_success", sess, nil)
+	return nil
+}
+
+// ChangePassword implements POST /api/v1/auth/change-password (authed).
+//
+// userID comes from the verified JWT (middleware). currentPassword is
+// re-verified against the live bcrypt hash before the update lands —
+// this protects against compromised access tokens being used to silently
+// change the credentials.
+//
+// Strategy: on success ALL refresh tokens of the user are revoked.
+// The current access token remains valid until its 15-min TTL elapses,
+// but no further refresh will succeed — user must re-login.
+func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string, sess SessionContext) error {
+	if userID == "" {
+		return ErrInvalidCredentials
+	}
+	if len(newPassword) < 6 {
+		return ErrPasswordTooShort
+	}
+
+	au, err := s.r.GetAuthUserByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if au.EncryptedPassword == "" {
+		return ErrInvalidCredentials
+	}
+	if err := ComparePassword(au.EncryptedPassword, currentPassword); err != nil {
+		if errors.Is(err, ErrPasswordMismatch) {
+			s.tryLogEvent(ctx, userID, "password_change_failed", sess, map[string]any{"reason": "wrong_current_password"})
+			return ErrInvalidCredentials
+		}
+		return fmt.Errorf("authService.ChangePassword: compare: %w", err)
+	}
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("authService.ChangePassword: hash: %w", err)
+	}
+	if err := s.r.UpdateEncryptedPassword(ctx, userID, hash); err != nil {
+		return fmt.Errorf("authService.ChangePassword: update password: %w", err)
+	}
+	if err := s.r.RevokeAllUserRefreshTokens(ctx, userID); err != nil {
+		log.Warn().Err(err).Str("user_id", userID).Msg("auth: change-password: revoke refresh tokens failed")
+	}
+	s.tryLogEvent(ctx, userID, "password_changed", sess, nil)
+	return nil
+}
+
+// buildResetURL assembles the public reset link. Empty AppBaseURL falls
+// back to a path-only string (callers in dev environments can prepend a
+// localhost origin when copying).
+func (s *Service) buildResetURL(token string) string {
+	q := "?token=" + url.QueryEscape(token)
+	if s.appBase != "" {
+		return s.appBase + "/reset-password" + q
+	}
+	return "/reset-password" + q
+}
+
+// sha8 produces a tiny stable identifier from an email for log correlation
+// without leaking the address itself.
+func sha8(s string) string { return HashRefreshToken(s)[:8] }
 
 // Me returns the public profile for the calling user (sourced from
 // middleware-attached AuthUser.ID). Used by GET /api/v1/auth/me.

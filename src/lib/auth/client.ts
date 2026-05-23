@@ -132,6 +132,84 @@ export async function registerWithPassword(payload: RegisterPayload): Promise<Re
   return (await res.json()) as RegisterResult;
 }
 
+// ForgotPasswordResult mirrors the server response. `reset_url` is only
+// present in non-prod environments where SMTP is not configured (operator
+// convenience for end-to-end testing without an email round-trip).
+export interface ForgotPasswordResult {
+  success: boolean;
+  reset_url?: string;
+}
+
+// forgotPassword posts to /api/v1/auth/forgot-password. The server ALWAYS
+// returns 200 with `success: true` regardless of whether the email exists
+// (anti-enumeration) — the caller should show the same "если email есть,
+// мы отправили письмо" toast for any outcome.
+export async function forgotPassword(email: string): Promise<ForgotPasswordResult> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  }).catch((err) => {
+    throw makeError(`network: ${(err as Error).message}`, undefined, 'network');
+  });
+  if (!res.ok) {
+    throw makeError(`forgot-password failed (${res.status})`, res.status, 'unknown');
+  }
+  return (await res.json()) as ForgotPasswordResult;
+}
+
+// resetPassword posts to /api/v1/auth/reset-password. token is the value
+// from the email link (server hashes it before lookup). Returns void on
+// success (204); throws on invalid/used/expired token (401) or weak
+// password (400).
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  }).catch((err) => {
+    throw makeError(`network: ${(err as Error).message}`, undefined, 'network');
+  });
+  if (res.status === 204) return;
+  if (res.status === 401) throw makeError('invalid or expired reset token', 401, 'refresh_invalid');
+  if (res.status === 400) {
+    let detail = 'invalid reset request';
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = body.detail;
+    } catch { /* ignore */ }
+    throw makeError(detail, 400, 'invalid_credentials');
+  }
+  throw makeError(`reset failed (${res.status})`, res.status, 'unknown');
+}
+
+// changePassword posts to /api/v1/auth/change-password. Requires an active
+// app-auth session (sends Bearer via getAccessToken). On success ALL
+// refresh tokens of the user are revoked server-side — the next /refresh
+// call from any tab will fail and force re-login.
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const token = await getAccessToken();
+  if (!token) throw makeError('not signed in', 401, 'invalid_credentials');
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  }).catch((err) => {
+    throw makeError(`network: ${(err as Error).message}`, undefined, 'network');
+  });
+  if (res.status === 204) return;
+  if (res.status === 401) throw makeError('current password is incorrect', 401, 'invalid_credentials');
+  if (res.status === 400) {
+    let detail = 'invalid change request';
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = body.detail;
+    } catch { /* ignore */ }
+    throw makeError(detail, 400, 'invalid_credentials');
+  }
+  throw makeError(`change-password failed (${res.status})`, res.status, 'unknown');
+}
+
 // signOut posts to /api/v1/auth/logout (best-effort) and unconditionally
 // clears local state. We do NOT propagate logout errors — the user wanted
 // out, and the server can sweep dangling tokens on the next refresh attempt.

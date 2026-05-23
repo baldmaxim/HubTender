@@ -411,6 +411,131 @@ WHERE id = $1::uuid AND revoked_at IS NULL
 }
 
 // ---------------------------------------------------------------------------
+// password_reset_tokens
+// ---------------------------------------------------------------------------
+
+// LookupAuthUserIDByEmail returns the auth.users.id for the given case-
+// insensitive email, or ("", false, nil) when not found. Used by the
+// /forgot-password flow — distinct from GetAuthUserByEmail (which maps
+// "not found" to ErrInvalidCredentials, suitable for login but not for
+// the anti-enumeration forgot flow that must NEVER differentiate).
+func (r *Repository) LookupAuthUserIDByEmail(ctx context.Context, email string) (string, bool, error) {
+	var id string
+	err := r.pool.QueryRow(ctx,
+		`SELECT id::text FROM auth.users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+		email,
+	).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("authRepo.LookupAuthUserIDByEmail: %w", err)
+	}
+	return id, true, nil
+}
+
+// InsertResetToken writes a new password-reset row. token_hash is SHA-256
+// of the plaintext (caller hashes via HashRefreshToken / equivalent). The
+// plaintext token leaves the issuer-response path only and is NEVER persisted.
+func (r *Repository) InsertResetToken(
+	ctx context.Context,
+	userID, tokenHash string,
+	requestedAt, expiresAt time.Time,
+	sess SessionContext,
+) (string, error) {
+	const q = `
+INSERT INTO app_auth.password_reset_tokens
+    (user_id, token_hash, requested_at, expires_at, user_agent, ip_address)
+VALUES
+    ($1::uuid, $2, $3, $4, NULLIF($5,''), NULLIF($6,'')::inet)
+RETURNING id::text
+`
+	var id string
+	err := r.pool.QueryRow(ctx, q,
+		userID, tokenHash, requestedAt, expiresAt,
+		sess.UserAgent, sess.IPAddress,
+	).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("authRepo.InsertResetToken: %w", err)
+	}
+	return id, nil
+}
+
+// FindResetTokenByHash returns the row whose token_hash matches. Returns
+// ErrResetTokenNotFound on miss — the service then maps that to a generic
+// 401 on the wire.
+func (r *Repository) FindResetTokenByHash(ctx context.Context, tokenHash string) (*ResetTokenRow, error) {
+	const q = `
+SELECT id::text, user_id::text, token_hash, requested_at, expires_at, used_at
+FROM app_auth.password_reset_tokens
+WHERE token_hash = $1
+LIMIT 1
+`
+	var (
+		row    ResetTokenRow
+		usedAt *time.Time
+	)
+	err := r.pool.QueryRow(ctx, q, tokenHash).Scan(
+		&row.ID, &row.UserID, &row.TokenHash, &row.RequestedAt, &row.ExpiresAt, &usedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrResetTokenNotFound
+		}
+		return nil, fmt.Errorf("authRepo.FindResetTokenByHash: %w", err)
+	}
+	row.UsedAt = usedAt
+	return &row, nil
+}
+
+// MarkResetTokenUsed flips used_at = now() on the matching row. Single-use
+// enforcement happens at the service layer (FindResetTokenByHash returns
+// the row; service checks UsedAt != nil and rejects with ErrResetTokenUsed
+// BEFORE calling this).
+func (r *Repository) MarkResetTokenUsed(ctx context.Context, id string) error {
+	const q = `
+UPDATE app_auth.password_reset_tokens
+SET used_at = now()
+WHERE id = $1::uuid AND used_at IS NULL
+`
+	if _, err := r.pool.Exec(ctx, q, id); err != nil {
+		return fmt.Errorf("authRepo.MarkResetTokenUsed: %w", err)
+	}
+	return nil
+}
+
+// UpdateEncryptedPassword swaps auth.users.encrypted_password and updates
+// updated_at. Caller MUST pass a bcrypt hash already produced by
+// auth.HashPassword (we never accept plaintext at the repo layer).
+func (r *Repository) UpdateEncryptedPassword(ctx context.Context, userID, passwordHash string) error {
+	const q = `
+UPDATE auth.users
+SET encrypted_password = $2, updated_at = now()
+WHERE id = $1::uuid
+`
+	if _, err := r.pool.Exec(ctx, q, userID, passwordHash); err != nil {
+		return fmt.Errorf("authRepo.UpdateEncryptedPassword: %w", err)
+	}
+	return nil
+}
+
+// RevokeAllUserRefreshTokens marks every non-revoked refresh token of a
+// given user as revoked. Called after a successful password reset / change
+// so any previously-issued session is immediately invalidated and the
+// user must re-login.
+func (r *Repository) RevokeAllUserRefreshTokens(ctx context.Context, userID string) error {
+	const q = `
+UPDATE app_auth.refresh_tokens
+SET revoked_at = now()
+WHERE user_id = $1::uuid AND revoked_at IS NULL
+`
+	if _, err := r.pool.Exec(ctx, q, userID); err != nil {
+		return fmt.Errorf("authRepo.RevokeAllUserRefreshTokens: %w", err)
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
 // auth_events
 // ---------------------------------------------------------------------------
 

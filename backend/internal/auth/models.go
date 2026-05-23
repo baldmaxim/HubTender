@@ -20,6 +20,48 @@ type RegisterRequest struct {
 	FullName string `json:"full_name"`
 }
 
+// ForgotPasswordRequest is the JSON body for POST /api/v1/auth/forgot-password.
+type ForgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// ForgotPasswordResult is the success-side response of /forgot-password.
+// Always returns 200 with `success: true` (anti-enumeration). In non-prod
+// environments where SMTP is not configured the response additionally
+// carries a `reset_url` so the operator can complete the flow without an
+// email round-trip. In production the field is always omitted.
+type ForgotPasswordResult struct {
+	Success  bool   `json:"success"`
+	ResetURL string `json:"reset_url,omitempty"` // dev convenience only
+}
+
+// ResetPasswordRequest is the JSON body for POST /api/v1/auth/reset-password.
+// Token is the plaintext value from the email link (we hash it before
+// looking it up in app_auth.password_reset_tokens).
+type ResetPasswordRequest struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
+}
+
+// ChangePasswordRequest is the JSON body for POST /api/v1/auth/change-password.
+// Authed route — the user id comes from the JWT, the current_password is
+// re-verified against the live bcrypt hash before the change is committed.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// ResetTokenRow mirrors a row of app_auth.password_reset_tokens — used by
+// the service's reuse / expiry checks.
+type ResetTokenRow struct {
+	ID          string
+	UserID      string
+	TokenHash   string
+	RequestedAt time.Time
+	ExpiresAt   time.Time
+	UsedAt      *time.Time
+}
+
 // RegisterResult is the success-side response of /api/v1/auth/register.
 // We deliberately do NOT return a session — fresh registrations land in
 // access_status="pending" by default and must wait for admin approval

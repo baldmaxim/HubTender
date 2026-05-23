@@ -52,4 +52,15 @@ var (
 
 	// ErrFullNameRequired: registration policy requires a non-empty full_name.
 	ErrFullNameRequired = errors.New("auth: full_name required")
+
+	// ErrResetTokenNotFound: reset-token hash lookup miss. Maps to 401 on
+	// /reset-password. NOT distinguished from "already used / expired" by
+	// the handler — same generic toast on the client.
+	ErrResetTokenNotFound = errors.New("auth: reset token not found")
+
+	// ErrResetTokenExpired: requested_at + TTL < now.
+	ErrResetTokenExpired = errors.New("auth: reset token expired")
+
+	// ErrResetTokenUsed: used_at IS NOT NULL — single-use enforcement.
+	ErrResetTokenUsed = errors.New("auth: reset token already used")
 )
