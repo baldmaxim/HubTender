@@ -21,24 +21,32 @@ func NewFIRepo(pool *pgxpool.Pool) *FIRepo {
 	return &FIRepo{pool: pool}
 }
 
-// TenderRow mirrors the public.tenders columns surfaced by the FI page.
+// FITenderRow mirrors the public.tenders columns surfaced by the FI page.
+//
+// NOTE: there is intentionally no `area` field — Yandex public.tenders has
+// only area_sp / area_client. The "общая площадь" (single value) the
+// frontend reads as `tender.area` lives on public.tender_registry, not on
+// public.tenders. Pre-cutover Supabase schema had a tenders.area column;
+// it was dropped during the Yandex import (lifted to registry level). Until
+// the FI page is taught to join in tender_registry by tender_number, the
+// frontend gets undefined for `tender.area` and falls back to its existing
+// `tender.area ? ... : '-'` UI branches.
 type FITenderRow struct {
-	ID                 string   `json:"id"`
-	Title              string   `json:"title"`
-	TenderNumber       *string  `json:"tender_number,omitempty"`
-	ClientName         *string  `json:"client_name,omitempty"`
-	Version            *int     `json:"version,omitempty"`
-	IsArchived         *bool    `json:"is_archived,omitempty"`
-	USDRate            *float64 `json:"usd_rate,omitempty"`
-	EURRate            *float64 `json:"eur_rate,omitempty"`
-	CNYRate            *float64 `json:"cny_rate,omitempty"`
-	MarkupTacticID     *string  `json:"markup_tactic_id,omitempty"`
-	CachedGrandTotal   *float64 `json:"cached_grand_total,omitempty"`
-	HousingClass       *string  `json:"housing_class,omitempty"`
-	ConstructionScope  *string  `json:"construction_scope,omitempty"`
-	Area               *float64 `json:"area,omitempty"`
-	AreaSP             *float64 `json:"area_sp,omitempty"`
-	AreaClient         *float64 `json:"area_client,omitempty"`
+	ID                string   `json:"id"`
+	Title             string   `json:"title"`
+	TenderNumber      *string  `json:"tender_number,omitempty"`
+	ClientName        *string  `json:"client_name,omitempty"`
+	Version           *int     `json:"version,omitempty"`
+	IsArchived        *bool    `json:"is_archived,omitempty"`
+	USDRate           *float64 `json:"usd_rate,omitempty"`
+	EURRate           *float64 `json:"eur_rate,omitempty"`
+	CNYRate           *float64 `json:"cny_rate,omitempty"`
+	MarkupTacticID    *string  `json:"markup_tactic_id,omitempty"`
+	CachedGrandTotal  *float64 `json:"cached_grand_total,omitempty"`
+	HousingClass      *string  `json:"housing_class,omitempty"`
+	ConstructionScope *string  `json:"construction_scope,omitempty"`
+	AreaSP            *float64 `json:"area_sp,omitempty"`
+	AreaClient        *float64 `json:"area_client,omitempty"`
 }
 
 func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, error) {
@@ -49,13 +57,13 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 		       usd_rate, eur_rate, cny_rate,
 		       markup_tactic_id::text, cached_grand_total,
 		       housing_class::text, construction_scope::text,
-		       area, area_sp, area_client
+		       area_sp, area_client
 		FROM public.tenders
 		WHERE id = $1
 	`, id).Scan(&t.ID, &t.Title, &t.TenderNumber, &t.ClientName, &t.Version, &t.IsArchived,
 		&t.USDRate, &t.EURRate, &t.CNYRate, &t.MarkupTacticID, &t.CachedGrandTotal,
 		&t.HousingClass, &t.ConstructionScope,
-		&t.Area, &t.AreaSP, &t.AreaClient)
+		&t.AreaSP, &t.AreaClient)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
