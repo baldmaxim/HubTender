@@ -13,6 +13,9 @@ services:
       SUPABASE_JWT_ISSUER: ${SUPABASE_JWT_ISSUER:-https://ocauafggjrqvopxjihas.supabase.co/auth/v1}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5185}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
     depends_on:
       redis:
         condition: service_healthy

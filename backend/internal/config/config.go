@@ -54,6 +54,11 @@ type Config struct {
 	DBMaxConns        int32
 	DBMinConns        int32
 	DBMaxConnIdleTime time.Duration
+
+	// Sentry. Empty DSN → SDK init becomes a no-op.
+	SentryDSN         string
+	SentryEnvironment string
+	SentryRelease     string
 }
 
 // Load reads configuration from environment variables via Viper.
@@ -163,6 +168,9 @@ func Load() (*Config, error) {
 		DBMaxConns:           maxConns,
 		DBMinConns:           minConns,
 		DBMaxConnIdleTime:    maxIdle,
+		SentryDSN:            v.GetString("SENTRY_DSN"),
+		SentryEnvironment:    v.GetString("SENTRY_ENVIRONMENT"),
+		SentryRelease:        v.GetString("SENTRY_RELEASE"),
 	}
 
 	return cfg, nil

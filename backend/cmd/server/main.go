@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/MicahParks/keyfunc/v3"
+	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
@@ -58,6 +60,26 @@ func main() {
 	zerolog.SetGlobalLevel(level)
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	log.Logger = logger
+
+	// -------------------------------------------------------------------------
+	// 2a. Sentry — error tracking. Empty DSN → no-op.
+	// -------------------------------------------------------------------------
+	if cfg.SentryDSN != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:              cfg.SentryDSN,
+			Environment:      cfg.SentryEnvironment,
+			Release:          cfg.SentryRelease,
+			TracesSampleRate: 0.1,
+			EnableTracing:    true,
+		}); err != nil {
+			log.Fatal().Err(err).Msg("sentry init failed")
+		}
+		defer sentry.Flush(2 * time.Second)
+		log.Info().
+			Str("env", cfg.SentryEnvironment).
+			Str("release", cfg.SentryRelease).
+			Msg("sentry initialised")
+	}
 
 	// -------------------------------------------------------------------------
 	// 3. Root context — cancelled on shutdown signal so background goroutines
@@ -270,6 +292,12 @@ func main() {
 
 	// Global middleware.
 	r.Use(chimiddleware.RequestID)
+	if cfg.SentryDSN != "" {
+		// Repanic: true → sentryhttp captures the panic, sends it to Sentry,
+		// and re-raises so our middleware.Recoverer still returns 500 and logs.
+		sentryMW := sentryhttp.New(sentryhttp.Options{Repanic: true})
+		r.Use(sentryMW.Handle)
+	}
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestLogger(logger))
 	r.Use(chimiddleware.Timeout(30 * time.Second))
