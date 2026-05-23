@@ -3,6 +3,8 @@
 // Lazy — connects on first subscribe(), tears down when no subscribers remain.
 import { supabase } from '../supabase';
 import { API_BASE_URL } from '../api/featureFlags';
+import { AUTH_MODE } from '../auth/mode';
+import { getAccessToken as appAuthGetAccessToken } from '../auth/client';
 
 export interface RealtimeEvent {
   table: string;
@@ -68,9 +70,17 @@ class WsClient {
   }
 
   private async connect(): Promise<void> {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) throw new Error('WS connect: no Supabase session');
+    // Unified token source — same as src/lib/api/client.ts. The Go BFF WS
+    // handler runs the same dual-mode middleware as REST, so either issuer
+    // works as long as we hand it a fresh access token.
+    let token: string | null;
+    if (AUTH_MODE === 'app') {
+      token = await appAuthGetAccessToken();
+    } else {
+      const { data } = await supabase.auth.getSession();
+      token = data.session?.access_token ?? null;
+    }
+    if (!token) throw new Error('WS connect: no active auth session');
 
     const httpBase = API_BASE_URL.replace(/\/$/, '');
     const wsBase = httpBase.replace(/^http/, 'ws');

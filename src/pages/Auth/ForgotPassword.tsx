@@ -1,15 +1,44 @@
 import { useState } from 'react';
-import { Form, Input, Button, Card, Typography, message } from 'antd';
+import { Form, Input, Button, Card, Result, Typography, message } from 'antd';
 import { MailOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { getErrorMessage } from '../../utils/errors';
+import { AUTH_MODE } from '../../lib/auth/mode';
 
 const { Title, Text } = Typography;
 
 export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+
+  // Phase 6 app-auth: forgot/reset endpoints not wired up yet (storage exists
+  // in app_auth.password_reset_tokens, but HTTP handlers are deferred).
+  if (AUTH_MODE === 'app') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <Card style={{ maxWidth: 400, width: '100%' }}>
+          <Result
+            status="info"
+            title="Сброс пароля временно недоступен"
+            subTitle={
+              <Text type="secondary">
+                Для сброса пароля обратитесь к администратору. Эта функция вернётся
+                в одном из ближайших релизов.
+              </Text>
+            }
+            extra={
+              <Link to="/login">
+                <Button type="primary">
+                  <ArrowLeftOutlined /> Вернуться к входу
+                </Button>
+              </Link>
+            }
+          />
+        </Card>
+      </div>
+    );
+  }
 
   const handleSubmit = async (values: { email: string }) => {
     try {

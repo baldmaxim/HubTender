@@ -1,6 +1,16 @@
-// Thin fetch wrapper for the Go BFF. Attaches Supabase JWT automatically.
+// Thin fetch wrapper for the Go BFF.
+//
+// Attaches a Bearer token from whichever auth source is active for this
+// build (Phase 6 cutover). In VITE_AUTH_MODE=app the token comes from the
+// local app-auth client (auto-refresh on near-expiry, no Supabase round-trip);
+// otherwise we fall back to the legacy Supabase session.
 import { supabase } from '../supabase';
 import { API_BASE_URL } from './featureFlags';
+import { AUTH_MODE } from '../auth/mode';
+import {
+  getAccessToken as appAuthGetAccessToken,
+  refreshSession as appAuthRefreshSession,
+} from '../auth/client';
 
 type FetchOptions = Omit<RequestInit, 'headers'> & {
   headers?: Record<string, string>;
@@ -34,6 +44,9 @@ interface CachedResponse {
 const etagCache = new Map<string, CachedResponse>();
 
 async function getToken(): Promise<string | null> {
+  if (AUTH_MODE === 'app') {
+    return appAuthGetAccessToken();
+  }
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
 }
@@ -44,34 +57,52 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const { cacheKey, timeoutMs, signal: callerSignal, ...rest } = options;
   const token = await getToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(rest.headers ?? {}),
+
+  const buildRequest = (bearer: string | null): { headers: Record<string, string>; signal: AbortSignal | undefined } => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(rest.headers ?? {}),
+    };
+    if (bearer) headers['Authorization'] = `Bearer ${bearer}`;
+
+    const cached = cacheKey ? etagCache.get(cacheKey) : undefined;
+    if (cached && !headers['If-None-Match']) {
+      headers['If-None-Match'] = cached.etag;
+    }
+
+    // Timeout + пользовательский signal. AbortSignal.any объединяет оба
+    // (браузеры Chromium 116+, Firefox 124+, Safari 17.4+).
+    const timeout = timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+    const signals: AbortSignal[] = [];
+    if (timeout > 0) signals.push(AbortSignal.timeout(timeout));
+    if (callerSignal) signals.push(callerSignal);
+    const signal = signals.length === 0
+      ? undefined
+      : signals.length === 1
+        ? signals[0]
+        : AbortSignal.any(signals);
+
+    return { headers, signal };
   };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const cached = cacheKey ? etagCache.get(cacheKey) : undefined;
-  if (cached && !headers['If-None-Match']) {
-    headers['If-None-Match'] = cached.etag;
+
+  let { headers, signal } = buildRequest(token);
+  let res = await fetch(`${API_BASE_URL}${path}`, { ...rest, headers, signal });
+
+  // App-mode 401 retry: try ONE refresh+retry before giving up. The
+  // refreshSession() helper coalesces concurrent callers, so multiple
+  // parallel apiFetch calls won't burn the refresh token in parallel.
+  if (res.status === 401 && AUTH_MODE === 'app') {
+    const refreshed = await appAuthRefreshSession();
+    if (refreshed) {
+      ({ headers, signal } = buildRequest(refreshed.access_token));
+      res = await fetch(`${API_BASE_URL}${path}`, { ...rest, headers, signal });
+    }
+    // If refresh failed, refreshSession already emitted SIGNED_OUT — the
+    // AuthContext will navigate to /login. Returning the 401 below lets the
+    // caller surface the failure too.
   }
-
-  // Timeout + пользовательский signal. AbortSignal.any объединяет оба
-  // (браузеры Chromium 116+, Firefox 124+, Safari 17.4+).
-  const timeout = timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
-  const signals: AbortSignal[] = [];
-  if (timeout > 0) signals.push(AbortSignal.timeout(timeout));
-  if (callerSignal) signals.push(callerSignal);
-  const signal = signals.length === 0
-    ? undefined
-    : signals.length === 1
-      ? signals[0]
-      : AbortSignal.any(signals);
-
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...rest,
-    headers,
-    signal,
-  });
 
   if (res.status === 304 && cached) {
     return cached.body as T;

@@ -6,6 +6,13 @@ import { invalidateApiCache } from '../lib/api/client';
 import { getMe } from '../lib/api/users';
 import { dropAll as dropAllPositionsCache } from '../lib/cache/clientPositionsCache';
 import { invalidateAll as dropAllPositionRows } from '../lib/cache/positionRowCache';
+import { AUTH_MODE } from '../lib/auth/mode';
+import {
+  hydrate as hydrateAppAuth,
+  me as appAuthMe,
+  onAuthStateChange as onAppAuthStateChange,
+  signOut as appAuthSignOut,
+} from '../lib/auth/client';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -48,6 +55,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
+    if (AUTH_MODE === 'app') {
+      // /auth/me touches the BFF to refresh access_status / allowed_pages
+      // in the cached session, then we re-load the full /me payload (with
+      // role_name + role_color) the same way the supabase branch does.
+      const u = await appAuthMe();
+      if (!u) {
+        setUser(null);
+        return;
+      }
+      const full = await loadUserData(u.id);
+      setUser(full);
+      return;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       const userData = await loadUserData(session.user.id);
@@ -59,7 +79,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const signOut = useCallback(async () => {
     try {
-      await supabase.auth.signOut();
+      if (AUTH_MODE === 'app') {
+        await appAuthSignOut();
+      } else {
+        await supabase.auth.signOut();
+      }
       setUser(null);
       invalidateApiCache();
       dropAllPositionsCache();
@@ -72,6 +96,48 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     let mounted = true;
 
+    // ---- Phase 6 app-auth branch (VITE_AUTH_MODE=app) ----
+    if (AUTH_MODE === 'app') {
+      const handleSession = (event: string, hasSession: boolean, userId: string | null) => {
+        if (!mounted) return;
+        if (event === 'SIGNED_OUT' || !hasSession || !userId) {
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+        // We have a session; do a full /api/v1/me load so role_name +
+        // role_color are populated (the app-auth /auth/me only returns
+        // role_code; the legacy /me JOINs roles). Same payload shape as
+        // the supabase branch — keeps badges + page guards consistent.
+        setTimeout(async () => {
+          if (!mounted) return;
+          const userData = await loadUserData(userId);
+          if (!mounted) return;
+          setUser(userData);
+          setLoading(false);
+        }, 0);
+      };
+
+      const { data: { subscription } } = onAppAuthStateChange((event, session) => {
+        handleSession(event, !!session, session?.user.id ?? null);
+      });
+
+      // Kick off initial hydrate (emits INITIAL_SESSION synchronously into
+      // the listener above).
+      hydrateAppAuth();
+
+      // Best-effort /auth/me to refresh access_status / allowed_pages in
+      // case admin made a change while the user was logged out. The
+      // emitted USER_UPDATED event will flow through the subscription.
+      appAuthMe().catch(() => undefined);
+
+      return () => {
+        mounted = false;
+        subscription.unsubscribe();
+      };
+    }
+
+    // ---- Legacy Supabase Auth branch (default / VITE_AUTH_MODE=supabase) ----
     // ВАЖНО: callback НЕ async. Supabase-запросы выносим в setTimeout,
     // чтобы не получить deadlock на внутреннем auth-lock GoTrueClient.
     // См. https://supabase.com/docs/reference/javascript/auth-onauthstatechange

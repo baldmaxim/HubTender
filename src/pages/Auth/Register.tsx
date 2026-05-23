@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, message, Typography } from 'antd';
-import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Card, message, Result, Typography } from 'antd';
+import { UserOutlined, LockOutlined, MailOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { registerUser as apiRegisterUser } from '../../lib/api/users';
 import { HeaderIcon } from '../../components/Icons/HeaderIcon';
+import { AUTH_MODE } from '../../lib/auth/mode';
 
 const { Title, Text } = Typography;
 
@@ -19,6 +20,51 @@ const Register: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Phase 6 app-auth: register endpoint is not yet implemented in the Go BFF.
+  // Show a controlled message instead of a half-broken form. The supabase
+  // branch below stays untouched so legacy builds still work.
+  if (AUTH_MODE === 'app') {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          padding: 24,
+        }}
+      >
+        <Card
+          style={{
+            width: '100%',
+            maxWidth: 500,
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
+            borderRadius: 8,
+          }}
+        >
+          <Result
+            status="info"
+            title="Регистрация временно недоступна"
+            subTitle={
+              <Text type="secondary">
+                Сейчас регистрация новых пользователей возможна только через администратора.
+                Обратитесь к нему для получения доступа.
+              </Text>
+            }
+            extra={
+              <Link to="/login">
+                <Button type="primary">
+                  <ArrowLeftOutlined /> Вернуться к входу
+                </Button>
+              </Link>
+            }
+          />
+        </Card>
+      </div>
+    );
+  }
 
   const handleRegister = async (values: RegisterFormValues) => {
     setLoading(true);

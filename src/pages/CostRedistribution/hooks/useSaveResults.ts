@@ -4,6 +4,8 @@
 
 import { useState, useCallback } from 'react';
 import { message } from 'antd';
+import { AUTH_MODE } from '../../../lib/auth/mode';
+import { getCurrentUserId as appAuthGetCurrentUserId } from '../../../lib/auth/client';
 import { supabase } from '../../../lib/supabase';
 import {
   saveRedistributionResults,
@@ -50,7 +52,13 @@ export function useSaveResults() {
 
       setSaving(true);
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        let userId: string | null;
+        if (AUTH_MODE === 'app') {
+          userId = appAuthGetCurrentUserId();
+        } else {
+          const { data: { user } } = await supabase.auth.getUser();
+          userId = user?.id ?? null;
+        }
 
         const changedResults = results.filter((result) =>
           Math.abs(result.deducted_amount) > 0.000001 || Math.abs(result.added_amount) > 0.000001
@@ -120,7 +128,7 @@ export function useSaveResults() {
           tacticId,
           records,
           rules,
-          createdBy: user?.id ?? null,
+          createdBy: userId,
         });
 
         message.success('Результаты перераспределения сохранены');

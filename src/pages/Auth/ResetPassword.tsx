@@ -1,13 +1,44 @@
 import { useState, useEffect } from 'react';
-import { Form, Input, Button, Card, Typography, message } from 'antd';
-import { LockOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { Form, Input, Button, Card, Result, Typography, message } from 'antd';
+import { LockOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { getErrorMessage } from '../../utils/errors';
+import { AUTH_MODE } from '../../lib/auth/mode';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
-export default function ResetPassword() {
+// Phase 6 app-auth placeholder. Split into its own component so the
+// Supabase variant below can keep its hooks (useState/useEffect) without
+// running afoul of react-hooks/rules-of-hooks (no hook may appear after a
+// conditional early return).
+function ResetPasswordAppPlaceholder() {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <Card style={{ maxWidth: 400, width: '100%' }}>
+        <Result
+          status="info"
+          title="Сброс пароля временно недоступен"
+          subTitle={
+            <Text type="secondary">
+              Эта страница временно отключена. Для сброса пароля обратитесь
+              к администратору.
+            </Text>
+          }
+          extra={
+            <Link to="/login">
+              <Button type="primary">
+                <ArrowLeftOutlined /> Вернуться к входу
+              </Button>
+            </Link>
+          }
+        />
+      </Card>
+    </div>
+  );
+}
+
+function ResetPasswordSupabase() {
   const [loading, setLoading] = useState(false);
   const [validSession, setValidSession] = useState(false);
   const [passwordUpdated, setPasswordUpdated] = useState(false);
@@ -171,4 +202,8 @@ export default function ResetPassword() {
       </Card>
     </div>
   );
+}
+
+export default function ResetPassword() {
+  return AUTH_MODE === 'app' ? <ResetPasswordAppPlaceholder /> : <ResetPasswordSupabase />;
 }

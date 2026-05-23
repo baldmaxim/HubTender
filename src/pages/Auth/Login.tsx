@@ -6,6 +6,9 @@ import { supabase } from '../../lib/supabase';
 import { reapplyAccess } from '../../lib/api/users';
 import { useAuth } from '../../contexts/AuthContext';
 import { HeaderIcon } from '../../components/Icons/HeaderIcon';
+import { AUTH_MODE } from '../../lib/auth/mode';
+import { signInWithPassword as appAuthSignIn, signOut as appAuthSignOut } from '../../lib/auth/client';
+import type { AppAuthError } from '../../lib/auth/types';
 
 const { Title, Text } = Typography;
 
@@ -41,6 +44,23 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
+      if (AUTH_MODE === 'app') {
+        // Phase 6: POST /api/v1/auth/login. AuthContext gets SIGNED_IN
+        // synchronously via the app-auth event bus → user/loading flip.
+        try {
+          await appAuthSignIn(values.email, values.password);
+        } catch (err) {
+          const e = err as AppAuthError;
+          if (e.code === 'invalid_credentials') message.error('Неверный email или пароль');
+          else if (e.code === 'access_blocked') message.error('Доступ к системе закрыт. Обратитесь к администратору');
+          else if (e.code === 'network') message.error('Сервис недоступен. Проверьте соединение');
+          else message.error(`Ошибка входа: ${e.message}`);
+          setLoading(false);
+          return;
+        }
+        return;
+      }
+
       const { error: authError } = await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,
@@ -128,7 +148,8 @@ const Login: React.FC = () => {
               <Button
                 key="logout"
                 onClick={async () => {
-                  await supabase.auth.signOut();
+                  if (AUTH_MODE === 'app') await appAuthSignOut();
+                  else await supabase.auth.signOut();
                   window.location.reload();
                 }}
               >
@@ -190,7 +211,8 @@ const Login: React.FC = () => {
               <Button
                 key="logout"
                 onClick={async () => {
-                  await supabase.auth.signOut();
+                  if (AUTH_MODE === 'app') await appAuthSignOut();
+                  else await supabase.auth.signOut();
                   window.location.reload();
                 }}
               >
@@ -247,7 +269,8 @@ const Login: React.FC = () => {
               <Button
                 key="logout"
                 onClick={async () => {
-                  await supabase.auth.signOut();
+                  if (AUTH_MODE === 'app') await appAuthSignOut();
+                  else await supabase.auth.signOut();
                   window.location.reload();
                 }}
               >
