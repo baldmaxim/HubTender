@@ -32,8 +32,14 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	sess := sessionFromRequest(r)
 	res, err := h.svc.Forgot(r.Context(), req.Email, sess)
 	if err != nil {
-		// Should never happen — Forgot() swallows everything to nil — but
-		// fall back to generic success for safety.
+		if errors.Is(err, ErrMailerNotConfigured) {
+			// Production deploy gate (see Service.Forgot). DO NOT pretend
+			// we sent an email — the user would never receive it.
+			apierr.New(http.StatusServiceUnavailable, "Service Unavailable", "email_provider_not_configured").Render(w)
+			return
+		}
+		// Should never happen — Forgot() swallows everything else to nil —
+		// but fall back to generic success for safety.
 		log.Error().Err(err).Msg("auth: forgot-password unexpected error")
 		writeJSON(w, http.StatusOK, ForgotPasswordResult{Success: true})
 		return

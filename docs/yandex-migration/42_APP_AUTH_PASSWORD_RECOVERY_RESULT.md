@@ -8,11 +8,14 @@
 
 ## Final status
 
-**APP_AUTH_PASSWORD_RECOVERY_OK** with explicit dev-mode caveat —
-shipping the SPA against an unconfigured SMTP backend will result in
-production users never receiving emails. Until SMTP creds land on the
-server (separate ops task), do NOT flip the prod `/forgot-password` UI
-visible for end users; the dev/staging path works end-to-end.
+**APP_AUTH_PASSWORD_RECOVERY_OK** — production deploy gate now enforced
+at the backend (see "Production deploy gate" section below). The
+forgot-password flow refuses to silently drop mail in prod: a 503
+`email_provider_not_configured` is returned until SMTP creds are set.
+Until then, the operator can safely deploy the recovery code to prod
+without giving end users a false-positive "we sent you a letter" UX —
+they will instead see a controlled "service temporarily unavailable"
+card with instructions to contact the administrator.
 
 ## Endpoints
 
@@ -128,6 +131,45 @@ On startup the BFF logs `password-recovery flow configured mailer_configured=<bo
 - `TestChangePassword_OK_RevokesRefreshTokens` — happy path + refresh-revoke verification
 - `TestChangePassword_WrongCurrentFails` — `ErrInvalidCredentials`
 - `TestChangePassword_WeakNewFails` — `ErrPasswordTooShort`
+
+## Production deploy gate (post-commit hardening)
+
+After the initial F42 ship, the operator flagged that the silent-drop
+behaviour in prod was too risky — users would see "we sent you a letter"
+toast but no email would arrive. To fix this without removing the dev
+convenience path:
+
+- **`Service.Forgot`** now checks `appEnv == "production" &&
+  !mailer.IsConfigured()` at the **top** of the function, BEFORE any
+  token is minted, and returns `ErrMailerNotConfigured`. The handler
+  maps this to **HTTP 503** with `detail: "email_provider_not_configured"`.
+- **`Handler.ForgotPassword`** retains the generic 200 success for all
+  other branches (including unknown email AND email-send failure when
+  mailer IS configured), preserving anti-enumeration for the
+  normal-operations case.
+- **Frontend `ForgotPassword.tsx`** maps the 503 to a dedicated
+  `<Result status="warning">` card titled "Сброс пароля временно недоступен"
+  with the operator-handoff instruction. NO false-positive toast fires.
+
+Trade-off: in this ONE branch we leak that "email service is down" to
+any caller (vs. anti-enumeration). Justified — false-positive UX would
+be worse and would harm real users with no recourse. Anti-enumeration
+for normal operations (unknown email, transient SMTP error with
+configured provider) is unaffected.
+
+### Tests covering the gate
+
+- `TestForgot_ProdWithoutSMTP_Returns503Error` — prod + NoopMailer →
+  `ErrMailerNotConfigured`; verifies NO reset token persisted.
+- `TestForgot_ProdWithSMTP_OKHidesResetURL` — prod + configured fake
+  mailer → 200, no reset_url leak, email actually sent.
+- `TestForgot_ProdWithSMTP_UnknownEmailGenericSuccess` — prod + mailer
+  configured + unknown email → generic 200, no email sent (anti-enum
+  preserved within "normal operations").
+- `TestForgot_KnownEmail_NonProdReturnsResetURL` — non-prod + NoopMailer
+  → 200 with reset_url inline (unchanged from initial F42).
+- `TestForgot_UnknownEmailGenericSuccess` — non-prod + unknown email →
+  generic 200 (unchanged).
 
 ## Deploy recommendation
 

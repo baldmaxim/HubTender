@@ -633,10 +633,44 @@ func TestForgot_KnownEmail_NonProdReturnsResetURL(t *testing.T) {
 	}
 }
 
-func TestForgot_KnownEmail_ProdHidesResetURL(t *testing.T) {
+// fakeMailer is a Mailer implementation for tests that need
+// IsConfigured()=true without actually sending mail.
+type fakeMailer struct {
+	configured bool
+	sent       []struct{ to, subject, body string }
+}
+
+func (f *fakeMailer) IsConfigured() bool { return f.configured }
+
+func (f *fakeMailer) Send(to, subject, body string) error {
+	f.sent = append(f.sent, struct{ to, subject, body string }{to, subject, body})
+	return nil
+}
+
+func TestForgot_ProdWithoutSMTP_Returns503Error(t *testing.T) {
+	// Production + NoopMailer (default for newTestService) — must fail
+	// fast with ErrMailerNotConfigured BEFORE creating any token, to
+	// avoid the false-positive "we sent you a letter" UX.
 	repo := newFakeRepo()
 	seedUser(t, repo, "u1", "a@b.com", "password1")
 	svc := newTestService(t, repo).WithAppEnv("production")
+	_, err := svc.Forgot(context.Background(), "a@b.com", SessionContext{})
+	if !errors.Is(err, ErrMailerNotConfigured) {
+		t.Fatalf("expected ErrMailerNotConfigured, got %v", err)
+	}
+	if len(repo.resetByHash) != 0 {
+		t.Fatalf("no reset token should be persisted on guard failure, got %d", len(repo.resetByHash))
+	}
+}
+
+func TestForgot_ProdWithSMTP_OKHidesResetURL(t *testing.T) {
+	repo := newFakeRepo()
+	seedUser(t, repo, "u1", "a@b.com", "password1")
+	mailer := &fakeMailer{configured: true}
+	svc := newTestService(t, repo).
+		WithAppEnv("production").
+		WithAppBaseURL("https://prod.local").
+		WithMailer(mailer)
 	res, err := svc.Forgot(context.Background(), "a@b.com", SessionContext{})
 	if err != nil {
 		t.Fatalf("Forgot: %v", err)
@@ -646,6 +680,33 @@ func TestForgot_KnownEmail_ProdHidesResetURL(t *testing.T) {
 	}
 	if res.ResetURL != "" {
 		t.Fatalf("ResetURL must NEVER appear in prod, got %q", res.ResetURL)
+	}
+	if len(mailer.sent) != 1 {
+		t.Fatalf("expected one email sent, got %d", len(mailer.sent))
+	}
+	if mailer.sent[0].to != "a@b.com" {
+		t.Fatalf("wrong recipient: %s", mailer.sent[0].to)
+	}
+	if !strings.Contains(mailer.sent[0].body, "https://prod.local/reset-password?token=") {
+		t.Fatalf("email body missing reset URL")
+	}
+}
+
+func TestForgot_ProdWithSMTP_UnknownEmailGenericSuccess(t *testing.T) {
+	// In prod with SMTP configured, unknown email STILL returns 200
+	// success — anti-enumeration. No email is sent.
+	repo := newFakeRepo()
+	mailer := &fakeMailer{configured: true}
+	svc := newTestService(t, repo).WithAppEnv("production").WithMailer(mailer)
+	res, err := svc.Forgot(context.Background(), "nobody@nowhere.com", SessionContext{})
+	if err != nil {
+		t.Fatalf("Forgot: %v", err)
+	}
+	if !res.Success || res.ResetURL != "" {
+		t.Fatalf("expected generic success without URL, got %+v", res)
+	}
+	if len(mailer.sent) != 0 {
+		t.Fatalf("expected no email sent for unknown address, got %d", len(mailer.sent))
 	}
 }
 

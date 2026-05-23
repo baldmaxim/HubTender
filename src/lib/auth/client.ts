@@ -140,10 +140,13 @@ export interface ForgotPasswordResult {
   reset_url?: string;
 }
 
-// forgotPassword posts to /api/v1/auth/forgot-password. The server ALWAYS
+// forgotPassword posts to /api/v1/auth/forgot-password. The server normally
 // returns 200 with `success: true` regardless of whether the email exists
-// (anti-enumeration) — the caller should show the same "если email есть,
-// мы отправили письмо" toast for any outcome.
+// (anti-enumeration). The ONE non-200 case is 503 with `detail:
+// "email_provider_not_configured"` — a deliberate production deploy gate
+// that fires when SMTP creds are not on the server. The caller (Forgot
+// page) MUST surface a distinct "service unavailable" message for that
+// code so the user doesn't see a false-positive "we sent you a letter".
 export async function forgotPassword(email: string): Promise<ForgotPasswordResult> {
   const res = await fetch(`${API_BASE_URL}/api/v1/auth/forgot-password`, {
     method: 'POST',
@@ -152,6 +155,14 @@ export async function forgotPassword(email: string): Promise<ForgotPasswordResul
   }).catch((err) => {
     throw makeError(`network: ${(err as Error).message}`, undefined, 'network');
   });
+  if (res.status === 503) {
+    let detail = 'email_provider_not_configured';
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = body.detail;
+    } catch { /* ignore */ }
+    throw makeError(detail, 503, 'unknown');
+  }
   if (!res.ok) {
     throw makeError(`forgot-password failed (${res.status})`, res.status, 'unknown');
   }

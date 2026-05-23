@@ -338,6 +338,19 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest, sess Sessio
 // Plaintext reset token leaves the process only in the email body or, in
 // dev, in the in-response ResetURL field — NEVER in logs.
 func (s *Service) Forgot(ctx context.Context, email string, sess SessionContext) (*ForgotPasswordResult, error) {
+	// Production deploy-gate: if SMTP is not configured we'd silently drop
+	// the email and the end user would see a false-positive "we sent you a
+	// letter" toast. Fail fast with a controlled error instead — the
+	// handler maps it to 503. This is the ONE branch where we sacrifice
+	// anti-enumeration semantics on purpose: telling all callers
+	// "service unavailable" is preferable to telling them "all done" and
+	// silently doing nothing. In non-production we keep the dev-friendly
+	// reset_url-in-response path active.
+	if s.appEnv == "production" && !s.mailer.IsConfigured() {
+		log.Warn().Msg("auth: /forgot-password called in production with no mailer configured — returning 503")
+		return nil, ErrMailerNotConfigured
+	}
+
 	email = strings.ToLower(strings.TrimSpace(email))
 	res := &ForgotPasswordResult{Success: true}
 	if email == "" || !strings.Contains(email, "@") {
