@@ -1,20 +1,58 @@
+// =============================================================================
+// DEPRECATED MODULE — legacy "BOQ items write with audit" wrapper.
+//
+// Why this still exists:
+//   The four call-sites in src/pages/PositionItems/ predate the typed BOQ
+//   api wrappers and the Go-BFF cutover. The wrappers below are NOT
+//   business calls anymore — every mutation goes through Go BFF
+//   (/api/v1/items/* + /api/v1/tenders/.../items). Supabase is touched only
+//   to read the Bearer token in supabase-auth mode.
+//
+// Phase 6 fix:
+//   `getAuditAccessToken()` now sources the token from the active auth mode
+//   (app vs supabase) via the same mechanism api/client.ts uses, so
+//   VITE_AUTH_MODE=app no longer leaves these calls unauthenticated.
+//
+// TODO: replace all four call-sites (PositionItems.tsx + 3 hooks) with the
+// typed wrappers in src/lib/api/boq.ts, then delete this module.
+// =============================================================================
+
 import { supabase } from './supabase';
 import type { BoqItem, BoqItemInsert } from './supabase';
 import { apiFetch } from './api/client';
 import { API_BASE_URL } from './api/featureFlags';
+import { AUTH_MODE } from './auth/mode';
+import { getAccessToken as appAuthGetAccessToken } from './auth/client';
+
+// getAuditAccessToken returns a fresh Bearer token from whichever auth source
+// is active for this build. Mirrors getToken() in src/lib/api/client.ts.
+//
+// In `app` mode this is the app-auth client (auto-refresh on near-expiry,
+// coalesced refresh per tab). In legacy `supabase` mode it's the Supabase
+// session. Returns null when no session exists — callers MUST treat that as
+// authentication-required, never as "send the request anonymously" (the
+// previous behaviour silently let unauthenticated requests through, which
+// the BFF middleware then rejected with 401 — confusing for debugging).
+async function getAuditAccessToken(): Promise<string | null> {
+  if (AUTH_MODE === 'app') {
+    return appAuthGetAccessToken();
+  }
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
 
 // ─── Go path helpers ────────────────────────────────────────────────────────
 // Reads the ETag header from a plain fetch (apiFetch discards headers).
 // cache: 'no-store' — иначе браузер на retry отдаёт закэшированный ETag,
 // сервер видит свежий updated_at и стабильно возвращает 412.
 async function fetchItemETag(itemId: string): Promise<string> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  const token = await getAuditAccessToken();
+  if (!token) throw new Error('Authentication required');
   const res = await fetch(
     `${API_BASE_URL}/api/v1/items/${encodeURIComponent(itemId)}`,
     {
       cache: 'no-store',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: { Authorization: `Bearer ${token}` },
     },
   );
   if (!res.ok) {
@@ -32,8 +70,8 @@ async function patchItemOnce(
   body: Record<string, unknown>,
   etag: string,
 ): Promise<{ data: unknown; conflict: boolean }> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  const token = await getAuditAccessToken();
+  if (!token) throw new Error('Authentication required');
   const res = await fetch(
     `${API_BASE_URL}/api/v1/items/${encodeURIComponent(itemId)}`,
     {
@@ -41,7 +79,7 @@ async function patchItemOnce(
       headers: {
         'Content-Type': 'application/json',
         'If-Match': etag,
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(body),
     },
@@ -55,15 +93,15 @@ async function patchItemOnce(
 }
 
 async function deleteItemOnce(itemId: string, etag: string): Promise<{ conflict: boolean }> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  const token = await getAuditAccessToken();
+  if (!token) throw new Error('Authentication required');
   const res = await fetch(
     `${API_BASE_URL}/api/v1/items/${encodeURIComponent(itemId)}`,
     {
       method: 'DELETE',
       headers: {
         'If-Match': etag,
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
       },
     },
   );
