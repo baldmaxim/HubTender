@@ -68,6 +68,9 @@ web_modules/
 # dotenv environment variable files
 .env
 .env.*
+
+# TLS certificates and locally-generated test signing keys (NEVER commit).
+.certs/
 !.env.example
 !.env.old-to-prod.example
 !.env.yandex-preflight.example
