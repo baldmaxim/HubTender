@@ -4,7 +4,7 @@
 
 ## Обзор проекта
 
-TenderHUB by SU_10 — портал управления тендерами в строительстве для BOQ (Bill of Quantities, ведомости объёмов работ) и биржевых процессов.
+TenderHUB — портал управления тендерами в строительстве для BOQ (Bill of Quantities, ведомости объёмов работ) и биржевых процессов.
 
 - **Языковые конвенции**: русский UI, английский код, русские сообщения коммитов
 - **Стек**: React 18 + Ant Design + Vite + TypeScript на фронте. Go BFF (chi + pgx/v5 + coder/websocket) перед **Yandex Managed PostgreSQL 17**. Supabase Realtime заменён native WebSocket-хабом Go BFF. Supabase Auth остаётся временным bridge для JWT (`docs/NEXT_PHASE_APP_AUTH.md`).

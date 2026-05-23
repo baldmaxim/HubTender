@@ -7,7 +7,7 @@ interface LogoIconProps {
 }
 
 /**
- * TenderHub by SU10 logo icon
+ * TenderHub logo icon
  * Professional construction tender management logo with building and crane elements
  */
 export const LogoIcon: React.FC<LogoIconProps> = ({
@@ -23,7 +23,7 @@ export const LogoIcon: React.FC<LogoIconProps> = ({
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       role="img"
-      aria-label="TenderHub by SU10 Logo"
+      aria-label="TenderHub Logo"
     >
       {/* Background Circle */}
       <circle cx="256" cy="256" r="240" fill="url(#bgGradient)" opacity="0.1"/>
@@ -78,12 +78,6 @@ export const LogoIcon: React.FC<LogoIconProps> = ({
         <line x1="18" y1="47" x2="40" y2="47" stroke="#059669" strokeWidth="2" strokeLinecap="round" opacity="0.5"/>
       </g>
 
-      {/* SU10 Badge */}
-      <g id="su10-badge">
-        <rect x="310" y="105" width="85" height="42" rx="21" fill="url(#badgeGradient)" stroke="#ffffff" strokeWidth="2"/>
-        <text x="352" y="133" fontFamily="Arial, sans-serif" fontSize="22" fontWeight="bold" fill="#ffffff" textAnchor="middle" letterSpacing="1">SU10</text>
-      </g>
-
       {/* Base Foundation */}
       <rect x="100" y="380" width="280" height="12" rx="6" fill="url(#foundationGradient)"/>
 
@@ -112,12 +106,6 @@ export const LogoIcon: React.FC<LogoIconProps> = ({
         <linearGradient id="craneGradient" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" style={{ stopColor: '#059669', stopOpacity: 1 }} />
           <stop offset="100%" style={{ stopColor: '#10b981', stopOpacity: 1 }} />
-        </linearGradient>
-
-        <linearGradient id="badgeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style={{ stopColor: '#10b981', stopOpacity: 1 }} />
-          <stop offset="50%" style={{ stopColor: '#059669', stopOpacity: 1 }} />
-          <stop offset="100%" style={{ stopColor: '#0891b2', stopOpacity: 1 }} />
         </linearGradient>
 
         <linearGradient id="foundationGradient" x1="0%" y1="0%" x2="100%" y2="0%">

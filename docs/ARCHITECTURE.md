@@ -1,4 +1,4 @@
-# Architecture — TenderHUB by SU_10
+# Architecture — TenderHUB
 
 Текущая runtime-архитектура после переезда БД на Yandex Managed PostgreSQL
 и завершения Phase 5 (frontend Supabase business migration).

@@ -31,12 +31,6 @@
     <circle cx="92" cy="74" r="2" fill="#10b981"/>
   </g>
 
-  <!-- SU10 Badge - Simplified -->
-  <g id="su10-badge">
-    <rect x="30" y="15" width="68" height="24" rx="12" fill="url(#badgeGradient)" stroke="#ffffff" strokeWidth="1.5"/>
-    <text x="64" y="32" fontFamily="Arial, sans-serif" fontSize="14" fontWeight="bold" fill="#ffffff" textAnchor="middle" letterSpacing="0.5">SU10</text>
-  </g>
-
   <!-- Base Foundation -->
   <rect x="15" y="100" width="90" height="6" rx="3" fill="url(#foundationGradient)"/>
 
@@ -55,12 +49,6 @@
     <linearGradient id="craneGradient" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" style="stop-color:#059669;stop-opacity:1" />
       <stop offset="100%" style="stop-color:#10b981;stop-opacity:1" />
-    </linearGradient>
-
-    <linearGradient id="badgeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
-      <stop offset="50%" style="stop-color:#059669;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#0891b2;stop-opacity:1" />
     </linearGradient>
 
     <linearGradient id="foundationGradient" x1="0%" y1="0%" x2="100%" y2="0%">

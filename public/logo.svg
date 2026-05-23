@@ -57,15 +57,6 @@
     <line x1="18" y1="47" x2="40" y2="47" stroke="#059669" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
   </g>
 
-  <!-- SU_10 Badge -->
-  <g id="su10-badge">
-    <!-- Badge Background -->
-    <rect x="310" y="105" width="90" height="42" rx="21" fill="url(#badgeGradient)" stroke="#ffffff" stroke-width="2"/>
-
-    <!-- SU_10 Text -->
-    <text x="355" y="133" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="1">SU_10</text>
-  </g>
-
   <!-- Base Foundation -->
   <rect x="100" y="380" width="280" height="12" rx="6" fill="url(#foundationGradient)"/>
 
@@ -94,12 +85,6 @@
     <linearGradient id="craneGradient" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" style="stop-color:#059669;stop-opacity:1" />
       <stop offset="100%" style="stop-color:#10b981;stop-opacity:1" />
-    </linearGradient>
-
-    <linearGradient id="badgeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
-      <stop offset="50%" style="stop-color:#059669;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#0891b2;stop-opacity:1" />
     </linearGradient>
 
     <linearGradient id="foundationGradient" x1="0%" y1="0%" x2="100%" y2="0%">

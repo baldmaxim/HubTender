@@ -501,7 +501,6 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               </div>
               <div className="logo-text-wrapper">
                 <div className="logo-title">TenderHUB</div>
-                <div className="logo-subtitle">by SU_10</div>
               </div>
             </div>
           )}
