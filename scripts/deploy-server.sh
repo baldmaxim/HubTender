@@ -170,9 +170,11 @@ deploy_frontend() {
   [ -f dist/index.html ] || fail "dist/index.html не появился"
 
   local ts; ts="$(date +%Y%m%d-%H%M%S)"
+  local backup_dir="$SITE_DIR/backups/public"
   if [ -d "$SITE_DIR/public" ]; then
-    log "бэкап $SITE_DIR/public → $SITE_DIR/public.backup-$ts"
-    cp -a "$SITE_DIR/public" "$SITE_DIR/public.backup-$ts"
+    mkdir -p "$backup_dir"
+    log "бэкап $SITE_DIR/public → $backup_dir/public.backup-$ts"
+    cp -a "$SITE_DIR/public" "$backup_dir/public.backup-$ts"
   else
     warn "$SITE_DIR/public ещё нет — пропуск бэкапа"
   fi
