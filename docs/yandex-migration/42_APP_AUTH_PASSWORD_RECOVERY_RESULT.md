@@ -8,14 +8,18 @@
 
 ## Final status
 
-**APP_AUTH_PASSWORD_RECOVERY_OK** — production deploy gate now enforced
-at the backend (see "Production deploy gate" section below). The
-forgot-password flow refuses to silently drop mail in prod: a 503
-`email_provider_not_configured` is returned until SMTP creds are set.
-Until then, the operator can safely deploy the recovery code to prod
-without giving end users a false-positive "we sent you a letter" UX —
-they will instead see a controlled "service temporarily unavailable"
-card with instructions to contact the administrator.
+**APP_AUTH_PASSWORD_RECOVERY_DEPLOY_OK_WITH_SMTP_DISABLED**
+— production deploy completed `2026-05-25` (release
+`hubtender-api@7b3d7e3`). Backend guard verified live on
+`https://tender.su10.ru`: `POST /api/v1/auth/forgot-password` returns
+**503 `email_provider_not_configured`** while SMTP is unset, and the
+frontend (browser smoke confirmed) surfaces the controlled
+`<Result status="warning">` "Сброс пароля временно недоступен"
+card — NO false-positive "письмо отправлено" toast, ZERO Supabase
+Auth fallback calls. SMTP creds are still pending operator action
+(see F9). Until they are added the recovery flow is deliberately
+closed-shut in prod — no silent drops, no enumeration leak for
+normal operations.
 
 ## Endpoints
 
@@ -171,6 +175,75 @@ configured provider) is unaffected.
 - `TestForgot_UnknownEmailGenericSuccess` — non-prod + unknown email →
   generic 200 (unchanged).
 
+## Production deploy result (2026-05-25)
+
+Operator performed `bash scripts/deploy-production.sh both` after the
+`7b3d7e3` push. Initial post-deploy probes still showed silent-drop
+200 — investigation traced this to **`APP_ENV` and `APP_BASE_URL`
+missing from `/srv/sites/tender.su10.ru/server/.env.prod`** (the
+config defaulted `APP_ENV=development`, so the guard predicate
+`appEnv == "production" && !mailer.IsConfigured()` was always false).
+Operator added both lines and restarted `hubtender-bff.service`.
+
+Post-fix startup log (BFF):
+
+```
+release=hubtender-api@7b3d7e3
+mailer_configured=false
+app_env=production
+app_base_url=https://tender.su10.ru
+kid=xDItcfIj5Kjn_UU9uYOcVl93afQYpNDiLlQCE1EAeag
+iss=https://tender.su10.ru
+```
+
+Public probes from operator workstation:
+
+| Probe | Expected | Actual |
+|---|---|---|
+| `POST /api/v1/auth/forgot-password` `{email:"test@example.com"}` | 503 `email_provider_not_configured` | ✅ 503 `email_provider_not_configured` |
+| `GET /.well-known/jwks.json` | 200, kid matches | ✅ kid `xDItcfIj5Kjn_UU9uYOcVl93afQYpNDiLlQCE1EAeag` |
+| `POST /api/v1/auth/register` `{}` | 400 validation | ✅ 400 `invalid email` |
+| `POST /api/v1/auth/reset-password` `{}` | 401/400 validation | ✅ 401 `invalid or expired reset token` |
+| `GET /health`, `/health/db` | (BFF) 200 | n/a — nginx routes non-`/api/*` to SPA index; BFF health is internal only by design |
+
+### Browser smoke (2026-05-25)
+
+Operator-driven manual verification on `https://tender.su10.ru` after
+the `.env.prod` fix + restart:
+
+| Step | Observation |
+|---|---|
+| Open `/forgot-password` | Page rendered (app-mode branch) |
+| Submit valid email via form | `POST /api/v1/auth/forgot-password` dispatched |
+| Network panel | **HTTP 503** with `detail: email_provider_not_configured` |
+| UI state | `<Result status="warning">` card — "Сброс пароля временно недоступен. Обратитесь к администратору." |
+| False-positive toast "письмо отправлено" | ❌ NOT shown — anti-foot-gun verified |
+| Supabase Auth network calls | **0** — app-mode branch fully active, no legacy fallback |
+
+End-to-end contract for the closed-shut state is confirmed: backend
+guard, frontend 503-handler, and the `providerUnavailable` UI all
+behave as designed. The system is safe to leave in production
+indefinitely until SMTP creds land (F9).
+
+### Security note: APP_JWT key rotation
+
+During the deploy session, the active `APP_JWT_PRIVATE_KEY_B64` value
+was inadvertently shared in chat (middle portion was redacted by the
+operator, but the BEGIN/END markers and significant base64 length were
+still in clear). Per recommendation the key was rotated immediately:
+
+- **Old kid** `gpJuRL85-hNX4LSxEq05UAz1lOt2PwFlS4gYRP7BzMU` — retired.
+- **New kid** `xDItcfIj5Kjn_UU9uYOcVl93afQYpNDiLlQCE1EAeag` — active.
+
+Effect on users: every access token issued before
+`2026-05-25T09:37:33Z` will fail signature verification on the next
+API call; clients will use their refresh token (still valid against
+`app_auth.refresh_tokens` row, unrelated to JWT signing key) to mint
+a new access token signed by the new key. No data loss; users may see
+one transient re-auth round-trip. JWKS endpoint serves the new key
+only — clients that cache the previous JWKS for >5 min should pick up
+the new key on their next fetch.
+
 ## Deploy recommendation
 
 Backend + frontend both:
@@ -232,13 +305,13 @@ no error surfaces to them. The operator's server log will show
 
 ## What was NOT done (per spec)
 
-- ❌ no deploy
-- ❌ no push
+- ✅ deploy completed by operator on `2026-05-25` (initial F42 + post-commit guard hardening)
+- ✅ push (`7b3d7e3` + prior commits) on `origin/main`
 - ❌ DATABASE_URL / AUTH_MODE untouched
 - ❌ import / clean / repair not run
 - ❌ Supabase SDK / fallback NOT removed
 - ❌ change-password UI surface deferred (see F10)
-- ❌ SMTP creds NOT added (operator decision, see F9)
+- ❌ SMTP creds NOT added (operator decision, see F9) — guard now ensures this is closed-shut, not silent-drop
 
 ## Related docs
 
