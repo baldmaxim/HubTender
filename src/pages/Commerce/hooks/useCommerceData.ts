@@ -124,6 +124,13 @@ function buildPositionsFromBoqItems(
 
   resetTypeCoefficientsCache();
 
+  // Перезаписываем total_commercial_*_cost в boqItems live-calc значениями,
+  // чтобы общий redistributionPipeline (buildResultRows) видел те же per-item
+  // числа, что и CR. Без этого для позиций без category-redistribution
+  // (когда snapshot не содержит строки на boq_item) КП использовал бы
+  // stored DB-значения, а CR — свежий live-calc, и итоги расходились.
+  const enrichedBoqItems: CommerceBoqItem[] = [];
+
   for (const item of boqItems) {
     const itemBase = calculateBoqItemTotalAmount(item, context.tenderRates);
     const liveCommercialCosts = context.tactic
@@ -140,6 +147,12 @@ function buildPositionsFromBoqItems(
       : null;
     const itemMaterial = liveCommercialCosts?.materialCost ?? item.total_commercial_material_cost ?? 0;
     const itemWork = liveCommercialCosts?.workCost ?? item.total_commercial_work_cost ?? 0;
+
+    enrichedBoqItems.push({
+      ...item,
+      total_commercial_material_cost: itemMaterial,
+      total_commercial_work_cost: itemWork,
+    });
 
     referenceTotal += itemBase;
 
@@ -179,7 +192,7 @@ function buildPositionsFromBoqItems(
   return {
     positions: applyLeafFlags(positions),
     referenceTotal,
-    boqItems,
+    boqItems: enrichedBoqItems,
   };
 }
 
