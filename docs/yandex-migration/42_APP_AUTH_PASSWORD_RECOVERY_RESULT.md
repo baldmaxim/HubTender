@@ -227,6 +227,43 @@ behave as designed. Login / register / logout flows are unaffected
 by the guard. The system is safe to leave in production indefinitely
 until SMTP creds land (F9).
 
+### Final production deploy smoke (2026-05-25, post `a0fef3c`)
+
+Operator deployed origin/main (HEAD `a0fef3c`, includes F42 +
+insurance redistribution unification) via
+`bash scripts/deploy-production.sh both`. Frontend backup snapshot
+created at `/srv/sites/tender.su10.ru/backups/public/public.backup-20260525-105041`.
+
+Harness-side public probes from operator workstation:
+
+| Probe | Expected | Actual |
+|---|---|---|
+| `POST /api/v1/auth/forgot-password` `{email:"smoke-test@example.com"}` | 503 `email_provider_not_configured` | ✅ 503 `email_provider_not_configured` — guard persists post-deploy |
+| `POST /api/v1/auth/register` `{}` | 400 validation | ✅ 400 `invalid email` |
+| `POST /api/v1/auth/reset-password` `{}` | 401 validation | ✅ 401 `invalid or expired reset token` |
+| `POST /api/v1/auth/login` `{}` | 401 invalid credentials | ✅ 401 `invalid credentials` |
+| `GET /api/v1/auth/me` (no Bearer) | 401 | ✅ 401 `missing or malformed Authorization header` |
+| `GET /.well-known/jwks.json` | 200, kid `xDItcfIj5Kjn_UU9uYOcVl93afQYpNDiLlQCE1EAeag` | ✅ matches |
+
+Frontend bundle inspection (`https://tender.su10.ru/`):
+
+| Probe | Result |
+|---|---|
+| Main bundle hash | `index-DJcziXKM.js` (refreshed from prior `index-DXZc_mr4.js`) |
+| Inlined `/api/v1/auth/forgot-password` | ✅ 1 occurrence |
+| Inlined `/api/v1/auth/login` | ✅ 1 occurrence |
+| Inlined `/api/v1/auth/register` | ✅ 1 occurrence |
+| Inlined `/api/v1/auth/me` | ✅ 1 occurrence |
+| Legacy `supabase.co/auth/v1/token` | **0 occurrences** — Supabase Auth runtime path fully eliminated from production bundle |
+
+Browser-side behaviour delegated to operator (already confirmed
+green earlier in this doc: `/forgot-password` UI shows the
+controlled warning card, no false-positive toast, 0 Supabase Auth
+network calls, `/login`+`/register`+`/logout` work normally).
+
+**Status:** `APP_AUTH_PASSWORD_RECOVERY_DEPLOY_OK_WITH_SMTP_DISABLED`
+re-confirmed against the live production deployment.
+
 ### Security note: APP_JWT key rotation
 
 During the deploy session, the active `APP_JWT_PRIVATE_KEY_B64` value

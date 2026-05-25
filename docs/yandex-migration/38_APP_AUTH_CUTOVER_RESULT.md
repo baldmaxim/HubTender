@@ -185,6 +185,27 @@ ssh root@45.80.128.254 'journalctl -u hubtender-bff.service -n 300 --no-pager' \
 В рамках Phase 6 этот баг **не блокирует**: auth-флоу полностью функционален,
 влияет только на конкретный путь UX (страница тендера через FI-aggregate).
 
+## Follow-up deploy: 2026-05-25
+
+Production redeploy on `2026-05-25` (HEAD `a0fef3c`) shipped:
+
+- F41 register endpoint ([41_APP_AUTH_REGISTER_RESULT.md](41_APP_AUTH_REGISTER_RESULT.md))
+- F42 password recovery + production guard
+  ([42_APP_AUTH_PASSWORD_RECOVERY_RESULT.md](42_APP_AUTH_PASSWORD_RECOVERY_RESULT.md))
+- APP_JWT key rotation: new `kid xDItcfIj5Kjn_UU9uYOcVl93afQYpNDiLlQCE1EAeag`
+  (old `gpJuRL85-…` retired after accidental clear-text exposure)
+- Insurance redistribution unification (unrelated; in same release)
+
+Post-deploy frontend bundle: `index-DJcziXKM.js`.
+Supabase Auth runtime path (`supabase.co/auth/v1/token`) verified
+**absent** from the production bundle.
+Frontend backup snapshot:
+`/srv/sites/tender.su10.ru/backups/public/public.backup-20260525-105041`.
+
+Final status: cutover holds — backend on app-auth only, no Supabase
+Auth runtime calls from production frontend. Password recovery
+gated 503 until SMTP credentials are provisioned.
+
 ## Next phase
 
 - **P1: пофиксить `/api/v1/tenders/{id}` 500** (см. Open issues выше). Отдельная задача, отдельный PR.
