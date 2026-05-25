@@ -121,6 +121,44 @@ Expected post-deploy smoke (operator-driven):
 - DevTools Network: `/api/v1/tenders/{id}/positions` → 200, `/overview` → 200 (< 500 ms typical).
 - Other tender ids should also work (fix is general).
 
+## Production deploy result (post-deploy update)
+
+**Deployed**: 2026-05-23, release `hubtender-api@ea8e1b1`.
+
+Operator-driven `bash scripts/deploy-production.sh backend` highlights:
+- `git fetch`: `7f543ef..ea8e1b1` ✓
+- `docker build` + `systemctl restart hubtender-bff.service`: OK
+- BFF log: `sentry initialised env=production release=hubtender-api@ea8e1b1` /
+  `app JWT issuer ready kid=gpJuRL85-…` / `port=3005 server listening`
+- `GET http://127.0.0.1:3006/health` → 200, `/health/db` → 200
+
+### Post-deploy public smoke (read-only, with Bearer)
+
+```
+GET /api/v1/tenders?limit=5                            → 200  280 ms
+GET /api/v1/tenders/e8c3a228-…                         → 200  274 ms   (F39 sanity)
+GET /api/v1/tenders/e8c3a228-…/positions               → 200  360 ms   (F1 fixed)
+GET /api/v1/tenders/e8c3a228-…/overview                → 200  268 ms   (F2 fixed — was 12.9 s, ≈48× faster)
+
+/positions body sample:
+  page_size: 50, next_cursor_present: true,
+  sample_numbers: [11, 3, 19.1, 14, 13, 15, 4, 5, 864, 859],
+  fractional_present: true            ← '19.1' confirms float64 scan in prod
+
+/overview body:
+  title: "Событие 6.1",
+  position_count: 1181, boq_item_count: 5362,
+  housing_class: "бизнес", construction_scope: "генподряд"
+
+Sanity on 2 other tenders:
+  9371e859-… positions=200/0.348s  overview=200/0.294s
+  deb67d4b-… positions=200/0.347s  overview=200/0.292s
+```
+
+**Production smoke: OK.** Все 4 endpoints зелёные с предсказуемым
+тайминг-профилем (< 400 ms). Тендер-detail-страница в браузере должна
+открываться без 500 / без вечной загрузки.
+
 ## Rollback note
 
 Both fixes are isolated:

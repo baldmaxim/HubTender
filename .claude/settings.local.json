@@ -25,7 +25,9 @@
       "mcp__claude_ai_Supabase__list_tables",
       "mcp__claude_ai_Supabase__execute_sql",
       "mcp__claude_ai_Supabase__list_projects",
-      "mcp__claude_ai_Supabase__get_advisors"
+      "mcp__claude_ai_Supabase__get_advisors",
+      "PowerShell($env:ALLOW_AUTH_IMPORT=\"true\"; $env:ALLOW_DISABLE_IMPORT_TRIGGERS=\"true\"; $env:ALLOW_CLEAN_AUTH=\"true\"; $env:ALLOW_CLEAN_PROD=\"true\"; npm run old-to-prod:migrate -- --use-mcp-preflight --clean-auth --clean-prod --confirm --batch-size=5000 2>&1 | Out-File -FilePath .old-to-prod-export\\\\_mcp_cache\\\\migrate-real4.log -Encoding utf8; \"EXIT $LASTEXITCODE\" | Out-File -Append .old-to-prod-export\\\\_mcp_cache\\\\migrate-real4.log -Encoding utf8)",
+      "PowerShell($sw=[Diagnostics.Stopwatch]::StartNew\\(\\); npm run old-to-prod:check 2>&1 | Out-File .old-to-prod-export\\\\_mcp_cache\\\\check-poolrecover.log -Encoding utf8; $code=$LASTEXITCODE; $sw.Stop\\(\\); \"EXIT $code in $\\([math]::Round\\($sw.Elapsed.TotalSeconds,1\\)\\)s\" | Out-File -Append .old-to-prod-export\\\\_mcp_cache\\\\check-poolrecover.log -Encoding utf8; Get-Content .old-to-prod-export\\\\_mcp_cache\\\\check-poolrecover.log)"
     ],
     "deny": [],
     "ask": [],

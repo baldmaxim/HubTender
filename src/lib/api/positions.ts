@@ -121,6 +121,7 @@ export async function bulkInsertPositions(
 export async function getPositionWithTender(positionId: string): Promise<Record<string, unknown>> {
   const res = await apiFetch<{ data: Record<string, unknown> }>(
     `/api/v1/positions/${encodeURIComponent(positionId)}/with-tender`,
+    { cache: 'no-store' },
   );
   return res.data;
 }
@@ -138,6 +139,7 @@ export async function listBoqItemsFullByTender(tenderId: string): Promise<Record
 export async function listBoqItemsFullByPosition(positionId: string): Promise<Record<string, unknown>[]> {
   const res = await apiFetch<{ data: Record<string, unknown>[] }>(
     `/api/v1/positions/${encodeURIComponent(positionId)}/boq-items-full`,
+    { cache: 'no-store' },
   );
   return res.data ?? [];
 }

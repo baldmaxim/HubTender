@@ -22,13 +22,17 @@ export async function listUserTasks(
   if (excludeCompleted) qs.set('exclude_completed', '1');
   const res = await apiFetch<{ data: UserTaskWithRelations[] }>(
     `/api/v1/tasks?${qs.toString()}`,
+    { cache: 'no-cache' },
   );
   return res.data ?? [];
 }
 
 /** All tasks (manager view; server enforces role). */
 export async function listAllTasks(): Promise<UserTaskWithRelations[]> {
-  const res = await apiFetch<{ data: UserTaskWithRelations[] }>('/api/v1/tasks');
+  const res = await apiFetch<{ data: UserTaskWithRelations[] }>(
+    '/api/v1/tasks',
+    { cache: 'no-cache' },
+  );
   return res.data ?? [];
 }
 
