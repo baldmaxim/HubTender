@@ -219,11 +219,13 @@ the `.env.prod` fix + restart:
 | UI state | `<Result status="warning">` card — "Сброс пароля временно недоступен. Обратитесь к администратору." |
 | False-positive toast "письмо отправлено" | ❌ NOT shown — anti-foot-gun verified |
 | Supabase Auth network calls | **0** — app-mode branch fully active, no legacy fallback |
+| Regression: `/login`, `/register`, `/logout` in same session | ✅ all three work normally — guard change isolated to forgot-password path |
 
 End-to-end contract for the closed-shut state is confirmed: backend
 guard, frontend 503-handler, and the `providerUnavailable` UI all
-behave as designed. The system is safe to leave in production
-indefinitely until SMTP creds land (F9).
+behave as designed. Login / register / logout flows are unaffected
+by the guard. The system is safe to leave in production indefinitely
+until SMTP creds land (F9).
 
 ### Security note: APP_JWT key rotation
 
