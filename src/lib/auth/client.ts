@@ -13,6 +13,14 @@ import type {
 // the BFF's 15-minute access TTL gracefully.
 const REFRESH_LEEWAY_SECONDS = 60;
 
+// Cross-tab coordination primitives. The Web Locks API serialises refresh
+// across tabs (in-tab `inflightRefresh` only coalesces within a single JS
+// instance), and BroadcastChannel lets the winning tab fan-out the rotated
+// session to its siblings so they update their in-memory cache without
+// burning a second refresh round-trip.
+const CROSS_TAB_LOCK_NAME = 'hubtender-auth-refresh';
+const CROSS_TAB_CHANNEL = 'hubtender-auth';
+
 // In-flight refresh promise — coalesces concurrent callers so we only ever
 // rotate the refresh token ONCE per expiry. Without this guard, two parallel
 // API calls would each consume the same refresh_token, triggering the
@@ -32,6 +40,73 @@ function persist(session: AppSession | null): void {
   cached = session;
   if (session) saveSession(session);
   else clearSession();
+}
+
+// Re-read localStorage into the in-memory cache. After winning the cross-tab
+// refresh lock we may discover that another tab already rotated the session
+// while we were queued; in that case we want to adopt the fresh state
+// instead of POSTing our (now-stale) refresh token.
+function reloadFromStorage(): AppSession | null {
+  cached = loadSession();
+  return cached;
+}
+
+// Lazy BroadcastChannel singleton. Created on first use so importing this
+// module in environments without the API (tests, SSR) doesn't crash.
+let broadcastChannel: BroadcastChannel | null = null;
+let broadcastChannelInit = false;
+
+type CrossTabMessage =
+  | { type: 'SESSION_ROTATED'; session: AppSession }
+  | { type: 'SIGNED_OUT' };
+
+function getBroadcastChannel(): BroadcastChannel | null {
+  if (broadcastChannelInit) return broadcastChannel;
+  broadcastChannelInit = true;
+  if (typeof BroadcastChannel === 'undefined') return null;
+  try {
+    broadcastChannel = new BroadcastChannel(CROSS_TAB_CHANNEL);
+    broadcastChannel.addEventListener('message', (ev: MessageEvent<CrossTabMessage>) => {
+      const data = ev.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'SESSION_ROTATED' && data.session) {
+        // Sibling tab successfully rotated. Adopt the new session into the
+        // in-memory cache (localStorage is already updated by the sender,
+        // since it's shared across same-origin tabs) and emit
+        // TOKEN_REFRESHED so AuthContext picks up role/access changes.
+        cached = data.session;
+        emitAuthEvent('TOKEN_REFRESHED', data.session);
+      } else if (data.type === 'SIGNED_OUT') {
+        cached = null;
+        emitAuthEvent('SIGNED_OUT', null);
+      }
+    });
+  } catch (err) {
+    console.warn('[auth/client] BroadcastChannel init failed:', err);
+    broadcastChannel = null;
+  }
+  return broadcastChannel;
+}
+
+function broadcast(message: CrossTabMessage): void {
+  const ch = getBroadcastChannel();
+  if (!ch) return;
+  try {
+    ch.postMessage(message);
+  } catch (err) {
+    // structuredClone on plain JSON shouldn't throw, but be defensive.
+    console.warn('[auth/client] broadcast failed:', err);
+  }
+}
+
+// withRefreshLock serialises refresh across tabs via the Web Locks API.
+// Falls back to direct execution when the API is missing (older browsers,
+// SSR, jsdom) — the in-tab `inflightRefresh` guard still applies so we
+// degrade to the previous behaviour rather than breaking auth entirely.
+async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  if (!locks || typeof locks.request !== 'function') return fn();
+  return locks.request(CROSS_TAB_LOCK_NAME, fn);
 }
 
 function makeError(message: string, status?: number, code?: AppAuthError['code']): AppAuthError {
@@ -224,11 +299,14 @@ export async function changePassword(currentPassword: string, newPassword: strin
 // signOut posts to /api/v1/auth/logout (best-effort) and unconditionally
 // clears local state. We do NOT propagate logout errors — the user wanted
 // out, and the server can sweep dangling tokens on the next refresh attempt.
+// Broadcasts SIGNED_OUT so sibling tabs drop their cached session and follow
+// the user back to /login.
 export async function signOut(): Promise<void> {
   const s = ensureLoaded();
   const token = s?.refresh_token;
   persist(null);
   emitAuthEvent('SIGNED_OUT', null);
+  broadcast({ type: 'SIGNED_OUT' });
   if (!token) return;
   try {
     await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
@@ -270,33 +348,56 @@ export async function getAccessToken(): Promise<string | null> {
 // the local session is purged and SIGNED_OUT is emitted — the caller should
 // redirect to /login).
 //
-// Coalesces concurrent callers via inflightRefresh — the server's reuse-
-// detection would otherwise revoke the whole token family.
+// Concurrency safety:
+//   - `inflightRefresh` coalesces callers within ONE tab so React + apiFetch
+//     parallelism doesn't burn the refresh token.
+//   - `withRefreshLock` (Web Locks API) coalesces across tabs: only one tab
+//     in the same origin actually POSTs /refresh; the others queue behind it
+//     and, on lock release, re-read the freshly persisted session from
+//     localStorage and short-circuit. Without this, two tabs hitting the
+//     refresh window simultaneously would each replay the same refresh
+//     token, trigger the server's reuse-detection, and revoke the whole
+//     token family — kicking BOTH tabs to /login.
+//   - On success the winning tab broadcasts the new session via
+//     BroadcastChannel so siblings update their in-memory cache (and React
+//     state via the emitted TOKEN_REFRESHED event) without a second network
+//     round-trip.
 export function refreshSession(): Promise<AppSession | null> {
   if (inflightRefresh) return inflightRefresh;
   inflightRefresh = (async () => {
     try {
-      const s = ensureLoaded();
-      if (!s) return null;
-      const res = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: s.refresh_token }),
-      }).catch(() => null);
+      return await withRefreshLock(async () => {
+        // Re-read storage AFTER acquiring the cross-tab lock — another tab
+        // may have rotated the session while we were queued. If the cached
+        // expiry now sits comfortably outside the leeway, the work is done.
+        const fresh = reloadFromStorage();
+        if (!fresh) return null;
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (fresh.expires_at - nowSec > REFRESH_LEEWAY_SECONDS) {
+          return fresh;
+        }
+        const res = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: fresh.refresh_token }),
+        }).catch(() => null);
 
-      if (!res || !res.ok) {
-        // Refresh failed — purge and emit SIGNED_OUT so the AuthContext
-        // navigates to /login. Don't differentiate 401 from network here:
-        // either way, the client cannot recover without a fresh login.
-        persist(null);
-        emitAuthEvent('SIGNED_OUT', null);
-        return null;
-      }
-      const payload = (await res.json()) as AuthResultPayload;
-      const newSession = toAppSession(payload);
-      persist(newSession);
-      emitAuthEvent('TOKEN_REFRESHED', newSession);
-      return newSession;
+        if (!res || !res.ok) {
+          // Refresh failed — purge and emit SIGNED_OUT so the AuthContext
+          // navigates to /login. Don't differentiate 401 from network here:
+          // either way, the client cannot recover without a fresh login.
+          persist(null);
+          emitAuthEvent('SIGNED_OUT', null);
+          broadcast({ type: 'SIGNED_OUT' });
+          return null;
+        }
+        const payload = (await res.json()) as AuthResultPayload;
+        const newSession = toAppSession(payload);
+        persist(newSession);
+        emitAuthEvent('TOKEN_REFRESHED', newSession);
+        broadcast({ type: 'SESSION_ROTATED', session: newSession });
+        return newSession;
+      });
     } finally {
       inflightRefresh = null;
     }
