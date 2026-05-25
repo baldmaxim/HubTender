@@ -14,18 +14,7 @@ type Config struct {
 	// postgres://user:pass@host:5432/db?sslmode=require
 	DatabaseURL string
 
-	// JWKS configuration for Supabase JWT verification.
-	// Required when AuthMode is "supabase" or "dual"; optional in "app" mode.
-	SupabaseJWKSURL   string
-	SupabaseJWTIssuer string
-
-	// AuthMode is one of "supabase" | "dual" | "app".
-	// supabase = legacy single-issuer (Supabase JWKS only).
-	// dual     = accept both Supabase JWT and app JWT (cutover window).
-	// app      = accept only app-issued JWT.
-	AuthMode string
-
-	// App-issued JWT configuration. Required when AuthMode is "app" or "dual".
+	// App-issued JWT configuration. All fields are required at startup.
 	AppJWTIssuer         string
 	AppJWTAudience       string
 	AppJWTKeyID          string
@@ -45,10 +34,6 @@ type Config struct {
 	// comma-separated env var CORS_ORIGINS.
 	CORSOrigins []string
 
-	// JWKSRefreshInterval controls how often keyfunc refreshes the JWKS.
-	// Hardcoded to 1 hour; not user-configurable.
-	JWKSRefreshInterval time.Duration
-
 	// DB pool tuning. Defaults are production-safe but can be overridden via
 	// DB_MAX_CONNS, DB_MIN_CONNS, DB_MAX_CONN_IDLE_TIME (Go duration string).
 	DBMaxConns        int32
@@ -63,8 +48,8 @@ type Config struct {
 	// AppEnv — "development" | "staging" | "production". Used by the
 	// password-recovery flow: when empty SMTP_HOST AND AppEnv != "production",
 	// /forgot-password returns the reset URL inline (test convenience). In
-	// production an unset SMTP_HOST means recovery emails are silently
-	// dropped — the operator must set SMTP creds. AppEnv falls back to "development".
+	// production an unset SMTP_HOST yields HTTP 503 — the operator must set
+	// SMTP creds. AppEnv falls back to "development".
 	AppEnv string
 
 	// AppBaseURL is the public origin used to build password-reset links
@@ -92,7 +77,6 @@ func Load() (*Config, error) {
 	v.SetDefault("DB_MAX_CONNS", 20)
 	v.SetDefault("DB_MIN_CONNS", 2)
 	v.SetDefault("DB_MAX_CONN_IDLE_TIME", "5m")
-	v.SetDefault("AUTH_MODE", "supabase")
 	v.SetDefault("APP_ACCESS_TOKEN_TTL_MINUTES", 15)
 	v.SetDefault("APP_REFRESH_TOKEN_TTL_DAYS", 30)
 	v.SetDefault("APP_ENV", "development")
@@ -103,27 +87,6 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: DATABASE_URL is required but not set")
 	}
 
-	authMode := strings.ToLower(strings.TrimSpace(v.GetString("AUTH_MODE")))
-	if authMode == "" {
-		authMode = "supabase"
-	}
-	switch authMode {
-	case "supabase", "dual", "app":
-	default:
-		return nil, fmt.Errorf("config: AUTH_MODE must be one of supabase|dual|app, got %q", authMode)
-	}
-
-	jwksURL := v.GetString("SUPABASE_JWKS_URL")
-	jwtIssuer := v.GetString("SUPABASE_JWT_ISSUER")
-	if authMode == "supabase" || authMode == "dual" {
-		if jwksURL == "" {
-			return nil, fmt.Errorf("config: SUPABASE_JWKS_URL is required when AUTH_MODE=%s", authMode)
-		}
-		if jwtIssuer == "" {
-			return nil, fmt.Errorf("config: SUPABASE_JWT_ISSUER is required when AUTH_MODE=%s", authMode)
-		}
-	}
-
 	appIssuer := v.GetString("APP_JWT_ISSUER")
 	appAudience := v.GetString("APP_JWT_AUDIENCE")
 	appKID := v.GetString("APP_JWT_KEY_ID")
@@ -132,19 +95,17 @@ func Load() (*Config, error) {
 	accessMins := v.GetInt("APP_ACCESS_TOKEN_TTL_MINUTES")
 	refreshDays := v.GetInt("APP_REFRESH_TOKEN_TTL_DAYS")
 
-	if authMode == "app" || authMode == "dual" {
-		if appIssuer == "" {
-			return nil, fmt.Errorf("config: APP_JWT_ISSUER is required when AUTH_MODE=%s", authMode)
-		}
-		if appKeyPath == "" && appKeyB64 == "" {
-			return nil, fmt.Errorf("config: APP_JWT_PRIVATE_KEY_PATH or APP_JWT_PRIVATE_KEY_B64 is required when AUTH_MODE=%s", authMode)
-		}
-		if accessMins < 1 {
-			return nil, fmt.Errorf("config: APP_ACCESS_TOKEN_TTL_MINUTES must be >= 1, got %d", accessMins)
-		}
-		if refreshDays < 1 {
-			return nil, fmt.Errorf("config: APP_REFRESH_TOKEN_TTL_DAYS must be >= 1, got %d", refreshDays)
-		}
+	if appIssuer == "" {
+		return nil, fmt.Errorf("config: APP_JWT_ISSUER is required")
+	}
+	if appKeyPath == "" && appKeyB64 == "" {
+		return nil, fmt.Errorf("config: APP_JWT_PRIVATE_KEY_PATH or APP_JWT_PRIVATE_KEY_B64 is required")
+	}
+	if accessMins < 1 {
+		return nil, fmt.Errorf("config: APP_ACCESS_TOKEN_TTL_MINUTES must be >= 1, got %d", accessMins)
+	}
+	if refreshDays < 1 {
+		return nil, fmt.Errorf("config: APP_REFRESH_TOKEN_TTL_DAYS must be >= 1, got %d", refreshDays)
 	}
 
 	rawOrigins := v.GetString("CORS_ORIGINS")
@@ -171,9 +132,6 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		DatabaseURL:          dbURL,
-		SupabaseJWKSURL:      jwksURL,
-		SupabaseJWTIssuer:    jwtIssuer,
-		AuthMode:             authMode,
 		AppJWTIssuer:         appIssuer,
 		AppJWTAudience:       appAudience,
 		AppJWTKeyID:          appKID,
@@ -185,7 +143,6 @@ func Load() (*Config, error) {
 		Port:                 v.GetString("PORT"),
 		LogLevel:             v.GetString("LOG_LEVEL"),
 		CORSOrigins:          origins,
-		JWKSRefreshInterval:  time.Hour,
 		DBMaxConns:           maxConns,
 		DBMinConns:           minConns,
 		DBMaxConnIdleTime:    maxIdle,

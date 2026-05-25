@@ -4,9 +4,7 @@
 
 import { useState, useCallback } from 'react';
 import { message } from 'antd';
-import { AUTH_MODE } from '../../../lib/auth/mode';
 import { getCurrentUserId as appAuthGetCurrentUserId } from '../../../lib/auth/client';
-import { supabase } from '../../../lib/supabase';
 import {
   saveRedistributionResults,
   loadRedistributionResults,
@@ -52,13 +50,7 @@ export function useSaveResults() {
 
       setSaving(true);
       try {
-        let userId: string | null;
-        if (AUTH_MODE === 'app') {
-          userId = appAuthGetCurrentUserId();
-        } else {
-          const { data: { user } } = await supabase.auth.getUser();
-          userId = user?.id ?? null;
-        }
+        const userId = appAuthGetCurrentUserId();
 
         const changedResults = results.filter((result) =>
           Math.abs(result.deducted_amount) > 0.000001 || Math.abs(result.added_amount) > 0.000001

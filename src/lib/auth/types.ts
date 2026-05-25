@@ -1,8 +1,6 @@
-// Shared types for the Phase 6 frontend app-auth client. Matches the
-// JSON shape emitted by the Go BFF /api/v1/auth/login + /refresh endpoints
-// (see backend/internal/auth/models.go AuthResult / UserPayload).
-
-export type AuthMode = 'supabase' | 'app';
+// Shared types for the frontend app-auth client. Matches the JSON shape
+// emitted by the Go BFF /api/v1/auth/login + /refresh endpoints (see
+// backend/internal/auth/models.go AuthResult / UserPayload).
 
 export interface AppAuthUser {
   id: string;

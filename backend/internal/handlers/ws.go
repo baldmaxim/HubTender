@@ -36,10 +36,9 @@ type WsHandler struct {
 	logger    zerolog.Logger
 }
 
-// NewWsHandler constructs a WsHandler. The verifyCfg is the same dual-mode
-// configuration the JWTAuth middleware uses — the handler does its own
-// token verification because the browser WebSocket API cannot set an
-// Authorization header.
+// NewWsHandler constructs a WsHandler. The verifyCfg is the same configuration
+// the JWTAuth middleware uses — the handler does its own token verification
+// because the browser WebSocket API cannot set an Authorization header.
 func NewWsHandler(hub *realtime.Hub, verifyCfg middleware.VerifyConfig, logger zerolog.Logger) *WsHandler {
 	return &WsHandler{
 		hub:       hub,

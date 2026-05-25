@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Form, Input, Button, Card, message, Typography, Spin, Result } from 'antd';
 import { UserOutlined, LockOutlined, LoginOutlined, LoadingOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
 import { reapplyAccess } from '../../lib/api/users';
 import { useAuth } from '../../contexts/AuthContext';
 import { HeaderIcon } from '../../components/Icons/HeaderIcon';
-import { AUTH_MODE } from '../../lib/auth/mode';
 import { signInWithPassword as appAuthSignIn, signOut as appAuthSignOut } from '../../lib/auth/client';
 import type { AppAuthError } from '../../lib/auth/types';
 
@@ -43,46 +41,16 @@ const Login: React.FC = () => {
   const handleLogin = async (values: LoginFormValues) => {
     setLoading(true);
 
+    // POST /api/v1/auth/login. AuthContext gets SIGNED_IN synchronously via
+    // the app-auth event bus → user/loading flip.
     try {
-      if (AUTH_MODE === 'app') {
-        // Phase 6: POST /api/v1/auth/login. AuthContext gets SIGNED_IN
-        // synchronously via the app-auth event bus → user/loading flip.
-        try {
-          await appAuthSignIn(values.email, values.password);
-        } catch (err) {
-          const e = err as AppAuthError;
-          if (e.code === 'invalid_credentials') message.error('Неверный email или пароль');
-          else if (e.code === 'access_blocked') message.error('Доступ к системе закрыт. Обратитесь к администратору');
-          else if (e.code === 'network') message.error('Сервис недоступен. Проверьте соединение');
-          else message.error(`Ошибка входа: ${e.message}`);
-          setLoading(false);
-          return;
-        }
-        return;
-      }
-
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password,
-      });
-
-      if (authError) {
-        if (authError.message.includes('Invalid login credentials')) {
-          message.error('Неверный email или пароль');
-        } else if (authError.message.includes('Email not confirmed')) {
-          message.error('Email не подтверждён');
-        } else {
-          message.error(`Ошибка входа: ${authError.message}`);
-        }
-        setLoading(false);
-        return;
-      }
-
-      // Успех: AuthContext получит SIGNED_IN и установит user,
-      // useEffect выше сделает редирект и сбросит loading.
-    } catch (error) {
-      console.error('Ошибка при входе:', error);
-      message.error('Произошла ошибка при входе');
+      await appAuthSignIn(values.email, values.password);
+    } catch (err) {
+      const e = err as AppAuthError;
+      if (e.code === 'invalid_credentials') message.error('Неверный email или пароль');
+      else if (e.code === 'access_blocked') message.error('Доступ к системе закрыт. Обратитесь к администратору');
+      else if (e.code === 'network') message.error('Сервис недоступен. Проверьте соединение');
+      else message.error(`Ошибка входа: ${e.message}`);
       setLoading(false);
     }
   };
@@ -148,8 +116,7 @@ const Login: React.FC = () => {
               <Button
                 key="logout"
                 onClick={async () => {
-                  if (AUTH_MODE === 'app') await appAuthSignOut();
-                  else await supabase.auth.signOut();
+                  await appAuthSignOut();
                   window.location.reload();
                 }}
               >
@@ -211,8 +178,7 @@ const Login: React.FC = () => {
               <Button
                 key="logout"
                 onClick={async () => {
-                  if (AUTH_MODE === 'app') await appAuthSignOut();
-                  else await supabase.auth.signOut();
+                  await appAuthSignOut();
                   window.location.reload();
                 }}
               >
@@ -269,8 +235,7 @@ const Login: React.FC = () => {
               <Button
                 key="logout"
                 onClick={async () => {
-                  if (AUTH_MODE === 'app') await appAuthSignOut();
-                  else await supabase.auth.signOut();
+                  await appAuthSignOut();
                   window.location.reload();
                 }}
               >

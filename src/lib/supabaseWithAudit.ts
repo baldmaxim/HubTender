@@ -3,42 +3,24 @@
 //
 // Why this still exists:
 //   The four call-sites in src/pages/PositionItems/ predate the typed BOQ
-//   api wrappers and the Go-BFF cutover. The wrappers below are NOT
-//   business calls anymore — every mutation goes through Go BFF
-//   (/api/v1/items/* + /api/v1/tenders/.../items). Supabase is touched only
-//   to read the Bearer token in supabase-auth mode.
-//
-// Phase 6 fix:
-//   `getAuditAccessToken()` now sources the token from the active auth mode
-//   (app vs supabase) via the same mechanism api/client.ts uses, so
-//   VITE_AUTH_MODE=app no longer leaves these calls unauthenticated.
+//   api wrappers. Every mutation goes through Go BFF
+//   (/api/v1/items/* + /api/v1/tenders/.../items).
 //
 // TODO: replace all four call-sites (PositionItems.tsx + 3 hooks) with the
 // typed wrappers in src/lib/api/boq.ts, then delete this module.
 // =============================================================================
 
-import { supabase } from './supabase';
 import type { BoqItem, BoqItemInsert } from './supabase';
 import { apiFetch } from './api/client';
 import { API_BASE_URL } from './api/featureFlags';
-import { AUTH_MODE } from './auth/mode';
 import { getAccessToken as appAuthGetAccessToken } from './auth/client';
 
-// getAuditAccessToken returns a fresh Bearer token from whichever auth source
-// is active for this build. Mirrors getToken() in src/lib/api/client.ts.
-//
-// In `app` mode this is the app-auth client (auto-refresh on near-expiry,
-// coalesced refresh per tab). In legacy `supabase` mode it's the Supabase
-// session. Returns null when no session exists — callers MUST treat that as
-// authentication-required, never as "send the request anonymously" (the
-// previous behaviour silently let unauthenticated requests through, which
-// the BFF middleware then rejected with 401 — confusing for debugging).
+// getAuditAccessToken returns a fresh Bearer token from the app-auth client
+// (auto-refresh on near-expiry, coalesced refresh per tab). Returns null when
+// no session exists — callers MUST treat that as authentication-required,
+// never as "send the request anonymously".
 async function getAuditAccessToken(): Promise<string | null> {
-  if (AUTH_MODE === 'app') {
-    return appAuthGetAccessToken();
-  }
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  return appAuthGetAccessToken();
 }
 
 // ─── Go path helpers ────────────────────────────────────────────────────────

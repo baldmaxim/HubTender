@@ -10,13 +10,14 @@
 │  React 18 + Ant Design + Vite frontend                      │
 │  https://tender.su10.ru                                     │
 │                                                             │
-│  ├─ Supabase Auth bridge (login → JWT)                      │
-│  │   только supabase.auth.* (signInWithPassword, getSession,│
-│  │   onAuthStateChange, signOut)                            │
+│  ├─ App-auth client (src/lib/auth/) — POST /api/v1/auth/    │
+│  │   login → RS256 JWT (issued by Go BFF). Stored under     │
+│  │   localStorage prefix `hubtender_app_auth_*`. Refresh    │
+│  │   token rotation, cross-tab Web Locks coordination.      │
 │  │                                                          │
-│  └─ Все бизнес-вызовы → fetch('/api/v1/*', Bearer JWT)      │
+│  └─ Все вызовы → fetch('/api/v1/*', Bearer JWT)             │
 └────────────────┬────────────────────────────────────────────┘
-                 │ HTTPS + Bearer JWT (Supabase ES256)
+                 │ HTTPS + Bearer JWT (RS256, kid in JWKS)
                  ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  nginx (tender.su10.ru)                                     │
@@ -30,9 +31,14 @@
 │  Go BFF (chi + pgx/v5 + coder/websocket)                    │
 │  container `hubtender-bff` (systemd, multi-stage distroless)│
 │                                                             │
-│  ├─ JWT verify (JWKS auto-refresh)                          │
-│  │   SUPABASE_JWKS_URL = ocauafggjrqvopxjihas/.../jwks.json │
-│  │   SUPABASE_JWT_ISSUER = ocauafggjrqvopxjihas/.../auth/v1 │
+│  ├─ App-auth service (issuer + repository + handlers)       │
+│  │   POST /api/v1/auth/{login,register,refresh,logout,me,   │
+│  │   forgot-password,reset-password,change-password}        │
+│  │   GET  /.well-known/jwks.json   (RS256 public key)       │
+│  │                                                          │
+│  ├─ JWT verify middleware — only the local issuer is        │
+│  │   accepted. APP_JWT_ISSUER, APP_JWT_AUDIENCE,            │
+│  │   APP_JWT_PRIVATE_KEY_* configure signing and verify.    │
 │  │                                                          │
 │  ├─ HTTP handlers /api/v1/* (≈111 уникальных путей)         │
 │  ├─ Native WS hub (Postgres LISTEN/NOTIFY → topics)         │
@@ -43,12 +49,14 @@
                  ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Yandex Managed PostgreSQL 17                               │
-│  rc1d-m4ubd0uem0j9gqqc.mdb.yandexcloud.net:6432/HubTender   │
+│  c-c9qmbgvs6rit4qfe0dni.rw.mdb.yandexcloud.net:6432         │
 │  sslrootcert: /certs/yandex-ca.pem                          │
 │                                                             │
 │  ├─ 41 public-таблица (schema из db/yandex/sql/)            │
-│  ├─ auth.users + auth.identities (33/33 — для legacy        │
-│  │   user_id FK; Supabase Auth не доступен напрямую)        │
+│  ├─ auth.users + auth.identities (legacy user_id FK; auth   │
+│  │   credentials are managed by app_auth.password_hashes)   │
+│  ├─ app_auth.{password_hashes, refresh_tokens,              │
+│  │            password_reset_tokens, auth_events}           │
 │  ├─ Триггеры trg_notify_row_change_* на 6 таблицах          │
 │  │   (notifications, boq_items, client_positions,           │
 │  │    cost_redistribution_results, construction_cost_volumes│
@@ -64,28 +72,40 @@
 | Frontend SPA | `src/` | React/Vite, vendor chunks ~ 1.3 MB gzip |
 | API client | `src/lib/api/*.ts` | один файл на домен, все вызовы через `apiFetch(/api/v1/...)` |
 | Realtime client | `src/lib/realtime/useRealtimeTopic.ts` | подписка на WS-топики Go BFF |
-| Supabase Auth bridge | `src/lib/supabase/client.ts` | только auth, **не business** |
+| App-auth client | `src/lib/auth/client.ts` | login/refresh/me/logout/forgot/reset/change, cross-tab Web Locks |
+| TS types (legacy namespace) | `src/lib/supabase/types.ts` + `database.types.ts` | TypeScript type definitions + access-control хелперы (`hasPageAccess`, `canManageUsers`). Supabase SDK удалён, имя папки оставлено для минимизации diff |
 | Go BFF entrypoint | `backend/cmd/server/main.go` | DI + chi router |
 | Go BFF слои | `backend/internal/{handlers,services,repository}/` | 3-layer |
+| App-auth backend | `backend/internal/auth/` | issuer + repository + handlers + JWKS |
 | Pricing/markup calc | `backend/internal/calc/` | port TS-ядра (юнит-тесты) |
 | Yandex schema baseline | `db/yandex/sql/` | 00..90 SQL — текущий applied schema |
 | Static deploy | `dist/` → `/srv/sites/tender.su10.ru/public/` | rsync на nginx |
-| Production env | `/etc/hubtender/.env.prod` на prod-сервере | `chmod 600`, **вне git** |
+| Production env | `/srv/sites/tender.su10.ru/server/.env.prod` на prod-сервере | `chmod 600`, **вне git** |
 
-## Auth model (bridge mode)
+## Auth model
 
-Сейчас:
+App-auth only. Supabase Auth runtime полностью удалён.
 
-1. Пользователь логинится через `supabase.auth.signInWithPassword` на
-   `https://ocauafggjrqvopxjihas.supabase.co/auth/v1`.
-2. Supabase Auth выдаёт ES256 JWT.
-3. Frontend кладёт JWT в `Authorization: Bearer …` заголовок для каждого
-   `/api/v1/*` запроса.
-4. Go BFF валидирует JWT через JWKS того же Supabase issuer.
-5. Sub-claim JWT = `auth.users.id` = `public.users.id`.
-
-Следующая Phase 6 (`docs/NEXT_PHASE_APP_AUTH.md`) — выдача JWT собственным
-Go BFF, отказ от Supabase Auth.
+1. Пользователь логинится через `POST /api/v1/auth/login` (Go BFF).
+2. Go BFF проверяет bcrypt-хэш в `app_auth.password_hashes` и выдаёт пару
+   токенов: RS256 access JWT (TTL = `APP_ACCESS_TOKEN_TTL_MINUTES`, default
+   15 min) + opaque refresh token (SHA-256 hash в
+   `app_auth.refresh_tokens`, TTL = `APP_REFRESH_TOKEN_TTL_DAYS`, default
+   30 days).
+3. Frontend хранит сессию под префиксом `localStorage.hubtender_app_auth_*`
+   и кладёт access JWT в `Authorization: Bearer …` для каждого `/api/v1/*`.
+4. Go BFF верифицирует JWT через локально загруженный публичный ключ
+   (`APP_JWT_*` env). `iss`-claim должен совпадать с `APP_JWT_ISSUER`.
+5. На 401 frontend выполняет одну попытку refresh — `POST /api/v1/auth/refresh`
+   принимает opaque refresh-токен, выдаёт новую пару (token-family rotation
+   с reuse-detection: переиспользование старого refresh-токена ревокает
+   всю семью).
+6. JWKS — `GET /.well-known/jwks.json` (опубликованный публичный ключ;
+   `kid` совпадает с `APP_JWT_KEY_ID`).
+7. Sub-claim JWT = `auth.users.id` = `public.users.id`.
+8. Password recovery — `forgot-password` / `reset-password` /
+   `change-password` через `app_auth.password_reset_tokens` + SMTP mailer
+   (см. `docs/yandex-migration/42_APP_AUTH_PASSWORD_RECOVERY_RESULT.md`).
 
 ## Realtime
 
@@ -97,26 +117,31 @@ Go BFF, отказ от Supabase Auth.
 
 ## Что НЕ используется в runtime
 
-- ❌ `supabase.from()`, `.rpc()`, `.channel()`, `.removeChannel()` — все
-  бизнес-вызовы фронта удалены (Phase 5 baseline,
-  `archive/migrations/2026-05-db-cutover/docs/yandex-migration/26_FRONTEND_SUPABASE_WRITE_PATHS.md`)
-- ❌ Supabase PostgREST `/rest/v1/*` — отсутствует в bundle (verified)
-- ❌ Supabase Realtime каналы — заменены WS hub Go BFF
-- ❌ Yandex Identity / IAM — не интегрирован, БД через DSN с паролем
+- ❌ Supabase runtime удалён целиком — Auth + Data + SDK
+  (`@supabase/supabase-js` снят из `package.json`, bundle не содержит
+  `supabase.co`, `/auth/v1/*`, `/rest/v1/*`, `GoTrueClient`). См.
+  `docs/yandex-migration/43_SUPABASE_AUTH_REMOVAL_RESULT.md` и
+  `docs/yandex-migration/44_SUPABASE_DATA_CALLS_AUDIT.md`.
+- ❌ Supabase Auth JWT verify на backend — `SUPABASE_JWKS_URL`,
+  `SUPABASE_JWT_ISSUER`, `AUTH_MODE` env-переменные удалены.
+- ❌ Supabase Realtime каналы — заменены WS hub Go BFF.
+- ❌ Yandex Identity / IAM — не интегрирован, БД через DSN с паролем.
 
 ## Внешние зависимости (runtime)
 
 | Service | Назначение | Что произойдёт если упадёт |
 |---|---|---|
-| Yandex Managed PostgreSQL | Source-of-truth БД | Go BFF не сможет читать/писать → 5xx на бизнес-запросы |
-| Supabase Auth | JWKS + login flow | Новые login'ы не пройдут; уже выданные JWT работают до exp |
+| Yandex Managed PostgreSQL | Source-of-truth БД + app_auth.* credential storage | Go BFF не сможет читать/писать → 5xx на бизнес-запросы и login |
+| SMTP provider | Только password recovery (forgot-password) | `/forgot-password` уже отдаёт 503 в проде если SMTP не настроен; нет регрессии до настройки |
 | nginx | TLS termination + reverse proxy | Frontend недоступен извне |
 | systemd `hubtender-bff` | Go BFF process supervisor | Авто-перезапуск при крэше |
 
 ## См. также
 
 - `docs/RUNTIME_ENV.md` — переменные окружения и где они живут
-- `docs/NEXT_PHASE_APP_AUTH.md` — план перехода с Supabase Auth bridge
+- `docs/yandex-migration/38_APP_AUTH_CUTOVER_RESULT.md` — production cutover
+- `docs/yandex-migration/43_SUPABASE_AUTH_REMOVAL_RESULT.md` — полное удаление Supabase runtime (Auth + Data + SDK)
+- `docs/yandex-migration/44_SUPABASE_DATA_CALLS_AUDIT.md` — forensic-аудит, корректирующий первоначальный неверный отчёт в doc 43
 - `archive/migrations/2026-05-db-cutover/README.md` — миграционная история
 - `CLAUDE.md` — гайд для разработки (стек, команды, паттерны)
 - `BRANDING.md` — дизайн-система

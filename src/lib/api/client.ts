@@ -1,12 +1,8 @@
 // Thin fetch wrapper for the Go BFF.
 //
-// Attaches a Bearer token from whichever auth source is active for this
-// build (Phase 6 cutover). In VITE_AUTH_MODE=app the token comes from the
-// local app-auth client (auto-refresh on near-expiry, no Supabase round-trip);
-// otherwise we fall back to the legacy Supabase session.
-import { supabase } from '../supabase';
+// Attaches a Bearer token from the app-auth client (auto-refresh on
+// near-expiry, no Supabase round-trip).
 import { API_BASE_URL } from './featureFlags';
-import { AUTH_MODE } from '../auth/mode';
 import {
   getAccessToken as appAuthGetAccessToken,
   refreshSession as appAuthRefreshSession,
@@ -44,11 +40,7 @@ interface CachedResponse {
 const etagCache = new Map<string, CachedResponse>();
 
 async function getToken(): Promise<string | null> {
-  if (AUTH_MODE === 'app') {
-    return appAuthGetAccessToken();
-  }
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  return appAuthGetAccessToken();
 }
 
 export async function apiFetch<T>(
@@ -90,10 +82,10 @@ export async function apiFetch<T>(
   let { headers, signal } = buildRequest(token);
   let res = await fetch(`${API_BASE_URL}${path}`, { ...rest, headers, signal });
 
-  // App-mode 401 retry: try ONE refresh+retry before giving up. The
-  // refreshSession() helper coalesces concurrent callers, so multiple
-  // parallel apiFetch calls won't burn the refresh token in parallel.
-  if (res.status === 401 && AUTH_MODE === 'app') {
+  // 401 retry: try ONE refresh+retry before giving up. The refreshSession()
+  // helper coalesces concurrent callers, so multiple parallel apiFetch calls
+  // won't burn the refresh token in parallel.
+  if (res.status === 401) {
     const refreshed = await appAuthRefreshSession();
     if (refreshed) {
       ({ headers, signal } = buildRequest(refreshed.access_token));

@@ -2,10 +2,7 @@ import React, { useState } from 'react';
 import { Form, Input, Button, Card, message, Typography } from 'antd';
 import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { registerUser as apiRegisterUser } from '../../lib/api/users';
 import { HeaderIcon } from '../../components/Icons/HeaderIcon';
-import { AUTH_MODE } from '../../lib/auth/mode';
 import { registerWithPassword as appAuthRegister } from '../../lib/auth/client';
 import type { AppAuthError } from '../../lib/auth/types';
 
@@ -26,88 +23,32 @@ const Register: React.FC = () => {
   const handleRegister = async (values: RegisterFormValues) => {
     setLoading(true);
 
-    if (AUTH_MODE === 'app') {
-      // Phase 6 app-auth: one POST /api/v1/auth/register creates both
-      // auth.users + public.users + admin notification in a single
-      // transaction. No session is issued — fresh users land in
-      // access_status=pending and must wait for admin approval.
-      try {
-        await appAuthRegister({
-          email: values.email,
-          password: values.password,
-          full_name: values.full_name,
-        });
-        message.success(
-          'Запрос на регистрацию отправлен! После одобрения администратором вы сможете войти в систему.',
-          5,
-        );
-        navigate('/login');
-      } catch (err) {
-        const e = err as AppAuthError;
-        if (e.status === 409) {
-          message.error('Пользователь с таким email уже зарегистрирован');
-        } else if (e.status === 400) {
-          message.error(e.message || 'Проверьте корректность данных');
-        } else if (e.code === 'network') {
-          message.error('Сервис недоступен. Проверьте соединение');
-        } else {
-          message.error(`Ошибка регистрации: ${e.message}`);
-        }
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
+    // One POST /api/v1/auth/register creates auth.users + public.users +
+    // admin notification in a single transaction. No session is issued —
+    // fresh users land in access_status=pending and must wait for admin
+    // approval.
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      await appAuthRegister({
         email: values.email,
         password: values.password,
+        full_name: values.full_name,
       });
-
-      if (authError) {
-        console.error('Ошибка регистрации:', authError);
-
-        if (authError.message.includes('already registered')) {
-          message.error('Пользователь с таким email уже зарегистрирован');
-        } else {
-          message.error(`Ошибка регистрации: ${authError.message}`);
-        }
-        return;
-      }
-
-      if (!authData.user) {
-        message.error('Не удалось создать пользователя');
-        return;
-      }
-
-      // Создаём запись public.users + рассылку уведомления админам в одной
-      // транзакции на Go BFF (allowed_pages подтягивается из roles, email и
-      // userID — из подтверждённого JWT, клиент их подменить не может).
-      try {
-        await apiRegisterUser({
-          full_name: values.full_name,
-          role_code: 'engineer',
-        });
-      } catch (userInsertError) {
-        const err = userInsertError as { message?: string };
-        console.error('Ошибка создания записи пользователя:', userInsertError);
-        await supabase.auth.signOut();
-        message.error(`Ошибка при создании профиля: ${err.message ?? 'unknown'}`);
-        return;
-      }
-
-      await supabase.auth.signOut();
-
       message.success(
         'Запрос на регистрацию отправлен! После одобрения администратором вы сможете войти в систему.',
-        5
+        5,
       );
-
       navigate('/login');
-    } catch (error) {
-      console.error('Неожиданная ошибка при регистрации:', error);
-      message.error('Произошла неожиданная ошибка при регистрации');
+    } catch (err) {
+      const e = err as AppAuthError;
+      if (e.status === 409) {
+        message.error('Пользователь с таким email уже зарегистрирован');
+      } else if (e.status === 400) {
+        message.error(e.message || 'Проверьте корректность данных');
+      } else if (e.code === 'network') {
+        message.error('Сервис недоступен. Проверьте соединение');
+      } else {
+        message.error(`Ошибка регистрации: ${e.message}`);
+      }
     } finally {
       setLoading(false);
     }

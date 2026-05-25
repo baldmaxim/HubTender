@@ -1,9 +1,10 @@
 # HUBTender
 
 Портал управления тендерами в строительстве (BOQ + биржа работ).
-Фронт — React + Vite + Ant Design. Бэк — Go BFF (chi + pgx) перед Supabase
-(Postgres 17 + Auth + Realtime). Подробнее о конвенциях, ENV и рабочем
-процессе — в [CLAUDE.md](CLAUDE.md).
+Фронт — React + Vite + Ant Design. Бэк — Go BFF (chi + pgx) перед Yandex
+Managed PostgreSQL 17. Аутентификация полностью app-auth (Go BFF выдаёт
+RS256 JWT через `/api/v1/auth/*`). Realtime — native WebSocket hub Go BFF.
+Подробнее о конвенциях, ENV и рабочем процессе — в [CLAUDE.md](CLAUDE.md).
 
 > **Первый раз поднимаете проект локально?** → [ЗАПУСК.md](ЗАПУСК.md) — пошаговая инструкция от чистой системы до работающего портала в браузере.
 

@@ -2,9 +2,7 @@ import { useState } from 'react';
 import { Form, Input, Button, Card, Result, Typography, message } from 'antd';
 import { MailOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
 import { getErrorMessage } from '../../utils/errors';
-import { AUTH_MODE } from '../../lib/auth/mode';
 import { forgotPassword as appAuthForgot } from '../../lib/auth/client';
 
 const { Title, Text } = Typography;
@@ -18,47 +16,25 @@ export default function ForgotPassword() {
   const handleSubmit = async (values: { email: string }) => {
     setLoading(true);
 
-    if (AUTH_MODE === 'app') {
-      // Phase 6 app-auth: server normally responds 200 with anti-enumeration
-      // semantics — even unknown emails get the same "email sent" UX.
-      // In non-prod environments where SMTP is not configured the response
-      // additionally carries reset_url for operator-driven testing.
-      // In production WITHOUT SMTP the server returns 503 with detail
-      // "email_provider_not_configured" — we surface a distinct
-      // "service unavailable" UI so the user doesn't see a false-positive
-      // "we sent you a letter" toast.
-      try {
-        const res = await appAuthForgot(values.email);
-        setEmailSent(true);
-        if (res.reset_url) setDevResetURL(res.reset_url);
-        message.success('Если email зарегистрирован, мы отправили письмо');
-      } catch (err) {
-        const e = err as { status?: number };
-        if (e.status === 503) {
-          setProviderUnavailable(true);
-        } else {
-          message.error(getErrorMessage(err) || 'Ошибка отправки');
-        }
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
+    // Server normally responds 200 with anti-enumeration semantics — even
+    // unknown emails get the same "email sent" UX. In non-prod environments
+    // where SMTP is not configured the response additionally carries
+    // reset_url for operator-driven testing. In production WITHOUT SMTP
+    // the server returns 503 with detail "email_provider_not_configured" —
+    // we surface a distinct "service unavailable" UI so the user doesn't
+    // see a false-positive "we sent you a letter" toast.
     try {
-      // Используем VITE_APP_URL для production, window.location.origin для локальной разработки
-      const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
-
-      const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-        redirectTo: `${baseUrl}/reset-password`,
-      });
-
-      if (error) throw error;
-
+      const res = await appAuthForgot(values.email);
       setEmailSent(true);
-      message.success('Письмо для восстановления пароля отправлено');
+      if (res.reset_url) setDevResetURL(res.reset_url);
+      message.success('Если email зарегистрирован, мы отправили письмо');
     } catch (err) {
-      message.error(getErrorMessage(err) || 'Ошибка отправки письма');
+      const e = err as { status?: number };
+      if (e.status === 503) {
+        setProviderUnavailable(true);
+      } else {
+        message.error(getErrorMessage(err) || 'Ошибка отправки');
+      }
     } finally {
       setLoading(false);
     }

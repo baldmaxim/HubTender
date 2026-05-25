@@ -40,29 +40,9 @@ func newTestPriv(t *testing.T) *rsa.PrivateKey {
 	return p
 }
 
-func TestParseAuthMode(t *testing.T) {
-	cases := map[string]AuthMode{
-		"":         AuthModeSupabase,
-		"supabase": AuthModeSupabase,
-		"SUPABASE": AuthModeSupabase,
-		" dual\n ": AuthModeDual,
-		"app":      AuthModeApp,
-	}
-	for in, want := range cases {
-		got, err := ParseAuthMode(in)
-		if err != nil || got != want {
-			t.Fatalf("ParseAuthMode(%q): got=%q err=%v want=%q", in, got, err, want)
-		}
-	}
-	if _, err := ParseAuthMode("nope"); err == nil {
-		t.Fatalf("expected error on unknown mode")
-	}
-}
-
 func TestVerifyToken_App_OK(t *testing.T) {
 	priv := newTestPriv(t)
 	cfg := VerifyConfig{
-		Mode:         AuthModeApp,
 		AppPublicKey: &priv.PublicKey,
 		AppIssuer:    "https://api.test.local",
 		AppAudience:  "test-aud",
@@ -77,38 +57,9 @@ func TestVerifyToken_App_OK(t *testing.T) {
 	}
 }
 
-func TestVerifyToken_App_AcceptedInDualMode(t *testing.T) {
-	priv := newTestPriv(t)
-	cfg := VerifyConfig{
-		Mode:           AuthModeDual,
-		AppPublicKey:   &priv.PublicKey,
-		AppIssuer:      "https://api.test.local",
-		SupabaseIssuer: "https://supabase.io/auth/v1",
-	}
-	raw := mintAppToken(t, priv, "https://api.test.local", "", "user-1", "a@b.com", time.Now().Add(5*time.Minute))
-	if _, err := VerifyToken(cfg, raw); err != nil {
-		t.Fatalf("dual-mode app verify: %v", err)
-	}
-}
-
-func TestVerifyToken_App_RejectedInSupabaseMode(t *testing.T) {
-	priv := newTestPriv(t)
-	cfg := VerifyConfig{
-		Mode:           AuthModeSupabase,
-		AppPublicKey:   &priv.PublicKey,
-		AppIssuer:      "https://api.test.local",
-		SupabaseIssuer: "https://supabase.io/auth/v1",
-	}
-	raw := mintAppToken(t, priv, "https://api.test.local", "", "user-1", "a@b.com", time.Now().Add(5*time.Minute))
-	if _, err := VerifyToken(cfg, raw); err == nil {
-		t.Fatalf("expected rejection of app JWT in supabase mode")
-	}
-}
-
 func TestVerifyToken_ExpiredFails(t *testing.T) {
 	priv := newTestPriv(t)
 	cfg := VerifyConfig{
-		Mode:         AuthModeApp,
 		AppPublicKey: &priv.PublicKey,
 		AppIssuer:    "https://api.test.local",
 	}
@@ -121,7 +72,6 @@ func TestVerifyToken_ExpiredFails(t *testing.T) {
 func TestVerifyToken_WrongIssuerFails(t *testing.T) {
 	priv := newTestPriv(t)
 	cfg := VerifyConfig{
-		Mode:         AuthModeApp,
 		AppPublicKey: &priv.PublicKey,
 		AppIssuer:    "https://api.test.local",
 	}
@@ -131,15 +81,13 @@ func TestVerifyToken_WrongIssuerFails(t *testing.T) {
 	}
 }
 
-func TestVerifyToken_UnknownIssuerFails(t *testing.T) {
-	cfg := VerifyConfig{
-		Mode:           AuthModeDual,
-		AppIssuer:      "https://api.test.local",
-		SupabaseIssuer: "https://supabase.io/auth/v1",
-	}
+func TestVerifyToken_MissingPublicKeyFails(t *testing.T) {
 	priv := newTestPriv(t)
-	raw := mintAppToken(t, priv, "https://random.local", "", "user-1", "a@b.com", time.Now().Add(5*time.Minute))
+	cfg := VerifyConfig{
+		AppIssuer: "https://api.test.local",
+	}
+	raw := mintAppToken(t, priv, "https://api.test.local", "", "user-1", "a@b.com", time.Now().Add(5*time.Minute))
 	if _, err := VerifyToken(cfg, raw); err == nil {
-		t.Fatalf("expected unknown-issuer rejection")
+		t.Fatalf("expected failure when AppPublicKey is nil")
 	}
 }

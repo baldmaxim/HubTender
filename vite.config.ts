@@ -49,7 +49,6 @@ export default defineConfig(({ mode }) => {
             'vendor-antd': ['antd', '@ant-design/icons', '@ant-design/charts'],
             'vendor-charts': ['chart.js', 'react-chartjs-2', 'chartjs-plugin-datalabels'],
             'vendor-xlsx': ['xlsx', 'xlsx-js-style'],
-            'vendor-supabase': ['@supabase/supabase-js'],
           },
         },
       },

@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/MicahParks/keyfunc/v3"
 	"github.com/getsentry/sentry-go"
 	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
@@ -126,72 +125,47 @@ func main() {
 	go listener.Run(rootCtx)
 
 	// -------------------------------------------------------------------------
-	// 7. Auth verification setup.
-	//
-	// VerifyConfig encapsulates the dual-mode JWT acceptance policy.
-	// Depending on cfg.AuthMode we load none/one/both of the issuer-specific
-	// helpers (Supabase JWKS, app signing key). The Supabase keyfunc is
-	// reused by the WS handler; the app issuer is reused by the auth
-	// service for minting access/refresh tokens.
+	// 7. Auth verification setup. Backend accepts only app-issued JWTs.
 	// -------------------------------------------------------------------------
-	authMode, err := middleware.ParseAuthMode(cfg.AuthMode)
+	signingKey, err := loadAppSigningKey(cfg)
 	if err != nil {
-		log.Fatal().Err(err).Msg("invalid AUTH_MODE")
+		log.Fatal().Err(err).Msg("failed to load app JWT signing key")
 	}
-
-	var kf keyfunc.Keyfunc
-	if authMode == middleware.AuthModeSupabase || authMode == middleware.AuthModeDual {
-		kf, err = keyfunc.NewDefault([]string{cfg.SupabaseJWKSURL})
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to initialise Supabase JWKS keyfunc")
-		}
+	appIssuer, err := auth.NewIssuer(auth.IssuerConfig{
+		SigningKey: signingKey,
+		Issuer:     cfg.AppJWTIssuer,
+		Audience:   cfg.AppJWTAudience,
+		AccessTTL:  cfg.AppAccessTokenTTL,
+		RefreshTTL: cfg.AppRefreshTokenTTL,
+	})
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to construct app JWT issuer")
 	}
+	authRepo := auth.NewRepository(pool)
+	mailer := auth.NewSMTPMailer(auth.SMTPConfig{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		User:     cfg.SMTPUser,
+		Password: cfg.SMTPPassword,
+		From:     cfg.SMTPFrom,
+	})
+	authSvc := auth.NewService(authRepo, appIssuer).
+		WithMailer(mailer).
+		WithAppEnv(cfg.AppEnv).
+		WithAppBaseURL(cfg.AppBaseURL)
+	authH := auth.NewHandler(authSvc)
+	log.Info().
+		Bool("mailer_configured", mailer.IsConfigured()).
+		Str("app_env", cfg.AppEnv).
+		Str("app_base_url", cfg.AppBaseURL).
+		Msg("password-recovery flow configured")
 
-	var authH *auth.Handler
 	verifyCfg := middleware.VerifyConfig{
-		Mode:            authMode,
-		SupabaseKeyfunc: kf,
-		SupabaseIssuer:  cfg.SupabaseJWTIssuer,
+		AppPublicKey: &signingKey.Private.PublicKey,
+		AppIssuer:    cfg.AppJWTIssuer,
+		AppAudience:  cfg.AppJWTAudience,
 	}
-	if authMode == middleware.AuthModeApp || authMode == middleware.AuthModeDual {
-		signingKey, err := loadAppSigningKey(cfg)
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to load app JWT signing key")
-		}
-		appIssuer, err := auth.NewIssuer(auth.IssuerConfig{
-			SigningKey: signingKey,
-			Issuer:     cfg.AppJWTIssuer,
-			Audience:   cfg.AppJWTAudience,
-			AccessTTL:  cfg.AppAccessTokenTTL,
-			RefreshTTL: cfg.AppRefreshTokenTTL,
-		})
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to construct app JWT issuer")
-		}
-		authRepo := auth.NewRepository(pool)
-		mailer := auth.NewSMTPMailer(auth.SMTPConfig{
-			Host:     cfg.SMTPHost,
-			Port:     cfg.SMTPPort,
-			User:     cfg.SMTPUser,
-			Password: cfg.SMTPPassword,
-			From:     cfg.SMTPFrom,
-		})
-		authSvc := auth.NewService(authRepo, appIssuer).
-			WithMailer(mailer).
-			WithAppEnv(cfg.AppEnv).
-			WithAppBaseURL(cfg.AppBaseURL)
-		authH = auth.NewHandler(authSvc)
-		log.Info().
-			Bool("mailer_configured", mailer.IsConfigured()).
-			Str("app_env", cfg.AppEnv).
-			Str("app_base_url", cfg.AppBaseURL).
-			Msg("password-recovery flow configured")
-
-		verifyCfg.AppPublicKey = &signingKey.Private.PublicKey
-		verifyCfg.AppIssuer = cfg.AppJWTIssuer
-		verifyCfg.AppAudience = cfg.AppJWTAudience
-		log.Info().Str("kid", signingKey.KID).Str("iss", cfg.AppJWTIssuer).Msg("app JWT issuer ready")
-	}
+	log.Info().Str("kid", signingKey.KID).Str("iss", cfg.AppJWTIssuer).Msg("app JWT issuer ready")
 
 	// -------------------------------------------------------------------------
 	// 8. Repositories, cache, services, handlers
@@ -326,17 +300,15 @@ func main() {
 	// Public auth routes — login / register / refresh / forgot / reset do
 	// NOT require an existing JWT. JWKS is served public so any RP can
 	// verify our access tokens.
-	if authH != nil {
-		r.Post("/api/v1/auth/login", authH.Login)
-		r.Post("/api/v1/auth/register", authH.Register)
-		r.Post("/api/v1/auth/refresh", authH.Refresh)
-		r.Post("/api/v1/auth/logout", authH.Logout)
-		r.Post("/api/v1/auth/forgot-password", authH.ForgotPassword)
-		r.Post("/api/v1/auth/reset-password", authH.ResetPassword)
-		r.Get("/.well-known/jwks.json", authH.JWKS)
-	}
+	r.Post("/api/v1/auth/login", authH.Login)
+	r.Post("/api/v1/auth/register", authH.Register)
+	r.Post("/api/v1/auth/refresh", authH.Refresh)
+	r.Post("/api/v1/auth/logout", authH.Logout)
+	r.Post("/api/v1/auth/forgot-password", authH.ForgotPassword)
+	r.Post("/api/v1/auth/reset-password", authH.ResetPassword)
+	r.Get("/.well-known/jwks.json", authH.JWKS)
 
-	// Authenticated API routes — dual-mode JWT (see VerifyConfig).
+	// Authenticated API routes — app-issued JWT only (see VerifyConfig).
 	authMW := middleware.JWTAuth(verifyCfg)
 
 	r.Group(func(r chi.Router) {
@@ -347,13 +319,11 @@ func main() {
 		r.Get("/api/v1/me/deadline-extensions", meH.GetDeadlineExtensions)
 		r.Post("/api/v1/me/reapply-access", meH.ReapplyAccess)
 
-		// Phase 6 app-auth: /me equivalent that returns a UserPayload shape
-		// identical to the login response (so the frontend can use one type
-		// across login/refresh/me).
-		if authH != nil {
-			r.Get("/api/v1/auth/me", authH.Me)
-			r.Post("/api/v1/auth/change-password", authH.ChangePassword)
-		}
+		// App-auth: /me equivalent that returns a UserPayload shape identical
+		// to the login response (so the frontend can use one type across
+		// login/refresh/me).
+		r.Get("/api/v1/auth/me", authH.Me)
+		r.Post("/api/v1/auth/change-password", authH.ChangePassword)
 
 		r.Get("/api/v1/references/roles", refH.GetRoles)
 		r.Get("/api/v1/references/units", refH.GetUnits)

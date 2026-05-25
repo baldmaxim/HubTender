@@ -21,8 +21,6 @@ jobs:
       - run: npm run typecheck
       - name: Build (with placeholder env)
         env:
-          VITE_SUPABASE_URL: https://placeholder.supabase.co
-          VITE_SUPABASE_PUBLISHABLE_KEY: placeholder-key
           VITE_API_URL: http://localhost:3005
         run: npm run build
 
