@@ -234,7 +234,15 @@ export function useVersionMatching({
       );
     } catch (error) {
       console.error('Ошибка создания версии:', error);
-      message.error(`Не удалось создать версию: ${getErrorMessage(error)}`);
+      const status = (error as { status?: number })?.status;
+      if (status === 409) {
+        message.error(
+          'Эта версия тендера уже создана (возможно, кем-то параллельно). ' +
+          'Закройте окно, обновите список тендеров и проверьте — новая версия должна быть видна.'
+        );
+      } else {
+        message.error(`Не удалось создать версию: ${getErrorMessage(error)}`);
+      }
     } finally {
       dispatch({ type: 'SET_CREATING', payload: false });
     }

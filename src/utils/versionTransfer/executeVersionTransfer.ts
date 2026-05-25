@@ -52,8 +52,9 @@ export async function executeVersionTransfer({
       },
     );
   } catch (err) {
+    const status = (err as { status?: number })?.status;
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Ошибка серверного переноса версии: ${msg}`);
+    throw Object.assign(new Error(`Ошибка серверного переноса версии: ${msg}`), { status });
   }
 
   const data = envelope?.data;
