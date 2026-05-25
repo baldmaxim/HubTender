@@ -6,6 +6,7 @@ import type {
 } from '../types/positionAdjustment';
 import {
   calculatePositionAdjustment,
+  computeCumulativePositionDeltas,
   validatePositionAdjustment,
   type AdjustmentBaseRow,
 } from '../utils/calculatePositionAdjustment';
@@ -19,34 +20,6 @@ interface Draft {
 
 function emptyDraft(mode: PositionAdjustmentMode = 'transfer'): Draft {
   return { mode, amount: 0, sourceIds: new Set(), targetIds: new Set() };
-}
-
-function applyDeltasToBase(
-  base: AdjustmentBaseRow[],
-  deltas: Map<string, number>
-): AdjustmentBaseRow[] {
-  if (deltas.size === 0) return base;
-  return base.map((row) => {
-    const delta = deltas.get(row.position_id);
-    return delta ? { ...row, total_works_after: row.total_works_after + delta } : row;
-  });
-}
-
-function cumulativeDeltas(
-  base: AdjustmentBaseRow[],
-  rules: PositionAdjustmentRule[]
-): { cumulative: Map<string, number>; current: AdjustmentBaseRow[] } {
-  const cumulative = new Map<string, number>();
-  let state = base;
-  for (const rule of rules) {
-    const { deltas } = calculatePositionAdjustment(rule, state);
-    if (deltas.size === 0) continue;
-    for (const [id, value] of deltas) {
-      cumulative.set(id, (cumulative.get(id) ?? 0) + value);
-    }
-    state = applyDeltasToBase(state, deltas);
-  }
-  return { cumulative, current: state };
 }
 
 export interface UsePositionAdjustmentReturn {
@@ -73,7 +46,7 @@ export function usePositionAdjustment(
   const [appliedRules, setAppliedRules] = useState<PositionAdjustmentRule[]>([]);
 
   const { cumulative: appliedDeltas, current: currentBaseRows } = useMemo(
-    () => cumulativeDeltas(baseRows, appliedRules),
+    () => computeCumulativePositionDeltas(baseRows, appliedRules),
     [baseRows, appliedRules]
   );
 

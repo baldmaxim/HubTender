@@ -79,8 +79,17 @@ export default function CommerceTable({
     };
   }, [insuranceTotal, positions, referenceTotal]);
 
-  const insShare = (pos: PositionWithCommercialCost) =>
-    summary.totalWorks > 0 ? insuranceTotal * ((pos.work_cost_total || 0) / summary.totalWorks) : 0;
+  // Доля страхования на позицию.
+  // Если у позиции есть pre-computed insurance_share (приходит из общего
+  // pipeline для тендеров с сохранённым перераспределением) — используем её,
+  // числа совпадают с CR. Иначе fallback на пропорциональное разнесение по
+  // raw work_cost_total (live-calc tender без снимка).
+  const insShare = (pos: PositionWithCommercialCost) => {
+    if (pos.insurance_share != null) return pos.insurance_share;
+    return summary.totalWorks > 0
+      ? insuranceTotal * ((pos.work_cost_total || 0) / summary.totalWorks)
+      : 0;
+  };
 
   const columns: ColumnsType<PositionWithCommercialCost> = [
     {

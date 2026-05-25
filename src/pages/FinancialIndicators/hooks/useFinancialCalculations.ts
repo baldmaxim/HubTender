@@ -12,6 +12,7 @@ import {
 import { listTenderMarkupPercentages } from '../../../lib/api/markup';
 import { createSystemNotification } from '../../../lib/api/notifications';
 import { getErrorMessage } from '../../../utils/errors';
+import { computeInsuranceTotal } from '../../../services/redistributionPipeline';
 
 export interface IndicatorRow {
   key: string;
@@ -129,13 +130,7 @@ export const useFinancialCalculations = () => {
         // ignore — fallback to zero insurance cost
       }
 
-      const insuranceCost = (() => {
-        if (!insuranceData) return 0;
-        const apt = (insuranceData.apt_price_m2 || 0) * (insuranceData.apt_area || 0);
-        const park = (insuranceData.parking_price_m2 || 0) * (insuranceData.parking_area || 0);
-        const stor = (insuranceData.storage_price_m2 || 0) * (insuranceData.storage_area || 0);
-        return (apt + park + stor) * ((insuranceData.judicial_pct || 0) / 100) * ((insuranceData.total_pct || 0) / 100);
-      })();
+      const insuranceCost = computeInsuranceTotal(insuranceData);
 
       const boqItems: BoqItemWithPosition[] = await listAllBoqItemsForTender(selectedTenderId);
 

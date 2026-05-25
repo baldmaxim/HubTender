@@ -1,49 +1,22 @@
 /**
  * Утилита для экспорта результатов перераспределения в Excel
+ *
+ * Получает готовые строки из общего pipeline (src/services/redistributionPipeline),
+ * чтобы не дублировать category-redistribution → position-adjustment → smartRound →
+ * insurance. Страница «Перераспределение» = единый источник правды, экспорт лишь
+ * рендерит уже посчитанные числа.
  */
 
 import * as XLSX from 'xlsx-js-style';
-import type { ClientPosition } from '../hooks';
-import type { RedistributionResult } from './calculateDistribution';
-import type { ResultRow } from '../components/Results/ResultsTableColumns';
-
-interface BoqItemFull {
-  id: string;
-  client_position_id: string;
-  detail_cost_category_id: string | null;
-  boq_item_type: string;
-  total_commercial_work_cost: number;
-  total_commercial_material_cost: number;
-}
+import type { PreparedRow } from '../../../services/redistributionPipeline';
 
 interface ExportData {
-  clientPositions: ClientPosition[];
-  redistributionResults: RedistributionResult[];
-  boqItemsMap: Map<string, BoqItemFull>;
+  rows: PreparedRow[];
   tenderTitle: string;
-  insuranceTotal?: number;
-  // Пропорциональная дельта работ по позициям (суммарная по всем итерациям position-level)
-  positionAdjustmentDeltas?: Map<string, number>;
 }
 
-/**
- * Экспорт результатов перераспределения в Excel
- */
 export function exportRedistributionToExcel(data: ExportData): void {
-  const {
-    clientPositions,
-    redistributionResults,
-    boqItemsMap,
-    tenderTitle,
-    insuranceTotal = 0,
-    positionAdjustmentDeltas,
-  } = data;
-
-  // Формируем Map результатов для быстрого доступа
-  const resultsMap = new Map<string, RedistributionResult>();
-  for (const result of redistributionResults) {
-    resultsMap.set(result.boq_item_id, result);
-  }
+  const { rows: preparedRows, tenderTitle } = data;
 
   // Заголовок
   const header = [
@@ -59,117 +32,30 @@ export function exportRedistributionToExcel(data: ExportData): void {
     'Примечание ГП',
   ];
 
-  // Разделяем позиции на обычные и ДОП
-  const regularPositions = clientPositions.filter((p) => !p.is_additional);
-  const additionalPositions = clientPositions.filter((p) => p.is_additional);
+  // Сортируем так же, как раньше: сначала обычные, затем ДОП.
+  const orderedRows = [
+    ...preparedRows.filter((r) => !r.is_additional),
+    ...preparedRows.filter((r) => r.is_additional),
+  ];
 
-  // Функция определения конечности позиции по hierarchy_level
-  const isLeafPosition = (index: number, positions: ClientPosition[]): boolean => {
-    if (index === positions.length - 1) {
-      return true;
-    }
+  const createRow = (resultRow: PreparedRow) => {
+    const materialUnitPrice =
+      Math.round((resultRow.rounded_material_unit_price ?? resultRow.material_unit_price ?? 0) * 100) / 100;
+    const totalWorksAfter = resultRow.rounded_total_works ?? resultRow.total_works_after;
+    const workUnitPriceAfter =
+      resultRow.quantity > 0
+        ? Math.round((totalWorksAfter / resultRow.quantity) * 100) / 100
+        : 0;
+    const totalMaterials = resultRow.rounded_total_materials ?? resultRow.total_materials;
 
-    const currentLevel = positions[index].hierarchy_level || 0;
-    const nextLevel = positions[index + 1]?.hierarchy_level || 0;
-
-    return currentLevel >= nextLevel;
-  };
-
-  // Функция для создания ResultRow для последующего округления
-  const createResultRow = (position: ClientPosition, index: number, positions: ClientPosition[]): ResultRow => {
-    // Получить все BOQ элементы для этой позиции
-    const positionBoqItems = Array.from(boqItemsMap.entries()).filter(
-      ([, item]) => item.client_position_id === position.id
-    );
-
-    // Суммируем материалы и работы
-    let totalMaterials = 0;
-    let totalWorksBefore = 0;
-    let totalWorksAfter = 0;
-    let totalRedistribution = 0;
-
-    for (const [boqItemId, boqItem] of positionBoqItems) {
-      totalMaterials += boqItem.total_commercial_material_cost || 0;
-
-      const workCost = boqItem.total_commercial_work_cost || 0;
-      const result = resultsMap.get(boqItemId);
-      if (result) {
-        totalWorksBefore += result.original_work_cost;
-        totalWorksAfter += result.final_work_cost;
-        totalRedistribution += result.added_amount - result.deducted_amount;
-      } else {
-        totalWorksBefore += workCost;
-        totalWorksAfter += workCost;
-      }
-    }
-
-    // Применяем position-level дельту (сумму всех итераций между строками) поверх
-    // уже готового category-level total_works_after.
-    const positionDelta = positionAdjustmentDeltas?.get(position.id) ?? 0;
-    const adjustedWorksAfter = totalWorksAfter + positionDelta;
-    const adjustedRedistribution = totalRedistribution + positionDelta;
-
-    // Рассчитываем цену за единицу
-    const quantity = position.manual_volume || position.volume || 1;
-    const materialUnitPrice = totalMaterials / quantity;
-    const workUnitPriceBefore = totalWorksBefore / quantity;
-    const workUnitPriceAfter = adjustedWorksAfter / quantity;
-
-    // Определяем конечность позиции по hierarchy_level
-    const isLeaf = isLeafPosition(index, positions);
-
-    return {
-      key: position.id,
-      position_id: position.id,
-      position_number: position.position_number,
-      section_number: position.section_number,
-      position_name: position.position_name,
-      item_no: position.item_no,
-      work_name: position.work_name,
-      client_volume: position.volume,
-      manual_volume: position.manual_volume,
-      unit_code: position.unit_code,
-      quantity,
-      material_unit_price: materialUnitPrice,
-      work_unit_price_before: workUnitPriceBefore,
-      work_unit_price_after: workUnitPriceAfter,
-      total_materials: totalMaterials,
-      total_works_before: totalWorksBefore,
-      total_works_after: adjustedWorksAfter,
-      redistribution_amount: adjustedRedistribution,
-      manual_note: position.manual_note,
-      isLeaf,
-      is_additional: position.is_additional,
-    };
-  };
-
-  // Создаем ResultRow объекты для округления
-  const regularResultRows = regularPositions.map((pos, idx) => createResultRow(pos, idx, regularPositions));
-  const additionalResultRows = additionalPositions.map((pos, idx) => createResultRow(pos, idx, additionalPositions));
-  const allResultRows = [...regularResultRows, ...additionalResultRows];
-  const totalWorksAfterBase = allResultRows.reduce((sum, row) => sum + (row.total_works_after || 0), 0);
-
-  // Функция для создания строки данных из ResultRow
-  const createRow = (resultRow: ResultRow) => {
-    const insuranceShare = totalWorksAfterBase > 0
-      ? insuranceTotal * ((resultRow.total_works_after || 0) / totalWorksAfterBase)
-      : 0;
-    const materialUnitPrice = Math.round((resultRow.material_unit_price || 0) * 100) / 100;
-    const workUnitPriceAfter = Math.round((((resultRow.total_works_after || 0) + insuranceShare) / resultRow.quantity) * 100) / 100;
-    const totalMaterials = resultRow.total_materials;
-    const totalWorksAfter = (resultRow.total_works_after || 0) + insuranceShare;
-
-    // Формируем наименование
     let fullName = '';
     if (resultRow.is_additional) {
-      // Для ДОП строк добавляем префикс
       fullName = `  [ДОП] ${resultRow.work_name}`;
     } else {
       const sectionPrefix = resultRow.section_number ? `[${resultRow.section_number}] ` : '';
       fullName = `${sectionPrefix}${resultRow.work_name}`;
     }
 
-    // Определяем нулевую стоимость
     const totalCost = totalMaterials + totalWorksAfter;
     const isZeroCost = resultRow.isLeaf && totalCost === 0;
 
@@ -192,8 +78,7 @@ export function exportRedistributionToExcel(data: ExportData): void {
     };
   };
 
-  // Формируем строки данных
-  const rows = allResultRows.map(resultRow => createRow(resultRow));
+  const rows = orderedRows.map(createRow);
 
   // Рассчитываем итоги
   const totals = [

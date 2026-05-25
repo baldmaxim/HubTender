@@ -12,6 +12,12 @@ export interface PositionWithCommercialCost extends ClientPosition {
   material_cost_total?: number;
   work_cost_total?: number;
   is_leaf?: boolean;
+  // Заполняются, когда per-position числа взяты из сохранённого снимка
+  // перераспределения (страница «Перераспределение Затрат» = single source of truth).
+  // Если у тендера нет снимка для текущей тактики — оба поля undefined и Commerce
+  // считает страхование по сырым work_cost_total как и раньше (live-calc fallback).
+  insurance_share?: number;
+  from_redistribution?: boolean;
 }
 
 export interface MarkupTactic {

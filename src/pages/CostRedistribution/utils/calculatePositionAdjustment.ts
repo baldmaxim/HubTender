@@ -96,3 +96,34 @@ export function calculatePositionAdjustment(
 
   return { deltas, errors: [] };
 }
+
+function applyDeltasToBase(
+  base: AdjustmentBaseRow[],
+  deltas: Map<string, number>
+): AdjustmentBaseRow[] {
+  if (deltas.size === 0) return base;
+  return base.map((row) => {
+    const delta = deltas.get(row.position_id);
+    return delta ? { ...row, total_works_after: row.total_works_after + delta } : row;
+  });
+}
+
+// Pure helper: applies a sequence of position-level rules to a base and
+// returns the cumulative deltas per position_id. Used by usePositionAdjustment
+// (with React state) and by the shared redistribution pipeline (no React).
+export function computeCumulativePositionDeltas(
+  base: AdjustmentBaseRow[],
+  rules: PositionAdjustmentRule[]
+): { cumulative: Map<string, number>; current: AdjustmentBaseRow[] } {
+  const cumulative = new Map<string, number>();
+  let state = base;
+  for (const rule of rules) {
+    const { deltas } = calculatePositionAdjustment(rule, state);
+    if (deltas.size === 0) continue;
+    for (const [id, value] of deltas) {
+      cumulative.set(id, (cumulative.get(id) ?? 0) + value);
+    }
+    state = applyDeltasToBase(state, deltas);
+  }
+  return { cumulative, current: state };
+}

@@ -19,6 +19,17 @@ import { listMarkupTactics, getMarkupTactic } from '../../../lib/api/markup';
 import { getTenderById, listAllBoqItemsForTender } from '../../../lib/api/fi';
 import { loadTenderInsurance } from '../../../lib/api/insurance';
 import { fetchPositionsWithCosts } from '../../../lib/api/positions';
+import { loadRedistributionResults } from '../../../lib/api/redistributions';
+import {
+  applyRedistributionPipeline,
+  computeInsuranceTotal,
+  type PreparedRow,
+} from '../../../services/redistributionPipeline';
+import { buildResultRows } from '../../CostRedistribution/utils/buildResultRows';
+import { computeCumulativePositionDeltas } from '../../CostRedistribution/utils/calculatePositionAdjustment';
+import type { ClientPosition as RedistributionClientPosition } from '../../CostRedistribution/hooks';
+import type { RedistributionResult } from '../../CostRedistribution/utils/calculateDistribution';
+import type { PositionAdjustmentRule } from '../../CostRedistribution/types/positionAdjustment';
 
 type CommerceBoqItem = Pick<
   BoqItem,
@@ -230,16 +241,7 @@ async function loadCommerceCalculationContext(tenderId: string): Promise<Commerc
 
 async function loadInsuranceTotal(tenderId: string): Promise<number> {
   const data = await loadTenderInsurance(tenderId);
-
-  if (!data) {
-    return 0;
-  }
-
-  const apt = (data.apt_price_m2 || 0) * (data.apt_area || 0);
-  const park = (data.parking_price_m2 || 0) * (data.parking_area || 0);
-  const stor = (data.storage_price_m2 || 0) * (data.storage_area || 0);
-
-  return (apt + park + stor) * ((data.judicial_pct || 0) / 100) * ((data.total_pct || 0) / 100);
+  return computeInsuranceTotal(data);
 }
 
 export function useCommerceData() {
@@ -340,6 +342,132 @@ export function useCommerceData() {
       setLoading(false);
     }
   };
+
+  // Единый источник правды для per-position сумм работ + страхования — страница
+  // «Перераспределение Затрат». Если для выбранной пары (тендер, тактика) есть
+  // сохранённый снимок — прогоняем тот же pipeline (category-redistribution →
+  // position-adjustments → smartRound → insurance) что и CR, и переписываем
+  // work_cost_total + insurance_share позиций. Иначе live-calc остаётся как есть.
+  useEffect(() => {
+    if (!selectedTenderId || !selectedTacticId) return;
+    if (!boqItems || positions.length === 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      let snapshot: Awaited<ReturnType<typeof loadRedistributionResults>> = null;
+      try {
+        snapshot = await loadRedistributionResults(selectedTenderId, selectedTacticId);
+      } catch (error) {
+        console.warn('Не удалось загрузить снимок перераспределения для Commerce:', error);
+        snapshot = null;
+      }
+      if (cancelled) return;
+
+      if (!snapshot || snapshot.results.length === 0) {
+        // Снимка нет — сбросить пометки, чтобы Commerce работал на live calc.
+        setPositions((prev) =>
+          prev.some((p) => p.from_redistribution)
+            ? prev.map((p) => ({
+                ...p,
+                insurance_share: undefined,
+                from_redistribution: false,
+              }))
+            : prev,
+        );
+        return;
+      }
+
+      const boqItemsByPosition = new Map<
+        string,
+        Array<{
+          id: string;
+          client_position_id: string;
+          total_commercial_work_cost: number;
+          total_commercial_material_cost: number;
+        }>
+      >();
+      for (const item of boqItems) {
+        const existing = boqItemsByPosition.get(item.client_position_id);
+        const entry = {
+          id: item.id,
+          client_position_id: item.client_position_id,
+          total_commercial_work_cost: item.total_commercial_work_cost ?? 0,
+          total_commercial_material_cost: item.total_commercial_material_cost ?? 0,
+        };
+        if (existing) existing.push(entry);
+        else boqItemsByPosition.set(item.client_position_id, [entry]);
+      }
+
+      const resultsMap = new Map<string, RedistributionResult>();
+      for (const r of snapshot.results) resultsMap.set(r.boq_item_id, r);
+
+      const categoryLevelRows = buildResultRows(
+        positions as unknown as RedistributionClientPosition[],
+        boqItemsByPosition,
+        resultsMap,
+      );
+
+      const rules = snapshot.redistribution_rules as
+        | (Record<string, unknown> & {
+            position_adjustments?: PositionAdjustmentRule[];
+            position_adjustment?: PositionAdjustmentRule;
+          })
+        | null;
+      const ruleArray = Array.isArray(rules?.position_adjustments)
+        ? (rules?.position_adjustments as PositionAdjustmentRule[])
+        : rules?.position_adjustment
+          ? [rules.position_adjustment as PositionAdjustmentRule]
+          : [];
+
+      const adjustmentBaseRows = categoryLevelRows.map((row) => ({
+        position_id: row.position_id,
+        total_works_after: row.total_works_after,
+      }));
+      const { cumulative: deltas } = computeCumulativePositionDeltas(
+        adjustmentBaseRows,
+        ruleArray,
+      );
+
+      const prepared = applyRedistributionPipeline({
+        categoryLevelRows,
+        positionAdjustmentDeltas: deltas,
+        insuranceTotal,
+      });
+
+      const byId = new Map<string, PreparedRow>();
+      for (const r of prepared.rows) byId.set(r.position_id, r);
+
+      setPositions((prev) =>
+        prev.map((p) => {
+          const row = byId.get(p.id);
+          if (!row) return p;
+          const newWorkCost = row.total_works_after_pre_insurance;
+          // Сохраняем согласованность производных полей: commercial_total =
+          // material_cost_total + work_cost_total (без страхования — оно
+          // отображается как отдельная надбавка через insurance_share).
+          const newCommercialTotal = (p.material_cost_total || 0) + newWorkCost;
+          const newMarkup =
+            (p.base_total || 0) > 0 ? newCommercialTotal / (p.base_total || 1) : 1;
+          return {
+            ...p,
+            work_cost_total: newWorkCost,
+            commercial_total: newCommercialTotal,
+            markup_percentage: newMarkup,
+            insurance_share: row.insurance_share,
+            from_redistribution: true,
+          };
+        }),
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // positions.length достаточно для триггера «позиции готовы»; полный объект positions
+    // умышленно опущен, чтобы не зациклить эффект (мы сами вызываем setPositions внутри).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTenderId, selectedTacticId, boqItems, insuranceTotal, positions.length]);
 
   const handleTacticChange = (tacticId: string) => {
     setSelectedTacticId(tacticId);

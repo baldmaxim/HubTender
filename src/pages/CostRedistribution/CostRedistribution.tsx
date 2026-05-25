@@ -17,8 +17,11 @@ import {
   useSaveResults,
   usePositionAdjustment,
 } from './hooks';
-import { smartRoundResults } from './utils';
 import { buildResultRows } from './utils/buildResultRows';
+import {
+  applyRedistributionPipeline,
+  computeInsuranceTotal,
+} from '../../services/redistributionPipeline';
 import { TabPositionAdjustment } from './components/PositionAdjustment/TabPositionAdjustment';
 import type { PositionAdjustmentRule } from './types/positionAdjustment';
 
@@ -69,15 +72,6 @@ const CostRedistribution: React.FC = () => {
   );
 
   const { saving, saveResults, loadSavedResults } = useSaveResults();
-
-  // Формируем Map для быстрого доступа к BOQ элементам
-  const boqItemsMap = useMemo(() => {
-    const map = new Map<string, (typeof boqItems)[number]>();
-    for (const item of boqItems) {
-      map.set(item.id, item);
-    }
-    return map;
-  }, [boqItems]);
 
   const boqItemsByPosition = useMemo(() => {
     const map = new Map<string, typeof boqItems>();
@@ -130,66 +124,14 @@ const CostRedistribution: React.FC = () => {
     if (!hasAnyRedistribution || categoryLevelRows.length === 0) {
       return null;
     }
-
-    // Apply position-adjustment deltas on top of categoryLevelRows instead of
-    // rebuilding from clientPositions/boqItemsByPosition — buildResultRows
-    // is O(positions × boqItemsPerPosition), calling it twice per render was
-    // the biggest hot spot on large tenders (see plan H1).
-    const adjustedRows = adjustment.appliedDeltas.size === 0
-      ? categoryLevelRows
-      : categoryLevelRows.map((row) => {
-          const delta = adjustment.appliedDeltas.get(row.position_id) ?? 0;
-          if (delta === 0) return row;
-          const adjustedWorksAfter = row.total_works_after + delta;
-          const q = row.quantity || 1;
-          return {
-            ...row,
-            total_works_after: adjustedWorksAfter,
-            work_unit_price_after: adjustedWorksAfter / q,
-            redistribution_amount: row.redistribution_amount + delta,
-          };
-        });
-
-    const roundedRows = smartRoundResults(adjustedRows);
-    const totalWorksBase = roundedRows.reduce(
-      (sum, row) => sum + (row.rounded_total_works ?? row.total_works_after),
-      0
-    );
-
-    const rows =
-      insuranceTotal > 0 && totalWorksBase > 0
-        ? roundedRows.map((row) => {
-            const worksAfter = row.rounded_total_works ?? row.total_works_after;
-            const insuranceShare = insuranceTotal * (worksAfter / totalWorksBase);
-            const newWorks = worksAfter + insuranceShare;
-
-            return {
-              ...row,
-              rounded_total_works: newWorks,
-              rounded_work_unit_price_after: newWorks / (row.quantity || 1),
-            };
-          })
-        : roundedRows;
-
-    const totals = rows.reduce(
-      (acc, row) => {
-        acc.totalMaterials += row.rounded_total_materials ?? row.total_materials;
-        acc.totalWorks += row.rounded_total_works ?? row.total_works_after;
-        return acc;
-      },
-      {
-        totalMaterials: 0,
-        totalWorks: 0,
-        total: 0,
-      }
-    );
-
-    totals.total = totals.totalMaterials + totals.totalWorks;
-
-    return {
-      rows,
-      totals,
-    };
+    // Единый pipeline (position-adjustment → smartRound → insurance) живёт
+    // в src/services/redistributionPipeline. Commerce/FI/оба Excel-экспорта
+    // используют тот же модуль, чтобы их per-position числа совпадали с CR.
+    return applyRedistributionPipeline({
+      categoryLevelRows,
+      positionAdjustmentDeltas: adjustment.appliedDeltas,
+      insuranceTotal,
+    });
   }, [
     hasAnyRedistribution,
     categoryLevelRows,
@@ -200,16 +142,9 @@ const CostRedistribution: React.FC = () => {
   // Загрузка страхования от судимостей при смене тендера
   useEffect(() => {
     if (!selectedTenderId) { setInsuranceTotal(0); return; }
-    loadTenderInsurance(selectedTenderId)
-      .then((data) => {
-        if (!data) { setInsuranceTotal(0); return; }
-        const apt = (data.apt_price_m2 || 0) * (data.apt_area || 0);
-        const park = (data.parking_price_m2 || 0) * (data.parking_area || 0);
-        const stor = (data.storage_price_m2 || 0) * (data.storage_area || 0);
-        setInsuranceTotal(
-          (apt + park + stor) * ((data.judicial_pct || 0) / 100) * ((data.total_pct || 0) / 100)
-        );
-      });
+    loadTenderInsurance(selectedTenderId).then((data) => {
+      setInsuranceTotal(computeInsuranceTotal(data));
+    });
   }, [selectedTenderId]);
 
   // Загрузка сохраненных результатов при выборе тендера и тактики
@@ -354,23 +289,11 @@ const CostRedistribution: React.FC = () => {
 
     import('./utils/exportToExcel').then(({ exportRedistributionToExcel }) => {
       exportRedistributionToExcel({
-        clientPositions,
-        redistributionResults: calculationState.results,
-        boqItemsMap,
+        rows: preparedResults?.rows ?? [],
         tenderTitle: `${selectedTender.title} (v${selectedTender.version})`,
-        insuranceTotal,
-        positionAdjustmentDeltas: adjustment.appliedDeltas,
       });
     });
-  }, [
-    selectedTenderId,
-    tenders,
-    clientPositions,
-    calculationState.results,
-    boqItemsMap,
-    insuranceTotal,
-    adjustment.appliedDeltas,
-  ]);
+  }, [selectedTenderId, tenders, preparedResults]);
 
   const handleSavePositionAdjustment = useCallback(async () => {
     if (!selectedTenderId || !selectedTacticId) {

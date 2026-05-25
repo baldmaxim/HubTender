@@ -30,8 +30,15 @@ export function exportCommerceToExcel(
   };
 
   const totalWorksBase = positions.reduce((sum, pos) => sum + (pos.work_cost_total ?? 0), 0);
-  const getInsuranceShare = (pos: PositionWithCommercialCost) =>
-    totalWorksBase > 0 ? insuranceTotal * ((pos.work_cost_total ?? 0) / totalWorksBase) : 0;
+  // Если у позиции уже есть pre-computed insurance_share из общего pipeline
+  // (страница «Перераспределение» = единый источник правды), используем его —
+  // числа совпадут с CR. Иначе fallback на пропорциональное разнесение.
+  const getInsuranceShare = (pos: PositionWithCommercialCost) => {
+    if (pos.insurance_share != null) return pos.insurance_share;
+    return totalWorksBase > 0
+      ? insuranceTotal * ((pos.work_cost_total ?? 0) / totalWorksBase)
+      : 0;
+  };
 
   // Заголовки колонок
   const headers = [
