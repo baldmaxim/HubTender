@@ -232,7 +232,7 @@ type NameInput struct {
 
 func (r *NomenclaturesRepo) createName(ctx context.Context, table string, in NameInput) error {
 	_, err := r.pool.Exec(ctx, fmt.Sprintf(`
-		INSERT INTO %s (name, unit) VALUES ($1, $2::unit_type)
+		INSERT INTO %s (name, unit) VALUES ($1, $2)
 	`, table), in.Name, in.Unit)
 	if err != nil {
 		return fmt.Errorf("nomenclaturesRepo.createName %s: %w", table, err)
@@ -242,7 +242,7 @@ func (r *NomenclaturesRepo) createName(ctx context.Context, table string, in Nam
 
 func (r *NomenclaturesRepo) updateName(ctx context.Context, table, id string, in NameInput) error {
 	_, err := r.pool.Exec(ctx, fmt.Sprintf(`
-		UPDATE %s SET name = $1, unit = $2::unit_type, updated_at = NOW() WHERE id = $3
+		UPDATE %s SET name = $1, unit = $2, updated_at = NOW() WHERE id = $3
 	`, table), in.Name, in.Unit, id)
 	if err != nil {
 		return fmt.Errorf("nomenclaturesRepo.updateName %s: %w", table, err)
