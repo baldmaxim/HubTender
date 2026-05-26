@@ -16,6 +16,10 @@
   поверх существующего runtime
 - **2026-05-21:** `FRONTEND_DEPLOY_OK` — фронт через Go BFF → Yandex;
   Phase 5 (frontend Supabase business migration) завершена
+- **2026-05-25:** ещё один data refresh — кластер Yandex переехал на
+  `c-c9qmbgvs6rit4qfe0dni.rw.mdb.yandexcloud.net`. Тулчейн временно
+  восстановлен из архива, прогнан, заархивирован обратно. Отчёт:
+  `docs/yandex-migration/28_DATA_REFRESH_2026_05_25.md` (в active docs)
 
 ## Source chain
 

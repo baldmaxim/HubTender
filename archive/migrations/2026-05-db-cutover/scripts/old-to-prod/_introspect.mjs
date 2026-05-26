@@ -152,6 +152,12 @@ async function fetchFunctions(client) {
       JOIN pg_namespace n ON n.oid = p.pronamespace
       JOIN pg_language l ON l.oid = p.prolang
      WHERE n.nspname = 'public'
+       AND NOT EXISTS (
+         SELECT 1 FROM pg_depend d
+          WHERE d.objid = p.oid
+            AND d.classid = 'pg_proc'::regclass
+            AND d.deptype = 'e'
+       )
      ORDER BY n.nspname, p.proname, args
   `);
   return rows;
