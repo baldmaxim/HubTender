@@ -53,6 +53,12 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItem
 	if in.Quantity != nil {
 		set("quantity", *in.Quantity)
 	}
+	if in.BaseQuantity != nil {
+		set("base_quantity", *in.BaseQuantity)
+	}
+	if in.ConversionCoefficient != nil {
+		set("conversion_coefficient", *in.ConversionCoefficient)
+	}
 	if in.UnitRate != nil {
 		set("unit_rate", *in.UnitRate)
 	}

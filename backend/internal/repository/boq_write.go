@@ -56,6 +56,8 @@ type CreateBoqItemInput struct {
 	Description            *string
 	UnitCode               *string
 	Quantity               *float64
+	BaseQuantity           *float64
+	ConversionCoefficient  *float64
 	UnitRate               *float64
 	CurrencyType           *string
 	DeliveryPriceType      *string
@@ -66,7 +68,7 @@ type CreateBoqItemInput struct {
 	WorkNameID             *string
 	ParentWorkItemID       *string
 	SortNumber             *int
-	CreatedBy              string // auth.users UUID for audit
+	CreatedBy              string // app users UUID for audit (changed_by)
 }
 
 // UpdateBoqItemInput holds validated patch fields for a boq_item.
@@ -76,6 +78,8 @@ type UpdateBoqItemInput struct {
 	Description            *string
 	UnitCode               *string
 	Quantity               *float64
+	BaseQuantity           *float64
+	ConversionCoefficient  *float64
 	UnitRate               *float64
 	CurrencyType           *string
 	DeliveryPriceType      *string
@@ -86,7 +90,7 @@ type UpdateBoqItemInput struct {
 	WorkNameID             *string
 	ParentWorkItemID       *string
 	SortNumber             *int
-	ChangedBy              string // auth.users UUID for audit
+	ChangedBy              string // app users UUID for audit (changed_by)
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +100,7 @@ type UpdateBoqItemInput struct {
 const boqScanCols = `
 	id::text, client_position_id::text, tender_id::text,
 	boq_item_type::text, material_type::text, description,
-	unit_code, quantity, unit_rate,
+	unit_code, quantity, base_quantity, conversion_coefficient, unit_rate,
 	currency_type::text, delivery_price_type::text, delivery_amount,
 	consumption_coefficient, total_amount, sort_number,
 	detail_cost_category_id::text, parent_work_item_id::text,
@@ -120,7 +124,9 @@ func scanBoqItemRow(row interface{ Scan(...any) error }) (*BoqItemRow, error) {
 	if err := row.Scan(
 		&b.ID, &b.ClientPositionID, &b.TenderID,
 		&b.BoqItemType, &b.MaterialType, &b.Description,
-		&b.UnitCode, &b.Quantity, &b.UnitRate,
+		&b.UnitCode, &b.Quantity,
+		&b.BaseQuantity, &b.ConversionCoefficient,
+		&b.UnitRate,
 		&b.CurrencyType, &b.DeliveryPriceType, &b.DeliveryAmount,
 		&b.ConsumptionCoefficient, &b.TotalAmount, &b.SortNumber,
 		&b.DetailCostCategoryID, &b.ParentWorkItemID,
@@ -150,6 +156,8 @@ func changedFields(old, new *BoqItemRow) []string {
 		{"description", old.Description, new.Description},
 		{"unit_code", old.UnitCode, new.UnitCode},
 		{"quantity", old.Quantity, new.Quantity},
+		{"base_quantity", old.BaseQuantity, new.BaseQuantity},
+		{"conversion_coefficient", old.ConversionCoefficient, new.ConversionCoefficient},
 		{"unit_rate", old.UnitRate, new.UnitRate},
 		{"currency_type", old.CurrencyType, new.CurrencyType},
 		{"delivery_price_type", old.DeliveryPriceType, new.DeliveryPriceType},
@@ -242,24 +250,28 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 	}
 	totalAmount := calc.CalculateBoqItemTotalAmount(calcIn, rates)
 
+	// NOTE: public.boq_items in the live Yandex schema has no `created_by`
+	// column — see db/yandex/sql/03_tables.sql. The authoring user is recorded
+	// via the audit row (boq_items_audit.changed_by) below.
 	q := `
 		INSERT INTO public.boq_items
 		    (client_position_id, tender_id, boq_item_type, material_type, description,
-		     unit_code, quantity, unit_rate, currency_type, delivery_price_type,
+		     unit_code, quantity, base_quantity, conversion_coefficient,
+		     unit_rate, currency_type, delivery_price_type,
 		     delivery_amount, consumption_coefficient, total_amount,
 		     detail_cost_category_id, material_name_id, work_name_id,
-		     parent_work_item_id, sort_number, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+		     parent_work_item_id, sort_number)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 		RETURNING ` + boqScanCols
 	row := tx.QueryRow(ctx, q,
 		in.ClientPositionID, in.TenderID, in.BoqItemType,
 		in.MaterialType, in.Description,
-		in.UnitCode, in.Quantity, in.UnitRate,
-		in.CurrencyType, in.DeliveryPriceType,
+		in.UnitCode, in.Quantity, in.BaseQuantity, in.ConversionCoefficient,
+		in.UnitRate, in.CurrencyType, in.DeliveryPriceType,
 		in.DeliveryAmount, in.ConsumptionCoefficient, totalAmount,
 		in.DetailCostCategoryID,
 		in.MaterialNameID, in.WorkNameID,
-		in.ParentWorkItemID, sortNum, in.CreatedBy,
+		in.ParentWorkItemID, sortNum,
 	)
 	item, err := scanBoqItemRow(row)
 	if err != nil {

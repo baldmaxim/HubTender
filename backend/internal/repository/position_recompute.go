@@ -74,10 +74,8 @@ func (r *BoqRepo) RecomputeLinkedMaterialsForWork(
 		return 0, fmt.Errorf("boqRepo.RecomputeLinkedMaterialsForWork: %w", err)
 	}
 
-	// conversion_coefficient is not on BoqItemRow / boqScanCols, so we read
-	// it as an extra column alongside the lock query.
 	rows, err := tx.Query(ctx,
-		`SELECT `+boqScanCols+`, conversion_coefficient
+		`SELECT `+boqScanCols+`
 		 FROM public.boq_items
 		 WHERE parent_work_item_id = $1
 		 FOR UPDATE`,
@@ -86,29 +84,14 @@ func (r *BoqRepo) RecomputeLinkedMaterialsForWork(
 	if err != nil {
 		return 0, fmt.Errorf("boqRepo.RecomputeLinkedMaterialsForWork: children: %w", err)
 	}
-	type childWithConv struct {
-		row  *BoqItemRow
-		conv *float64
-	}
-	children := make([]childWithConv, 0)
+	children := make([]*BoqItemRow, 0)
 	for rows.Next() {
-		var c BoqItemRow
-		var conv *float64
-		if err := rows.Scan(
-			&c.ID, &c.ClientPositionID, &c.TenderID,
-			&c.BoqItemType, &c.MaterialType, &c.Description,
-			&c.UnitCode, &c.Quantity, &c.UnitRate,
-			&c.CurrencyType, &c.DeliveryPriceType, &c.DeliveryAmount,
-			&c.ConsumptionCoefficient, &c.TotalAmount, &c.SortNumber,
-			&c.DetailCostCategoryID, &c.ParentWorkItemID,
-			&c.MaterialNameID, &c.WorkNameID,
-			&c.CreatedAt, &c.UpdatedAt,
-			&conv,
-		); err != nil {
+		c, scanErr := scanBoqItemRow(rows)
+		if scanErr != nil {
 			rows.Close()
-			return 0, fmt.Errorf("boqRepo.RecomputeLinkedMaterialsForWork: child scan: %w", err)
+			return 0, fmt.Errorf("boqRepo.RecomputeLinkedMaterialsForWork: child scan: %w", scanErr)
 		}
-		children = append(children, childWithConv{row: &c, conv: conv})
+		children = append(children, c)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -124,28 +107,28 @@ func (r *BoqRepo) RecomputeLinkedMaterialsForWork(
 	updated := 0
 	for _, c := range children {
 		convVal := 1.0
-		if c.conv != nil && *c.conv != 0 {
-			convVal = *c.conv
+		if c.ConversionCoefficient != nil && *c.ConversionCoefficient != 0 {
+			convVal = *c.ConversionCoefficient
 		}
 		cons := 1.0
-		if c.row.ConsumptionCoefficient != nil && *c.row.ConsumptionCoefficient != 0 {
-			cons = *c.row.ConsumptionCoefficient
+		if c.ConsumptionCoefficient != nil && *c.ConsumptionCoefficient != 0 {
+			cons = *c.ConsumptionCoefficient
 		}
 		newQty := wq * convVal * cons
 
 		// Recompute total via the shared calc using the new quantity.
-		amtIn := boqAmountInputFromRow(c.row)
+		amtIn := boqAmountInputFromRow(c)
 		amtIn.Quantity = &newQty
 		newTotal := calc.CalculateBoqItemTotalAmount(amtIn, rates)
 
-		oldJSON, _ := boqRowJSON(c.row)
-		newItem, err := scanBoqItemRow(tx.QueryRow(ctx, updQ, newQty, newTotal, c.row.ID))
+		oldJSON, _ := boqRowJSON(c)
+		newItem, err := scanBoqItemRow(tx.QueryRow(ctx, updQ, newQty, newTotal, c.ID))
 		if err != nil {
 			return 0, fmt.Errorf("boqRepo.RecomputeLinkedMaterialsForWork: update: %w", err)
 		}
 		newJSON, _ := boqRowJSON(newItem)
-		if err := insertAudit(ctx, tx, c.row.ID, "UPDATE", changedBy,
-			changedFields(c.row, newItem), oldJSON, newJSON); err != nil {
+		if err := insertAudit(ctx, tx, c.ID, "UPDATE", changedBy,
+			changedFields(c, newItem), oldJSON, newJSON); err != nil {
 			return 0, fmt.Errorf("boqRepo.RecomputeLinkedMaterialsForWork: audit: %w", err)
 		}
 		updated++

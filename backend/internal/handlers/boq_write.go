@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
@@ -38,12 +39,16 @@ func NewBoqWriteHandler(svc boqWriteServicer) *BoqWriteHandler {
 }
 
 // createBoqItemReq is the request body for POST /api/v1/positions/:posId/items.
+// base_quantity / conversion_coefficient DB CHECK constraints (see
+// db/yandex/sql/06_indexes_constraints.sql) require >0 or NULL — hence gt=0.
 type createBoqItemReq struct {
 	BoqItemType            string   `json:"boq_item_type" validate:"required"`
 	MaterialType           *string  `json:"material_type"`
 	Description            *string  `json:"description"`
 	UnitCode               *string  `json:"unit_code"`
 	Quantity               *float64 `json:"quantity" validate:"omitempty,gte=0"`
+	BaseQuantity           *float64 `json:"base_quantity" validate:"omitempty,gt=0"`
+	ConversionCoefficient  *float64 `json:"conversion_coefficient" validate:"omitempty,gt=0"`
 	UnitRate               *float64 `json:"unit_rate" validate:"omitempty,gte=0"`
 	CurrencyType           *string  `json:"currency_type"`
 	DeliveryPriceType      *string  `json:"delivery_price_type"`
@@ -63,6 +68,8 @@ type updateBoqItemReq struct {
 	Description            *string  `json:"description"`
 	UnitCode               *string  `json:"unit_code"`
 	Quantity               *float64 `json:"quantity" validate:"omitempty,gte=0"`
+	BaseQuantity           *float64 `json:"base_quantity" validate:"omitempty,gt=0"`
+	ConversionCoefficient  *float64 `json:"conversion_coefficient" validate:"omitempty,gt=0"`
 	UnitRate               *float64 `json:"unit_rate" validate:"omitempty,gte=0"`
 	CurrencyType           *string  `json:"currency_type"`
 	DeliveryPriceType      *string  `json:"delivery_price_type"`
@@ -109,6 +116,8 @@ func (h *BoqWriteHandler) CreateBoqItem(w http.ResponseWriter, r *http.Request) 
 		Description:            req.Description,
 		UnitCode:               req.UnitCode,
 		Quantity:               req.Quantity,
+		BaseQuantity:           req.BaseQuantity,
+		ConversionCoefficient:  req.ConversionCoefficient,
 		UnitRate:               req.UnitRate,
 		CurrencyType:           req.CurrencyType,
 		DeliveryPriceType:      req.DeliveryPriceType,
@@ -124,6 +133,10 @@ func (h *BoqWriteHandler) CreateBoqItem(w http.ResponseWriter, r *http.Request) 
 
 	item, err := h.svc.CreateBoqItem(r.Context(), in)
 	if err != nil {
+		log.Error().Err(err).
+			Str("tender_id", tenderID).
+			Str("position_id", posID).
+			Msg("boq_write: CreateBoqItem failed")
 		apierr.InternalError("failed to create BOQ item").Render(w)
 		return
 	}
@@ -152,6 +165,7 @@ func (h *BoqWriteHandler) UpdateBoqItem(w http.ResponseWriter, r *http.Request) 
 			apierr.NotFound("BOQ item not found").Render(w)
 			return
 		}
+		log.Error().Err(err).Str("item_id", itemID).Msg("boq_write: load BOQ item failed (update path)")
 		apierr.InternalError("failed to load BOQ item").Render(w)
 		return
 	}
@@ -185,6 +199,8 @@ func (h *BoqWriteHandler) UpdateBoqItem(w http.ResponseWriter, r *http.Request) 
 		Description:            req.Description,
 		UnitCode:               req.UnitCode,
 		Quantity:               req.Quantity,
+		BaseQuantity:           req.BaseQuantity,
+		ConversionCoefficient:  req.ConversionCoefficient,
 		UnitRate:               req.UnitRate,
 		CurrencyType:           req.CurrencyType,
 		DeliveryPriceType:      req.DeliveryPriceType,
@@ -200,6 +216,7 @@ func (h *BoqWriteHandler) UpdateBoqItem(w http.ResponseWriter, r *http.Request) 
 
 	updated, err := h.svc.UpdateBoqItem(r.Context(), itemID, in)
 	if err != nil {
+		log.Error().Err(err).Str("item_id", itemID).Msg("boq_write: UpdateBoqItem failed")
 		apierr.InternalError("failed to update BOQ item").Render(w)
 		return
 	}
@@ -228,6 +245,7 @@ func (h *BoqWriteHandler) DeleteBoqItem(w http.ResponseWriter, r *http.Request) 
 			apierr.NotFound("BOQ item not found").Render(w)
 			return
 		}
+		log.Error().Err(err).Str("item_id", itemID).Msg("boq_write: load BOQ item failed (delete path)")
 		apierr.InternalError("failed to load BOQ item").Render(w)
 		return
 	}
@@ -247,6 +265,7 @@ func (h *BoqWriteHandler) DeleteBoqItem(w http.ResponseWriter, r *http.Request) 
 
 	deleted, err := h.svc.DeleteBoqItem(r.Context(), itemID, authUser.ID)
 	if err != nil {
+		log.Error().Err(err).Str("item_id", itemID).Msg("boq_write: DeleteBoqItem failed")
 		apierr.InternalError("failed to delete BOQ item").Render(w)
 		return
 	}
@@ -296,6 +315,7 @@ func (h *BoqWriteHandler) InsertTemplate(w http.ResponseWriter, r *http.Request)
 			errors.Is(err, repository.ErrTemplateItemNoLib):
 			apierr.BadRequest(err.Error()).Render(w)
 		default:
+			log.Error().Err(err).Str("template_id", templateID).Str("position_id", req.ClientPositionID).Msg("boq_write: InsertTemplate failed")
 			apierr.InternalError("failed to insert template").Render(w)
 		}
 		return
@@ -324,6 +344,7 @@ func (h *BoqWriteHandler) RecomputeLinkedMaterials(w http.ResponseWriter, r *htt
 			apierr.NotFound(err.Error()).Render(w)
 			return
 		}
+		log.Error().Err(err).Str("work_id", workID).Msg("boq_write: RecomputeLinkedMaterials failed")
 		apierr.InternalError("failed to recompute linked materials").Render(w)
 		return
 	}
@@ -362,6 +383,7 @@ func (h *BoqWriteHandler) CopyPositionItems(w http.ResponseWriter, r *http.Reque
 		case errors.Is(err, repository.ErrCopyTenderMismatch):
 			apierr.BadRequest(err.Error()).Render(w)
 		default:
+			log.Error().Err(err).Str("source_position_id", req.SourcePositionID).Str("target_position_id", targetID).Msg("boq_write: CopyPositionItems failed")
 			apierr.InternalError("failed to copy position items").Render(w)
 		}
 		return

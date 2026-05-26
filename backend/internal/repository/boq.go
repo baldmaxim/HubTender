@@ -22,6 +22,8 @@ type BoqItemRow struct {
 	Description            *string   `json:"description"`
 	UnitCode               *string   `json:"unit_code"`
 	Quantity               *float64  `json:"quantity"`
+	BaseQuantity           *float64  `json:"base_quantity"`
+	ConversionCoefficient  *float64  `json:"conversion_coefficient"`
 	UnitRate               *float64  `json:"unit_rate"`
 	CurrencyType           *string   `json:"currency_type"`
 	DeliveryPriceType      *string   `json:"delivery_price_type"`
@@ -64,6 +66,8 @@ func (r *BoqRepo) ListBoqItems(ctx context.Context, tenderID, positionID string)
 		    description,
 		    unit_code,
 		    quantity,
+		    base_quantity,
+		    conversion_coefficient,
 		    unit_rate,
 		    currency_type::text,
 		    delivery_price_type::text,
@@ -95,7 +99,9 @@ func (r *BoqRepo) ListBoqItems(ctx context.Context, tenderID, positionID string)
 		if err := rows.Scan(
 			&row.ID, &row.ClientPositionID, &row.TenderID,
 			&row.BoqItemType, &row.MaterialType, &row.Description,
-			&row.UnitCode, &row.Quantity, &row.UnitRate,
+			&row.UnitCode, &row.Quantity,
+			&row.BaseQuantity, &row.ConversionCoefficient,
+			&row.UnitRate,
 			&row.CurrencyType, &row.DeliveryPriceType, &row.DeliveryAmount,
 			&row.ConsumptionCoefficient, &row.TotalAmount, &row.SortNumber,
 			&row.DetailCostCategoryID, &row.ParentWorkItemID,
