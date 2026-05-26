@@ -39,7 +39,10 @@ export interface CancelImportSessionResult {
 
 export async function fetchImportSessions(tenderId?: string | null): Promise<ImportSession[]> {
   const qs = tenderId ? `?tender_id=${encodeURIComponent(tenderId)}` : '';
-  const res = await apiFetch<{ data: ImportSession[] }>(`/api/v1/import-sessions${qs}`);
+  const res = await apiFetch<{ data: ImportSession[] }>(
+    `/api/v1/import-sessions${qs}`,
+    { cache: 'no-store' },
+  );
   return res.data ?? [];
 }
 
