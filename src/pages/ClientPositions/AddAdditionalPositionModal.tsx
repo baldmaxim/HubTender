@@ -23,6 +23,8 @@ interface AddAdditionalPositionModalProps {
   open: boolean;
   parentPositionId: string | null;
   tenderId: string;
+  /** Defensive disable: на случай если модалка открыта в момент истечения дедлайна. */
+  disabled?: boolean;
   onCancel: () => void;
   onSuccess: (newPositionId: string) => void;
 }
@@ -31,6 +33,7 @@ const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
   open,
   parentPositionId,
   tenderId,
+  disabled,
   onCancel,
   onSuccess,
 }) => {
@@ -58,6 +61,10 @@ const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
   };
 
   const handleOk = async () => {
+    if (disabled) {
+      message.warning('Срок редактирования истёк');
+      return;
+    }
     try {
       setLoading(true);
       const values = await form.validateFields();
@@ -103,6 +110,7 @@ const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
       okText="Добавить"
       cancelText="Отмена"
       width={600}
+      okButtonProps={{ disabled }}
     >
       <Form
         form={form}

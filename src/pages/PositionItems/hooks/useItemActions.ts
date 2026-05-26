@@ -28,6 +28,8 @@ interface UseItemActionsProps {
   items: BoqItemFull[];
   getCurrencyRate: (currency: CurrencyType) => number;
   fetchItems: () => Promise<void>;
+  /** true когда дедлайн версии тендера истёк (без personal extension). */
+  readOnly?: boolean;
 }
 
 export const useItemActions = ({
@@ -37,8 +39,19 @@ export const useItemActions = ({
   items,
   getCurrencyRate,
   fetchItems,
+  readOnly,
 }: UseItemActionsProps) => {
   const { user } = useAuth();
+
+  // Defensive guard — UI блокирует кнопки через disabled, но programmatic
+  // вызовы (race, hotkey) идут в обход.
+  const blockedByDeadline = (): boolean => {
+    if (readOnly) {
+      message.warning('Срок редактирования истёк');
+      return true;
+    }
+    return false;
+  };
 
   const updateClientPositionTotals = async (positionId: string) => {
     try {
@@ -50,6 +63,7 @@ export const useItemActions = ({
   };
 
   const handleAddWork = async (workNameId: string) => {
+    if (blockedByDeadline()) return;
     if (!workNameId || !position) {
       message.error('Выберите работу');
       return;
@@ -90,6 +104,7 @@ export const useItemActions = ({
   };
 
   const handleAddMaterial = async (materialNameId: string) => {
+    if (blockedByDeadline()) return;
     if (!materialNameId || !position) {
       message.error('Выберите материал');
       return;
@@ -150,6 +165,7 @@ export const useItemActions = ({
   };
 
   const handleAddTemplate = async (templateId: string, setLoading: (loading: boolean) => void) => {
+    if (blockedByDeadline()) return;
     if (!templateId || !position) {
       message.error('Выберите шаблон');
       return;
@@ -172,6 +188,7 @@ export const useItemActions = ({
   };
 
   const handleDelete = async (id: string) => {
+    if (blockedByDeadline()) return;
     try {
       await deleteBoqItemWithAudit(user?.id, id);
 
@@ -202,6 +219,7 @@ export const useItemActions = ({
     items: BoqItemFull[],
     onSuccess: () => void
   ) => {
+    if (blockedByDeadline()) return;
     try {
       const recordId = expandedRowKeys[0];
       if (!recordId) return;
@@ -230,6 +248,7 @@ export const useItemActions = ({
     gpNote: string,
     onSuccess: () => void
   ) => {
+    if (blockedByDeadline()) return;
     try {
       await updatePositionFields(
         positionId,
@@ -248,6 +267,7 @@ export const useItemActions = ({
     unitCode: string,
     onSuccess: () => void
   ) => {
+    if (blockedByDeadline()) return;
     try {
       await updatePositionFields(
         positionId,
@@ -326,6 +346,7 @@ export const useItemActions = ({
   };
 
   const handleMoveItem = async (itemId: string, direction: 'up' | 'down') => {
+    if (blockedByDeadline()) return;
     try {
       const currentIndex = items.findIndex(i => i.id === itemId);
       const item = items[currentIndex];

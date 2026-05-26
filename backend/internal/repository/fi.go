@@ -52,6 +52,10 @@ type FITenderRow struct {
 	TzLink             *string  `json:"tz_link,omitempty"`
 	QaFormLink         *string  `json:"qa_form_link,omitempty"`
 	ProjectFolderLink  *string  `json:"project_folder_link,omitempty"`
+	// SubmissionDeadline is needed by useDeadlineCheck on the frontend —
+	// without it инженер/старший_группы видят canEdit=true даже после
+	// истечения срока сдачи версии тендера.
+	SubmissionDeadline *string `json:"submission_deadline,omitempty"`
 }
 
 func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, error) {
@@ -63,14 +67,16 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 		       markup_tactic_id::text, cached_grand_total,
 		       housing_class::text, construction_scope::text,
 		       area_sp, area_client,
-		       upload_folder, bsm_link, tz_link, qa_form_link, project_folder_link
+		       upload_folder, bsm_link, tz_link, qa_form_link, project_folder_link,
+		       submission_deadline::text
 		FROM public.tenders
 		WHERE id = $1
 	`, id).Scan(&t.ID, &t.Title, &t.TenderNumber, &t.ClientName, &t.Version, &t.IsArchived,
 		&t.USDRate, &t.EURRate, &t.CNYRate, &t.MarkupTacticID, &t.CachedGrandTotal,
 		&t.HousingClass, &t.ConstructionScope,
 		&t.AreaSP, &t.AreaClient,
-		&t.UploadFolder, &t.BsmLink, &t.TzLink, &t.QaFormLink, &t.ProjectFolderLink)
+		&t.UploadFolder, &t.BsmLink, &t.TzLink, &t.QaFormLink, &t.ProjectFolderLink,
+		&t.SubmissionDeadline)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

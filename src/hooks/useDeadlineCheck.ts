@@ -5,6 +5,10 @@ import { apiFetch } from '../lib/api/client';
 import { checkTenderDeadline } from '../utils/deadlineCheck';
 import type { DeadlineCheckResult, TenderDeadlineExtension } from '../lib/supabase/types';
 
+// Должен совпадать с ROLES_WITH_FULL_ACCESS в src/utils/deadlineCheck.ts —
+// привилегированные роли не падают в fail-closed при сетевой ошибке.
+const ROLES_WITH_FULL_ACCESS = ['administrator', 'director', 'developer', 'veduschiy_inzhener'];
+
 /**
  * Хук для проверки дедлайна тендера и прав доступа пользователя
  * @param tenderId - ID тендера
@@ -23,6 +27,19 @@ export const useDeadlineCheck = (tenderId: string | undefined) => {
   useEffect(() => {
     const fetchDeadlineInfo = async () => {
       if (!tenderId || !user) {
+        setDeadlineStatus({
+          isExpired: false,
+          canEdit: true,
+          deadline: null,
+          isExtended: false
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Привилегированные роли пропускаем без fetch — сетевая ошибка их
+      // не должна залочить (fail-closed ниже).
+      if (user.role_code && ROLES_WITH_FULL_ACCESS.includes(user.role_code)) {
         setDeadlineStatus({
           isExpired: false,
           canEdit: true,
@@ -53,10 +70,12 @@ export const useDeadlineCheck = (tenderId: string | undefined) => {
         setDeadlineStatus(result);
       } catch (error) {
         console.error('Ошибка проверки дедлайна:', error);
-        // В случае ошибки разрешаем редактирование
+        // Fail-closed: при ошибке загрузки дедлайна закрываем редактирование
+        // для не-привилегированных юзеров. Раньше здесь было canEdit: true —
+        // любой network blip разлочивал инженеров/старших группы.
         setDeadlineStatus({
-          isExpired: false,
-          canEdit: true,
+          isExpired: true,
+          canEdit: false,
           deadline: null,
           isExtended: false
         });

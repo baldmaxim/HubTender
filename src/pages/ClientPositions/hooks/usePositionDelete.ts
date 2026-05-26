@@ -11,15 +11,25 @@ export const usePositionDelete = (
   setLoading: (loading: boolean) => void,
   fetchClientPositions: (tenderId: string) => Promise<void>,
   currentTheme: string,
-  callbacks: ClearModesCallback
+  callbacks: ClearModesCallback,
+  readOnly?: boolean,
 ) => {
   const [isPositionDeleteMode, setIsPositionDeleteMode] = useState(false);
   const [selectedPositionDeleteIds, setSelectedPositionDeleteIds] = useState<Set<string>>(new Set());
   const [isBulkPositionDeleting, setIsBulkPositionDeleting] = useState(false);
 
+  const blockedByDeadline = (): boolean => {
+    if (readOnly) {
+      message.warning('Срок редактирования истёк');
+      return true;
+    }
+    return false;
+  };
+
   // Вход в режим массового удаления строк заказчика
   const handleStartPositionDeleteSelection = (positionId: string, event: React.MouseEvent) => {
     event.stopPropagation();
+    if (blockedByDeadline()) return;
     callbacks.clearOtherModes();
     setIsPositionDeleteMode(true);
     setSelectedPositionDeleteIds(new Set([positionId]));
@@ -47,6 +57,7 @@ export const usePositionDelete = (
 
   // Массовое удаление строк заказчика (с работами и материалами)
   const handleBulkDeletePositions = async (selectedTenderId: string | null) => {
+    if (blockedByDeadline()) return;
     if (selectedPositionDeleteIds.size === 0) return;
 
     const count = selectedPositionDeleteIds.size;

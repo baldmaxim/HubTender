@@ -82,6 +82,13 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
     overlayInnerStyle: { backgroundColor: '#434343', color: '#fff' }
   } : {};
 
+  // Стиль кнопок действий с учётом readOnly (общий дедлайн истёк без extension).
+  // pointerEvents: 'none' блокирует клик на уровне DOM — хуки в дополнение
+  // делают defensive early-return на случай programmatic-вызовов.
+  const actionStyle: React.CSSProperties = readOnly
+    ? { cursor: 'not-allowed', margin: 0, opacity: 0.5, pointerEvents: 'none' }
+    : { cursor: 'pointer', margin: 0 };
+
   return (
     <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, alignSelf: 'center' }}>
       {/* Теги выбора для вставки работ/примечания */}
@@ -176,13 +183,13 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
             <div style={{ display: 'flex', gap: 4 }}>
               {copiedPositionId !== record.id && (
                 <Tooltip title="Скопировать работы и материалы" {...tooltipColor}>
-                  <Tag color="blue" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onCopyPosition(record.id, e); }}>
+                  <Tag color="blue" style={actionStyle} onClick={(e) => { e.stopPropagation(); onCopyPosition(record.id, e); }}>
                     <CopyOutlined />
                   </Tag>
                 </Tooltip>
               )}
               <Tooltip title="Скопировать примечание ГП" {...tooltipColor}>
-                <Tag color="purple" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onCopyNote(record.id, record.manual_note ?? null, e); }}>
+                <Tag color="purple" style={actionStyle} onClick={(e) => { e.stopPropagation(); onCopyNote(record.id, record.manual_note ?? null, e); }}>
                   <FileTextOutlined />
                 </Tag>
               </Tooltip>
@@ -192,42 +199,42 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
           <div style={{ display: 'flex', gap: 4 }}>
             {!record.is_additional && (
               <Tooltip title="Добавить ДОП работу" {...tooltipColor}>
-                <Tag color="success" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onOpenAdditionalModal(record.id, e); }}>
+                <Tag color="success" style={actionStyle} onClick={(e) => { e.stopPropagation(); onOpenAdditionalModal(record.id, e); }}>
                   <PlusOutlined />
                 </Tag>
               </Tooltip>
             )}
             {record.is_additional && (
               <Tooltip title="Удалить ДОП работу" {...tooltipColor}>
-                <Tag color="error" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onDeleteAdditionalPosition(record.id, record.work_name, e); }}>
+                <Tag color="error" style={actionStyle} onClick={(e) => { e.stopPropagation(); onDeleteAdditionalPosition(record.id, record.work_name, e); }}>
                   <DeleteOutlined />
                 </Tag>
               </Tooltip>
             )}
             {isLeaf && (
               <Tooltip title="Удалить работы и материалы" {...tooltipColor}>
-                <Tag color="orange" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onStartDeleteSelection(record.id, e); }}>
+                <Tag color="orange" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartDeleteSelection(record.id, e); }}>
                   <ClearOutlined />
                 </Tag>
               </Tooltip>
             )}
             {!isLeaf && counts.works + counts.materials > 0 && (
               <Tooltip title="Удалить работы и материалы" {...tooltipColor}>
-                <Tag color="orange" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onClearPositionBoqItems(record.id, record.work_name, e); }}>
+                <Tag color="orange" style={actionStyle} onClick={(e) => { e.stopPropagation(); onClearPositionBoqItems(record.id, record.work_name, e); }}>
                   <ClearOutlined />
                 </Tag>
               </Tooltip>
             )}
             {canChangeLevel && (
               <Tooltip title="Понизить уровень иерархии" {...tooltipColor}>
-                <Tag color="geekblue" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onStartLevelChange(e); }}>
+                <Tag color="geekblue" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartLevelChange(e); }}>
                   <VerticalAlignBottomOutlined />
                 </Tag>
               </Tooltip>
             )}
             {canDeletePositions && (
               <Tooltip title="Удалить строки заказчика" {...tooltipColor}>
-                <Tag color="red" style={{ cursor: 'pointer', margin: 0 }} onClick={(e) => { e.stopPropagation(); onStartPositionDeleteSelection?.(record.id, e); }}>
+                <Tag color="red" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartPositionDeleteSelection?.(record.id, e); }}>
                   <DeleteOutlined />
                 </Tag>
               </Tooltip>

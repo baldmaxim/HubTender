@@ -63,6 +63,7 @@ const PositionItems: React.FC = () => {
   // Проверка дедлайна для блокировки редактирования
   const { canEdit: canEditByDeadline, loading: deadlineLoading } =
     useDeadlineCheck(position?.tender_id);
+  const isReadOnlyByDeadline = !canEditByDeadline || deadlineLoading;
 
   const {
     handleAddWork,
@@ -79,6 +80,7 @@ const PositionItems: React.FC = () => {
     items,
     getCurrencyRate,
     fetchItems,
+    readOnly: isReadOnlyByDeadline,
   });
 
   // Вычисление общей суммы

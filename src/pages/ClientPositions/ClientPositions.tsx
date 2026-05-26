@@ -104,6 +104,12 @@ const ClientPositions: React.FC = () => {
     fetchClientPositions,
   } = useClientPositions();
 
+  // Проверка дедлайна — должна быть объявлена ДО хуков-actions, чтобы
+  // прокинуть `readOnly` в их defensive-guard'ы (см. usePositionActions).
+  const { canEdit: canEditByDeadline, loading: deadlineLoading } =
+    useDeadlineCheck(selectedTender?.id);
+  const isReadOnlyByDeadline = !canEditByDeadline || deadlineLoading;
+
   const {
     copiedPositionId,
     copiedNotePositionId,
@@ -134,7 +140,7 @@ const ClientPositions: React.FC = () => {
     handleCancelLevelChange,
     handleBulkLevelChange,
     clearAllModes,
-  } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, currentTheme);
+  } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, currentTheme, isReadOnlyByDeadline);
 
   const {
     isPositionDeleteMode,
@@ -144,7 +150,7 @@ const ClientPositions: React.FC = () => {
     handleTogglePositionDeleteSelection,
     handleCancelPositionDeleteSelection,
     handleBulkDeletePositions,
-  } = usePositionDelete(setLoading, fetchClientPositions, currentTheme, { clearOtherModes: clearAllModes });
+  } = usePositionDelete(setLoading, fetchClientPositions, currentTheme, { clearOtherModes: clearAllModes }, isReadOnlyByDeadline);
 
   // Хук фильтрации позиций и получение информации о пользователе
   const { user } = useAuth();
@@ -167,9 +173,8 @@ const ClientPositions: React.FC = () => {
     addPositionToFilter,
   } = usePositionFilters(user?.id, selectedTenderId);
 
-  // Проверка дедлайна для блокировки редактирования
-  const { canEdit: canEditByDeadline, loading: deadlineLoading } =
-    useDeadlineCheck(selectedTender?.id);
+  // useDeadlineCheck объявлен выше (после useClientPositions), чтобы прокинуть
+  // isReadOnlyByDeadline в usePositionActions/usePositionDelete.
 
   // Получение уникальных наименований тендеров
   const tenderTitles = useMemo((): TenderOption[] => {
@@ -432,7 +437,7 @@ const ClientPositions: React.FC = () => {
           positionCounts={positionCounts}
           currentTheme={currentTheme}
           leafPositionIndices={leafPositionIndices}
-          readOnly={!canEditByDeadline || deadlineLoading}
+          readOnly={isReadOnlyByDeadline}
           isFilterActive={isFilterActive}
           filterSelectedCount={selectedPositionIds.size}
           totalPositionsCount={clientPositions.length}
@@ -496,6 +501,7 @@ const ClientPositions: React.FC = () => {
         open={additionalModalOpen}
         parentPositionId={selectedParentId}
         tenderId={selectedTenderId || ''}
+        disabled={isReadOnlyByDeadline}
         onCancel={() => {
           setAdditionalModalOpen(false);
           setSelectedParentId(null);

@@ -468,19 +468,19 @@ export const PositionTable: React.FC<PositionTableProps> = ({
           )}
           {/* Существующие кнопки */}
           {copiedPositionId && selectedTargetIds.size > 0 && (
-            <Button type="primary" icon={<CheckOutlined />} onClick={onBulkPaste} loading={isBulkPasting} disabled={loading}>
+            <Button type="primary" icon={<CheckOutlined />} onClick={onBulkPaste} loading={isBulkPasting} disabled={loading || readOnly}>
               Вставить работы и материалы ({selectedTargetIds.size})
             </Button>
           )}
           {copiedNotePositionId && selectedTargetIds.size > 0 && (
-            <Button type="primary" icon={<FileAddOutlined />} onClick={onBulkPasteNote} loading={isBulkPasting} disabled={loading}>
+            <Button type="primary" icon={<FileAddOutlined />} onClick={onBulkPasteNote} loading={isBulkPasting} disabled={loading || readOnly}>
               Вставить примечание ({selectedTargetIds.size})
             </Button>
           )}
           {isDeleteSelectionMode && (
             <>
               {selectedDeleteIds.size > 0 && (
-                <Button type="primary" danger icon={<ClearOutlined />} onClick={onBulkDeleteBoqItems} loading={isBulkDeleting} disabled={loading}>
+                <Button type="primary" danger icon={<ClearOutlined />} onClick={onBulkDeleteBoqItems} loading={isBulkDeleting} disabled={loading || readOnly}>
                   Удалить работы и материалы ({selectedDeleteIds.size})
                 </Button>
               )}
@@ -490,7 +490,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
           {isLevelChangeMode && (
             <>
               {selectedLevelChangeIds.size > 0 && (
-                <Button type="primary" icon={<VerticalAlignBottomOutlined />} onClick={onBulkLevelChange} loading={isLevelChanging} disabled={loading}>
+                <Button type="primary" icon={<VerticalAlignBottomOutlined />} onClick={onBulkLevelChange} loading={isLevelChanging} disabled={loading || readOnly}>
                   Понизить уровень ({selectedLevelChangeIds.size})
                 </Button>
               )}
@@ -500,7 +500,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
           {isPositionDeleteMode && (
             <>
               {selectedPositionDeleteIds.size > 0 && (
-                <Button type="primary" danger icon={<DeleteOutlined />} onClick={onBulkDeletePositions} loading={isBulkPositionDeleting} disabled={loading}>
+                <Button type="primary" danger icon={<DeleteOutlined />} onClick={onBulkDeletePositions} loading={isBulkPositionDeleting} disabled={loading || readOnly}>
                   Удалить строки заказчика ({selectedPositionDeleteIds.size})
                 </Button>
               )}

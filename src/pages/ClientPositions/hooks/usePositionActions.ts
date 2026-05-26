@@ -17,8 +17,18 @@ export const usePositionActions = (
   setClientPositions: React.Dispatch<React.SetStateAction<ClientPosition[]>>,
   setLoading: (loading: boolean) => void,
   fetchClientPositions: (tenderId: string) => Promise<void>,
-  currentTheme: string
+  currentTheme: string,
+  readOnly?: boolean,
 ) => {
+  // Defensive guard на случай programmatic-вызовов мимо disabled-кнопок.
+  // UI-уровень блокируется через readOnly props в PositionTable/PositionRowActions.
+  const blockedByDeadline = (): boolean => {
+    if (readOnly) {
+      message.warning('Срок редактирования истёк');
+      return true;
+    }
+    return false;
+  };
   const [copiedPositionId, setCopiedPositionId] = useState<string | null>(null);
   const [copiedNoteValue, setCopiedNoteValue] = useState<string | null>(null);
   const [copiedNotePositionId, setCopiedNotePositionId] = useState<string | null>(null);
@@ -44,6 +54,7 @@ export const usePositionActions = (
   // Вставка позиции
   const handlePastePosition = async (targetPositionId: string, event: React.MouseEvent, selectedTenderId: string | null) => {
     event.stopPropagation();
+    if (blockedByDeadline()) return;
     if (!copiedPositionId) return;
 
     setLoading(true);
@@ -86,6 +97,7 @@ export const usePositionActions = (
 
   // Массовая вставка в выбранные позиции
   const handleBulkPaste = async (selectedTenderId: string | null) => {
+    if (blockedByDeadline()) return;
     if (!copiedPositionId || selectedTargetIds.size === 0) return;
 
     setIsBulkPasting(true);
@@ -171,6 +183,7 @@ export const usePositionActions = (
   // Вставка примечания ГП
   const handlePasteNote = async (targetPositionId: string, event: React.MouseEvent, selectedTenderId: string | null) => {
     event.stopPropagation();
+    if (blockedByDeadline()) return;
 
     if (!copiedNoteValue || !copiedNotePositionId) return;
 
@@ -198,6 +211,7 @@ export const usePositionActions = (
 
   // Массовая вставка примечания ГП в выбранные позиции
   const handleBulkPasteNote = async (selectedTenderId: string | null) => {
+    if (blockedByDeadline()) return;
     if (!copiedNoteValue || !copiedNotePositionId || selectedTargetIds.size === 0) return;
 
     setIsBulkPasting(true);
@@ -241,6 +255,7 @@ export const usePositionActions = (
   // Вход в режим массового удаления работ и материалов
   const handleStartDeleteSelection = (positionId: string, event: React.MouseEvent) => {
     event.stopPropagation();
+    if (blockedByDeadline()) return;
     // Сбрасываем режимы копирования
     setCopiedPositionId(null);
     setCopiedNoteValue(null);
@@ -273,6 +288,7 @@ export const usePositionActions = (
 
   // Массовое удаление работ и материалов из выбранных позиций
   const handleBulkDeleteBoqItems = async (selectedTenderId: string | null) => {
+    if (blockedByDeadline()) return;
     if (selectedDeleteIds.size === 0) return;
 
     const count = selectedDeleteIds.size;
@@ -321,6 +337,7 @@ export const usePositionActions = (
     event: React.MouseEvent
   ) => {
     event.stopPropagation();
+    if (blockedByDeadline()) return;
 
     Modal.confirm({
       title: 'Удалить работы и материалы?',
@@ -357,6 +374,7 @@ export const usePositionActions = (
     event: React.MouseEvent
   ) => {
     event.stopPropagation();
+    if (blockedByDeadline()) return;
 
     Modal.confirm({
       title: 'Удалить ДОП работу?',
@@ -390,6 +408,7 @@ export const usePositionActions = (
   // Вход в режим изменения уровня иерархии
   const handleStartLevelChange = (event: React.MouseEvent) => {
     event.stopPropagation();
+    if (blockedByDeadline()) return;
     setCopiedPositionId(null);
     setCopiedNoteValue(null);
     setCopiedNotePositionId(null);
@@ -422,6 +441,7 @@ export const usePositionActions = (
 
   // Массовое понижение уровня иерархии на 1
   const handleBulkLevelChange = async (selectedTenderId: string | null) => {
+    if (blockedByDeadline()) return;
     if (selectedLevelChangeIds.size === 0) return;
 
     const count = selectedLevelChangeIds.size;
