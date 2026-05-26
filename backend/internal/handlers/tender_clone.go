@@ -46,11 +46,11 @@ func (h *TenderCloneHandler) Clone(w http.ResponseWriter, r *http.Request) {
 			case 404:
 				apierr.NotFound(cloneErr.Message).Render(w)
 			default:
-				apierr.InternalError(cloneErr.Message).Render(w)
+				apierr.InternalFromErr(w, r, cloneErr, cloneErr.Message)
 			}
 			return
 		}
-		apierr.InternalError("failed to clone tender").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to clone tender")
 		return
 	}
 

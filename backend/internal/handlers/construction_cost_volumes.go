@@ -36,7 +36,7 @@ func (h *ConstructionCostVolumesHandler) ListByTender(w http.ResponseWriter, r *
 	}
 	rows, err := h.svc.ListByTender(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to list cost volumes").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list cost volumes")
 		return
 	}
 	if rows == nil {
@@ -67,7 +67,7 @@ func (h *ConstructionCostVolumesHandler) Upsert(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err := h.svc.UpsertVolume(r.Context(), req.TenderID, req.DetailCostCategoryID, req.GroupKey, req.Volume); err != nil {
-		apierr.InternalError("failed to upsert cost volume").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to upsert cost volume")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

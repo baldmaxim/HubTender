@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/rs/zerolog/log"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
@@ -49,7 +48,7 @@ func NewUserAdminHandler(svc userAdminServicer) *UserAdminHandler {
 func (h *UserAdminHandler) ListTendersForUserAccess(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListTendersForUserAccess(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list tenders").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list tenders")
 		return
 	}
 	if rows == nil {
@@ -61,7 +60,7 @@ func (h *UserAdminHandler) ListTendersForUserAccess(w http.ResponseWriter, r *ht
 func (h *UserAdminHandler) ListAccessUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListAccessUsers(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list access users").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list access users")
 		return
 	}
 	if rows == nil {
@@ -87,7 +86,7 @@ func (h *UserAdminHandler) SetTenderExtension(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err := h.svc.SetTenderExtensionForUsers(r.Context(), req.TenderID, req.UserIDs, req.ExtendedDeadline); err != nil {
-		apierr.InternalError("failed to set tender extension").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to set tender extension")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -98,7 +97,7 @@ func (h *UserAdminHandler) SetTenderExtension(w http.ResponseWriter, r *http.Req
 func (h *UserAdminHandler) ListPending(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListPendingUsers(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list pending users").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list pending users")
 		return
 	}
 	if rows == nil {
@@ -110,8 +109,7 @@ func (h *UserAdminHandler) ListPending(w http.ResponseWriter, r *http.Request) {
 func (h *UserAdminHandler) ListAll(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListAllUsers(r.Context())
 	if err != nil {
-		log.Error().Err(err).Msg("user_admin: list-all failed")
-		apierr.InternalError("failed to list users").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list users")
 		return
 	}
 	if rows == nil {
@@ -150,7 +148,7 @@ func (h *UserAdminHandler) Approve(w http.ResponseWriter, r *http.Request) {
 		RoleCode:     req.RoleCode,
 		AllowedPages: req.AllowedPages,
 	}); err != nil {
-		apierr.InternalError("failed to approve user").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to approve user")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -163,7 +161,7 @@ func (h *UserAdminHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DeleteUser(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete user").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete user")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -185,7 +183,7 @@ func (h *UserAdminHandler) SetAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.SetUserAccessEnabled(r.Context(), id, req.Enabled); err != nil {
-		apierr.InternalError("failed to update access").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update access")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -203,7 +201,7 @@ func (h *UserAdminHandler) UpdateProfile(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := h.svc.UpdateUserProfile(r.Context(), id, in); err != nil {
-		apierr.InternalError("failed to update user").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update user")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -225,7 +223,7 @@ func (h *UserAdminHandler) SyncPagesByRole(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := h.svc.SyncUsersAllowedPagesByRole(r.Context(), roleCode, req.AllowedPages); err != nil {
-		apierr.InternalError("failed to sync allowed pages").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to sync allowed pages")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -239,7 +237,7 @@ func (h *UserAdminHandler) CountByRole(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := h.svc.CountUsersWithRole(r.Context(), roleCode)
 	if err != nil {
-		apierr.InternalError("failed to count users").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to count users")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, map[string]int{"count": n})
@@ -250,7 +248,7 @@ func (h *UserAdminHandler) CountByRole(w http.ResponseWriter, r *http.Request) {
 func (h *UserAdminHandler) ListRoles(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListRoles(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list roles").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list roles")
 		return
 	}
 	if rows == nil {
@@ -267,7 +265,7 @@ func (h *UserAdminHandler) FindRoleByCode(w http.ResponseWriter, r *http.Request
 	}
 	row, err := h.svc.FindRoleByCode(r.Context(), code)
 	if err != nil {
-		apierr.InternalError("failed to find role").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to find role")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: row})
@@ -281,7 +279,7 @@ func (h *UserAdminHandler) FindRoleByName(w http.ResponseWriter, r *http.Request
 	}
 	row, err := h.svc.FindRoleByName(r.Context(), name)
 	if err != nil {
-		apierr.InternalError("failed to find role").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to find role")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: row})
@@ -299,7 +297,7 @@ func (h *UserAdminHandler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := h.svc.CreateRole(r.Context(), in)
 	if err != nil {
-		apierr.InternalError("failed to create role").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create role")
 		return
 	}
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: row})
@@ -317,7 +315,7 @@ func (h *UserAdminHandler) UpdateRolePages(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := h.svc.UpdateRoleAllowedPages(r.Context(), code, req.AllowedPages); err != nil {
-		apierr.InternalError("failed to update role").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update role")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -330,7 +328,7 @@ func (h *UserAdminHandler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DeleteRole(r.Context(), code); err != nil {
-		apierr.InternalError("failed to delete role").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete role")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

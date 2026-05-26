@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -100,7 +101,47 @@ func (h *PositionHandler) GetBoqPreview(w http.ResponseWriter, r *http.Request) 
 	}
 	rows, err := h.svc.ListBoqPreviewByPositions(r.Context(), ids)
 	if err != nil {
-		apierr.InternalError("failed to load boq preview").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load boq preview")
+		return
+	}
+	if rows == nil {
+		rows = []repository.BoqPreviewRow{}
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
+}
+
+// postBoqPreviewReq is the body for POST /api/v1/positions/boq-preview.
+type postBoqPreviewReq struct {
+	PositionIDs []string `json:"position_ids"`
+}
+
+// PostBoqPreview handles POST /api/v1/positions/boq-preview с
+// {"position_ids": [...]} в теле. Семантика идентична GetBoqPreview, но без
+// лимита URI (Sentry HUBTENDER-WEB-1: на mass-import тендеров с сотнями
+// позиций прод-прокси резал GET-query с 414).
+func (h *PositionHandler) PostBoqPreview(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var req postBoqPreviewReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	ids := make([]string, 0, len(req.PositionIDs))
+	for _, s := range req.PositionIDs {
+		if s = strings.TrimSpace(s); s != "" {
+			ids = append(ids, s)
+		}
+	}
+	if len(ids) == 0 {
+		renderJSON(w, r, http.StatusOK, dataEnvelope{Data: []repository.BoqPreviewRow{}})
+		return
+	}
+	rows, err := h.svc.ListBoqPreviewByPositions(r.Context(), ids)
+	if err != nil {
+		apierr.InternalFromErr(w, r, err, "failed to load boq preview")
 		return
 	}
 	if rows == nil {
@@ -122,7 +163,7 @@ func (h *PositionHandler) GetPositionWithTender(w http.ResponseWriter, r *http.R
 	}
 	p, err := h.svc.GetPositionWithTender(r.Context(), id)
 	if err != nil {
-		apierr.InternalError("failed to load position").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load position")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: p})
@@ -141,7 +182,7 @@ func (h *PositionHandler) ListBoqItemsFullByPosition(w http.ResponseWriter, r *h
 	}
 	rows, err := h.svc.ListBoqItemsFullByPosition(r.Context(), id)
 	if err != nil {
-		apierr.InternalError("failed to list boq items").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list boq items")
 		return
 	}
 	if rows == nil {
@@ -163,7 +204,7 @@ func (h *PositionHandler) ListBoqItemsFullByTender(w http.ResponseWriter, r *htt
 	}
 	rows, err := h.svc.ListBoqItemsFullByTender(r.Context(), id)
 	if err != nil {
-		apierr.InternalError("failed to list boq items").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list boq items")
 		return
 	}
 	if rows == nil {

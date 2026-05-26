@@ -56,7 +56,7 @@ func (h *BulkBoqHandler) BulkUpdateCommercial(w http.ResponseWriter, r *http.Req
 
 	count, err := h.svc.BulkUpdateCommercial(r.Context(), req.Rows)
 	if err != nil {
-		apierr.InternalError("failed to bulk-update commercial costs").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to bulk-update commercial costs")
 		return
 	}
 
@@ -91,7 +91,7 @@ func (h *BulkBoqHandler) SetQuoteLinkByName(w http.ResponseWriter, r *http.Reque
 	}
 	count, err := h.svc.SetQuoteLinkByName(r.Context(), tenderID, req.Field, req.Value, req.QuoteLink)
 	if err != nil {
-		apierr.InternalError("failed to update quote link").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update quote link")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, bulkCommercialResp{Updated: count})
@@ -119,7 +119,7 @@ func (h *BulkBoqHandler) SetQuoteLinkByIDs(w http.ResponseWriter, r *http.Reques
 	}
 	count, err := h.svc.SetQuoteLinkByIDs(r.Context(), req.IDs, req.QuoteLink)
 	if err != nil {
-		apierr.InternalError("failed to update quote link").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update quote link")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, bulkCommercialResp{Updated: count})

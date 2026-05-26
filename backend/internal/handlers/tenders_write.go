@@ -98,7 +98,7 @@ func (h *TenderWriteHandler) CreateTender(w http.ResponseWriter, r *http.Request
 
 	t, err := h.svc.CreateTender(r.Context(), in)
 	if err != nil {
-		apierr.InternalError("failed to create tender").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create tender")
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *TenderWriteHandler) UpdateTender(w http.ResponseWriter, r *http.Request
 			apierr.NotFound("tender not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to load tender").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load tender")
 		return
 	}
 
@@ -163,7 +163,7 @@ func (h *TenderWriteHandler) UpdateTender(w http.ResponseWriter, r *http.Request
 
 	updated, err := h.svc.UpdateTender(r.Context(), tenderID, in)
 	if err != nil {
-		apierr.InternalError("failed to update tender").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update tender")
 		return
 	}
 
@@ -189,7 +189,7 @@ func (h *TenderWriteHandler) AdminPatchTender(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err := h.svc.AdminPatchTender(r.Context(), id, p); err != nil {
-		apierr.InternalError("failed to patch tender").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to patch tender")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -207,7 +207,7 @@ func (h *TenderWriteHandler) DeleteTender(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.DeleteTender(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete tender").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete tender")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -125,11 +125,11 @@ func (h *TenderTransferHandler) Transfer(w http.ResponseWriter, r *http.Request)
 			case 409:
 				apierr.Conflict(transferErr.Message).Render(w)
 			default:
-				apierr.InternalError(transferErr.Message).Render(w)
+				apierr.InternalFromErr(w, r, transferErr, transferErr.Message)
 			}
 			return
 		}
-		apierr.InternalError("failed to execute version transfer").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to execute version transfer")
 		return
 	}
 

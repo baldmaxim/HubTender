@@ -338,6 +338,7 @@ func main() {
 		r.Get("/api/v1/tenders/{id}/overview", tenderH.GetTenderOverview)
 		r.Get("/api/v1/tenders/{id}/positions", positionH.GetPositions)
 		r.Get("/api/v1/positions/boq-preview", positionH.GetBoqPreview)
+		r.Post("/api/v1/positions/boq-preview", positionH.PostBoqPreview)
 		r.Get("/api/v1/positions/{id}/with-tender", positionH.GetPositionWithTender)
 		r.Get("/api/v1/positions/{id}/boq-items-full", positionH.ListBoqItemsFullByPosition)
 		r.Get("/api/v1/tenders/{id}/boq-items-full", positionH.ListBoqItemsFullByTender)

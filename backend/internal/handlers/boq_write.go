@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5"
-	"github.com/rs/zerolog/log"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
@@ -133,11 +132,7 @@ func (h *BoqWriteHandler) CreateBoqItem(w http.ResponseWriter, r *http.Request) 
 
 	item, err := h.svc.CreateBoqItem(r.Context(), in)
 	if err != nil {
-		log.Error().Err(err).
-			Str("tender_id", tenderID).
-			Str("position_id", posID).
-			Msg("boq_write: CreateBoqItem failed")
-		apierr.InternalError("failed to create BOQ item").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create BOQ item", "tender_id", tenderID, "position_id", posID)
 		return
 	}
 
@@ -165,8 +160,7 @@ func (h *BoqWriteHandler) UpdateBoqItem(w http.ResponseWriter, r *http.Request) 
 			apierr.NotFound("BOQ item not found").Render(w)
 			return
 		}
-		log.Error().Err(err).Str("item_id", itemID).Msg("boq_write: load BOQ item failed (update path)")
-		apierr.InternalError("failed to load BOQ item").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load BOQ item", "item_id", itemID)
 		return
 	}
 
@@ -216,8 +210,7 @@ func (h *BoqWriteHandler) UpdateBoqItem(w http.ResponseWriter, r *http.Request) 
 
 	updated, err := h.svc.UpdateBoqItem(r.Context(), itemID, in)
 	if err != nil {
-		log.Error().Err(err).Str("item_id", itemID).Msg("boq_write: UpdateBoqItem failed")
-		apierr.InternalError("failed to update BOQ item").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update BOQ item", "item_id", itemID)
 		return
 	}
 
@@ -245,8 +238,7 @@ func (h *BoqWriteHandler) DeleteBoqItem(w http.ResponseWriter, r *http.Request) 
 			apierr.NotFound("BOQ item not found").Render(w)
 			return
 		}
-		log.Error().Err(err).Str("item_id", itemID).Msg("boq_write: load BOQ item failed (delete path)")
-		apierr.InternalError("failed to load BOQ item").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load BOQ item", "item_id", itemID)
 		return
 	}
 
@@ -265,8 +257,7 @@ func (h *BoqWriteHandler) DeleteBoqItem(w http.ResponseWriter, r *http.Request) 
 
 	deleted, err := h.svc.DeleteBoqItem(r.Context(), itemID, authUser.ID)
 	if err != nil {
-		log.Error().Err(err).Str("item_id", itemID).Msg("boq_write: DeleteBoqItem failed")
-		apierr.InternalError("failed to delete BOQ item").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete BOQ item", "item_id", itemID)
 		return
 	}
 
@@ -315,8 +306,7 @@ func (h *BoqWriteHandler) InsertTemplate(w http.ResponseWriter, r *http.Request)
 			errors.Is(err, repository.ErrTemplateItemNoLib):
 			apierr.BadRequest(err.Error()).Render(w)
 		default:
-			log.Error().Err(err).Str("template_id", templateID).Str("position_id", req.ClientPositionID).Msg("boq_write: InsertTemplate failed")
-			apierr.InternalError("failed to insert template").Render(w)
+			apierr.InternalFromErr(w, r, err, "failed to insert template", "template_id", templateID, "position_id", req.ClientPositionID)
 		}
 		return
 	}
@@ -344,8 +334,7 @@ func (h *BoqWriteHandler) RecomputeLinkedMaterials(w http.ResponseWriter, r *htt
 			apierr.NotFound(err.Error()).Render(w)
 			return
 		}
-		log.Error().Err(err).Str("work_id", workID).Msg("boq_write: RecomputeLinkedMaterials failed")
-		apierr.InternalError("failed to recompute linked materials").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to recompute linked materials", "work_id", workID)
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: map[string]int{"updated": n}})
@@ -383,8 +372,7 @@ func (h *BoqWriteHandler) CopyPositionItems(w http.ResponseWriter, r *http.Reque
 		case errors.Is(err, repository.ErrCopyTenderMismatch):
 			apierr.BadRequest(err.Error()).Render(w)
 		default:
-			log.Error().Err(err).Str("source_position_id", req.SourcePositionID).Str("target_position_id", targetID).Msg("boq_write: CopyPositionItems failed")
-			apierr.InternalError("failed to copy position items").Render(w)
+			apierr.InternalFromErr(w, r, err, "failed to copy position items", "source_position_id", req.SourcePositionID, "target_position_id", targetID)
 		}
 		return
 	}

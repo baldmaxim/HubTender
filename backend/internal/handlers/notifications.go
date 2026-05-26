@@ -55,7 +55,7 @@ func (h *NotificationsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Title:   req.Title,
 		Message: req.Message,
 	}); err != nil {
-		apierr.InternalError("failed to create notification").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create notification")
 		return
 	}
 
@@ -72,7 +72,7 @@ func (h *NotificationsHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.svc.List(r.Context(), limit)
 	if err != nil {
-		apierr.InternalError("failed to list notifications").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list notifications")
 		return
 	}
 	if rows == nil {
@@ -84,7 +84,7 @@ func (h *NotificationsHandler) List(w http.ResponseWriter, r *http.Request) {
 // DeleteAll handles DELETE /api/v1/notifications.
 func (h *NotificationsHandler) DeleteAll(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.DeleteAll(r.Context()); err != nil {
-		apierr.InternalError("failed to clear notifications").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to clear notifications")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

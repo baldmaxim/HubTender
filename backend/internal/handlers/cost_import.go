@@ -51,7 +51,7 @@ func (h *CostImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := h.svc.Import(r.Context(), req.Categories, req.Details)
 	if err != nil {
-		apierr.InternalError("failed to import cost categories").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to import cost categories")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, costImportResp{RecordsAdded: n})

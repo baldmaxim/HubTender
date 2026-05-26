@@ -44,7 +44,7 @@ func (h *TenderNotesHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.svc.LoadNotes(r.Context(), tenderID, authUser.ID)
 	if err != nil {
-		apierr.InternalError("failed to load tender notes").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load tender notes")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: res})
@@ -76,7 +76,7 @@ func (h *TenderNotesHandler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.SaveNote(r.Context(), tenderID, authUser.ID, req.NoteText); err != nil {
-		apierr.InternalError("failed to save tender note").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to save tender note")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

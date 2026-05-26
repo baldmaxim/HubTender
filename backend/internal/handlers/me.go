@@ -63,7 +63,7 @@ func (h *MeHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 			apierr.NotFound("user not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to load user profile").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load user profile")
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *MeHandler) GetPermissions(w http.ResponseWriter, r *http.Request) {
 			apierr.NotFound("user not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to load user profile").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load user profile")
 		return
 	}
 
@@ -123,7 +123,7 @@ func (h *MeHandler) GetDeadlineExtensions(w http.ResponseWriter, r *http.Request
 			apierr.NotFound("user not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to load deadline extensions").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load deadline extensions")
 		return
 	}
 
@@ -140,7 +140,7 @@ func (h *MeHandler) ReapplyAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.SetMyAccessStatus(r.Context(), authUser.ID, "pending"); err != nil {
-		apierr.InternalError("failed to update access status").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update access status")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -163,7 +163,7 @@ func (h *MeHandler) ReapplyAccess(w http.ResponseWriter, r *http.Request) {
 func renderJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
-		apierr.InternalError("response serialization failed").Render(w)
+		apierr.InternalFromErr(w, r, err, "response serialization failed")
 		return
 	}
 

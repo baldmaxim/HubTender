@@ -54,7 +54,7 @@ func (h *LibraryHandler) ListWorks(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.svc.ListWorks(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list works library").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list works library")
 		return
 	}
 	if rows == nil {
@@ -74,7 +74,7 @@ func (h *LibraryHandler) CreateWork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.CreateWork(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create work").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create work")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -96,7 +96,7 @@ func (h *LibraryHandler) UpdateWork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.UpdateWork(r.Context(), id, in); err != nil {
-		apierr.InternalError("failed to update work").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update work")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -113,7 +113,7 @@ func (h *LibraryHandler) DeleteWork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DeleteWork(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete work").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete work")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -128,7 +128,7 @@ func (h *LibraryHandler) ListMaterials(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.svc.ListMaterials(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list materials library").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list materials library")
 		return
 	}
 	if rows == nil {
@@ -148,7 +148,7 @@ func (h *LibraryHandler) CreateMaterial(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.svc.CreateMaterial(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create material").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create material")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -170,7 +170,7 @@ func (h *LibraryHandler) UpdateMaterial(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.svc.UpdateMaterial(r.Context(), id, in); err != nil {
-		apierr.InternalError("failed to update material").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update material")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -187,7 +187,7 @@ func (h *LibraryHandler) DeleteMaterial(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.svc.DeleteMaterial(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete material").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete material")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -207,7 +207,7 @@ func (h *LibraryHandler) ListFolders(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.svc.ListFolders(r.Context(), folderType)
 	if err != nil {
-		apierr.InternalError("failed to list folders").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list folders")
 		return
 	}
 	if rows == nil {
@@ -227,7 +227,7 @@ func (h *LibraryHandler) CreateFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.CreateFolder(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create folder").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create folder")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -253,7 +253,7 @@ func (h *LibraryHandler) RenameFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.RenameFolder(r.Context(), id, req.Name); err != nil {
-		apierr.InternalError("failed to rename folder").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to rename folder")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -270,7 +270,7 @@ func (h *LibraryHandler) DeleteFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DeleteFolder(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete folder").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete folder")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -312,7 +312,7 @@ func (h *LibraryHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.svc.ListTemplates(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list templates").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list templates")
 		return
 	}
 	if rows == nil {
@@ -332,7 +332,7 @@ func (h *LibraryHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.svc.DeleteTemplate(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete template").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete template")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -350,7 +350,7 @@ func (h *LibraryHandler) ListTemplateItems(w http.ResponseWriter, r *http.Reques
 	}
 	rows, err := h.svc.ListTemplateItems(r.Context(), templateID)
 	if err != nil {
-		apierr.InternalError("failed to list template items").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list template items")
 		return
 	}
 	if rows == nil {
@@ -370,7 +370,7 @@ func (h *LibraryHandler) DeleteTemplateItem(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err := h.svc.DeleteTemplateItem(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete template item").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete template item")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -388,7 +388,7 @@ func (h *LibraryHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) 
 	}
 	id, err := h.svc.CreateTemplate(r.Context(), in)
 	if err != nil {
-		apierr.InternalError("failed to create template").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create template")
 		return
 	}
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: map[string]string{"id": id}})
@@ -410,7 +410,7 @@ func (h *LibraryHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.svc.UpdateTemplate(r.Context(), id, in); err != nil {
-		apierr.InternalError("failed to update template").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update template")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -433,7 +433,7 @@ func (h *LibraryHandler) AddTemplateItem(w http.ResponseWriter, r *http.Request)
 	}
 	row, err := h.svc.AddTemplateItem(r.Context(), templateID, in)
 	if err != nil {
-		apierr.InternalError("failed to add template item").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to add template item")
 		return
 	}
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: row})

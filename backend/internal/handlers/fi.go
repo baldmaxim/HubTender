@@ -34,7 +34,7 @@ func (h *FIHandler) GetTenderByID(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := h.svc.GetTenderByID(r.Context(), id)
 	if err != nil {
-		apierr.InternalError("failed to load tender").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load tender")
 		return
 	}
 	if row == nil {
@@ -53,7 +53,7 @@ func (h *FIHandler) ListBoqItemsFlat(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.svc.ListAllBoqItemsForTender(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to list boq items").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list boq items")
 		return
 	}
 	if rows == nil {

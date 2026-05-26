@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/rs/zerolog/log"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
@@ -39,7 +38,7 @@ type dataEnvelope struct {
 func (h *ReferenceHandler) GetRoles(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.GetRoles(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to load roles").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load roles")
 		return
 	}
 	if rows == nil {
@@ -52,7 +51,7 @@ func (h *ReferenceHandler) GetRoles(w http.ResponseWriter, r *http.Request) {
 func (h *ReferenceHandler) GetUnits(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.GetUnits(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to load units").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load units")
 		return
 	}
 	if rows == nil {
@@ -65,7 +64,7 @@ func (h *ReferenceHandler) GetUnits(w http.ResponseWriter, r *http.Request) {
 func (h *ReferenceHandler) GetMaterialNames(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.GetMaterialNames(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to load material names").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load material names")
 		return
 	}
 	if rows == nil {
@@ -78,7 +77,7 @@ func (h *ReferenceHandler) GetMaterialNames(w http.ResponseWriter, r *http.Reque
 func (h *ReferenceHandler) GetWorkNames(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.GetWorkNames(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to load work names").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load work names")
 		return
 	}
 	if rows == nil {
@@ -91,8 +90,7 @@ func (h *ReferenceHandler) GetWorkNames(w http.ResponseWriter, r *http.Request) 
 func (h *ReferenceHandler) GetCostCategories(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.GetCostCategories(r.Context())
 	if err != nil {
-		log.Error().Err(err).Msg("references: cost-categories failed")
-		apierr.InternalError("failed to load cost categories").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load cost categories")
 		return
 	}
 	if rows == nil {
@@ -108,8 +106,7 @@ func (h *ReferenceHandler) GetDetailCostCategories(w http.ResponseWriter, r *htt
 
 	rows, err := h.svc.GetDetailCostCategories(r.Context(), costCategoryID)
 	if err != nil {
-		log.Error().Err(err).Msg("references: detail-cost-categories failed")
-		apierr.InternalError("failed to load detail cost categories").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load detail cost categories")
 		return
 	}
 	if rows == nil {

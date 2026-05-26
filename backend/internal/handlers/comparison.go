@@ -42,7 +42,7 @@ func (h *ComparisonHandler) ListNotes(w http.ResponseWriter, r *http.Request) {
 	}
 	notes, err := h.svc.ListNotes(r.Context(), t1, t2)
 	if err != nil {
-		apierr.InternalError("failed to load comparison notes").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load comparison notes")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: notes})
@@ -77,7 +77,7 @@ func (h *ComparisonHandler) UpsertNote(w http.ResponseWriter, r *http.Request) {
 		r.Context(), req.TenderID1, req.TenderID2, req.CostCategoryName,
 		req.DetailCategoryKey, req.Note, authUser.ID,
 	); err != nil {
-		apierr.InternalError("failed to save comparison note").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to save comparison note")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -96,7 +96,7 @@ func (h *ComparisonHandler) ListCostVolumes(w http.ResponseWriter, r *http.Reque
 	}
 	vols, err := h.svc.ListCostVolumes(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to load cost volumes").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load cost volumes")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: vols})

@@ -78,8 +78,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, ErrResetTokenExpired):
 			apierr.Unauthorized("invalid or expired reset token").Render(w)
 		default:
-			log.Error().Err(err).Msg("auth: reset-password failed unexpectedly")
-			apierr.InternalError("reset failed").Render(w)
+			apierr.InternalFromErr(w, r, err, "reset failed")
 		}
 		return
 	}
@@ -118,8 +117,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrAccountMissing):
 			apierr.Forbidden("account access disabled").Render(w)
 		default:
-			log.Error().Err(err).Msg("auth: change-password failed unexpectedly")
-			apierr.InternalError("change failed").Render(w)
+			apierr.InternalFromErr(w, r, err, "change failed")
 		}
 		return
 	}
@@ -168,8 +166,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrUserBlocked):
 			apierr.Forbidden("account access disabled").Render(w)
 		default:
-			log.Error().Err(err).Msg("auth: login failed unexpectedly")
-			apierr.InternalError("login failed").Render(w)
+			apierr.InternalFromErr(w, r, err, "login failed")
 		}
 		return
 	}
@@ -212,8 +209,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrEmailAlreadyExists):
 			apierr.Conflict("email already registered").Render(w)
 		default:
-			log.Error().Err(err).Msg("auth: register failed unexpectedly")
-			apierr.InternalError("registration failed").Render(w)
+			apierr.InternalFromErr(w, r, err, "registration failed")
 		}
 		return
 	}
@@ -254,8 +250,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrUserBlocked):
 			apierr.Forbidden("account access disabled").Render(w)
 		default:
-			log.Error().Err(err).Msg("auth: refresh failed unexpectedly")
-			apierr.InternalError("refresh failed").Render(w)
+			apierr.InternalFromErr(w, r, err, "refresh failed")
 		}
 		return
 	}
@@ -309,8 +304,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrAccountMissing), errors.Is(err, ErrUserBlocked):
 			apierr.Forbidden("account access disabled").Render(w)
 		default:
-			log.Error().Err(err).Msg("auth: /me failed")
-			apierr.InternalError("failed to load profile").Render(w)
+			apierr.InternalFromErr(w, r, err, "failed to load profile")
 		}
 		return
 	}

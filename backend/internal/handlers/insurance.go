@@ -37,7 +37,7 @@ func (h *InsuranceHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	row, err := h.svc.Get(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to load insurance").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load insurance")
 		return
 	}
 
@@ -62,7 +62,7 @@ func (h *InsuranceHandler) Put(w http.ResponseWriter, r *http.Request) {
 
 	row, err := h.svc.Upsert(r.Context(), tenderID, in)
 	if err != nil {
-		apierr.InternalError("failed to save insurance").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to save insurance")
 		return
 	}
 

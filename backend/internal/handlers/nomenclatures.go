@@ -51,7 +51,7 @@ func NewNomenclaturesHandler(svc nomenclaturesServicer) *NomenclaturesHandler {
 func (h *NomenclaturesHandler) ListUnits(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListUnits(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list units").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list units")
 		return
 	}
 	if rows == nil {
@@ -63,7 +63,7 @@ func (h *NomenclaturesHandler) ListUnits(w http.ResponseWriter, r *http.Request)
 func (h *NomenclaturesHandler) ListActiveUnitsShort(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListActiveUnitsShort(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list units").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list units")
 		return
 	}
 	if rows == nil {
@@ -80,7 +80,7 @@ func (h *NomenclaturesHandler) UnitExists(w http.ResponseWriter, r *http.Request
 	}
 	exists, err := h.svc.UnitExists(r.Context(), code)
 	if err != nil {
-		apierr.InternalError("failed to check unit").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to check unit")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, map[string]bool{"exists": exists})
@@ -93,7 +93,7 @@ func (h *NomenclaturesHandler) CreateUnit(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.CreateUnit(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create unit").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create unit")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -111,7 +111,7 @@ func (h *NomenclaturesHandler) UpdateUnit(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.UpdateUnit(r.Context(), code, in); err != nil {
-		apierr.InternalError("failed to update unit").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update unit")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -124,7 +124,7 @@ func (h *NomenclaturesHandler) DeleteUnit(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.DeleteUnit(r.Context(), code); err != nil {
-		apierr.InternalError("failed to delete unit").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete unit")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -135,7 +135,7 @@ func (h *NomenclaturesHandler) DeleteUnit(w http.ResponseWriter, r *http.Request
 func (h *NomenclaturesHandler) ListMaterialNames(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListMaterialNames(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list material names").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list material names")
 		return
 	}
 	if rows == nil {
@@ -147,7 +147,7 @@ func (h *NomenclaturesHandler) ListMaterialNames(w http.ResponseWriter, r *http.
 func (h *NomenclaturesHandler) ListWorkNames(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListWorkNames(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list work names").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list work names")
 		return
 	}
 	if rows == nil {
@@ -164,7 +164,7 @@ func (h *NomenclaturesHandler) ListMaterialNamesByUnit(w http.ResponseWriter, r 
 	}
 	rows, err := h.svc.ListMaterialNamesByUnit(r.Context(), unit)
 	if err != nil {
-		apierr.InternalError("failed to list material names by unit").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list material names by unit")
 		return
 	}
 	if rows == nil {
@@ -181,7 +181,7 @@ func (h *NomenclaturesHandler) ListWorkNamesByUnit(w http.ResponseWriter, r *htt
 	}
 	rows, err := h.svc.ListWorkNamesByUnit(r.Context(), unit)
 	if err != nil {
-		apierr.InternalError("failed to list work names by unit").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list work names by unit")
 		return
 	}
 	if rows == nil {
@@ -197,7 +197,7 @@ func (h *NomenclaturesHandler) CreateMaterialName(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.svc.CreateMaterialName(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create material name").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create material name")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -215,7 +215,7 @@ func (h *NomenclaturesHandler) UpdateMaterialName(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.svc.UpdateMaterialName(r.Context(), id, in); err != nil {
-		apierr.InternalError("failed to update material name").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update material name")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -228,7 +228,7 @@ func (h *NomenclaturesHandler) DeleteMaterialName(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.svc.DeleteMaterialName(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete material name").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete material name")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -245,7 +245,7 @@ func (h *NomenclaturesHandler) DeleteMaterialNamesIn(w http.ResponseWriter, r *h
 		return
 	}
 	if err := h.svc.DeleteMaterialNamesIn(r.Context(), req.IDs); err != nil {
-		apierr.InternalError("failed to delete material names in batch").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete material names in batch")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -258,7 +258,7 @@ func (h *NomenclaturesHandler) CreateWorkName(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err := h.svc.CreateWorkName(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create work name").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create work name")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -276,7 +276,7 @@ func (h *NomenclaturesHandler) UpdateWorkName(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err := h.svc.UpdateWorkName(r.Context(), id, in); err != nil {
-		apierr.InternalError("failed to update work name").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update work name")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -289,7 +289,7 @@ func (h *NomenclaturesHandler) DeleteWorkName(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err := h.svc.DeleteWorkName(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete work name").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete work name")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -302,7 +302,7 @@ func (h *NomenclaturesHandler) DeleteWorkNamesIn(w http.ResponseWriter, r *http.
 		return
 	}
 	if err := h.svc.DeleteWorkNamesIn(r.Context(), req.IDs); err != nil {
-		apierr.InternalError("failed to delete work names in batch").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete work names in batch")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -322,7 +322,7 @@ func (h *NomenclaturesHandler) RemapBoqMaterial(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err := h.svc.RemapBoqMaterialName(r.Context(), req.From, req.To); err != nil {
-		apierr.InternalError("failed to remap boq material").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to remap boq material")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -335,7 +335,7 @@ func (h *NomenclaturesHandler) RemapLibraryMaterial(w http.ResponseWriter, r *ht
 		return
 	}
 	if err := h.svc.RemapMaterialsLibraryMaterialName(r.Context(), req.From, req.To); err != nil {
-		apierr.InternalError("failed to remap materials library").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to remap materials library")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -348,7 +348,7 @@ func (h *NomenclaturesHandler) RemapBoqWork(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err := h.svc.RemapBoqWorkName(r.Context(), req.From, req.To); err != nil {
-		apierr.InternalError("failed to remap boq work").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to remap boq work")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -361,7 +361,7 @@ func (h *NomenclaturesHandler) RemapLibraryWork(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err := h.svc.RemapWorksLibraryWorkName(r.Context(), req.From, req.To); err != nil {
-		apierr.InternalError("failed to remap works library").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to remap works library")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

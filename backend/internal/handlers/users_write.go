@@ -69,7 +69,7 @@ func (h *UserRegisterHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Register(r.Context(), in); err != nil {
-		apierr.InternalError("failed to register user").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to register user")
 		return
 	}
 

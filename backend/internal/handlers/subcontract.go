@@ -55,7 +55,7 @@ func (h *SubcontractHandler) ToggleExclusion(w http.ResponseWriter, r *http.Requ
 
 	added, err := h.svc.ToggleExclusion(r.Context(), tenderID, req.DetailCostCategoryID, req.ExclusionType)
 	if err != nil {
-		apierr.InternalError("failed to toggle exclusion").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to toggle exclusion")
 		return
 	}
 

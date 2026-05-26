@@ -79,14 +79,16 @@ export interface BoqPreviewRow {
   material_names: { name: string } | null;
 }
 
-/** Существующие boq_items (subset + name embeds) по позициям для предпросмотра. */
+/** Существующие boq_items (subset + name embeds) по позициям для предпросмотра.
+ *  POST с JSON-body: на mass-import тендеров с сотнями позиций GET-вариант
+ *  ловил 414 на прод-прокси (Sentry HUBTENDER-WEB-1). */
 export async function listBoqPreviewByPositions(
   positionIds: string[],
 ): Promise<BoqPreviewRow[]> {
   if (positionIds.length === 0) return [];
-  const qs = encodeURIComponent(positionIds.join(','));
   const res = await apiFetch<{ data: BoqPreviewRow[] }>(
-    `/api/v1/positions/boq-preview?position_ids=${qs}`,
+    '/api/v1/positions/boq-preview',
+    { method: 'POST', body: JSON.stringify({ position_ids: positionIds }) },
   );
   return res.data ?? [];
 }

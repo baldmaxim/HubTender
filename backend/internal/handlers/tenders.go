@@ -78,7 +78,7 @@ func (h *TenderHandler) GetTenders(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.svc.ListTenders(r.Context(), userID, p)
 	if err != nil {
-		apierr.InternalError("failed to list tenders").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list tenders")
 		return
 	}
 

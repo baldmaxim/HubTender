@@ -82,7 +82,7 @@ func (h *ImportBoqHandler) BulkImport(w http.ResponseWriter, r *http.Request) {
 			apierr.BadRequest(bulkErr.Message).Render(w)
 			return
 		}
-		apierr.InternalError("failed to import BOQ items").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to import BOQ items")
 		return
 	}
 

@@ -44,7 +44,7 @@ func (h *PositionFiltersHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := h.svc.List(r.Context(), authUser.ID, tenderID)
 	if err != nil {
-		apierr.InternalError("failed to load filter").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load filter")
 		return
 	}
 	if ids == nil {
@@ -77,7 +77,7 @@ func (h *PositionFiltersHandler) Replace(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.svc.Replace(r.Context(), authUser.ID, tenderID, req.PositionIDs); err != nil {
-		apierr.InternalError("failed to save filter").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to save filter")
 		return
 	}
 
@@ -111,7 +111,7 @@ func (h *PositionFiltersHandler) Append(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.svc.Append(r.Context(), authUser.ID, tenderID, req.PositionID); err != nil {
-		apierr.InternalError("failed to append filter entry").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to append filter entry")
 		return
 	}
 
@@ -131,7 +131,7 @@ func (h *PositionFiltersHandler) Clear(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Clear(r.Context(), authUser.ID, tenderID); err != nil {
-		apierr.InternalError("failed to clear filter").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to clear filter")
 		return
 	}
 

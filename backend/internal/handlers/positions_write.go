@@ -99,7 +99,7 @@ func (h *PositionWriteHandler) CreatePosition(w http.ResponseWriter, r *http.Req
 
 	pos, err := h.svc.CreatePosition(r.Context(), in)
 	if err != nil {
-		apierr.InternalError("failed to create position").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create position")
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *PositionWriteHandler) UpdatePosition(w http.ResponseWriter, r *http.Req
 			apierr.NotFound("position not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to load position").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load position")
 		return
 	}
 
@@ -161,7 +161,7 @@ func (h *PositionWriteHandler) UpdatePosition(w http.ResponseWriter, r *http.Req
 
 	updated, err := h.svc.UpdatePosition(r.Context(), posID, in, current.TenderID)
 	if err != nil {
-		apierr.InternalError("failed to update position").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update position")
 		return
 	}
 
@@ -192,7 +192,7 @@ func (h *PositionWriteHandler) BulkDeletePositions(w http.ResponseWriter, r *htt
 		return
 	}
 	if err := h.svc.BulkDeletePositions(r.Context(), req.PositionIDs, req.TenderID); err != nil {
-		apierr.InternalError("failed to delete positions").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete positions")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -236,7 +236,7 @@ func (h *PositionWriteHandler) CreateAdditionalPosition(w http.ResponseWriter, r
 			apierr.NotFound(err.Error()).Render(w)
 			return
 		}
-		apierr.InternalError("failed to create additional position").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create additional position")
 		return
 	}
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: map[string]string{"id": id}})
@@ -265,7 +265,7 @@ func (h *PositionWriteHandler) UpdatePositionsNote(w http.ResponseWriter, r *htt
 		return
 	}
 	if err := h.svc.UpdatePositionsNote(r.Context(), req.PositionIDs, req.ManualNote, req.TenderID); err != nil {
-		apierr.InternalError("failed to update positions note").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update positions note")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -293,7 +293,7 @@ func (h *PositionWriteHandler) ClearPositionsBoq(w http.ResponseWriter, r *http.
 		return
 	}
 	if err := h.svc.ClearPositionsBoq(r.Context(), req.PositionIDs, req.TenderID); err != nil {
-		apierr.InternalError("failed to clear positions boq").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to clear positions boq")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -322,7 +322,7 @@ func (h *PositionWriteHandler) ShiftPositionsLevel(w http.ResponseWriter, r *htt
 		return
 	}
 	if err := h.svc.ShiftPositionsLevel(r.Context(), req.PositionIDs, req.Delta, req.TenderID); err != nil {
-		apierr.InternalError("failed to shift positions level").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to shift positions level")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -352,7 +352,7 @@ func (h *PositionWriteHandler) RecomputePositionTotals(w http.ResponseWriter, r 
 		}
 	}
 	if err := h.svc.RecomputePositionTotals(r.Context(), id, req.TenderID); err != nil {
-		apierr.InternalError("failed to recompute position totals").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to recompute position totals")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -390,7 +390,7 @@ func (h *PositionWriteHandler) BulkInsertPositions(w http.ResponseWriter, r *htt
 	}
 	n, err := h.svc.BulkInsertPositions(r.Context(), req.Positions, req.TenderID)
 	if err != nil {
-		apierr.InternalError("failed to bulk-insert positions").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to bulk-insert positions")
 		return
 	}
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: map[string]int{"inserted": n}})
@@ -422,7 +422,7 @@ func (h *PositionWriteHandler) UpdatePositionFields(w http.ResponseWriter, r *ht
 		WorkName:     req.WorkName,
 		UnitCode:     req.UnitCode,
 	}, req.TenderID); err != nil {
-		apierr.InternalError("failed to update position fields").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update position fields")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

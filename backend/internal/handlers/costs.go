@@ -61,7 +61,7 @@ func (h *CostsHandler) ListCostCategories(w http.ResponseWriter, r *http.Request
 	if ids := splitCSV(r.URL.Query().Get("ids")); len(ids) > 0 {
 		rows, err := h.svc.ListCostCategoriesByIDs(r.Context(), ids)
 		if err != nil {
-			apierr.InternalError("failed to list cost categories").Render(w)
+			apierr.InternalFromErr(w, r, err, "failed to list cost categories")
 			return
 		}
 		renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rows})
@@ -69,7 +69,7 @@ func (h *CostsHandler) ListCostCategories(w http.ResponseWriter, r *http.Request
 	}
 	rows, err := h.svc.ListCostCategories(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list cost categories").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list cost categories")
 		return
 	}
 	if rows == nil {
@@ -87,7 +87,7 @@ func (h *CostsHandler) FindCostCategory(w http.ResponseWriter, r *http.Request) 
 	}
 	rec, err := h.svc.FindCostCategoryByNameAndUnit(r.Context(), name, unit)
 	if err != nil {
-		apierr.InternalError("failed to find cost category").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to find cost category")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: rec})
@@ -105,7 +105,7 @@ func (h *CostsHandler) CreateCostCategory(w http.ResponseWriter, r *http.Request
 	}
 	rec, err := h.svc.CreateCostCategory(r.Context(), in)
 	if err != nil {
-		apierr.InternalError("failed to create cost category").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create cost category")
 		return
 	}
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: rec})
@@ -123,7 +123,7 @@ func (h *CostsHandler) UpdateCostCategory(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.UpdateCostCategory(r.Context(), id, in); err != nil {
-		apierr.InternalError("failed to update cost category").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update cost category")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -136,7 +136,7 @@ func (h *CostsHandler) DeleteCostCategory(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.DeleteCostCategory(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete cost category").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete cost category")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -144,7 +144,7 @@ func (h *CostsHandler) DeleteCostCategory(w http.ResponseWriter, r *http.Request
 
 func (h *CostsHandler) DeleteAllCostCategories(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.DeleteAllCostCategories(r.Context()); err != nil {
-		apierr.InternalError("failed to delete all cost categories").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete all cost categories")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -155,7 +155,7 @@ func (h *CostsHandler) DeleteAllCostCategories(w http.ResponseWriter, r *http.Re
 func (h *CostsHandler) ListDetailCostCategories(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListDetailCostCategoriesByOrder(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list detail cost categories").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list detail cost categories")
 		return
 	}
 	if rows == nil {
@@ -167,7 +167,7 @@ func (h *CostsHandler) ListDetailCostCategories(w http.ResponseWriter, r *http.R
 func (h *CostsHandler) NextDetailOrderNum(w http.ResponseWriter, r *http.Request) {
 	n, err := h.svc.NextDetailOrderNum(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to compute next order num").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to compute next order num")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, map[string]int{"max_order_num": n})
@@ -180,7 +180,7 @@ func (h *CostsHandler) CreateDetailCostCategory(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err := h.svc.CreateDetailCostCategory(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create detail cost category").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create detail cost category")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -198,7 +198,7 @@ func (h *CostsHandler) UpdateDetailCostCategory(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err := h.svc.UpdateDetailCostCategory(r.Context(), id, p); err != nil {
-		apierr.InternalError("failed to update detail cost category").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update detail cost category")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -211,7 +211,7 @@ func (h *CostsHandler) DeleteDetailCostCategory(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err := h.svc.DeleteDetailCostCategory(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete detail cost category").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete detail cost category")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -219,7 +219,7 @@ func (h *CostsHandler) DeleteDetailCostCategory(w http.ResponseWriter, r *http.R
 
 func (h *CostsHandler) DeleteAllDetailCostCategories(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.DeleteAllDetailCostCategories(r.Context()); err != nil {
-		apierr.InternalError("failed to delete all detail cost categories").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete all detail cost categories")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -231,7 +231,7 @@ func (h *CostsHandler) ListLocations(w http.ResponseWriter, r *http.Request) {
 	ids := splitCSV(r.URL.Query().Get("ids"))
 	rows, err := h.svc.ListLocationsByIDs(r.Context(), ids)
 	if err != nil {
-		apierr.InternalError("failed to list locations").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list locations")
 		return
 	}
 	if rows == nil {
@@ -243,7 +243,7 @@ func (h *CostsHandler) ListLocations(w http.ResponseWriter, r *http.Request) {
 func (h *CostsHandler) ListActiveUnitsFull(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListActiveUnitsFull(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list units").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list units")
 		return
 	}
 	if rows == nil {
@@ -263,7 +263,7 @@ func (h *CostsHandler) UpsertImportedUnits(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := h.svc.UpsertImportedUnits(r.Context(), req.Units); err != nil {
-		apierr.InternalError("failed to upsert imported units").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to upsert imported units")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

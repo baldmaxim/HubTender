@@ -79,7 +79,7 @@ func (h *TimelineHandler) SetGroupQuality(w http.ResponseWriter, r *http.Request
 			apierr.NotFound("tender group not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to set group quality").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to set group quality")
 		return
 	}
 
@@ -137,7 +137,7 @@ func (h *TimelineHandler) RespondIteration(w http.ResponseWriter, r *http.Reques
 			apierr.NotFound("tender iteration not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to respond to iteration").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to respond to iteration")
 		return
 	}
 
@@ -156,7 +156,7 @@ func (h *TimelineHandler) ListAssignableUsers(w http.ResponseWriter, r *http.Req
 	}
 	users, err := h.svc.ListAssignableUsers(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list assignable users").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list assignable users")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: users})
@@ -176,7 +176,7 @@ func (h *TimelineHandler) ListTimelineTenders(w http.ResponseWriter, r *http.Req
 	}
 	out, err := h.svc.ListTimelineTenders(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list timeline tenders").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list timeline tenders")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: out})
@@ -195,7 +195,7 @@ func (h *TimelineHandler) ListTenderGroups(w http.ResponseWriter, r *http.Reques
 	}
 	out, err := h.svc.ListTenderGroups(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to list tender groups").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list tender groups")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: out})
@@ -216,7 +216,7 @@ func (h *TimelineHandler) ListGroupIterations(w http.ResponseWriter, r *http.Req
 	}
 	out, err := h.svc.ListGroupIterations(r.Context(), groupID, userID)
 	if err != nil {
-		apierr.InternalError("failed to list group iterations").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list group iterations")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: out})
@@ -261,7 +261,7 @@ func (h *TimelineHandler) CreateIteration(w http.ResponseWriter, r *http.Request
 		UserAmount:      req.UserAmount,
 	})
 	if err != nil {
-		apierr.InternalError("failed to create iteration").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create iteration")
 		return
 	}
 
@@ -290,7 +290,7 @@ func (h *TimelineHandler) ReconcileGroups(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.ReconcileTenderGroups(r.Context(), tenderID, req.ExcludedUserIDs, req.ExpectedGroups); err != nil {
-		apierr.InternalError("failed to reconcile tender groups").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to reconcile tender groups")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

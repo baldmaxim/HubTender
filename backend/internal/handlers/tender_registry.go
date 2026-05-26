@@ -39,7 +39,7 @@ func NewTenderRegistryHandler(svc tenderRegistryServicer) *TenderRegistryHandler
 func (h *TenderRegistryHandler) List(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.List(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list tender registry").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list tender registry")
 		return
 	}
 	if rows == nil {
@@ -52,7 +52,7 @@ func (h *TenderRegistryHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *TenderRegistryHandler) NextSortOrder(w http.ResponseWriter, r *http.Request) {
 	n, err := h.svc.NextSortOrder(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to compute next sort order").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to compute next sort order")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, map[string]int{"next_sort_order": n})
@@ -62,7 +62,7 @@ func (h *TenderRegistryHandler) NextSortOrder(w http.ResponseWriter, r *http.Req
 func (h *TenderRegistryHandler) Autocomplete(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.Autocomplete(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to load autocomplete").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load autocomplete")
 		return
 	}
 	if rows == nil {
@@ -83,7 +83,7 @@ func (h *TenderRegistryHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.Create(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create tender registry row").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create tender registry row")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -102,7 +102,7 @@ func (h *TenderRegistryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.Update(r.Context(), id, in); err != nil {
-		apierr.InternalError("failed to update tender registry row").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update tender registry row")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -122,7 +122,7 @@ func (h *TenderRegistryHandler) PatchFields(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err := h.svc.PatchFields(r.Context(), id, p); err != nil {
-		apierr.InternalError("failed to patch tender registry row").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to patch tender registry row")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -132,7 +132,7 @@ func (h *TenderRegistryHandler) PatchFields(w http.ResponseWriter, r *http.Reque
 func (h *TenderRegistryHandler) ListTenderStatuses(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListTenderStatuses(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list tender statuses").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list tender statuses")
 		return
 	}
 	if rows == nil {
@@ -145,7 +145,7 @@ func (h *TenderRegistryHandler) ListTenderStatuses(w http.ResponseWriter, r *htt
 func (h *TenderRegistryHandler) ListConstructionScopes(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListConstructionScopes(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list construction scopes").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list construction scopes")
 		return
 	}
 	if rows == nil {
@@ -158,7 +158,7 @@ func (h *TenderRegistryHandler) ListConstructionScopes(w http.ResponseWriter, r 
 func (h *TenderRegistryHandler) TenderNumbers(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.TenderNumbers(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list tender numbers").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list tender numbers")
 		return
 	}
 	if rows == nil {
@@ -181,7 +181,7 @@ func (h *TenderRegistryHandler) RelatedTenders(w http.ResponseWriter, r *http.Re
 	}
 	rows, err := h.svc.RelatedTendersByNumbers(r.Context(), numbers)
 	if err != nil {
-		apierr.InternalError("failed to list related tenders").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list related tenders")
 		return
 	}
 	if rows == nil {

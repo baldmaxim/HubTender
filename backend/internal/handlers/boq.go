@@ -40,7 +40,7 @@ func (h *BoqHandler) GetBoqItems(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.svc.ListBoqItems(r.Context(), tenderID, positionID)
 	if err != nil {
-		apierr.InternalError("failed to list BOQ items").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list BOQ items")
 		return
 	}
 
@@ -67,7 +67,7 @@ func (h *BoqHandler) GetBoqItem(w http.ResponseWriter, r *http.Request) {
 			apierr.NotFound("BOQ item not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to load BOQ item").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load BOQ item")
 		return
 	}
 

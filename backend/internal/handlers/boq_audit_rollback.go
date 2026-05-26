@@ -57,11 +57,11 @@ func (h *BoqAuditRollbackHandler) Rollback(w http.ResponseWriter, r *http.Reques
 			case 409:
 				apierr.Conflict(rbErr.Message).Render(w)
 			default:
-				apierr.InternalError(rbErr.Message).Render(w)
+				apierr.InternalFromErr(w, r, rbErr, rbErr.Message)
 			}
 			return
 		}
-		apierr.InternalError("failed to roll back BOQ item").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to roll back BOQ item")
 		return
 	}
 
@@ -97,7 +97,7 @@ func (h *BoqAuditRollbackHandler) ListByPosition(w http.ResponseWriter, r *http.
 		OperationType: strOrNil(q.Get("operation_type")),
 	})
 	if err != nil {
-		apierr.InternalError("failed to list boq audit").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list boq audit")
 		return
 	}
 	if rows == nil {

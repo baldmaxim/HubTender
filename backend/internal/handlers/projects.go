@@ -47,7 +47,7 @@ func (h *ProjectsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.Create(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create project").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create project")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -65,7 +65,7 @@ func (h *ProjectsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.Update(r.Context(), id, in); err != nil {
-		apierr.InternalError("failed to update project").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update project")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -78,7 +78,7 @@ func (h *ProjectsHandler) SoftDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.SoftDelete(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete project").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete project")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -87,7 +87,7 @@ func (h *ProjectsHandler) SoftDelete(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectsHandler) ListActiveTendersForSelect(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListActiveTendersForSelect(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list tenders").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list tenders")
 		return
 	}
 	if rows == nil {
@@ -99,7 +99,7 @@ func (h *ProjectsHandler) ListActiveTendersForSelect(w http.ResponseWriter, r *h
 func (h *ProjectsHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListProjects(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list projects").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list projects")
 		return
 	}
 	if rows == nil {
@@ -116,7 +116,7 @@ func (h *ProjectsHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := h.svc.GetProject(r.Context(), id)
 	if err != nil {
-		apierr.InternalError("failed to load project").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load project")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: p})
@@ -125,7 +125,7 @@ func (h *ProjectsHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectsHandler) ListAllAgreements(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListAllAgreements(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list agreements").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list agreements")
 		return
 	}
 	if rows == nil {
@@ -138,7 +138,7 @@ func (h *ProjectsHandler) ListMonthlyCompletion(w http.ResponseWriter, r *http.R
 	projectID := r.URL.Query().Get("project_id")
 	rows, err := h.svc.ListMonthlyCompletion(r.Context(), projectID)
 	if err != nil {
-		apierr.InternalError("failed to list monthly completion").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list monthly completion")
 		return
 	}
 	if rows == nil {
@@ -158,7 +158,7 @@ func (h *ProjectsHandler) ListAgreements(w http.ResponseWriter, r *http.Request)
 	asc := r.URL.Query().Get("order") == "asc"
 	rows, err := h.svc.ListAgreements(r.Context(), projectID, asc)
 	if err != nil {
-		apierr.InternalError("failed to list agreements").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list agreements")
 		return
 	}
 	if rows == nil {
@@ -174,7 +174,7 @@ func (h *ProjectsHandler) CreateAgreement(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.CreateAgreement(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create agreement").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create agreement")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -192,7 +192,7 @@ func (h *ProjectsHandler) UpdateAgreement(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.UpdateAgreement(r.Context(), id, p); err != nil {
-		apierr.InternalError("failed to update agreement").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update agreement")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -205,7 +205,7 @@ func (h *ProjectsHandler) DeleteAgreement(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.DeleteAgreement(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete agreement").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete agreement")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -220,7 +220,7 @@ func (h *ProjectsHandler) CreateMonthlyCompletion(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.svc.CreateMonthlyCompletion(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create monthly completion").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create monthly completion")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -238,7 +238,7 @@ func (h *ProjectsHandler) UpdateMonthlyCompletion(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.svc.UpdateMonthlyCompletion(r.Context(), id, p); err != nil {
-		apierr.InternalError("failed to update monthly completion").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update monthly completion")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

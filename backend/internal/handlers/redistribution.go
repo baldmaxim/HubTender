@@ -71,7 +71,7 @@ func (h *RedistributionHandler) Save(w http.ResponseWriter, r *http.Request) {
 		authUser.ID,
 	)
 	if err != nil {
-		apierr.InternalError("failed to save redistribution results").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to save redistribution results")
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *RedistributionHandler) Load(w http.ResponseWriter, r *http.Request) {
 
 	out, err := h.svc.LoadResults(r.Context(), tenderID, tacticID)
 	if err != nil {
-		apierr.InternalError("failed to load redistribution results").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load redistribution results")
 		return
 	}
 

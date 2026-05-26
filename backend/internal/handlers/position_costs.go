@@ -36,7 +36,7 @@ func (h *PositionCostsHandler) GetPositionsWithCosts(w http.ResponseWriter, r *h
 
 	rows, err := h.svc.GetPositionsWithCosts(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to load positions with costs").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load positions with costs")
 		return
 	}
 

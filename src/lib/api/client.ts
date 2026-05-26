@@ -7,6 +7,7 @@ import {
   getAccessToken as appAuthGetAccessToken,
   refreshSession as appAuthRefreshSession,
 } from '../auth/client';
+import { Sentry } from '../sentry';
 
 type FetchOptions = Omit<RequestInit, 'headers'> & {
   headers?: Record<string, string>;
@@ -105,10 +106,23 @@ export async function apiFetch<T>(
     // Предпочитаем `detail` (RFC 7807) — там приходит конкретное сообщение
     // от Go-handler/SQL, иначе откатываемся на `title` или statusText.
     const messageText = body.detail || body.title || res.statusText;
-    throw Object.assign(new Error(messageText), {
+    const err = Object.assign(new Error(messageText), {
       status: res.status,
       body,
     });
+    // 5xx уходят в Sentry безусловно — даже если caller проглатывает
+    // ошибку через message.error(...). 4xx остаются user-facing-only.
+    if (res.status >= 500) {
+      Sentry.captureException(err, {
+        tags: {
+          api_status: String(res.status),
+          api_path: path.split('?')[0],
+          api_method: (rest.method ?? 'GET').toUpperCase(),
+        },
+        extra: { body, path },
+      });
+    }
+    throw err;
   }
 
   if (res.status === 204) return undefined as T;

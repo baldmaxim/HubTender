@@ -53,7 +53,7 @@ func NewMarkupHandler(svc markupServicer) *MarkupHandler {
 func (h *MarkupHandler) ListTactics(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListTactics(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list tactics").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list tactics")
 		return
 	}
 	if rows == nil {
@@ -70,7 +70,7 @@ func (h *MarkupHandler) GetTactic(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := h.svc.GetTactic(r.Context(), id)
 	if err != nil {
-		apierr.InternalError("failed to load tactic").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load tactic")
 		return
 	}
 	if row == nil {
@@ -88,7 +88,7 @@ func (h *MarkupHandler) FindGlobalTactic(w http.ResponseWriter, r *http.Request)
 	}
 	row, err := h.svc.FindGlobalTacticByName(r.Context(), name)
 	if err != nil {
-		apierr.InternalError("failed to find global tactic").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to find global tactic")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: row})
@@ -102,7 +102,7 @@ func (h *MarkupHandler) CreateTactic(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := h.svc.CreateTactic(r.Context(), in)
 	if err != nil {
-		apierr.InternalError("failed to create tactic").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create tactic")
 		return
 	}
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: row})
@@ -120,7 +120,7 @@ func (h *MarkupHandler) UpdateTactic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.UpdateTactic(r.Context(), id, p); err != nil {
-		apierr.InternalError("failed to update tactic").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update tactic")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -142,7 +142,7 @@ func (h *MarkupHandler) RenameTactic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.RenameTactic(r.Context(), id, req.Name); err != nil {
-		apierr.InternalError("failed to rename tactic").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to rename tactic")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -155,7 +155,7 @@ func (h *MarkupHandler) DeleteTactic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DeleteTactic(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete tactic").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete tactic")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -166,7 +166,7 @@ func (h *MarkupHandler) DeleteTactic(w http.ResponseWriter, r *http.Request) {
 func (h *MarkupHandler) ListParameters(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListActiveParameters(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to list parameters").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list parameters")
 		return
 	}
 	if rows == nil {
@@ -182,7 +182,7 @@ func (h *MarkupHandler) CreateParameter(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.svc.CreateParameter(r.Context(), in); err != nil {
-		apierr.InternalError("failed to create parameter").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create parameter")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -200,7 +200,7 @@ func (h *MarkupHandler) UpdateParameter(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.svc.UpdateParameter(r.Context(), id, p); err != nil {
-		apierr.InternalError("failed to update parameter").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update parameter")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -213,7 +213,7 @@ func (h *MarkupHandler) DeleteParameter(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.svc.DeleteParameter(r.Context(), id); err != nil {
-		apierr.InternalError("failed to delete parameter").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete parameter")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -245,7 +245,7 @@ func (h *MarkupHandler) SetParameterOrderNum(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	if err := h.svc.SetParameterOrderNum(r.Context(), id, req.OrderNum); err != nil {
-		apierr.InternalError("failed to set order num").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to set order num")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -261,7 +261,7 @@ func (h *MarkupHandler) GetTenderTacticID(w http.ResponseWriter, r *http.Request
 	}
 	id, err := h.svc.GetTenderTacticID(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to load tactic id").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load tactic id")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, map[string]any{"markup_tactic_id": id})
@@ -283,7 +283,7 @@ func (h *MarkupHandler) SetTenderTacticID(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.SetTenderTacticID(r.Context(), tenderID, req.MarkupTacticID); err != nil {
-		apierr.InternalError("failed to set tactic id").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to set tactic id")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -299,7 +299,7 @@ func (h *MarkupHandler) ListTenderMarkupPercentages(w http.ResponseWriter, r *ht
 	}
 	rows, err := h.svc.ListTenderMarkupPercentages(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to list percentages").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list percentages")
 		return
 	}
 	if rows == nil {
@@ -324,7 +324,7 @@ func (h *MarkupHandler) ReplaceTenderMarkupPercentages(w http.ResponseWriter, r 
 		return
 	}
 	if err := h.svc.ReplaceTenderMarkupPercentages(r.Context(), tenderID, req.Records); err != nil {
-		apierr.InternalError("failed to replace percentages").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to replace percentages")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -340,7 +340,7 @@ func (h *MarkupHandler) GetPricingDistribution(w http.ResponseWriter, r *http.Re
 	}
 	row, err := h.svc.GetPricingDistribution(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to load pricing distribution").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load pricing distribution")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: row})
@@ -358,7 +358,7 @@ func (h *MarkupHandler) UpsertPricingDistribution(w http.ResponseWriter, r *http
 	}
 	row, err := h.svc.UpsertPricingDistribution(r.Context(), in)
 	if err != nil {
-		apierr.InternalError("failed to save pricing distribution").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to save pricing distribution")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: row})
@@ -374,7 +374,7 @@ func (h *MarkupHandler) ListSubcontractExclusions(w http.ResponseWriter, r *http
 	}
 	rows, err := h.svc.ListSubcontractExclusions(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to list exclusions").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list exclusions")
 		return
 	}
 	if rows == nil {
@@ -390,7 +390,7 @@ func (h *MarkupHandler) InsertSubcontractExclusion(w http.ResponseWriter, r *htt
 		return
 	}
 	if err := h.svc.InsertSubcontractExclusion(r.Context(), in); err != nil {
-		apierr.InternalError("failed to insert exclusion").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to insert exclusion")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -407,7 +407,7 @@ func (h *MarkupHandler) InsertSubcontractExclusionsBatch(w http.ResponseWriter, 
 		return
 	}
 	if err := h.svc.InsertSubcontractExclusionsBatch(r.Context(), req.Rows); err != nil {
-		apierr.InternalError("failed to insert exclusions batch").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to insert exclusions batch")
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -420,7 +420,7 @@ func (h *MarkupHandler) DeleteSubcontractExclusion(w http.ResponseWriter, r *htt
 		return
 	}
 	if err := h.svc.DeleteSubcontractExclusion(r.Context(), in); err != nil {
-		apierr.InternalError("failed to delete exclusion").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete exclusion")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -439,7 +439,7 @@ func (h *MarkupHandler) DeleteSubcontractExclusionsBatch(w http.ResponseWriter, 
 		return
 	}
 	if err := h.svc.DeleteSubcontractExclusionsBatch(r.Context(), req.TenderID, req.DetailCostCategoryIDs, req.ExclusionType); err != nil {
-		apierr.InternalError("failed to delete exclusions batch").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to delete exclusions batch")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

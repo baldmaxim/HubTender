@@ -50,7 +50,7 @@ func (h *TasksHandler) List(w http.ResponseWriter, r *http.Request) {
 			r.URL.Query().Get("exclude_completed") == "true"
 		tasks, err := h.svc.ListByUser(r.Context(), userID, excludeCompleted)
 		if err != nil {
-			apierr.InternalError("failed to load tasks").Render(w)
+			apierr.InternalFromErr(w, r, err, "failed to load tasks")
 			return
 		}
 		renderJSON(w, r, http.StatusOK, dataEnvelope{Data: tasks})
@@ -63,7 +63,7 @@ func (h *TasksHandler) List(w http.ResponseWriter, r *http.Request) {
 			apierr.Forbidden("insufficient privilege for all tasks").Render(w)
 			return
 		}
-		apierr.InternalError("failed to load tasks").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load tasks")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: tasks})
@@ -92,7 +92,7 @@ func (h *TasksHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := h.svc.Create(r.Context(), req.UserID, req.TenderID, req.Description)
 	if err != nil {
-		apierr.InternalError("failed to create task").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to create task")
 		return
 	}
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: map[string]string{"id": id}})
@@ -124,7 +124,7 @@ func (h *TasksHandler) Update(w http.ResponseWriter, r *http.Request) {
 			apierr.NotFound("task not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to update task").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update task")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -147,7 +147,7 @@ func (h *TasksHandler) GetWorkSettings(w http.ResponseWriter, r *http.Request) {
 			apierr.NotFound("user not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to load work settings").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load work settings")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: ws})
@@ -179,7 +179,7 @@ func (h *TasksHandler) SetWorkSettings(w http.ResponseWriter, r *http.Request) {
 			apierr.NotFound("user not found").Render(w)
 			return
 		}
-		apierr.InternalError("failed to update work settings").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to update work settings")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

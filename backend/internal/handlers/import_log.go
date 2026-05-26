@@ -34,7 +34,7 @@ func (h *ImportLogHandler) ListSessions(w http.ResponseWriter, r *http.Request) 
 	tenderID := r.URL.Query().Get("tender_id")
 	rows, err := h.svc.ListSessions(r.Context(), tenderID)
 	if err != nil {
-		apierr.InternalError("failed to list import sessions").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to list import sessions")
 		return
 	}
 	if rows == nil {
@@ -48,7 +48,7 @@ func (h *ImportLogHandler) UsersByIDs(w http.ResponseWriter, r *http.Request) {
 	ids := splitCSV(r.URL.Query().Get("ids"))
 	rows, err := h.svc.UsersByIDs(r.Context(), ids)
 	if err != nil {
-		apierr.InternalError("failed to load users").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load users")
 		return
 	}
 	if rows == nil {
@@ -62,7 +62,7 @@ func (h *ImportLogHandler) TendersByIDs(w http.ResponseWriter, r *http.Request) 
 	ids := splitCSV(r.URL.Query().Get("ids"))
 	rows, err := h.svc.TendersByIDs(r.Context(), ids)
 	if err != nil {
-		apierr.InternalError("failed to load tenders").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load tenders")
 		return
 	}
 	if rows == nil {
@@ -75,7 +75,7 @@ func (h *ImportLogHandler) TendersByIDs(w http.ResponseWriter, r *http.Request) 
 func (h *ImportLogHandler) AllTendersForFilter(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.ListAllTendersForFilter(r.Context())
 	if err != nil {
-		apierr.InternalError("failed to load tenders").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to load tenders")
 		return
 	}
 	if rows == nil {
@@ -99,7 +99,7 @@ func (h *ImportLogHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.svc.CancelSession(r.Context(), sessionID, authUser.ID)
 	if err != nil {
-		apierr.InternalError("failed to cancel import session").Render(w)
+		apierr.InternalFromErr(w, r, err, "failed to cancel import session")
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: res})
