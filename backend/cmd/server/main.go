@@ -289,7 +289,7 @@ func main() {
 	}
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestLogger(logger))
-	r.Use(chimiddleware.Timeout(30 * time.Second))
+	r.Use(chimiddleware.Timeout(5 * time.Minute))
 	r.Use(corsMiddleware(cfg.CORSOrigins))
 
 	// Public routes.
