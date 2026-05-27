@@ -115,6 +115,7 @@ export async function bulkInsertPositions(
   const res = await apiFetch<{ data: { inserted: number } }>('/api/v1/positions/bulk', {
     method: 'POST',
     body: JSON.stringify({ tender_id: tenderId, positions }),
+    timeoutMs: 0,
   });
   return res.data.inserted;
 }
