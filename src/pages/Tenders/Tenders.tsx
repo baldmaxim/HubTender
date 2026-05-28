@@ -90,7 +90,7 @@ const Tenders: React.FC = () => {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const { tenders, statuses, constructionScopes, tenderNumbers, loading, refetch } = useTenderData();
+  const { tenders, statuses, constructionScopes, tenderNumbers, versionsByNumber, loading, refetch } = useTenderData();
 
   useEffect(() => {
     if (!selectedTender) {
@@ -261,6 +261,7 @@ const Tenders: React.FC = () => {
 
         <TenderMonitorTable
           tenders={visibleTenders}
+          versionsByNumber={versionsByNumber}
           loading={loading}
           activeTab={activeTab}
           searchValue={searchValue}

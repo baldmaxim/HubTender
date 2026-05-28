@@ -6,6 +6,7 @@ import {
   fetchConstructionScopes,
   fetchTenderNumbers,
   fetchRelatedTendersByNumbers,
+  type RelatedTenderRow,
 } from '../../../lib/api/tenderRegistry';
 
 const normalizeTenderTitle = (title?: string | null) =>
@@ -51,6 +52,7 @@ export const useTenderData = () => {
   const [statuses, setStatuses] = useState<TenderStatus[]>([]);
   const [constructionScopes, setConstructionScopes] = useState<ConstructionScope[]>([]);
   const [tenderNumbers, setTenderNumbers] = useState<string[]>([]);
+  const [versionsByNumber, setVersionsByNumber] = useState<Map<string, RelatedTenderRow[]>>(new Map());
   const [loading, setLoading] = useState(false);
 
   const fetchTenders = async () => {
@@ -65,6 +67,7 @@ export const useTenderData = () => {
       const tendersWithNumbers = tendersData.filter((t) => t.tender_number);
       const tenderIdMap = new Map<string, string>();
       const grandTotalMap = new Map<string, number>();
+      const versionsMap = new Map<string, RelatedTenderRow[]>();
 
       if (tendersWithNumbers.length > 0) {
         const numbers = tendersWithNumbers
@@ -79,9 +82,16 @@ export const useTenderData = () => {
               tenderIdMap.set(rt.tender_number, rt.id);
             }
             grandTotalMap.set(rt.id, rt.cached_grand_total || 0);
+            if (rt.tender_number) {
+              const arr = versionsMap.get(rt.tender_number) ?? [];
+              arr.push(rt);
+              versionsMap.set(rt.tender_number, arr);
+            }
           });
         }
       }
+
+      setVersionsByNumber(versionsMap);
 
       const updatedTenders = tendersData.map((tender) => {
         if (tender.manual_total_cost != null) {
@@ -109,5 +119,5 @@ export const useTenderData = () => {
     fetchTenderNumbers().then(setTenderNumbers).catch(() => setTenderNumbers([]));
   }, []);
 
-  return { tenders, statuses, constructionScopes, tenderNumbers, loading, refetch: fetchTenders };
+  return { tenders, statuses, constructionScopes, tenderNumbers, versionsByNumber, loading, refetch: fetchTenders };
 };

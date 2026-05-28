@@ -1,12 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Empty, Input, Popover, Skeleton, Space, Tag } from 'antd';
 import {
+  DownOutlined,
+  EditOutlined,
   EnvironmentFilled,
   FileTextOutlined,
   LinkOutlined,
   PhoneOutlined,
+  RightOutlined,
 } from '@ant-design/icons';
 import type { TenderRegistryWithRelations } from '../../../lib/supabase';
+import type { RelatedTenderRow } from '../../../lib/api/tenderRegistry';
+import { getVersionColor } from '../../../utils/versionColor';
 import { useTheme } from '../../../contexts/ThemeContext';
 import {
   formatArea,
@@ -32,6 +37,7 @@ import { getTenderMonitorPalette, type TenderMonitorPalette } from '../utils/ten
 
 interface TenderMonitorTableProps {
   tenders: TenderRegistryWithRelations[];
+  versionsByNumber: Map<string, RelatedTenderRow[]>;
   loading: boolean;
   activeTab: TenderMonitorTab;
   searchValue: string;
@@ -347,11 +353,17 @@ function SectionHeader({
 
 function TenderRow({
   tender,
+  expandable,
+  expanded,
+  onToggleExpand,
   onOpenTender,
   onQuickCall,
   palette,
 }: {
   tender: TenderRegistryWithRelations;
+  expandable: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
   palette: TenderMonitorPalette;
@@ -379,7 +391,46 @@ function TenderRow({
         background: palette.cardBgAlt,
       }}
     >
-      <div style={{ padding: '12px 0', color: palette.subtleText, fontSize: 11, textAlign: 'center' }}>{tender.sort_order}</div>
+      <div
+        style={{
+          padding: '12px 0',
+          color: palette.subtleText,
+          fontSize: 11,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 4,
+        }}
+      >
+        {expandable ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleExpand();
+            }}
+            style={{
+              width: 16,
+              height: 16,
+              border: 'none',
+              background: 'transparent',
+              color: palette.muted,
+              cursor: 'pointer',
+              padding: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 10,
+            }}
+            title={expanded ? 'Свернуть версии' : 'Показать версии'}
+          >
+            {expanded ? <DownOutlined /> : <RightOutlined />}
+          </button>
+        ) : (
+          <span style={{ width: 16, display: 'inline-block' }} />
+        )}
+        <span>{tender.sort_order}</span>
+      </div>
 
       <div style={{ padding: '12px 0', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -588,8 +639,75 @@ function TenderRow({
   );
 }
 
+function VersionSubRow({
+  version,
+  cachedGrandTotal,
+  maxVersion,
+  onEdit,
+  palette,
+}: {
+  version: number;
+  cachedGrandTotal: number | null;
+  maxVersion: number;
+  onEdit: () => void;
+  palette: TenderMonitorPalette;
+}) {
+  const color = getVersionColor(version, maxVersion);
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '8px 14px 8px 64px',
+        borderBottom: `1px solid ${palette.borderSoft}`,
+        background: palette.sectionBg,
+      }}
+    >
+      <Tag
+        style={{
+          margin: 0,
+          background: `${color}1f`,
+          border: `1px solid ${color}55`,
+          color,
+          fontWeight: 700,
+        }}
+      >
+        v{version}
+      </Tag>
+      <div style={{ color: palette.text, fontSize: 13, fontWeight: 600 }}>
+        {formatMoney(cachedGrandTotal)}
+      </div>
+      <div style={{ flex: 1 }} />
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onEdit();
+        }}
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: 6,
+          border: `1px solid ${palette.border}`,
+          background: palette.cardBgAlt,
+          color: palette.info,
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        title="Редактировать"
+      >
+        <EditOutlined />
+      </button>
+    </div>
+  );
+}
+
 export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   tenders,
+  versionsByNumber,
   loading,
   activeTab,
   searchValue,
@@ -607,6 +725,19 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
 
   const { theme } = useTheme();
   const palette = getTenderMonitorPalette(theme === 'dark');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const sections =
     activeTab === 'all'
@@ -744,15 +875,39 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
               <SectionHeader title={section.title} tenders={section.items} palette={palette} />
               {renderHeader(palette)}
               {section.items.length > 0 ? (
-                section.items.map((tender) => (
-                  <TenderRow
-                    key={tender.id}
-                    tender={tender}
-                    onOpenTender={onOpenTender}
-                    onQuickCall={onQuickCall}
-                    palette={palette}
-                  />
-                ))
+                section.items.map((tender) => {
+                  const versions = tender.tender_number ? versionsByNumber.get(tender.tender_number) ?? [] : [];
+                  const isExpandable = versions.length > 1;
+                  const isExpanded = tender.tender_number ? expanded.has(tender.tender_number) : false;
+                  const maxVersion = versions.reduce((m, v) => Math.max(m, v.version || 1), 1);
+                  const sortedVersions = [...versions].sort((a, b) => (b.version || 0) - (a.version || 0));
+
+                  return (
+                    <React.Fragment key={tender.id}>
+                      <TenderRow
+                        tender={tender}
+                        expandable={isExpandable}
+                        expanded={isExpanded}
+                        onToggleExpand={() => tender.tender_number && toggleExpand(tender.tender_number)}
+                        onOpenTender={onOpenTender}
+                        onQuickCall={onQuickCall}
+                        palette={palette}
+                      />
+                      {isExpandable && isExpanded
+                        ? sortedVersions.map((v) => (
+                            <VersionSubRow
+                              key={v.id}
+                              version={v.version || 1}
+                              cachedGrandTotal={v.cached_grand_total}
+                              maxVersion={maxVersion}
+                              onEdit={() => onOpenTender(tender)}
+                              palette={palette}
+                            />
+                          ))
+                        : null}
+                    </React.Fragment>
+                  );
+                })
               ) : (
                 <div style={{ padding: 36, color: palette.muted, textAlign: 'center' }}>Нет тендеров</div>
               )}
