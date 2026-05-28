@@ -61,7 +61,7 @@ export interface PositionUpdateData {
 
 export interface ValidationError {
   rowIndex: number;
-  type: 'missing_nomenclature' | 'unit_mismatch' | 'missing_cost' | 'invalid_type' | 'missing_field' | 'binding_error' | 'position_not_found';
+  type: 'missing_nomenclature' | 'unit_mismatch' | 'missing_cost' | 'invalid_type' | 'missing_field' | 'binding_error' | 'position_not_found' | 'non_leaf_position';
   field: string;
   message: string;
   severity: 'error' | 'warning';
@@ -70,6 +70,12 @@ export interface ValidationError {
 export interface MissingNomenclatureGroup {
   name: string;
   unit: string;
+  rows: number[];
+}
+
+export interface NonLeafPositionGroup {
+  positionNumber: string;
+  positionName: string;
   rows: number[];
 }
 
@@ -83,12 +89,15 @@ export interface ValidationResult {
   };
   unknownCosts: Array<{ text: string; rows: number[] }>;
   unmatchedPositions: Array<{ positionNumber: string; rows: number[] }>;
+  nonLeafPositions: NonLeafPositionGroup[];
 }
 
 export interface ClientPosition {
   id: string;
   position_number: number;
   work_name: string;
+  hierarchy_level: number | null;
+  is_additional: boolean | null;
 }
 
 // ===========================

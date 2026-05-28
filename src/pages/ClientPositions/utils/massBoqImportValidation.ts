@@ -5,6 +5,7 @@ import {
   ValidationResult,
   ClientPosition,
   MissingNomenclatureGroup,
+  NonLeafPositionGroup,
   isWork,
   isMaterial,
   buildNomenclatureLookupKey,
@@ -20,6 +21,7 @@ interface ValidationMaps {
   workNamesMap: Map<string, string>;
   materialNamesMap: Map<string, string>;
   costCategoriesMap: Map<string, string>;
+  leafPositionIds: Set<string>;
 }
 
 export const validateBoqData = (
@@ -27,7 +29,7 @@ export const validateBoqData = (
   positionUpdates: Map<string, PositionUpdateData>,
   maps: ValidationMaps,
 ): ValidationResult => {
-  const { clientPositionsMap, workNamesMap, materialNamesMap, costCategoriesMap } = maps;
+  const { clientPositionsMap, workNamesMap, materialNamesMap, costCategoriesMap, leafPositionIds } = maps;
 
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
@@ -35,6 +37,7 @@ export const validateBoqData = (
   const missingMaterialsMap = new Map<string, MissingNomenclatureGroup>();
   const unknownCostsMap = new Map<string, number[]>();
   const unmatchedPositionsMap = new Map<string, number[]>();
+  const nonLeafPositionsMap = new Map<string, NonLeafPositionGroup>();
 
   const validBoqTypes = ['раб', 'суб-раб', 'раб-комп.', 'мат', 'суб-мат', 'мат-комп.'];
   const validMaterialTypes = ['основн.', 'вспомогат.'];
@@ -73,6 +76,27 @@ export const validateBoqData = (
         const posData = positionUpdates.get(item.positionNumber);
         if (posData) {
           posData.positionId = position.id;
+        }
+
+        if (!leafPositionIds.has(position.id)) {
+          errors.push({
+            rowIndex: row,
+            type: 'non_leaf_position',
+            field: 'positionNumber',
+            message: `Позиция "${item.positionNumber}" — раздел/заголовок, в неё нельзя загружать работы/материалы`,
+            severity: 'error',
+          });
+
+          const existingGroup = nonLeafPositionsMap.get(item.positionNumber);
+          if (existingGroup) {
+            existingGroup.rows.push(row);
+          } else {
+            nonLeafPositionsMap.set(item.positionNumber, {
+              positionNumber: item.positionNumber,
+              positionName: position.work_name || '',
+              rows: [row],
+            });
+          }
         }
       }
     }
@@ -255,6 +279,7 @@ export const validateBoqData = (
     },
     unknownCosts: Array.from(unknownCostsMap.entries()).map(([text, rows]) => ({ text, rows })),
     unmatchedPositions: Array.from(unmatchedPositionsMap.entries()).map(([positionNumber, rows]) => ({ positionNumber, rows })),
+    nonLeafPositions: Array.from(nonLeafPositionsMap.values()),
   };
 
   console.log('[MassBoqImport] Результат валидации:', {

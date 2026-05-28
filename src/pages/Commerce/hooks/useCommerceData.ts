@@ -20,6 +20,7 @@ import { getTenderById, listAllBoqItemsForTender } from '../../../lib/api/fi';
 import { loadTenderInsurance } from '../../../lib/api/insurance';
 import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 import { loadRedistributionResults } from '../../../lib/api/redistributions';
+import { computeLeafPositionIds } from '../../../utils/positions/leafPositions';
 import {
   applyRedistributionPipeline,
   computeInsuranceTotal,
@@ -76,35 +77,6 @@ type PositionAccumulator = {
   workCostTotal: number;
   itemsCount: number;
 };
-
-function computeLeafPositionIds(positions: Pick<PositionWithCommercialCost, 'id' | 'hierarchy_level' | 'is_additional'>[]): Set<string> {
-  const leafIds = new Set<string>();
-
-  positions.forEach((position, index) => {
-    if (position.is_additional) {
-      leafIds.add(position.id);
-      return;
-    }
-
-    if (index === positions.length - 1) {
-      leafIds.add(position.id);
-      return;
-    }
-
-    const currentLevel = position.hierarchy_level || 0;
-    let nextIndex = index + 1;
-
-    while (nextIndex < positions.length && positions[nextIndex].is_additional) {
-      nextIndex++;
-    }
-
-    if (nextIndex >= positions.length || currentLevel >= (positions[nextIndex].hierarchy_level || 0)) {
-      leafIds.add(position.id);
-    }
-  });
-
-  return leafIds;
-}
 
 function applyLeafFlags(positions: PositionWithCommercialCost[]): PositionWithCommercialCost[] {
   const leafIds = computeLeafPositionIds(positions);

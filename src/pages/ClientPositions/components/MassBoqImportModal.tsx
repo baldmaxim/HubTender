@@ -501,6 +501,28 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
                     />
                   )}
 
+                  {/* Загрузка в нелистовые позиции (разделы/заголовки) */}
+                  {validationResult.nonLeafPositions.length > 0 && (
+                    <Alert
+                      message="Нельзя загружать работы/материалы в разделы/заголовки"
+                      description={
+                        <List
+                          size="small"
+                          dataSource={validationResult.nonLeafPositions}
+                          renderItem={item => (
+                            <List.Item>
+                              <Text type="danger">
+                                Позиция "{item.positionNumber}"{item.positionName ? ` — ${item.positionName}` : ''} — строки: {item.rows.join(', ')}
+                              </Text>
+                            </List.Item>
+                          )}
+                        />
+                      }
+                      type="error"
+                      style={{ marginBottom: 8 }}
+                    />
+                  )}
+
                   {/* Отсутствующая номенклатура — можно добавить кнопкой в футере */}
                   {validationResult.missingNomenclature.works.length > 0 && (
                     <Alert
@@ -569,7 +591,7 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
                   {/* Прочие ошибки (отсутствующие поля, неверные типы, ошибки привязки) */}
                   {(() => {
                     const otherErrors = validationResult.errors.filter(
-                      e => !['position_not_found', 'missing_nomenclature', 'missing_cost'].includes(e.type)
+                      e => !['position_not_found', 'missing_nomenclature', 'missing_cost', 'non_leaf_position'].includes(e.type)
                     );
                     if (otherErrors.length === 0) return null;
                     return (

@@ -12,6 +12,7 @@ import {
 import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
 import { fetchPositionsWithCosts, listBoqPreviewByPositions } from '../../../lib/api/positions';
 import { getTenderById } from '../../../lib/api/fi';
+import { computeLeafPositionIds } from '../../../utils/positions/leafPositions';
 import {
   ParsedBoqItem,
   PositionUpdateData,
@@ -46,6 +47,7 @@ export const useMassBoqImport = () => {
   const [materialNamesMap, setMaterialNamesMap] = useState<Map<string, string>>(new Map());
   const [costCategoriesMap, setCostCategoriesMap] = useState<Map<string, string>>(new Map());
   const [clientPositionsMap, setClientPositionsMap] = useState<Map<string, ClientPosition>>(new Map());
+  const [leafPositionIds, setLeafPositionIds] = useState<Set<string>>(new Set());
 
   // Единицы измерения — для маппинга
   const [availableUnits, setAvailableUnits] = useState<{ code: string; name: string }[]>([]);
@@ -116,8 +118,12 @@ export const useMassBoqImport = () => {
           id: p.id,
           position_number: Number(p.position_number),
           work_name: p.work_name ?? '',
+          hierarchy_level: p.hierarchy_level,
+          is_additional: p.is_additional,
         });
       });
+
+      const leafIds = computeLeafPositionIds(positionsData);
 
       console.log('[MassBoqImport] Первые 20 позиций в БД:',
         Array.from(positionsMap.entries()).slice(0, 20).map(([key, val]) =>
@@ -129,6 +135,7 @@ export const useMassBoqImport = () => {
       setMaterialNamesMap(materialsMap);
       setCostCategoriesMap(costsMap);
       setClientPositionsMap(positionsMap);
+      setLeafPositionIds(leafIds);
       setAvailableUnits((unitsResult.data || []) as { code: string; name: string }[]);
       setUnitMappings({});
 
@@ -207,6 +214,7 @@ export const useMassBoqImport = () => {
       workNamesMap,
       materialNamesMap,
       costCategoriesMap,
+      leafPositionIds,
     });
     setValidationResult(result);
     return result;
