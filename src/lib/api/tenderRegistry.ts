@@ -17,7 +17,7 @@ export interface TenderAutocomplete {
   clientNames: string[];
 }
 
-export interface RelatedTenderRow {
+interface RelatedTenderRow {
   id: string;
   tender_number: string | null;
   version: number | null;
