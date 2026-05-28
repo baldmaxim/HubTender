@@ -99,18 +99,6 @@ const Tenders: React.FC = () => {
     });
   }, [actions.handleEdit, actions.handleDelete, handleCopy, handleNewVersion, handleArchive, handleUnarchive]);
 
-  const columns = useMemo(() => getTendersTableColumns({
-    onOpenUploadBOQ: handleOpenUploadBOQ,
-    getActionMenu,
-  }), [handleOpenUploadBOQ, getActionMenu]);
-
-  const rowSelection = {
-    selectedRowKeys,
-    onChange: (newSelectedRowKeys: React.Key[]) => {
-      setSelectedRowKeys(newSelectedRowKeys);
-    },
-  };
-
   const tabFilteredData = useMemo(() => {
     const search = searchText.toLowerCase();
     return tendersData.filter((item) => {
@@ -123,6 +111,52 @@ const Tenders: React.FC = () => {
       );
     });
   }, [tendersData, searchText, activeTab]);
+
+  const { groupedData, maxVersionByNumber } = useMemo(() => {
+    const groups = new Map<string, TenderRecord[]>();
+    const order: string[] = [];
+
+    tabFilteredData.forEach((item) => {
+      const key = item.tenderNumber || `__no_number__${item.id}`;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+        order.push(key);
+      }
+      groups.get(key)!.push(item);
+    });
+
+    const maxMap = new Map<string, number>();
+    const result: TenderRecord[] = [];
+
+    order.forEach((key) => {
+      const items = groups.get(key)!;
+      const sorted = [...items].sort((a, b) => (Number(b.version) || 0) - (Number(a.version) || 0));
+      const tenderNumber = sorted[0].tenderNumber;
+      maxMap.set(tenderNumber, Number(sorted[0].version) || 1);
+
+      if (sorted.length === 1) {
+        result.push(sorted[0]);
+      } else {
+        const [parent, ...children] = sorted;
+        result.push({ ...parent, children });
+      }
+    });
+
+    return { groupedData: result, maxVersionByNumber: maxMap };
+  }, [tabFilteredData]);
+
+  const columns = useMemo(() => getTendersTableColumns({
+    onOpenUploadBOQ: handleOpenUploadBOQ,
+    getActionMenu,
+    maxVersionByNumber,
+  }), [handleOpenUploadBOQ, getActionMenu, maxVersionByNumber]);
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newSelectedRowKeys: React.Key[]) => {
+      setSelectedRowKeys(newSelectedRowKeys);
+    },
+  };
 
   const handlePaginationChange = useCallback((page: number, nextPageSize: number) => {
     if (nextPageSize !== pageSize) {
@@ -170,7 +204,7 @@ const Tenders: React.FC = () => {
               <Table
                 rowSelection={rowSelection}
                 columns={columns}
-                dataSource={tabFilteredData}
+                dataSource={groupedData}
                 loading={loading}
                 pagination={paginationConfig}
                 scroll={{ x: 'max-content' }}
@@ -192,7 +226,7 @@ const Tenders: React.FC = () => {
               <Table
                 rowSelection={rowSelection}
                 columns={columns}
-                dataSource={tabFilteredData}
+                dataSource={groupedData}
                 loading={loading}
                 pagination={paginationConfig}
                 scroll={{ x: 'max-content' }}

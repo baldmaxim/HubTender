@@ -3,33 +3,56 @@ import { DownloadOutlined, MoreOutlined, LinkOutlined, FolderOutlined, FileTextO
 import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
 import type { TenderRecord } from '../hooks/useTendersData';
+import { getVersionColor } from '../../../../utils/versionColor';
 
 const { Text } = Typography;
 
 interface GetColumnsParams {
   onOpenUploadBOQ: (record: TenderRecord) => void;
   getActionMenu: (record: TenderRecord) => MenuProps['items'];
+  maxVersionByNumber: Map<string, number>;
 }
 
 export const getTendersTableColumns = (params: GetColumnsParams): ColumnsType<TenderRecord> => {
-  const { onOpenUploadBOQ, getActionMenu } = params;
+  const { onOpenUploadBOQ, getActionMenu, maxVersionByNumber } = params;
 
   return [
     {
       title: 'Тендер',
       dataIndex: 'tender',
       key: 'tender',
-      width: 180,
+      width: 200,
       ellipsis: true,
-      render: (text: string, record: TenderRecord) => (
-        <div>
-          <Text strong>{text}</Text>
-          <br />
-          <Text type="secondary" style={{ fontSize: 11 }}>
-            {record.tenderNumber}
-          </Text>
-        </div>
-      ),
+      render: (text: string, record: TenderRecord) => {
+        const versionNum = Number(record.version) || 1;
+        const maxVersion = maxVersionByNumber.get(record.tenderNumber) ?? versionNum;
+        const versionColor = getVersionColor(versionNum, maxVersion);
+        return (
+          <div>
+            <Space size={6} align="center" wrap={false}>
+              <Text strong>{text}</Text>
+              <Tag
+                style={{
+                  margin: 0,
+                  background: `${versionColor}1f`,
+                  border: `1px solid ${versionColor}55`,
+                  color: versionColor,
+                  fontWeight: 700,
+                  fontSize: 11,
+                  lineHeight: '16px',
+                  padding: '0 6px',
+                }}
+              >
+                v{versionNum}
+              </Tag>
+            </Space>
+            <br />
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {record.tenderNumber}
+            </Text>
+          </div>
+        );
+      },
     },
     {
       title: 'Класс жилья',

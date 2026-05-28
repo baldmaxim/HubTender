@@ -35,6 +35,8 @@ export interface TenderRecord {
   is_archived?: boolean;
   /** Исходные данные тендера из БД — используется в модальных окнах */
   raw: Tender;
+  /** Дочерние версии для иерархического отображения в Ant Table */
+  children?: TenderRecord[];
 }
 
 const formatTender = (tender: Tender): TenderRecord => ({
