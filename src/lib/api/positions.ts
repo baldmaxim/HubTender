@@ -134,7 +134,7 @@ export async function getPositionWithTender(positionId: string): Promise<Record<
 export async function listBoqItemsFullByTender(tenderId: string): Promise<Record<string, unknown>[]> {
   const res = await apiFetch<{ data: Record<string, unknown>[] }>(
     `/api/v1/tenders/${encodeURIComponent(tenderId)}/boq-items-full`,
-    { cache: 'no-store' },
+    { cache: 'no-store', timeoutMs: 0 },
   );
   return res.data ?? [];
 }

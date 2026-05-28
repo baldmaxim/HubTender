@@ -74,6 +74,7 @@ export async function saveRedistributionResults(
         records,
         rules,
       }),
+      timeoutMs: 0,
     }
   );
   return res.data.saved_count;
