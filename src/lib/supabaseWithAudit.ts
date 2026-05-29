@@ -88,6 +88,9 @@ async function deleteItemOnce(itemId: string, etag: string): Promise<{ conflict:
     },
   );
   if (res.status === 412) return { conflict: true };
+  // DELETE идемпотентен: 404 = строки уже нет (например, снесена ON DELETE CASCADE
+  // при удалении родительской работы) = цель достигнута, не ошибка.
+  if (res.status === 404) return { conflict: false };
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`DELETE /api/v1/items/${itemId} → ${res.status}: ${txt}`);
