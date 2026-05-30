@@ -1,0 +1,27 @@
+/*
+ * transitions.dev animation layer for TenderHUB.
+ * Source: https://transitions.dev — copy-paste CSS recipes by Jakub Antalik (vendored, not an npm dependency).
+ *
+ * All recipes are OPT-IN: they only animate elements that explicitly carry a `t-*` class.
+ * Every recipe ships its own `@media (prefers-reduced-motion: reduce)` guard.
+ * The shared `:root` block (_root.css) is imported once below.
+ *
+ * NOTE: recipes 03/05/06 (badge/dropdown/modal) overlap with Ant Design's built-in rc-motion —
+ * apply them only to custom (non-antd) elements. Recipes 07/08 (panel reveal / page side-by-side)
+ * are vendored but intentionally NOT imported yet (deferred route/panel-transition phase).
+ */
+@import './_root.css';
+@import './01-card-resize.css';
+@import './02-number-pop-in.css';
+@import './03-notification-badge.css';
+@import './04-text-states-swap.css';
+@import './05-menu-dropdown.css';
+@import './06-modal.css';
+@import './09-icon-swap.css';
+@import './10-success-check.css';
+@import './11-avatar-group-hover.css';
+@import './12-error-state-shake.css';
+/* Deferred (do not enable without the route-transition phase):
+@import './07-panel-reveal.css';
+@import './08-page-side-by-side.css';
+*/

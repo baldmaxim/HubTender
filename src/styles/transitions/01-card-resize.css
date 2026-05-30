@@ -1,0 +1,12 @@
+/* transitions.dev — Card resize. Source: https://transitions.dev (Jakub Antalik).
+   Tween width/height when a container's layout state changes. Opt-in: add .t-resize. */
+.t-resize {
+  transition:
+    width  var(--resize-dur) var(--resize-ease),
+    height var(--resize-dur) var(--resize-ease);
+  will-change: width, height;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-resize { transition: none !important; }
+}

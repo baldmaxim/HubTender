@@ -7,6 +7,7 @@ import { Card, Row, Col, Select, Typography, Space, Statistic, Button, Tag } fro
 import { CheckCircleOutlined, DownloadOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { Tender } from '../../../lib/supabase';
 import type { MarkupTactic } from '../hooks';
+import { AnimatedNumber } from '../../../components/transitions';
 
 const { Title } = Typography;
 
@@ -124,7 +125,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                   title="Итого материалы"
                   value={totals.totalMaterials}
                   precision={0}
-                  formatter={(value) => formatRuInteger(value as number | string)}
+                  formatter={(value) => <AnimatedNumber value={formatRuInteger(value as number | string)} />}
                   valueStyle={{ fontSize: 18 }}
                 />
               </div>
@@ -133,7 +134,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                   title="Итого работы"
                   value={totals.totalWorks}
                   precision={0}
-                  formatter={(value) => formatRuInteger(value as number | string)}
+                  formatter={(value) => <AnimatedNumber value={formatRuInteger(value as number | string)} />}
                   valueStyle={{ fontSize: 18 }}
                 />
               </div>
@@ -142,7 +143,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                   title="Итого"
                   value={totals.total}
                   precision={0}
-                  formatter={(value) => formatRuInteger(value as number | string)}
+                  formatter={(value) => <AnimatedNumber value={formatRuInteger(value as number | string)} />}
                   valueStyle={{ color: '#10b981', fontWeight: 600, fontSize: 18 }}
                 />
               </div>
@@ -152,7 +153,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                     title="Страхование от судимостей"
                     value={insuranceTotal}
                     precision={0}
-                    formatter={(value) => formatRuInteger(value as number | string)}
+                    formatter={(value) => <AnimatedNumber value={formatRuInteger(value as number | string)} />}
                     valueStyle={{ color: '#10b981', fontWeight: 600, fontSize: 18 }}
                   />
                   <div style={{ fontSize: 12, color: '#10b981' }}>

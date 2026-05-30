@@ -1,0 +1,15 @@
+/* transitions.dev — Avatar group hover. Source: https://transitions.dev (Jakub Antalik).
+   Distance-falloff lift on a row of items with bouncy spring. Opt-in: .t-avatar-group > .t-avatar + JS (see AvatarGroup recipe). */
+.t-avatar {
+  transform-origin: center;
+  /* translateY before scale so scale doesn't amplify the lift offset. */
+  transform:
+    translateY(var(--shift, 0px))
+    scale(var(--scale-active, 1));
+  transition: transform var(--avatar-dur) var(--avatar-ease-in);
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-avatar { transition: none !important; transform: none !important; }
+}

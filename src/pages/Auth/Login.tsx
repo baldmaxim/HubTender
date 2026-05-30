@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { HeaderIcon } from '../../components/Icons/HeaderIcon';
 import { signInWithPassword as appAuthSignIn, signOut as appAuthSignOut } from '../../lib/auth/client';
 import type { AppAuthError } from '../../lib/auth/types';
+import { ShakeOnError } from '../../components/transitions';
 
 const { Title, Text } = Typography;
 
@@ -18,6 +19,7 @@ interface LoginFormValues {
 const Login: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [shakeKey, setShakeKey] = useState(0);
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
@@ -51,6 +53,7 @@ const Login: React.FC = () => {
       else if (e.code === 'access_blocked') message.error('Доступ к системе закрыт. Обратитесь к администратору');
       else if (e.code === 'network') message.error('Сервис недоступен. Проверьте соединение');
       else message.error(`Ошибка входа: ${e.message}`);
+      setShakeKey((k) => k + 1);
       setLoading(false);
     }
   };
@@ -313,6 +316,7 @@ const Login: React.FC = () => {
         </div>
 
         {/* Форма входа */}
+        <ShakeOnError trigger={shakeKey}>
         <Form
           form={form}
           name="login"
@@ -382,6 +386,7 @@ const Login: React.FC = () => {
             </Text>
           </div>
         </Form>
+        </ShakeOnError>
       </Card>
     </div>
   );

@@ -39,6 +39,7 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { LogoIcon } from '../Icons';
+import { IconSwap } from '../transitions';
 import { type Notification } from '../../lib/supabase';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { listNotifications, deleteAllNotifications } from '../../lib/api/notifications';
@@ -544,14 +545,17 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            {React.createElement(collapsed ? MenuUnfoldOutlined : MenuFoldOutlined, {
-              className: 'trigger',
-              onClick: () => setCollapsed(!collapsed),
-              style: {
-                fontSize: '18px',
-                cursor: 'pointer',
-              },
-            })}
+            <span
+              className="trigger"
+              onClick={() => setCollapsed(!collapsed)}
+              style={{ cursor: 'pointer', fontSize: '18px', display: 'inline-flex' }}
+            >
+              <IconSwap
+                state={collapsed ? 'b' : 'a'}
+                iconA={<MenuFoldOutlined />}
+                iconB={<MenuUnfoldOutlined />}
+              />
+            </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
