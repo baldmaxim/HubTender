@@ -142,7 +142,7 @@ export const BoqItemsImportModal: React.FC<BoqItemsImportModalProps> = ({
             loading={addingToNomenclature}
             disabled={uploading}
           >
-            Р”РѕР±Р°РІРёС‚СЊ РІ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂСѓ ({missingCount})
+            Добавить в номенклатуру ({missingCount})
           </Button>,
         ] : []),
         <Button
