@@ -7,6 +7,7 @@ export interface ConstructionCostVolume {
   detail_cost_category_id: string | null;
   group_key: string | null;
   volume: number | null;
+  notes?: string | null;
 }
 
 /** GET /api/v1/tenders/{id}/construction-cost-volumes */
@@ -24,6 +25,7 @@ export async function upsertConstructionCostVolume(input: {
   detail_cost_category_id?: string | null;
   group_key?: string | null;
   volume: number;
+  notes?: string | null;
 }): Promise<void> {
   await apiFetch<undefined>('/api/v1/construction-cost-volumes', {
     method: 'POST',
@@ -32,6 +34,7 @@ export async function upsertConstructionCostVolume(input: {
       detail_cost_category_id: input.detail_cost_category_id ?? null,
       group_key: input.group_key ?? null,
       volume: input.volume,
+      notes: input.notes ?? null,
     }),
   });
 }

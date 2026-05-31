@@ -24,9 +24,9 @@ func (s *ConstructionCostVolumesService) ListByTender(ctx context.Context, tende
 }
 
 func (s *ConstructionCostVolumesService) UpsertVolume(
-	ctx context.Context, tenderID string, detailCostCategoryID, groupKey *string, volume float64,
+	ctx context.Context, tenderID string, detailCostCategoryID, groupKey *string, volume float64, notes *string,
 ) error {
-	if err := s.repo.UpsertVolume(ctx, tenderID, detailCostCategoryID, groupKey, volume); err != nil {
+	if err := s.repo.UpsertVolume(ctx, tenderID, detailCostCategoryID, groupKey, volume, notes); err != nil {
 		return fmt.Errorf("ccvService.UpsertVolume: %w", err)
 	}
 	return nil

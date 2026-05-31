@@ -25,12 +25,13 @@ type ConstructionCostVolumeRow struct {
 	DetailCostCategoryID *string  `json:"detail_cost_category_id"`
 	GroupKey             *string  `json:"group_key"`
 	Volume               *float64 `json:"volume"`
+	Notes                *string  `json:"notes"`
 }
 
 // ListByTender returns every construction_cost_volumes row for the tender.
 func (r *ConstructionCostVolumesRepo) ListByTender(ctx context.Context, tenderID string) ([]ConstructionCostVolumeRow, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id::text, tender_id::text, detail_cost_category_id::text, group_key, volume
+		SELECT id::text, tender_id::text, detail_cost_category_id::text, group_key, volume, notes
 		FROM public.construction_cost_volumes
 		WHERE tender_id = $1
 	`, tenderID)
@@ -42,7 +43,7 @@ func (r *ConstructionCostVolumesRepo) ListByTender(ctx context.Context, tenderID
 	out := make([]ConstructionCostVolumeRow, 0)
 	for rows.Next() {
 		var v ConstructionCostVolumeRow
-		if err := rows.Scan(&v.ID, &v.TenderID, &v.DetailCostCategoryID, &v.GroupKey, &v.Volume); err != nil {
+		if err := rows.Scan(&v.ID, &v.TenderID, &v.DetailCostCategoryID, &v.GroupKey, &v.Volume, &v.Notes); err != nil {
 			return nil, fmt.Errorf("ccvRepo.ListByTender scan: %w", err)
 		}
 		out = append(out, v)
@@ -50,10 +51,10 @@ func (r *ConstructionCostVolumesRepo) ListByTender(ctx context.Context, tenderID
 	return out, rows.Err()
 }
 
-// UpsertVolume sets the volume for the (tender_id, detail_cost_category_id|group_key)
+// UpsertVolume sets the volume and notes for the (tender_id, detail_cost_category_id|group_key)
 // pair. Exactly one of detailCostCategoryID and groupKey must be non-empty.
 func (r *ConstructionCostVolumesRepo) UpsertVolume(
-	ctx context.Context, tenderID string, detailCostCategoryID, groupKey *string, volume float64,
+	ctx context.Context, tenderID string, detailCostCategoryID, groupKey *string, volume float64, notes *string,
 ) error {
 	if (detailCostCategoryID == nil || *detailCostCategoryID == "") && (groupKey == nil || *groupKey == "") {
 		return errors.New("ccvRepo.UpsertVolume: detail_cost_category_id or group_key required")
@@ -85,17 +86,17 @@ func (r *ConstructionCostVolumesRepo) UpsertVolume(
 	if existingID != "" {
 		if _, err := tx.Exec(ctx, `
 			UPDATE public.construction_cost_volumes
-			   SET volume = $1, updated_at = NOW()
-			 WHERE id = $2
-		`, volume, existingID); err != nil {
+			   SET volume = $1, notes = $2, updated_at = NOW()
+			 WHERE id = $3
+		`, volume, notes, existingID); err != nil {
 			return fmt.Errorf("ccvRepo.UpsertVolume: update: %w", err)
 		}
 	} else {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO public.construction_cost_volumes
-			    (tender_id, detail_cost_category_id, group_key, volume)
-			VALUES ($1, $2, $3, $4)
-		`, tenderID, detailCostCategoryID, groupKey, volume); err != nil {
+			    (tender_id, detail_cost_category_id, group_key, volume, notes)
+			VALUES ($1, $2, $3, $4, $5)
+		`, tenderID, detailCostCategoryID, groupKey, volume, notes); err != nil {
 			return fmt.Errorf("ccvRepo.UpsertVolume: insert: %w", err)
 		}
 	}

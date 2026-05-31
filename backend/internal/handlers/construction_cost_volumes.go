@@ -13,7 +13,7 @@ import (
 
 type ccvServicer interface {
 	ListByTender(ctx context.Context, tenderID string) ([]repository.ConstructionCostVolumeRow, error)
-	UpsertVolume(ctx context.Context, tenderID string, detailCostCategoryID, groupKey *string, volume float64) error
+	UpsertVolume(ctx context.Context, tenderID string, detailCostCategoryID, groupKey *string, volume float64, notes *string) error
 }
 
 type ConstructionCostVolumesHandler struct {
@@ -50,6 +50,7 @@ type upsertVolumeReq struct {
 	DetailCostCategoryID *string `json:"detail_cost_category_id"`
 	GroupKey             *string `json:"group_key"`
 	Volume               float64 `json:"volume"`
+	Notes                *string `json:"notes"`
 }
 
 func (h *ConstructionCostVolumesHandler) Upsert(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +67,7 @@ func (h *ConstructionCostVolumesHandler) Upsert(w http.ResponseWriter, r *http.R
 		apierr.BadRequest("tender_id required").Render(w)
 		return
 	}
-	if err := h.svc.UpsertVolume(r.Context(), req.TenderID, req.DetailCostCategoryID, req.GroupKey, req.Volume); err != nil {
+	if err := h.svc.UpsertVolume(r.Context(), req.TenderID, req.DetailCostCategoryID, req.GroupKey, req.Volume, req.Notes); err != nil {
 		apierr.InternalFromErr(w, r, err, "failed to upsert cost volume")
 		return
 	}
