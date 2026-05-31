@@ -108,7 +108,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         !d.is_header &&
         !d.is_total &&
         d.row_number >= 2 &&
-        d.row_number <= 15
+        d.row_number <= 16
       );
 
       // Прямые затраты: строки 2-7 (Субподряд, СУ-10, Запас на сдачу, СМ, МБП+ГСМ, Гарантия)
@@ -117,9 +117,9 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         .filter(d => d.row_number >= 2 && d.row_number <= 7)
         .reduce((sum, d) => sum + (d.total_cost || 0), 0);
 
-      // Наценки: строки 8-15
+      // Наценки: строки 8-16 (включая страхование от судимостей, строка 16)
       const markups = baseData
-        .filter(d => d.row_number >= 8 && d.row_number <= 15)
+        .filter(d => d.row_number >= 8 && d.row_number <= 16)
         .reduce((sum, d) => sum + (d.total_cost || 0), 0);
 
       // Сортируем по убыванию
@@ -758,7 +758,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         !d.is_header &&
         !d.is_total &&
         d.row_number >= 8 &&
-        d.row_number <= 15
+        d.row_number <= 16
       );
 
       const profitRow = markupsData.find(d => d.row_number === 14);
@@ -786,7 +786,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           if (d.row_number === 11) return combinedOOZ;
           return d;
         })
-        .filter(Boolean);
+        .filter(d => d && (d.total_cost || 0) !== 0); // как в рендере: скрываем нулевые строки, чтобы индексы совпадали
 
       // Сортируем массив перед получением кликнутого элемента
       const sortedMarkups = filteredMarkups.map((d, idx) => ({
@@ -829,6 +829,8 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               rowNumber: 9,
             },
           ]);
+        } else if (clickedRow.row_number === 16) {
+          // Страхование от судимостей — нет дальнейшей детализации, клик игнорируем
         } else {
           // Обычный drill-down для других показателей
           setSelectedIndicator(clickedRow.row_number);
@@ -911,7 +913,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       const directCosts = data.filter(d => !d.is_header && !d.is_total && d.row_number >= 2 && d.row_number <= 7)
         .reduce((sum, d) => sum + (d.total_cost || 0), 0);
 
-      const markups = data.filter(d => !d.is_header && !d.is_total && d.row_number >= 8 && d.row_number <= 15)
+      const markups = data.filter(d => !d.is_header && !d.is_total && d.row_number >= 8 && d.row_number <= 16)
         .reduce((sum, d) => sum + (d.total_cost || 0), 0);
 
       barItems = [
@@ -1157,7 +1159,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       const directCosts = data.filter(d => !d.is_header && !d.is_total && d.row_number >= 2 && d.row_number <= 7)
         .reduce((sum, d) => sum + (d.total_cost || 0), 0);
 
-      const markups = data.filter(d => !d.is_header && !d.is_total && d.row_number >= 8 && d.row_number <= 15)
+      const markups = data.filter(d => !d.is_header && !d.is_total && d.row_number >= 8 && d.row_number <= 16)
         .reduce((sum, d) => sum + (d.total_cost || 0), 0);
 
       return [
@@ -1501,7 +1503,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         !d.is_header &&
         !d.is_total &&
         d.row_number >= 8 &&
-        d.row_number <= 15
+        d.row_number <= 16
       );
 
       // Объединяем строки прибыли
@@ -1531,7 +1533,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           if (d.row_number === 11) return combinedOOZ;
           return d;
         })
-        .filter(Boolean);
+        .filter(d => d && (d.total_cost || 0) !== 0); // как в рендере: скрываем нулевые строки, чтобы индексы совпадали
 
       // Сортируем массив перед получением кликнутого элемента
       const sortedMarkups = filteredMarkups.map((d, idx) => ({
@@ -1573,6 +1575,8 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               rowNumber: 9,
             },
           ]);
+        } else if (clickedRow.row_number === 16) {
+          // Страхование от судимостей — нет дальнейшей детализации, клик игнорируем
         } else {
           // Обычный drill-down для других показателей
           setSelectedIndicator(clickedRow.row_number);
@@ -1702,7 +1706,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
                           : drillDownPath[drillDownPath.length - 1].type === 'direct_costs'
                           ? data.filter(d => !d.is_header && !d.is_total && d.row_number >= 2 && d.row_number <= 7).reduce((sum, d) => sum + (d.total_cost || 0), 0)
                           : drillDownPath[drillDownPath.length - 1].type === 'markups'
-                          ? data.filter(d => !d.is_header && !d.is_total && d.row_number >= 8 && d.row_number <= 15).reduce((sum, d) => sum + (d.total_cost || 0), 0)
+                          ? data.filter(d => !d.is_header && !d.is_total && d.row_number >= 8 && d.row_number <= 16).reduce((sum, d) => sum + (d.total_cost || 0), 0)
                           : drillDownPath[drillDownPath.length - 1].type === 'indicator' && selectedIndicator
                           ? data.find(d => d.row_number === selectedIndicator)?.total_cost
                           : drillDownPath[drillDownPath.length - 1].type === 'profit_breakdown'
@@ -1825,7 +1829,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
                           currentCost = data.filter(d => !d.is_header && !d.is_total && d.row_number >= 2 && d.row_number <= 7)
                             .reduce((sum, d) => sum + (d.total_cost || 0), 0);
                         } else if (currentLevel.type === 'markups') {
-                          currentCost = data.filter(d => !d.is_header && !d.is_total && d.row_number >= 8 && d.row_number <= 15)
+                          currentCost = data.filter(d => !d.is_header && !d.is_total && d.row_number >= 8 && d.row_number <= 16)
                             .reduce((sum, d) => sum + (d.total_cost || 0), 0);
                         } else if (currentLevel.type === 'indicator' && selectedIndicator) {
                           currentCost = data.find(d => d.row_number === selectedIndicator)?.total_cost || 0;
