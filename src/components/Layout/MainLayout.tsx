@@ -227,6 +227,11 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       label: 'Дашборд',
     },
     {
+      key: '/positions',
+      icon: <ShoppingCartOutlined />,
+      label: 'Позиции заказчика',
+    },
+    {
       key: 'tender-data-group',
       icon: <FileTextOutlined />,
       label: 'Данные по тендерам',
@@ -247,11 +252,6 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       key: '/tasks',
       icon: <CheckSquareOutlined />,
       label: 'Список задач',
-    },
-    {
-      key: '/positions',
-      icon: <ShoppingCartOutlined />,
-      label: 'Позиции заказчика',
     },
     {
       key: 'commerce-group',
