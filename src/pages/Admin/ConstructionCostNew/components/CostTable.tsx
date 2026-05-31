@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Table, InputNumber, Typography, Spin } from 'antd';
+import { Table, InputNumber, Typography, Spin, Input } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { CostRow } from '../hooks/useCostData';
 import { useTheme } from '../../../../contexts/ThemeContext';
@@ -17,6 +17,7 @@ interface CostTableProps {
   expandedRowKeys: string[];
   onExpandedRowsChange: (keys: string[]) => void;
   onVolumeChange: (value: number, record: CostRow) => void;
+  onNotesChange: (value: string, record: CostRow) => void;
   areaSp: number;
 }
 
@@ -27,6 +28,7 @@ const CostTable: React.FC<CostTableProps> = ({
   expandedRowKeys,
   onExpandedRowsChange,
   onVolumeChange,
+  onNotesChange,
   areaSp,
 }) => {
   const { theme } = useTheme();
@@ -53,7 +55,7 @@ const CostTable: React.FC<CostTableProps> = ({
       title: <div style={{ textAlign: 'center' }}>Вид</div>,
       dataIndex: 'detail_category_name',
       key: 'detail_category_name',
-      width: 180,
+      width: 160,
       render: (value: string, record: CostRow) => {
         if (record.is_category) return null;
         if (record.is_location) return null;
@@ -64,7 +66,7 @@ const CostTable: React.FC<CostTableProps> = ({
       title: <div style={{ textAlign: 'center' }}>Локализация</div>,
       dataIndex: 'location_name',
       key: 'location_name',
-      width: 110,
+      width: 100,
       render: (value: string, record: CostRow) => {
         if (record.is_category) return null;
         if (record.is_location) return null;
@@ -75,7 +77,7 @@ const CostTable: React.FC<CostTableProps> = ({
       title: <div style={{ textAlign: 'center' }}>Объем</div>,
       dataIndex: 'volume',
       key: 'volume',
-      width: 100,
+      width: 90,
       align: 'right',
       render: (value: number, record: CostRow) => {
         // Для категорий и локализаций - показываем InputNumber для ввода объема группы
@@ -145,7 +147,7 @@ const CostTable: React.FC<CostTableProps> = ({
       title: <div style={{ textAlign: 'center' }}>₽/ед.</div>,
       dataIndex: 'cost_per_unit',
       key: 'cost_per_unit',
-      width: 110,
+      width: 100,
       align: 'right',
       render: (value: number, record: CostRow) => {
         // Для категорий и локализаций - показываем расчет стоимости за единицу, если введен объем
@@ -166,7 +168,7 @@ const CostTable: React.FC<CostTableProps> = ({
     {
       title: <div style={{ textAlign: 'center' }}>Мат.</div>,
       key: 'materials_total',
-      width: 110,
+      width: 100,
       align: 'right',
       render: (_: unknown, record: CostRow) => {
         const total = record.materials_cost + record.materials_comp_cost;
@@ -176,7 +178,7 @@ const CostTable: React.FC<CostTableProps> = ({
     {
       title: <div style={{ textAlign: 'center' }}>Раб.</div>,
       key: 'works_total',
-      width: 110,
+      width: 100,
       align: 'right',
       render: (_: unknown, record: CostRow) => {
         const total = record.works_cost + record.works_comp_cost;
@@ -187,7 +189,7 @@ const CostTable: React.FC<CostTableProps> = ({
       title: <div style={{ textAlign: 'center' }}>Суб-мат.</div>,
       dataIndex: 'sub_materials_cost',
       key: 'sub_materials_cost',
-      width: 110,
+      width: 95,
       align: 'right',
       render: (value: number) => value.toLocaleString('ru-RU', { minimumFractionDigits: 0 }),
     },
@@ -195,7 +197,7 @@ const CostTable: React.FC<CostTableProps> = ({
       title: <div style={{ textAlign: 'center' }}>Суб-раб.</div>,
       dataIndex: 'sub_works_cost',
       key: 'sub_works_cost',
-      width: 110,
+      width: 95,
       align: 'right',
       render: (value: number) => value.toLocaleString('ru-RU', { minimumFractionDigits: 0 }),
     },
@@ -206,7 +208,7 @@ const CostTable: React.FC<CostTableProps> = ({
     {
       title: <div style={{ textAlign: 'center' }}>Итого работы</div>,
       key: 'total_works',
-      width: 130,
+      width: 120,
       align: 'right',
       render: (_: unknown, record: CostRow) => {
         const totalWorks = record.works_cost + record.sub_works_cost + record.works_comp_cost;
@@ -220,7 +222,7 @@ const CostTable: React.FC<CostTableProps> = ({
     {
       title: <div style={{ textAlign: 'center' }}>Итого материалы</div>,
       key: 'total_materials',
-      width: 150,
+      width: 130,
       align: 'right',
       render: (_: unknown, record: CostRow) => {
         const totalMaterials = record.materials_cost + record.sub_materials_cost + record.materials_comp_cost;
@@ -230,6 +232,28 @@ const CostTable: React.FC<CostTableProps> = ({
           </Text>
         );
       },
+    },
+  ];
+
+  // Колонка примечание (всегда видна, fixed right)
+  const noteColumn: ColumnsType<CostRow> = [
+    {
+      title: <div style={{ textAlign: 'center' }}>Примечание</div>,
+      dataIndex: 'notes',
+      key: 'notes',
+      width: 150,
+      fixed: 'right',
+      render: (value: string | undefined, record: CostRow) => (
+        <Input
+          defaultValue={value || ''}
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            if (v !== (value || '')) onNotesChange(v, record);
+          }}
+          size="small"
+          placeholder="—"
+        />
+      ),
     },
   ];
 
@@ -256,7 +280,7 @@ const CostTable: React.FC<CostTableProps> = ({
       title: <div style={{ textAlign: 'center' }}>Итого</div>,
       dataIndex: 'total_cost',
       key: 'total_cost',
-      width: 150,
+      width: 130,
       align: 'right',
       render: (value: number) => (
         <Text strong style={{ color: '#10b981' }}>
@@ -267,9 +291,8 @@ const CostTable: React.FC<CostTableProps> = ({
     {
       title: <div style={{ textAlign: 'center' }}>Итого за ед общей площади</div>,
       key: 'cost_per_total_area',
-      width: 200,
+      width: 180,
       align: 'right',
-      fixed: 'right',
       render: (_: unknown, record: CostRow) => {
         if (!areaSp) return '-';
         const costPerArea = record.total_cost / areaSp;
@@ -290,11 +313,13 @@ const CostTable: React.FC<CostTableProps> = ({
           baseColumns[1], // Вид
           baseColumns[2], // Локализация
           ...simplifiedColumns,
+          ...noteColumn,
         ]
       : [
           ...baseColumns,
           ...(viewMode === 'detailed' ? detailedColumns : summaryColumns),
           ...totalColumn,
+          ...noteColumn,
         ];
 
   // Вычисляем итоговую строку
@@ -356,6 +381,7 @@ const CostTable: React.FC<CostTableProps> = ({
                         {areaSp ? (totals.total / areaSp).toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : '-'}
                       </Text>
                     </Table.Summary.Cell>
+                    <Table.Summary.Cell index={5} />
                   </>
                 ) : viewMode === 'detailed' ? (
                   <>
@@ -376,6 +402,7 @@ const CostTable: React.FC<CostTableProps> = ({
                         {totals.total.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}
                       </Text>
                     </Table.Summary.Cell>
+                    <Table.Summary.Cell index={11} />
                   </>
                 ) : (
                   <>
@@ -394,6 +421,7 @@ const CostTable: React.FC<CostTableProps> = ({
                         {totals.total.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}
                       </Text>
                     </Table.Summary.Cell>
+                    <Table.Summary.Cell index={9} />
                   </>
                 )}
               </Table.Summary.Row>

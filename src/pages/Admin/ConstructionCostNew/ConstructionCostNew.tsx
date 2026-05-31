@@ -40,6 +40,7 @@ const ConstructionCostNew: React.FC = () => {
     handleVersionChange,
     fetchConstructionCosts,
     handleVolumeChange,
+    handleNotesChange,
   } = useCostData();
 
   // Проверка роли для фильтрации архивных тендеров в карточках
@@ -176,6 +177,7 @@ const ConstructionCostNew: React.FC = () => {
           expandedRowKeys={expandedRowKeys}
           onExpandedRowsChange={setExpandedRowKeys}
           onVolumeChange={handleVolumeChange}
+          onNotesChange={handleNotesChange}
           areaSp={selectedTender?.area_sp || 0}
         />
       </Card>

@@ -53,6 +53,7 @@ export interface CostRow {
   is_category?: boolean;
   is_location?: boolean;  // Промежуточный уровень группировки по локализации
   children?: CostRow[];
+  notes?: string;
 }
 
 export interface TenderOption {
@@ -155,13 +156,17 @@ export const useCostData = () => {
       const volumes = await listConstructionCostVolumes(selectedTenderId);
 
       const volumeMap = new Map<string, number>();
+      const notesMap = new Map<string, string>();
       const groupVolumesMap = new Map<string, number>();
+      const groupNotesMap = new Map<string, string>();
 
       volumes.forEach((v) => {
         if (v.detail_cost_category_id) {
           volumeMap.set(v.detail_cost_category_id, v.volume || 0);
+          if (v.notes) notesMap.set(v.detail_cost_category_id, v.notes);
         } else if (v.group_key) {
           groupVolumesMap.set(v.group_key, v.volume || 0);
+          if (v.notes) groupNotesMap.set(v.group_key, v.notes);
         }
       });
 
@@ -282,6 +287,7 @@ export const useCostData = () => {
           total_cost: totalCost,
           cost_per_unit: costPerUnit,
           order_num: cat.order_num ?? undefined,
+          notes: notesMap.get(cat.id),
         };
 
         // Собираем строки по категориям
@@ -398,8 +404,9 @@ export const useCostData = () => {
         const hasMultipleLocations = locations.size > 1;
 
         // Создаем категорию
+        const categoryKey = `category-${categoryName}`;
         const categoryRow: CostRow = {
-          key: `category-${categoryName}`,
+          key: categoryKey,
           cost_category_name: categoryName,
           detail_category_name: '',
           location_name: '',
@@ -416,6 +423,7 @@ export const useCostData = () => {
           is_category: true,
           children: [],
           order_num: detailRows[0]?.order_num || 0,
+          notes: groupNotesMap.get(categoryKey),
         };
 
         if (hasMultipleLocations) {
@@ -433,9 +441,10 @@ export const useCostData = () => {
           // Создаем строки локализаций
           for (const [location, rows] of locationGroups.entries()) {
             const sortedRows = sortDetailRows(rows, categoryName, location);
+            const locationKey = `location-${categoryName}-${location}`;
 
             const locationRow: CostRow = {
-              key: `location-${categoryName}-${location}`,
+              key: locationKey,
               cost_category_name: categoryName,
               detail_category_name: '',
               location_name: location,
@@ -452,6 +461,7 @@ export const useCostData = () => {
               is_location: true,
               children: sortedRows,
               order_num: sortedRows[0]?.order_num || 0,
+              notes: groupNotesMap.get(locationKey),
             };
 
             // Суммируем затраты для локализации
@@ -673,6 +683,38 @@ export const useCostData = () => {
     }
   };
 
+  const handleNotesChange = async (value: string, record: CostRow) => {
+    try {
+      if (record.detail_cost_category_id) {
+        await upsertConstructionCostVolume({
+          tender_id: selectedTenderId!,
+          detail_cost_category_id: record.detail_cost_category_id,
+          volume: record.volume,
+          notes: value || null,
+        });
+      } else if (record.is_category || record.is_location) {
+        await upsertConstructionCostVolume({
+          tender_id: selectedTenderId!,
+          group_key: record.key,
+          volume: record.volume,
+          notes: value || null,
+        });
+      }
+
+      setData((prevData) => {
+        const updateNotes = (rows: CostRow[]): CostRow[] =>
+          rows.map((row) => {
+            if (row.key === record.key) return { ...row, notes: value || undefined };
+            if (row.children) return { ...row, children: updateNotes(row.children) };
+            return row;
+          });
+        return updateNotes(prevData);
+      });
+    } catch (error) {
+      message.error('Ошибка сохранения примечания: ' + getErrorMessage(error));
+    }
+  };
+
   useEffect(() => {
     fetchTenders();
   }, []);
@@ -713,5 +755,6 @@ export const useCostData = () => {
     handleVersionChange,
     fetchConstructionCosts,
     handleVolumeChange,
+    handleNotesChange,
   };
 };
