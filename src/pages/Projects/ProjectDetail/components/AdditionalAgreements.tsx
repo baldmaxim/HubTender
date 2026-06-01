@@ -26,6 +26,7 @@ import {
   updateProjectAgreement,
   deleteProjectAgreement,
 } from '../../../../lib/api/projects';
+import { AnimatedNumber } from '../../../../components/transitions';
 
 const { Text } = Typography;
 
@@ -290,7 +291,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
             <Statistic
               title="Стоимость договора"
               value={project.contract_cost}
-              formatter={() => formatMoney(project.contract_cost)}
+              formatter={() => <AnimatedNumber value={formatMoney(project.contract_cost)} />}
               valueStyle={{ color: '#1890ff', fontSize: 16 }}
               suffix="₽"
             />
@@ -301,7 +302,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
             <Statistic
               title="Сумма доп. соглашений"
               value={totalAgreementsSum}
-              formatter={() => formatMoneyWithSign(totalAgreementsSum)}
+              formatter={() => <AnimatedNumber value={formatMoneyWithSign(totalAgreementsSum)} />}
               valueStyle={{
                 color: totalAgreementsSum > 0 ? '#52c41a' : totalAgreementsSum < 0 ? '#ff4d4f' : undefined,
                 fontSize: 16
@@ -315,7 +316,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
             <Statistic
               title="Итого договор"
               value={totalWithContract}
-              formatter={() => formatMoney(totalWithContract)}
+              formatter={() => <AnimatedNumber value={formatMoney(totalWithContract)} />}
               valueStyle={{ color: '#722ed1', fontSize: 16 }}
               suffix="₽"
             />

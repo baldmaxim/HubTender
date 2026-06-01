@@ -22,6 +22,7 @@ import {
   updateProject,
 } from '../../../../lib/api/projects';
 import type { ProjectFull, Tender, ProjectInsert } from '../../../../lib/supabase/types';
+import { AnimatedNumber } from '../../../../components/transitions';
 
 const { Text } = Typography;
 
@@ -139,7 +140,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
             <Statistic
               title="Стоимость договора"
               value={project.contract_cost}
-              formatter={() => formatMoney(project.contract_cost)}
+              formatter={() => <AnimatedNumber value={formatMoney(project.contract_cost)} />}
               valueStyle={{ color: '#1890ff', fontSize: 16 }}
               suffix="₽"
             />
@@ -150,7 +151,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
             <Statistic
               title="Итого с доп. соглашениями"
               value={project.final_contract_cost ?? 0}
-              formatter={() => formatMoney(project.final_contract_cost ?? 0)}
+              formatter={() => <AnimatedNumber value={formatMoney(project.final_contract_cost ?? 0)} />}
               valueStyle={{ color: '#722ed1', fontSize: 16 }}
               suffix="₽"
             />
@@ -161,7 +162,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
             <Statistic
               title="Закрыто выполнения"
               value={project.total_completion ?? 0}
-              formatter={() => formatMoney(project.total_completion ?? 0)}
+              formatter={() => <AnimatedNumber value={formatMoney(project.total_completion ?? 0)} />}
               valueStyle={{ color: '#52c41a', fontSize: 16 }}
               suffix="₽"
             />

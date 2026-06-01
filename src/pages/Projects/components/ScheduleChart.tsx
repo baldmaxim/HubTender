@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { ProjectFull, ProjectCompletion } from '../../../lib/supabase/types';
+import { AnimatedNumber } from '../../../components/transitions';
 
 dayjs.locale('ru');
 
@@ -263,7 +264,7 @@ export const ScheduleChart: React.FC<ScheduleChartProps> = ({
                 precision={0}
                 suffix="₽"
                 valueStyle={{ color: '#1890ff' }}
-                formatter={(value) => formatMoney(Number(value))}
+                formatter={(value) => <AnimatedNumber value={formatMoney(Number(value))} />}
               />
             </Card>
           </Col>
@@ -275,7 +276,7 @@ export const ScheduleChart: React.FC<ScheduleChartProps> = ({
                 precision={0}
                 suffix="₽"
                 valueStyle={{ color: '#52c41a' }}
-                formatter={(value) => formatMoney(Number(value))}
+                formatter={(value) => <AnimatedNumber value={formatMoney(Number(value))} />}
               />
             </Card>
           </Col>
