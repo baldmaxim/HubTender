@@ -5,6 +5,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { HeaderIcon } from '../../components/Icons/HeaderIcon';
 import { registerWithPassword as appAuthRegister } from '../../lib/auth/client';
 import type { AppAuthError } from '../../lib/auth/types';
+import { ShakeOnError } from '../../components/transitions';
 
 const { Title, Text } = Typography;
 
@@ -18,6 +19,7 @@ interface RegisterFormValues {
 const Register: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [shakeKey, setShakeKey] = useState(0);
   const navigate = useNavigate();
 
   const handleRegister = async (values: RegisterFormValues) => {
@@ -49,6 +51,7 @@ const Register: React.FC = () => {
       } else {
         message.error(`Ошибка регистрации: ${e.message}`);
       }
+      setShakeKey((k) => k + 1);
     } finally {
       setLoading(false);
     }
@@ -90,6 +93,7 @@ const Register: React.FC = () => {
         </div>
 
         {/* Форма регистрации */}
+        <ShakeOnError trigger={shakeKey}>
         <Form
           form={form}
           name="register"
@@ -199,6 +203,7 @@ const Register: React.FC = () => {
             </Text>
           </div>
         </Form>
+        </ShakeOnError>
 
         {/* Информационное сообщение */}
         <div

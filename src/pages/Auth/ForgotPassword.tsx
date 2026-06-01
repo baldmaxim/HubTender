@@ -4,6 +4,7 @@ import { MailOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { getErrorMessage } from '../../utils/errors';
 import { forgotPassword as appAuthForgot } from '../../lib/auth/client';
+import { ShakeOnError } from '../../components/transitions';
 
 const { Title, Text } = Typography;
 
@@ -12,6 +13,7 @@ export default function ForgotPassword() {
   const [emailSent, setEmailSent] = useState(false);
   const [devResetURL, setDevResetURL] = useState<string | null>(null);
   const [providerUnavailable, setProviderUnavailable] = useState(false);
+  const [shakeKey, setShakeKey] = useState(0);
 
   const handleSubmit = async (values: { email: string }) => {
     setLoading(true);
@@ -29,6 +31,7 @@ export default function ForgotPassword() {
       if (res.reset_url) setDevResetURL(res.reset_url);
       message.success('Если email зарегистрирован, мы отправили письмо');
     } catch (err) {
+      setShakeKey((k) => k + 1);
       const e = err as { status?: number };
       if (e.status === 503) {
         setProviderUnavailable(true);
@@ -109,6 +112,7 @@ export default function ForgotPassword() {
         <Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>
           Восстановление пароля
         </Title>
+        <ShakeOnError trigger={shakeKey}>
         <Form onFinish={handleSubmit} layout="vertical">
           <Form.Item
             name="email"
@@ -128,6 +132,7 @@ export default function ForgotPassword() {
             </Button>
           </Link>
         </Form>
+        </ShakeOnError>
       </Card>
     </div>
   );

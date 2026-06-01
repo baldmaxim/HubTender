@@ -4,6 +4,7 @@ import { LockOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import { resetPassword as appAuthReset } from '../../lib/auth/client';
 import type { AppAuthError } from '../../lib/auth/types';
+import { ShakeOnError } from '../../components/transitions';
 
 const { Title, Text } = Typography;
 
@@ -14,6 +15,7 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [shakeKey, setShakeKey] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -46,6 +48,7 @@ export default function ResetPassword() {
       } else {
         message.error('Не удалось изменить пароль');
       }
+      setShakeKey((k) => k + 1);
     } finally {
       setLoading(false);
     }
@@ -67,6 +70,7 @@ export default function ResetPassword() {
         <Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>
           Новый пароль
         </Title>
+        <ShakeOnError trigger={shakeKey}>
         <Form onFinish={handleSubmit} layout="vertical">
           <Form.Item
             name="password"
@@ -101,6 +105,7 @@ export default function ResetPassword() {
             </Button>
           </Link>
         </Form>
+        </ShakeOnError>
       </Card>
     </div>
   );

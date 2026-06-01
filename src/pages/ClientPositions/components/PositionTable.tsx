@@ -17,6 +17,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { ClientPosition, Tender } from '../../../lib/supabase';
 import { PositionRowActions } from './PositionRowActions';
+import { IconSwap } from '../../../components/transitions';
 
 const { Text } = Typography;
 
@@ -454,7 +455,13 @@ export const PositionTable: React.FC<PositionTableProps> = ({
           {isFilterActive && (
             <>
               <Button
-                icon={showAllPositions ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                icon={
+                  <IconSwap
+                    state={showAllPositions ? 'b' : 'a'}
+                    iconA={<EyeOutlined />}
+                    iconB={<EyeInvisibleOutlined />}
+                  />
+                }
                 onClick={onToggleShowAll}
                 type={showAllPositions ? 'primary' : 'default'}
               >
