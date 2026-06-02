@@ -4,10 +4,10 @@
 
 import React from 'react';
 import { Card, Row, Col, Select, Typography, Space, Statistic, Button, Tag } from 'antd';
-import { CheckCircleOutlined, DownloadOutlined, LoadingOutlined } from '@ant-design/icons';
+import { DownloadOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { Tender } from '../../../lib/supabase';
 import type { MarkupTactic } from '../hooks';
-import { AnimatedNumber } from '../../../components/transitions';
+import { AnimatedNumber, SuccessCheck } from '../../../components/transitions';
 
 const { Title } = Typography;
 
@@ -67,9 +67,10 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
             </Tag>
           )}
           {!saving && savedRecently && (
-            <Tag icon={<CheckCircleOutlined />} color="success">
-              Сохранено
-            </Tag>
+            <Space align="center" size={4}>
+              <SuccessCheck show size={18} color="#10b981" strokeWidth={5} />
+              <Tag color="success">Сохранено</Tag>
+            </Space>
           )}
         </Space>
 
