@@ -70,13 +70,13 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   const calcInputRef = useRef<InputRef>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { isMobile } = useIsMobile();
+  const { isPhone } = useIsMobile();
 
-  // На мобиле автоматически сворачивать боковое меню в icon-режим (80px),
-  // освобождая место под контент. Ручное управление триггером сохраняется.
+  // На телефоне (<576px) автоматически сворачивать боковое меню в icon-режим,
+  // освобождая место под контент. Планшет/десктоп не затрагиваем.
   useEffect(() => {
-    if (isMobile) setCollapsed(true);
-  }, [isMobile]);
+    if (isPhone) setCollapsed(true);
+  }, [isPhone]);
 
   // tenderId доступен, когда пользователь находится на странице позиций заказчика
   const currentTenderId = location.pathname === '/positions'
@@ -485,6 +485,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         trigger={null}
         collapsible
         collapsed={collapsed}
+        collapsedWidth={isPhone ? 48 : 80}
         className={`sidebar-${currentTheme}`}
         style={{
           background: currentTheme === 'dark' ? '#0a0a0a' : '#fff',
@@ -502,7 +503,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         >
           {collapsed ? (
             <div className="logo-collapsed">
-              <LogoIcon size={80} color={currentTheme === 'dark' ? '#10b981' : '#ffffff'} />
+              <LogoIcon size={isPhone ? 32 : 80} color={currentTheme === 'dark' ? '#10b981' : '#ffffff'} />
             </div>
           ) : (
             <div className="logo-expanded">

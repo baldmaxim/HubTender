@@ -1323,12 +1323,13 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         position: isPhone ? ('bottom' as const) : ('right' as const),
         labels: {
           color: currentTheme === 'dark' ? '#ffffff' : '#000000',
-          padding: 6,
-          font: { size: 10 },
-          boxWidth: 12,
-          boxHeight: 12,
+          padding: isPhone ? 4 : 6,
+          font: { size: isPhone ? 9 : 10 },
+          boxWidth: isPhone ? 10 : 12,
+          boxHeight: isPhone ? 10 : 12,
           generateLabels: function(chart: Chart) {
             const currentLevel = drillDownPath[drillDownPath.length - 1];
+            const truncate = (s: string, max: number) => (s.length > max ? s.slice(0, max - 1) + '…' : s);
 
             type LegendItem = {
               text: string;
@@ -1363,7 +1364,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
                 const value = dataArr1[i] ?? 0;
                 const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
                 labels.push({
-                  text: `${label} (${percentage}%)`,
+                  text: `${truncate(label, isPhone ? 20 : 40)} (${percentage}%)`,
                   fillStyle: (chart.data.datasets[0]!.backgroundColor as string[])[i],
                   hidden: false,
                   index: i,
@@ -1396,7 +1397,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
                 const value = dataArr2[i] ?? 0;
                 const percentage = totalMarkups > 0 ? ((value / totalMarkups) * 100).toFixed(1) : '0.0';
                 labels.push({
-                  text: `${label} (${percentage}%)`,
+                  text: `${truncate(label, isPhone ? 20 : 40)} (${percentage}%)`,
                   fillStyle: (chart.data.datasets[0]!.backgroundColor as string[])[i],
                   hidden: false,
                   index: i,
@@ -1414,7 +1415,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               const value = dataArr3[i] ?? 0;
               const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
               return {
-                text: `${label} (${percentage}%)`,
+                text: `${truncate(label, isPhone ? 20 : 40)} (${percentage}%)`,
                 fillStyle: (chart.data.datasets[0]!.backgroundColor as string[])[i],
                 hidden: false,
                 index: i,
@@ -1423,7 +1424,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
             });
           },
         },
-        maxWidth: 200,
+        maxWidth: isPhone ? 360 : 200,
         onClick: function(e: ChartEvent, legendItem: ChartLegendItem, legend: LegendElement<'doughnut'>) {
           // Игнорируем клики на заголовки и разделители
           if (legendItem.index == null || legendItem.index < 0) return;
@@ -1638,19 +1639,21 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         ticks: {
           color: currentTheme === 'dark' ? '#ffffff' : '#000000',
           font: {
-            size: currentLevel.type === 'indicator' && breakdownData.length > 0 ? 10 : 12
+            size: isPhone ? 9 : (currentLevel.type === 'indicator' && breakdownData.length > 0 ? 10 : 12)
           },
-          maxRotation: currentLevel.type === 'indicator' && breakdownData.length > 0 ? 0 : 0,
-          minRotation: 0,
-          autoSkip: false,
+          maxRotation: isPhone ? 90 : 0,
+          minRotation: isPhone ? 90 : 0,
+          autoSkip: isPhone ? true : false,
+          autoSkipPadding: 4,
           callback: function(this: { getLabelForValue: (v: number) => string }, value: number): string | string[] {
             const label = this.getLabelForValue(value);
-            const maxLen = currentLevel.type === 'markups' ? 14 : 20;
+            const maxLen = isPhone ? 16 : (currentLevel.type === 'markups' ? 14 : 20);
             // Разбиваем длинные метки на несколько строк
-            if (
+            const shouldWrap =
+              isPhone ||
               (currentLevel.type === 'indicator' && breakdownData.length > 0) ||
-              currentLevel.type === 'markups'
-            ) {
+              currentLevel.type === 'markups';
+            if (shouldWrap) {
               if (label.length > maxLen) {
                 const words = label.split(' ');
                 const lines: string[] = [];
@@ -1781,7 +1784,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
             </div>
             <Spin spinning={loadingBreakdown}>
               {getCategoriesData() ? (
-                <div style={{ height: isPhone ? 380 : 320, maxHeight: isPhone ? 380 : 320, overflow: 'hidden' }}>
+                <div style={{ height: isPhone ? 380 : 320, maxHeight: isPhone ? 380 : 320, overflow: 'hidden', touchAction: 'pan-x pan-y pinch-zoom' }}>
                   <Doughnut data={getCategoriesData()!} options={pieOptions} />
                 </div>
               ) : drillDownPath.length > 1 ? (
@@ -1858,7 +1861,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               </div>
             </div>
             {getAreaBarData() && (
-              <div style={{ height: isPhone ? 300 : 350 }}>
+              <div style={{ height: isPhone ? 340 : 350, touchAction: 'pan-x pan-y pinch-zoom' }}>
                 <Bar data={getAreaBarData()!} options={barOptions as never} />
               </div>
             )}

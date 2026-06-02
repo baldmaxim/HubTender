@@ -18,6 +18,7 @@ interface IndicatorsTableProps {
   tenderTitle: string;
   tenderVersion: number;
   tenderId: string;
+  isPhone?: boolean;
   onAreaUpdated: () => void;
 }
 
@@ -30,6 +31,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
   tenderTitle,
   tenderVersion,
   tenderId,
+  isPhone,
   onAreaUpdated,
 }) => {
   const [editingSp, setEditingSp] = useState(false);
@@ -224,7 +226,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
         pagination={false}
         bordered
         size="small"
-        scroll={{ x: 1080 }}
+        scroll={isPhone ? { x: 1080 } : undefined}
         rowClassName={(record) => {
           if (record.is_header) return `header-row-${currentTheme}`;
           if (record.is_total) return `total-row-${currentTheme}`;

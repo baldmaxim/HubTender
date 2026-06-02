@@ -153,3 +153,20 @@
   border-color: #10b981 !important;
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
 }
+
+/* Телефон: ослабляем fixed-height shell, чтобы работал нативный pinch-zoom
+   (контент может расти и панорамироваться). Сайдбар оставляем фиксированным. */
+@media (max-width: 575px) {
+  #root {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .ant-layout {
+    height: auto !important;
+    min-height: 100vh;
+  }
+  .ant-layout-sider {
+    height: 100vh !important;
+  }
+}

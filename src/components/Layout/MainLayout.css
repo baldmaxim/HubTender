@@ -47,6 +47,24 @@
   padding: 12px 8px !important;
 }
 
+/* Телефон: узкий icon-рейл (48px) без пустых отступов */
+@media (max-width: 575px) {
+  .ant-layout-sider-collapsed .logo {
+    padding: 6px 2px !important;
+    margin: 6px 4px !important;
+  }
+  .ant-layout-sider-collapsed .ant-menu-item,
+  .ant-layout-sider-collapsed .ant-menu-submenu-title {
+    padding-inline: 0 !important;
+    text-align: center;
+  }
+  .ant-layout-sider-collapsed .ant-menu-item .anticon,
+  .ant-layout-sider-collapsed .ant-menu-submenu-title .anticon {
+    font-size: 18px;
+    margin: 0 auto;
+  }
+}
+
 /* Logo expanded state (icon + text) */
 .logo-expanded {
   display: flex;

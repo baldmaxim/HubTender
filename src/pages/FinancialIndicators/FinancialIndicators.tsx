@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, message } from 'antd';
-import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
+import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, Drawer, Space, message } from 'antd';
+import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getVersionColorByTitle } from '../../utils/versionColor';
 import { getTenderById } from '../../lib/api/fi';
@@ -61,6 +61,8 @@ const FinancialIndicators: React.FC = () => {
   const [editingVolumeTitle, setEditingVolumeTitle] = useState(false);
   const [volumeTitle, setVolumeTitle] = useState('Полный объём строительства');
   const [tempVolumeTitle, setTempVolumeTitle] = useState('Полный объём строительства');
+  const [tableFullscreen, setTableFullscreen] = useState(false);
+  const [tableScale, setTableScale] = useState(1);
 
   const loadVolumeTitle = useCallback(async (tenderId: string) => {
     try {
@@ -206,12 +208,13 @@ const FinancialIndicators: React.FC = () => {
                 <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
                   Или выберите из списка:
                 </Text>
-                <Row gutter={[16, 16]} justify="center">
+                <Row gutter={isPhone ? [8, 8] : [16, 16]} justify="center">
                   {tenders.filter(t => !t.is_archived).slice(0, 6).map(tender => (
-                    <Col key={tender.id} xs={12} sm={12} md={8}>
+                    <Col key={tender.id} {...(isPhone ? { xs: 12 } : {})}>
                       <Card
                         hoverable
                         size={isPhone ? 'small' : 'default'}
+                        styles={{ body: { padding: isPhone ? 8 : undefined } }}
                         style={{
                           width: isPhone ? '100%' : 200,
                           textAlign: 'center',
@@ -231,28 +234,38 @@ const FinancialIndicators: React.FC = () => {
                           }
                         }}
                       >
-                        <div style={{ marginBottom: 8 }}>
-                          <Tag color="#10b981">{tender.tender_number}</Tag>
+                        <div style={{ marginBottom: isPhone ? 4 : 8 }}>
+                          <Tag color="#10b981" style={isPhone ? { margin: 0, fontSize: 11, lineHeight: '18px' } : undefined}>{tender.tender_number}</Tag>
                         </div>
                         <div style={{
-                          marginBottom: 8,
+                          marginBottom: isPhone ? 4 : 8,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          flexWrap: 'nowrap',
-                          gap: 4
+                          flexDirection: isPhone ? 'column' : 'row',
+                          flexWrap: isPhone ? 'wrap' : 'nowrap',
+                          gap: isPhone ? 2 : 4
                         }}>
-                          <Text strong style={{
+                          <Text strong style={isPhone ? {
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            wordBreak: 'break-word',
+                            fontSize: 12,
+                            lineHeight: 1.2,
+                            maxWidth: '100%'
+                          } : {
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
-                            maxWidth: isPhone ? 90 : 140
+                            maxWidth: 140
                           }}>
                             {tender.title}
                           </Text>
                           <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
                         </div>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
+                        <Text type="secondary" style={{ fontSize: isPhone ? 11 : 12 }}>
                           {tender.client_name}
                         </Text>
                       </Card>
@@ -266,6 +279,21 @@ const FinancialIndicators: React.FC = () => {
       </div>
     );
   }
+
+  const indicatorsTableNode = (
+    <IndicatorsTable
+      data={data}
+      spTotal={spTotal}
+      customerTotal={customerTotal}
+      formatNumber={formatNumber}
+      currentTheme={currentTheme}
+      tenderTitle={selectedTenderTitle}
+      tenderVersion={selectedVersion || 1}
+      tenderId={selectedTenderId}
+      isPhone={isPhone}
+      onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
+    />
+  );
 
   return (
     <div>
@@ -344,7 +372,10 @@ const FinancialIndicators: React.FC = () => {
         <Spin spinning={loading}>
           <Tabs
             activeKey={activeTab}
-            onChange={(key) => setActiveTab(key as 'table' | 'charts')}
+            onChange={(key) => {
+              setActiveTab(key as 'table' | 'charts');
+              if (key === 'table' && isPhone) setTableFullscreen(true);
+            }}
             items={[
               {
                 key: 'charts',
@@ -374,23 +405,54 @@ const FinancialIndicators: React.FC = () => {
                   </span>
                 ),
                 children: (
-                  <IndicatorsTable
-                    data={data}
-                    spTotal={spTotal}
-                    customerTotal={customerTotal}
-                    formatNumber={formatNumber}
-                    currentTheme={currentTheme}
-                    tenderTitle={selectedTenderTitle}
-                    tenderVersion={selectedVersion || 1}
-                    tenderId={selectedTenderId}
-                    onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
-                  />
+                  <>
+                    {isPhone && (
+                      <div style={{ marginBottom: 8, textAlign: 'right' }}>
+                        <Button icon={<FullscreenOutlined />} onClick={() => setTableFullscreen(true)}>
+                          На весь экран
+                        </Button>
+                      </div>
+                    )}
+                    {indicatorsTableNode}
+                  </>
                 ),
               },
             ]}
           />
         </Spin>
       </Card>
+
+      <Drawer
+        open={tableFullscreen}
+        onClose={() => setTableFullscreen(false)}
+        placement="bottom"
+        height="100%"
+        title="Финансовые показатели — таблица"
+        styles={{ body: { padding: 8, overflow: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y pinch-zoom' } }}
+        extra={
+          <Space>
+            <Button
+              size="small"
+              icon={<ZoomOutOutlined />}
+              disabled={tableScale <= 0.75}
+              onClick={() => setTableScale((s) => Math.max(0.75, Math.round((s - 0.25) * 100) / 100))}
+            />
+            <span style={{ minWidth: 44, textAlign: 'center', display: 'inline-block' }}>
+              {Math.round(tableScale * 100)}%
+            </span>
+            <Button
+              size="small"
+              icon={<ZoomInOutlined />}
+              disabled={tableScale >= 2}
+              onClick={() => setTableScale((s) => Math.min(2, Math.round((s + 0.25) * 100) / 100))}
+            />
+          </Space>
+        }
+      >
+        <div style={{ transform: `scale(${tableScale})`, transformOrigin: 'top left', width: `${100 / tableScale}%` }}>
+          {indicatorsTableNode}
+        </div>
+      </Drawer>
     </div>
   );
 };
