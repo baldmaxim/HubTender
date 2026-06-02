@@ -186,3 +186,8 @@ backups/
 backend/*.exe
 backend/hubtender-bff
 backend/hubtender-bff.exe
+
+# Артефакты Claude Code / agent-харнесса (установленные скилы, runtime-локи) — не коммитим.
+# .claude/agents/*.md и .claude/commands/*.md трекаются намеренно, их НЕ игнорируем.
+.agents/
+.claude/scheduled_tasks.lock
