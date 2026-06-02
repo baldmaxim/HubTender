@@ -17,6 +17,8 @@ export const usePositionActions = (
   setClientPositions: React.Dispatch<React.SetStateAction<ClientPosition[]>>,
   setLoading: (loading: boolean) => void,
   fetchClientPositions: (tenderId: string) => Promise<void>,
+  applyLocalBoqClear: (positionIds: string[]) => void,
+  applyLocalPositionRemove: (positionIds: string[]) => void,
   currentTheme: string,
   readOnly?: boolean,
 ) => {
@@ -302,18 +304,15 @@ export const usePositionActions = (
       rootClassName: currentTheme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
         setIsBulkDeleting(true);
-        setLoading(true);
+        const ids = Array.from(selectedDeleteIds);
         try {
           // Go: одна pgx.Tx (delete boq_items → обнулить totals).
-          await clearPositionsBoq(Array.from(selectedDeleteIds), selectedTenderId);
+          await clearPositionsBoq(ids, selectedTenderId);
 
-          // 3. Сброс состояния и обновление таблицы
+          // Сброс режима + оптимистичное локальное обновление (без рефетча тендера).
           setSelectedDeleteIds(new Set());
           setIsDeleteSelectionMode(false);
-
-          if (selectedTenderId) {
-            await fetchClientPositions(selectedTenderId);
-          }
+          applyLocalBoqClear(ids);
 
           message.success(
             `Работы и материалы удалены из ${count} ${pluralize(count, 'позиции', 'позиций', 'позиций')}`
@@ -321,9 +320,9 @@ export const usePositionActions = (
         } catch (error) {
           console.error('Ошибка массового удаления:', error);
           message.error('Ошибка удаления: ' + getErrorMessage(error));
+          if (selectedTenderId) await fetchClientPositions(selectedTenderId); // resync
         } finally {
           setIsBulkDeleting(false);
-          setLoading(false);
         }
       },
     });
@@ -347,20 +346,15 @@ export const usePositionActions = (
       okButtonProps: { danger: true },
       rootClassName: currentTheme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
-        setLoading(true);
         try {
           await clearPositionsBoq([positionId], selectedTenderId);
-
-          if (selectedTenderId) {
-            await fetchClientPositions(selectedTenderId);
-          }
+          applyLocalBoqClear([positionId]); // оптимистично, без рефетча тендера
 
           message.success('Работы и материалы удалены');
         } catch (error) {
           console.error('Ошибка очистки позиции:', error);
           message.error('Ошибка очистки: ' + getErrorMessage(error));
-        } finally {
-          setLoading(false);
+          if (selectedTenderId) await fetchClientPositions(selectedTenderId); // resync
         }
       },
     });
@@ -384,22 +378,16 @@ export const usePositionActions = (
       okButtonProps: { danger: true },
       rootClassName: currentTheme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
-        setLoading(true);
         try {
           // Go: одна pgx.Tx (delete boq_items → delete client_positions).
           await bulkDeletePositions([positionId], selectedTenderId);
+          applyLocalPositionRemove([positionId]); // оптимистично, без рефетча тендера
 
           message.success('ДОП работа успешно удалена');
-
-          // Обновляем список позиций
-          if (selectedTenderId) {
-            await fetchClientPositions(selectedTenderId);
-          }
         } catch (error) {
           console.error('Ошибка удаления ДОП работы:', error);
           message.error('Ошибка удаления: ' + getErrorMessage(error));
-        } finally {
-          setLoading(false);
+          if (selectedTenderId) await fetchClientPositions(selectedTenderId); // resync
         }
       },
     });

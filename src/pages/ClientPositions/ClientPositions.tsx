@@ -102,6 +102,8 @@ const ClientPositions: React.FC = () => {
     totalSum,
     leafPositionIndices,
     fetchClientPositions,
+    applyLocalBoqClear,
+    applyLocalPositionRemove,
   } = useClientPositions();
 
   // Проверка дедлайна — должна быть объявлена ДО хуков-actions, чтобы
@@ -140,7 +142,7 @@ const ClientPositions: React.FC = () => {
     handleCancelLevelChange,
     handleBulkLevelChange,
     clearAllModes,
-  } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, currentTheme, isReadOnlyByDeadline);
+  } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, applyLocalBoqClear, applyLocalPositionRemove, currentTheme, isReadOnlyByDeadline);
 
   const {
     isPositionDeleteMode,
@@ -150,7 +152,7 @@ const ClientPositions: React.FC = () => {
     handleTogglePositionDeleteSelection,
     handleCancelPositionDeleteSelection,
     handleBulkDeletePositions,
-  } = usePositionDelete(setLoading, fetchClientPositions, currentTheme, { clearOtherModes: clearAllModes }, isReadOnlyByDeadline);
+  } = usePositionDelete(setLoading, fetchClientPositions, applyLocalPositionRemove, currentTheme, { clearOtherModes: clearAllModes }, isReadOnlyByDeadline);
 
   // Хук фильтрации позиций и получение информации о пользователе
   const { user } = useAuth();

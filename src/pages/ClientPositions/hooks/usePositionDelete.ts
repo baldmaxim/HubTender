@@ -10,6 +10,7 @@ interface ClearModesCallback {
 export const usePositionDelete = (
   setLoading: (loading: boolean) => void,
   fetchClientPositions: (tenderId: string) => Promise<void>,
+  applyLocalPositionRemove: (positionIds: string[]) => void,
   currentTheme: string,
   callbacks: ClearModesCallback,
   readOnly?: boolean,
@@ -71,20 +72,15 @@ export const usePositionDelete = (
       rootClassName: currentTheme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
         setIsBulkPositionDeleting(true);
-        setLoading(true);
+        const positionIds = Array.from(selectedPositionDeleteIds);
         try {
-          const positionIds = Array.from(selectedPositionDeleteIds);
-
           // Go: одна транзакция (delete boq_items → delete client_positions).
           await bulkDeletePositions(positionIds, selectedTenderId);
 
-          // 3. Сброс состояния и обновление таблицы
+          // Сброс режима + оптимистичное локальное удаление строк (без рефетча).
           setSelectedPositionDeleteIds(new Set());
           setIsPositionDeleteMode(false);
-
-          if (selectedTenderId) {
-            await fetchClientPositions(selectedTenderId);
-          }
+          applyLocalPositionRemove(positionIds);
 
           message.success(
             `Удалено ${count} ${pluralize(count, 'строка', 'строки', 'строк')} заказчика`
@@ -92,9 +88,9 @@ export const usePositionDelete = (
         } catch (error) {
           console.error('Ошибка удаления строк заказчика:', error);
           message.error('Ошибка удаления: ' + (error instanceof Error ? error.message : String(error)));
+          if (selectedTenderId) await fetchClientPositions(selectedTenderId); // resync
         } finally {
           setIsBulkPositionDeleting(false);
-          setLoading(false);
         }
       },
     });

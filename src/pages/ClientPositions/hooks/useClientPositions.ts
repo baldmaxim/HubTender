@@ -17,7 +17,10 @@ import {
   writeCache as writePositionsCache,
   dropCache as dropPositionsCache,
 } from '../../../lib/cache/clientPositionsCache';
-import { setRows as setRowCacheRows } from '../../../lib/cache/positionRowCache';
+import {
+  setRows as setRowCacheRows,
+  invalidateRow as invalidatePositionRowCache,
+} from '../../../lib/cache/positionRowCache';
 
 type PositionCountMap = Record<string, { works: number; materials: number; total: number }>;
 
@@ -204,6 +207,80 @@ export const useClientPositions = () => {
   const recentlyFetchedRef = useRef<Map<string, number>>(new Map());
   const RECENT_FETCH_MS = 30_000;
 
+  // Метка последней локальной (оптимистичной) мутации. WS-обработчик ниже
+  // использует её, чтобы подавить self-echo: наша же мутация шлёт NOTIFY,
+  // который через ~200 мс (дебаунс брокера) возвращается WS-событием. Внутри
+  // окна полную перезагрузку пропускаем; правки других пользователей приходят
+  // позже и перезагрузку не теряют.
+  const locallyMutatedAtRef = useRef<number>(0);
+  const LOCAL_MUTATION_ECHO_MS = 1500;
+
+  // Оптимистичное обнуление работ/материалов у позиций (clear-boq): строки
+  // получают works=0/materials=0/total=0, итоги строки обнуляются. Избавляет
+  // от полного рефетча тендера на каждую очистку.
+  const applyLocalBoqClear = useCallback(
+    (positionIds: string[]) => {
+      const ids = new Set(positionIds);
+      locallyMutatedAtRef.current = Date.now();
+
+      let removed = 0;
+      const nextCounts: PositionCountMap = { ...positionCounts };
+      for (const id of ids) {
+        if (nextCounts[id]) removed += nextCounts[id].total;
+        nextCounts[id] = { works: 0, materials: 0, total: 0 };
+      }
+      setPositionCounts(nextCounts);
+      setTotalSum((s) => Math.max(0, s - removed));
+
+      const nextPositions = clientPositions.map((p) =>
+        ids.has(p.id)
+          ? {
+              ...p,
+              total_material: 0,
+              total_works: 0,
+              total_commercial_material: 0,
+              total_commercial_work: 0,
+              material_cost_per_unit: 0,
+              work_cost_per_unit: 0,
+              total_commercial_material_per_unit: 0,
+              total_commercial_work_per_unit: 0,
+            }
+          : p,
+      );
+      setRowCacheRows(nextPositions);
+      setClientPositions(nextPositions);
+      // leafPositionIndices при очистке BOQ не меняется (порядок/иерархия те же).
+    },
+    [positionCounts, clientPositions],
+  );
+
+  // Оптимистичное удаление строк целиком (ДОП / массовое удаление строк
+  // заказчика). На бэке это два DELETE без перенумерации сиблингов, поэтому
+  // локальное удаление строки полностью корректно.
+  const applyLocalPositionRemove = useCallback(
+    (positionIds: string[]) => {
+      const ids = new Set(positionIds);
+      locallyMutatedAtRef.current = Date.now();
+
+      let removed = 0;
+      const nextCounts: PositionCountMap = { ...positionCounts };
+      for (const id of ids) {
+        if (nextCounts[id]) removed += nextCounts[id].total;
+        delete nextCounts[id];
+      }
+      setPositionCounts(nextCounts);
+      setTotalSum((s) => Math.max(0, s - removed));
+
+      const nextPositions = clientPositions.filter((p) => !ids.has(p.id));
+      setRowCacheRows(nextPositions);
+      setClientPositions(nextPositions);
+      setLeafPositionIndices(computeLeafPositions(nextPositions));
+
+      for (const id of ids) invalidatePositionRowCache(id);
+    },
+    [positionCounts, clientPositions],
+  );
+
   const fetchClientPositions = useCallback(
     async (tenderId: string) => {
       const recentTs = recentlyFetchedRef.current.get(tenderId);
@@ -247,12 +324,15 @@ export const useClientPositions = () => {
   useRealtimeTopic(
     selectedTender?.id ? `tender:${selectedTender.id}` : null,
     () => {
-      if (selectedTender?.id) {
-        dropPositionsCache(selectedTender.id);
-        invalidateApiCache(`positions:${selectedTender.id}`);
-        void fetchTenders();
-        void fetchClientPositions(selectedTender.id);
-      }
+      if (!selectedTender?.id) return;
+      // Self-echo guard: своя оптимистичная мутация уже обновила UI и породила
+      // NOTIFY, который вернётся сюда WS-событием ~200 мс спустя. В окне эха
+      // тяжёлую перезагрузку пропускаем.
+      if (Date.now() - locallyMutatedAtRef.current < LOCAL_MUTATION_ECHO_MS) return;
+      dropPositionsCache(selectedTender.id);
+      invalidateApiCache(`positions:${selectedTender.id}`);
+      void fetchTenders();
+      void fetchClientPositions(selectedTender.id);
     },
   );
 
@@ -270,5 +350,7 @@ export const useClientPositions = () => {
     setTotalSum,
     leafPositionIndices,
     fetchClientPositions,
+    applyLocalBoqClear,
+    applyLocalPositionRemove,
   };
 };
