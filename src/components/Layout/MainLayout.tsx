@@ -293,17 +293,17 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           icon: <ProfileOutlined />,
           label: 'Шаблоны',
         },
+        {
+          key: '/admin/nomenclatures',
+          icon: <ProfileOutlined />,
+          label: 'Номенклатуры',
+        },
+        {
+          key: '/admin/construction_cost',
+          icon: <BankOutlined />,
+          label: 'Справочник затрат',
+        },
       ],
-    },
-    {
-      key: '/bsm',
-      icon: <FileTextOutlined />,
-      label: 'Базовая стоимость',
-    },
-    {
-      key: '/costs',
-      icon: <DollarOutlined />,
-      label: 'Затраты на строительство',
     },
     {
       key: '/financial-indicators',
@@ -311,19 +311,29 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       label: 'Финансовые показатели',
     },
     {
-      key: '/projects',
-      icon: <BuildOutlined />,
-      label: 'Текущие объекты',
-    },
-    {
       key: 'analytics',
       icon: <BarChartOutlined />,
       label: 'Аналитика',
       children: [
         {
+          key: '/costs',
+          icon: <DollarOutlined />,
+          label: 'Затраты на строительство',
+        },
+        {
           key: '/analytics/comparison',
           icon: <LineChartOutlined />,
           label: 'Сравнение объектов',
+        },
+        {
+          key: '/bsm',
+          icon: <FileTextOutlined />,
+          label: 'Базовая стоимость',
+        },
+        {
+          key: '/projects',
+          icon: <BuildOutlined />,
+          label: 'Текущие объекты',
         },
       ],
     },
@@ -333,19 +343,9 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       label: 'Администрирование',
       children: [
         {
-          key: '/admin/nomenclatures',
-          icon: <ProfileOutlined />,
-          label: 'Номенклатуры',
-        },
-        {
           key: '/admin/tenders',
           icon: <FileTextOutlined />,
           label: 'Тендеры',
-        },
-        {
-          key: '/admin/construction_cost',
-          icon: <BankOutlined />,
-          label: 'Справочник затрат',
         },
         {
           key: '/admin/markup',
@@ -360,22 +360,6 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           icon: <PercentageOutlined />,
           label: 'Конструктор наценок',
         },
-        {
-          type: 'divider',
-        },
-        {
-          key: '/admin/import-log',
-          icon: <ImportOutlined />,
-          label: 'Журнал импортов строк',
-        },
-        {
-          type: 'divider',
-        },
-        {
-          key: '/admin/insurance',
-          icon: <SafetyCertificateOutlined />,
-          label: 'Страхование от судимостей',
-        },
       ],
     },
     {
@@ -384,9 +368,26 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       label: 'Пользователи',
     },
     {
-      key: '/settings',
+      key: 'settings-group',
       icon: <SettingOutlined />,
       label: 'Настройки',
+      children: [
+        {
+          key: '/settings',
+          icon: <SettingOutlined />,
+          label: 'Общие настройки',
+        },
+        {
+          key: '/admin/import-log',
+          icon: <ImportOutlined />,
+          label: 'Журнал импортов строк',
+        },
+        {
+          key: '/admin/insurance',
+          icon: <SafetyCertificateOutlined />,
+          label: 'Страхование от судимостей',
+        },
+      ],
     },
   ];
 
@@ -526,12 +527,14 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             theme={currentTheme}
             mode="inline"
             selectedKeys={[location.pathname]}
-            defaultOpenKeys={
-              location.pathname.startsWith('/admin') ? ['admin'] :
-              location.pathname.startsWith('/library') ? ['library'] :
-              location.pathname.startsWith('/analytics') ? ['analytics'] :
-              []
-            }
+            defaultOpenKeys={(() => {
+              const p = location.pathname;
+              if (['/library', '/library/templates', '/admin/nomenclatures', '/admin/construction_cost'].includes(p)) return ['library'];
+              if (['/costs', '/bsm', '/projects'].includes(p) || p.startsWith('/analytics')) return ['analytics'];
+              if (['/settings', '/admin/import-log', '/admin/insurance'].includes(p)) return ['settings-group'];
+              if (p.startsWith('/admin')) return ['admin'];
+              return [];
+            })()}
             items={filteredMenuItems}
             onClick={handleMenuClick}
             style={{
