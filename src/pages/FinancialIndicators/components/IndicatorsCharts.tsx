@@ -16,6 +16,7 @@ const { Text, Title } = Typography;
 import { Bar, Doughnut } from 'react-chartjs-2';
 import type { Chart, TooltipItem, LegendItem as ChartLegendItem, ChartEvent, ActiveElement, LegendElement } from 'chart.js';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import type { IndicatorRow } from '../hooks/useFinancialData';
 
 interface IndicatorsChartsProps {
@@ -64,6 +65,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   vatCoefficient,
 }) => {
   const { theme: currentTheme } = useTheme();
+  const { isPhone } = useIsMobile();
   const [selectedIndicator, setSelectedIndicator] = useState<number | null>(null);
   const [breakdownData, setBreakdownData] = useState<CategoryBreakdown[]>([]);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
@@ -1318,7 +1320,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
     },
     plugins: {
       legend: {
-        position: 'right' as const,
+        position: isPhone ? ('bottom' as const) : ('right' as const),
         labels: {
           color: currentTheme === 'dark' ? '#ffffff' : '#000000',
           padding: 6,
@@ -1688,12 +1690,12 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           <Card
             bordered
             style={{
-              height: 450,
+              minHeight: isPhone ? 480 : 450,
               background: currentTheme === 'dark' ? '#1f1f1f' : '#ffffff',
             }}
           >
             <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
                 <Title level={5} style={{ margin: 0, color: currentTheme === 'dark' ? '#ffffff' : '#000000' }}>
                   Структура Цены
                 </Title>
@@ -1779,7 +1781,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
             </div>
             <Spin spinning={loadingBreakdown}>
               {getCategoriesData() ? (
-                <div style={{ height: 320, maxHeight: 320, overflow: 'hidden' }}>
+                <div style={{ height: isPhone ? 380 : 320, maxHeight: isPhone ? 380 : 320, overflow: 'hidden' }}>
                   <Doughnut data={getCategoriesData()!} options={pieOptions} />
                 </div>
               ) : drillDownPath.length > 1 ? (
@@ -1806,12 +1808,12 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           <Card
             bordered
             style={{
-              height: 450,
+              minHeight: isPhone ? 480 : 450,
               background: currentTheme === 'dark' ? '#1f1f1f' : '#ffffff',
             }}
           >
             <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                 <Title level={5} style={{ margin: 0, color: currentTheme === 'dark' ? '#ffffff' : '#000000' }}>
                   Стоимость за м²
                 </Title>
@@ -1856,7 +1858,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               </div>
             </div>
             {getAreaBarData() && (
-              <div style={{ height: 350 }}>
+              <div style={{ height: isPhone ? 300 : 350 }}>
                 <Bar data={getAreaBarData()!} options={barOptions as never} />
               </div>
             )}
@@ -1998,19 +2000,19 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               Справочная информация
             </Title>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
                 <Text>1. Стоимость монолита за м³</Text>
                 <Text strong style={{ fontSize: 16 }}>
                   {formatNumber(Math.round(referenceInfo.monolithPerM3))} руб/м³
                 </Text>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
                 <Text>2. Стоимость ВИСов за м²</Text>
                 <Text strong style={{ fontSize: 16 }}>
                   {formatNumber(Math.round(referenceInfo.visPerM2))} руб/м²
                 </Text>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
                 <Text>3. Стоимость Фасадов за м²</Text>
                 <Text strong style={{ fontSize: 16 }}>
                   {formatNumber(Math.round(referenceInfo.facadePerM2))} руб/м²

@@ -1,5 +1,6 @@
 import { Select, Button, Space, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Text } = Typography;
 import type { Tender } from '../../../lib/supabase';
@@ -23,6 +24,8 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
   onVersionChange,
   onRefresh,
 }) => {
+  const { isPhone } = useIsMobile();
+
   const getTenderTitles = () => {
     const uniqueTitles = new Map<string, { value: string; label: string }>();
     tenders.forEach(tender => {
@@ -47,10 +50,10 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
 
   return (
     <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-      <Space size="small">
+      <Space size="small" style={{ width: isPhone ? '100%' : undefined }}>
         <Text type="secondary">Тендер:</Text>
         <Select
-          style={{ width: 300 }}
+          style={{ width: isPhone ? '100%' : 300 }}
           placeholder="Выберите тендер"
           value={selectedTenderTitle}
           onChange={onTenderTitleChange}
@@ -67,7 +70,7 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
         <Space size="small">
           <Text type="secondary">Версия:</Text>
           <Select
-            style={{ width: 150 }}
+            style={{ width: isPhone ? '50%' : 150 }}
             placeholder="Выберите версию"
             value={selectedVersion}
             onChange={onVersionChange}

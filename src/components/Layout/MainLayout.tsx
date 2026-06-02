@@ -44,6 +44,7 @@ import { type Notification } from '../../lib/supabase';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { listNotifications, deleteAllNotifications } from '../../lib/api/notifications';
 import { hasPageAccess } from '../../lib/supabase/types';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/ru';
@@ -69,6 +70,13 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   const calcInputRef = useRef<InputRef>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const { isMobile } = useIsMobile();
+
+  // На мобиле автоматически сворачивать боковое меню в icon-режим (80px),
+  // освобождая место под контент. Ручное управление триггером сохраняется.
+  useEffect(() => {
+    if (isMobile) setCollapsed(true);
+  }, [isMobile]);
 
   // tenderId доступен, когда пользователь находится на странице позиций заказчика
   const currentTenderId = location.pathname === '/positions'

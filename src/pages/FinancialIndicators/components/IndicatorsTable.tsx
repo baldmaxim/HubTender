@@ -224,6 +224,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
         pagination={false}
         bordered
         size="small"
+        scroll={{ x: 1080 }}
         rowClassName={(record) => {
           if (record.is_header) return `header-row-${currentTheme}`;
           if (record.is_total) return `total-row-${currentTheme}`;

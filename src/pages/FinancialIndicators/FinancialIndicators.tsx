@@ -19,6 +19,7 @@ import {
   ArcElement,
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { useFinancialData } from './hooks/useFinancialData';
 import { IndicatorsCharts } from './components/IndicatorsCharts';
 import { IndicatorsTable } from './components/IndicatorsTable';
@@ -40,6 +41,7 @@ const { Title, Text } = Typography;
 
 const FinancialIndicators: React.FC = () => {
   const { theme: currentTheme } = useTheme();
+  const { isPhone } = useIsMobile();
   const {
     tenders,
     loading,
@@ -175,7 +177,7 @@ const FinancialIndicators: React.FC = () => {
             </Text>
             <Select
               className="tender-select"
-              style={{ width: 400, marginBottom: 32 }}
+              style={{ width: isPhone ? '100%' : 400, maxWidth: '100%', marginBottom: 32 }}
               placeholder="Выберите тендер"
               value={selectedTenderTitle}
               onChange={handleTenderTitleChange}
@@ -190,7 +192,7 @@ const FinancialIndicators: React.FC = () => {
 
             {selectedTenderTitle && (
               <Select
-                style={{ width: 200, marginBottom: 32, marginLeft: 16 }}
+                style={{ width: isPhone ? '100%' : 200, maxWidth: '100%', marginBottom: 32, marginLeft: isPhone ? 0 : 16 }}
                 placeholder="Выберите версию"
                 value={selectedVersion}
                 onChange={handleVersionChange}
@@ -206,11 +208,12 @@ const FinancialIndicators: React.FC = () => {
                 </Text>
                 <Row gutter={[16, 16]} justify="center">
                   {tenders.filter(t => !t.is_archived).slice(0, 6).map(tender => (
-                    <Col key={tender.id}>
+                    <Col key={tender.id} xs={12} sm={12} md={8}>
                       <Card
                         hoverable
+                        size={isPhone ? 'small' : 'default'}
                         style={{
-                          width: 200,
+                          width: isPhone ? '100%' : 200,
                           textAlign: 'center',
                           cursor: 'pointer',
                           borderColor: '#10b981',
@@ -243,7 +246,7 @@ const FinancialIndicators: React.FC = () => {
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
-                            maxWidth: 140
+                            maxWidth: isPhone ? 90 : 140
                           }}>
                             {tender.title}
                           </Text>
@@ -299,11 +302,11 @@ const FinancialIndicators: React.FC = () => {
       <Card bordered={false}>
         <div style={{ marginBottom: 24 }}>
           {editingVolumeTitle ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
               <Input
                 value={tempVolumeTitle}
                 onChange={(e) => setTempVolumeTitle(e.target.value)}
-                style={{ maxWidth: 400, fontSize: 24, fontWeight: 600, color: '#ff4d4f', textAlign: 'center' }}
+                style={{ width: isPhone ? '100%' : 400, maxWidth: '100%', fontSize: isPhone ? 18 : 24, fontWeight: 600, color: '#ff4d4f', textAlign: 'center' }}
                 size="large"
               />
               <CheckOutlined
