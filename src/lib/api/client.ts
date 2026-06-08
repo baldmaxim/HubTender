@@ -81,7 +81,10 @@ export async function apiFetch<T>(
   const cached = cacheKey ? etagCache.get(cacheKey) : undefined;
 
   let { headers, signal } = buildRequest(token);
-  let res = await fetch(`${API_BASE_URL}${path}`, { ...rest, headers, signal });
+  // cache: 'no-store' — не даём браузеру отдавать устаревший ответ из HTTP-кэша
+  // (renderJSON ставит Cache-Control: private, max-age=60). Свежесть условных
+  // запросов обеспечивает собственный etagCache (If-None-Match → 304).
+  let res = await fetch(`${API_BASE_URL}${path}`, { ...rest, headers, signal, cache: 'no-store' });
 
   // 401 retry: try ONE refresh+retry before giving up. The refreshSession()
   // helper coalesces concurrent callers, so multiple parallel apiFetch calls
@@ -90,7 +93,7 @@ export async function apiFetch<T>(
     const refreshed = await appAuthRefreshSession();
     if (refreshed) {
       ({ headers, signal } = buildRequest(refreshed.access_token));
-      res = await fetch(`${API_BASE_URL}${path}`, { ...rest, headers, signal });
+      res = await fetch(`${API_BASE_URL}${path}`, { ...rest, headers, signal, cache: 'no-store' });
     }
     // If refresh failed, refreshSession already emitted SIGNED_OUT — the
     // AuthContext will navigate to /login. Returning the 401 below lets the

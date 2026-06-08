@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   App,
   Alert,
@@ -43,6 +43,7 @@ interface UserTimelineProps {
   currentUserRoleCode: string | null;
   canRespond: boolean;
   onDataChanged?: () => Promise<void> | void;
+  refreshSignal?: number;
 }
 
 function getRecordsLabel(count: number): string {
@@ -68,6 +69,7 @@ const UserTimeline: React.FC<UserTimelineProps> = ({
   currentUserRoleCode,
   canRespond,
   onDataChanged,
+  refreshSignal = 0,
 }) => {
   const {
     token: { colorFillAlter, colorPrimaryBg },
@@ -76,6 +78,15 @@ const UserTimeline: React.FC<UserTimelineProps> = ({
   const [dataForm] = Form.useForm<DataFormValues>();
   const [responseForm] = Form.useForm<ResponseFormValues>();
   const { iterations, loading, error, refetch } = useTenderIterations(group?.id || null, selectedUserId);
+  // Перезапрос итераций по realtime-сигналу от родителя (изменение в tender:<id>).
+  // Срабатывает только на реальное увеличение сигнала, не на маунт.
+  const lastSignalRef = useRef(refreshSignal);
+  useEffect(() => {
+    if (refreshSignal !== lastSignalRef.current) {
+      lastSignalRef.current = refreshSignal;
+      void refetch();
+    }
+  }, [refreshSignal, refetch]);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [responseModalOpen, setResponseModalOpen] = useState(false);
   const [savingData, setSavingData] = useState(false);

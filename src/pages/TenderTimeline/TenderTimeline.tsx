@@ -21,6 +21,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { CloseOutlined } from '@ant-design/icons';
 import { reconcileTenderGroups, setTenderGroupQuality } from '../../lib/api/timeline';
+import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { useAuth } from '../../contexts/AuthContext';
 import UserTimeline from './components/UserTimeline';
 import { useTenderAssignableUsers } from './hooks/useTenderAssignableUsers';
@@ -141,6 +142,7 @@ const TenderTimeline: React.FC = () => {
   const [qualityModalOpen, setQualityModalOpen] = useState(false);
   const [qualitySaving, setQualitySaving] = useState(false);
   const [qualityTenderId, setQualityTenderId] = useState<string | null>(null);
+  const [realtimeSignal, setRealtimeSignal] = useState(0);
   const syncInFlightRef = useRef(false);
   const lastSyncSignatureRef = useRef<string>('');
 
@@ -350,6 +352,14 @@ const TenderTimeline: React.FC = () => {
   const refreshAll = async () => {
     await Promise.all([refetchTenders(), refetchGroups()]);
   };
+
+  // Realtime: при изменении timeline-строк выбранного тендера (создание/ответ по
+  // записи, оценка качества — фан-аут через pgnotify в топик tender:<id>)
+  // перезапрашиваем список/группы и сигналим открытой панели обновить итерации.
+  useRealtimeTopic(selectedTenderId ? `tender:${selectedTenderId}` : null, () => {
+    void refreshAll();
+    setRealtimeSignal((signal) => signal + 1);
+  });
 
   const handleSelectTender = (tenderId: string) => {
     if (tenderId !== selectedTenderId) {
@@ -747,6 +757,7 @@ const TenderTimeline: React.FC = () => {
                 currentUserRoleCode={user?.role_code || null}
                 canRespond={canRespondToIterations}
                 onDataChanged={refreshAll}
+                refreshSignal={realtimeSignal}
               />
             </div>
           </>

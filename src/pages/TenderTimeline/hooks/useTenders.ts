@@ -147,31 +147,36 @@ function getTenderStatus(groups: GroupRow[] = []): ApprovalStatus {
   return 'pending';
 }
 
-function pickLatestTenderVersion(tenders: TenderRow[]): Map<string, TenderRow> {
-  const latestByNumber = new Map<string, TenderRow>();
+// Каноничный «якорь» хронологии — МИНИМАЛЬНАЯ версия тендера (тай-брейк — самый
+// ранний created_at). Новые версии получают БОЛЬШИЙ номер, поэтому min-версия
+// стабильна, и записи хронологии привязаны к наименованию тендера, а не к версии
+// (cleanup-скрипты тоже сохраняют именно version = min). Это чинит «пропажу»
+// записей при создании новой версии (см. план, Задача №2).
+function pickCanonicalTenderVersion(tenders: TenderRow[]): Map<string, TenderRow> {
+  const canonicalByNumber = new Map<string, TenderRow>();
 
   tenders.forEach((tender) => {
-    const current = latestByNumber.get(tender.tender_number);
+    const current = canonicalByNumber.get(tender.tender_number);
 
     if (!current) {
-      latestByNumber.set(tender.tender_number, tender);
+      canonicalByNumber.set(tender.tender_number, tender);
       return;
     }
 
     const currentVersion = current.version ?? 0;
     const nextVersion = tender.version ?? 0;
 
-    if (nextVersion > currentVersion) {
-      latestByNumber.set(tender.tender_number, tender);
+    if (nextVersion < currentVersion) {
+      canonicalByNumber.set(tender.tender_number, tender);
       return;
     }
 
-    if (nextVersion === currentVersion && new Date(tender.created_at).getTime() > new Date(current.created_at).getTime()) {
-      latestByNumber.set(tender.tender_number, tender);
+    if (nextVersion === currentVersion && new Date(tender.created_at).getTime() < new Date(current.created_at).getTime()) {
+      canonicalByNumber.set(tender.tender_number, tender);
     }
   });
 
-  return latestByNumber;
+  return canonicalByNumber;
 }
 
 function dedupeRegistryRowsByTenderNumber(rows: TenderRegistryRow[]): TenderRegistryRow[] {
@@ -241,7 +246,7 @@ export function useTenders(): UseTendersResult {
         return;
       }
 
-      const latestTendersByNumber = pickLatestTenderVersion((payload.tenders || []) as TenderRow[]);
+      const canonicalTendersByNumber = pickCanonicalTenderVersion((payload.tenders || []) as TenderRow[]);
 
       const normalized = registryRows
         .filter((registryRow) => {
@@ -249,11 +254,11 @@ export function useTenders(): UseTendersResult {
             return false;
           }
 
-          return latestTendersByNumber.has(registryRow.tender_number);
+          return canonicalTendersByNumber.has(registryRow.tender_number);
         })
         .map((registryRow) => {
         const tender = registryRow.tender_number
-          ? latestTendersByNumber.get(registryRow.tender_number) || null
+          ? canonicalTendersByNumber.get(registryRow.tender_number) || null
           : null;
         const groups = tender?.tender_groups || [];
         const overallScore = getOverallScore(groups);

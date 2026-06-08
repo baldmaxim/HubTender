@@ -19,7 +19,12 @@
 -- still an open warning for the final runtime cutover).
 --
 -- Triggers fan out on: tenders, notifications, boq_items, client_positions,
--- cost_redistribution_results, construction_cost_volumes.
+-- cost_redistribution_results, construction_cost_volumes, tender_groups,
+-- tender_iterations.
+--
+-- tender_iterations has no tender_id column — it is resolved via its group_id
+-- → tender_groups.tender_id so the broker can route the event to tender:<id>
+-- (see db/yandex/incremental/2026_06_timeline_pgnotify.sql).
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.notify_row_change()
@@ -42,8 +47,17 @@ BEGIN
         v_tender := v_id;
     ELSIF TG_TABLE_NAME = 'notifications' THEN
         v_tender := NULL;
+    ELSIF TG_TABLE_NAME = 'tender_iterations' THEN
+        -- No tender_id column: resolve it through the parent group.
+        SELECT tg.tender_id INTO v_tender
+        FROM public.tender_groups tg
+        WHERE tg.id = COALESCE(
+            (CASE WHEN NEW IS NOT NULL THEN (to_jsonb(NEW)->>'group_id')::uuid END),
+            (CASE WHEN OLD IS NOT NULL THEN (to_jsonb(OLD)->>'group_id')::uuid END)
+        );
     ELSE
-        -- boq_items, client_positions, cost_redistribution_results, construction_cost_volumes
+        -- boq_items, client_positions, cost_redistribution_results,
+        -- construction_cost_volumes, tender_groups — all carry tender_id.
         v_tender := COALESCE(
             (CASE WHEN NEW IS NOT NULL THEN (to_jsonb(NEW)->>'tender_id')::uuid END),
             (CASE WHEN OLD IS NOT NULL THEN (to_jsonb(OLD)->>'tender_id')::uuid END)
@@ -80,6 +94,8 @@ DROP TRIGGER IF EXISTS trg_notify_row_change_boq_items                    ON pub
 DROP TRIGGER IF EXISTS trg_notify_row_change_client_positions             ON public.client_positions;
 DROP TRIGGER IF EXISTS trg_notify_row_change_cost_redistribution_results  ON public.cost_redistribution_results;
 DROP TRIGGER IF EXISTS trg_notify_row_change_construction_cost_volumes    ON public.construction_cost_volumes;
+DROP TRIGGER IF EXISTS trg_notify_row_change_tender_groups                ON public.tender_groups;
+DROP TRIGGER IF EXISTS trg_notify_row_change_tender_iterations            ON public.tender_iterations;
 
 CREATE TRIGGER trg_notify_row_change_tenders
     AFTER INSERT OR UPDATE OR DELETE ON public.tenders
@@ -103,4 +119,12 @@ CREATE TRIGGER trg_notify_row_change_cost_redistribution_results
 
 CREATE TRIGGER trg_notify_row_change_construction_cost_volumes
     AFTER INSERT OR UPDATE OR DELETE ON public.construction_cost_volumes
+    FOR EACH ROW EXECUTE FUNCTION public.notify_row_change();
+
+CREATE TRIGGER trg_notify_row_change_tender_groups
+    AFTER INSERT OR UPDATE OR DELETE ON public.tender_groups
+    FOR EACH ROW EXECUTE FUNCTION public.notify_row_change();
+
+CREATE TRIGGER trg_notify_row_change_tender_iterations
+    AFTER INSERT OR UPDATE OR DELETE ON public.tender_iterations
     FOR EACH ROW EXECUTE FUNCTION public.notify_row_change();
