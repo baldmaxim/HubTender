@@ -12,6 +12,9 @@ export type TenderMonitorSortDirection = 'asc' | 'desc';
 
 export const STANDARD_PACKAGE_ITEMS = ['ПД', 'ВОР', 'Договор', 'ТЗ на СМР', 'ТЗ на РД'] as const;
 
+// Первый формат — для отображения, остальные — для разбора ввода без точек (ддммгггг).
+export const DATE_INPUT_FORMATS = ['DD.MM.YYYY', 'DDMMYYYY', 'DDMMYY', 'D.M.YYYY'];
+
 export const DASHBOARD_STATUS_OPTIONS: Array<{ value: DashboardStatus; label: string }> = [
   { value: 'calc', label: 'В расчете' },
   { value: 'sent', label: 'Направлено' },
@@ -175,11 +178,17 @@ export function formatRubPerSquare(totalCost?: number | null, area?: number | nu
 }
 
 export function getChronologyItems(tender: TenderRegistryWithRelations): ChronologyItem[] {
-  return (tender.chronology_items || []).map((item) => ({
-    date: item.date ?? null,
-    text: item.text,
-    type: item.type ?? 'default',
-  }));
+  return (tender.chronology_items || [])
+    .map((item) => ({
+      date: item.date ?? null,
+      text: item.text,
+      type: item.type ?? 'default',
+    }))
+    .sort((left, right) => {
+      if (!left.date) return 1;
+      if (!right.date) return -1;
+      return dayjs(left.date).valueOf() - dayjs(right.date).valueOf();
+    });
 }
 
 export function getPackageItems(tender: TenderRegistryWithRelations): TenderPackageItem[] {

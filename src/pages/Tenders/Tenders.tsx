@@ -273,6 +273,7 @@ const Tenders: React.FC = () => {
           onOpenTender={(tender) => handleOpenTender(tender, 'info')}
           onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
           onQuickCall={handleQuickCall}
+          onUpdate={refetch}
         />
       </div>
 

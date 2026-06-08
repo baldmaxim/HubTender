@@ -1,14 +1,18 @@
-import React from 'react';
-import { Empty, Input, Popover, Skeleton, Space, Tag } from 'antd';
+import React, { useState } from 'react';
+import { Button, DatePicker, Empty, Input, Popover, Select, Skeleton, Space, Tag, message } from 'antd';
+import dayjs, { type Dayjs } from 'dayjs';
 import {
+  CloseOutlined,
   EnvironmentFilled,
   FileTextOutlined,
   LinkOutlined,
   PhoneOutlined,
 } from '@ant-design/icons';
+import { patchTenderRegistryFields } from '../../../lib/api/tenderRegistry';
 import type { TenderRegistryWithRelations } from '../../../lib/supabase';
 import { useTheme } from '../../../contexts/ThemeContext';
 import {
+  DATE_INPUT_FORMATS,
   formatArea,
   formatDate,
   formatDateTime,
@@ -44,6 +48,7 @@ interface TenderMonitorTableProps {
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
   onOpenTimeline: (tender: TenderRegistryWithRelations) => void;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
+  onUpdate: () => Promise<void> | void;
 }
 
 type TableColumn = {
@@ -216,39 +221,139 @@ function MapPopover({ tender, palette }: { tender: TenderRegistryWithRelations; 
   );
 }
 
-function ChronologyPopover({ tender, palette }: { tender: TenderRegistryWithRelations; palette: TenderMonitorPalette }) {
+function ChronologyPopover({
+  tender,
+  palette,
+  onUpdate,
+}: {
+  tender: TenderRegistryWithRelations;
+  palette: TenderMonitorPalette;
+  onUpdate: () => Promise<void> | void;
+}) {
   const chronologyItems = getChronologyItems(tender);
+  const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [draftType, setDraftType] = useState<'default' | 'call_follow_up'>('default');
+  const [draftDate, setDraftDate] = useState<Dayjs | null>(dayjs());
+  const [draftText, setDraftText] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const trimmed = draftText.trim();
+
+    if (!trimmed) {
+      message.warning('Введите текст события');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const newItem = {
+        date: (draftDate ?? dayjs()).toISOString(),
+        text: trimmed,
+        type: draftType,
+      };
+      const existing = tender.chronology_items || [];
+
+      try {
+        await patchTenderRegistryFields(tender.id, { chronology_items: [...existing, newItem] });
+      } catch (err) {
+        message.error((err as Error).message);
+        return;
+      }
+
+      setDraftText('');
+      setDraftType('default');
+      setDraftDate(dayjs());
+      await onUpdate();
+      message.success('Событие добавлено');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Popover
       trigger="hover"
       placement="leftTop"
       mouseEnterDelay={0.15}
-      destroyTooltipOnHide
+      open={open || pinned}
+      onOpenChange={(next) => setOpen(next)}
       content={
-        chronologyItems.length > 0 ? (
-          <div style={{ width: 320, maxHeight: 300, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {chronologyItems.map((item, index) => (
-              <div
-                key={`${item.date || 'empty'}-${item.text}-${index}`}
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: 10,
-                  background: palette.fieldBg,
-                  border: `1px solid ${item.type === 'call_follow_up' ? palette.dangerBorder : palette.borderSoft}`,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                  <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDateTime(item.date)}</span>
-                  {item.type === 'call_follow_up' ? <Tag color="error" style={{ marginInlineEnd: 0 }}>Звонок</Tag> : null}
+        <div style={{ width: 340, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {chronologyItems.length > 0 ? (
+            <div style={{ maxHeight: 260, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {chronologyItems.map((item, index) => (
+                <div
+                  key={`${item.date || 'empty'}-${item.text}-${index}`}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    background: palette.fieldBg,
+                    border: `1px solid ${item.type === 'call_follow_up' ? palette.dangerBorder : palette.borderSoft}`,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                    <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDateTime(item.date)}</span>
+                    {item.type === 'call_follow_up' ? <Tag color="error" style={{ marginInlineEnd: 0 }}>Звонок</Tag> : null}
+                  </div>
+                  <div style={{ color: palette.textSecondary, fontSize: 12, lineHeight: 1.35 }}>{item.text}</div>
                 </div>
-                <div style={{ color: palette.textSecondary, fontSize: 12, lineHeight: 1.35 }}>{item.text}</div>
-              </div>
-            ))}
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: palette.muted, fontSize: 13 }}>Хронология пока не заполнена</div>
+          )}
+
+          <div style={{ borderTop: `1px solid ${palette.border}`, paddingTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ color: palette.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Добавить событие
+              </span>
+              {pinned ? (
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<CloseOutlined />}
+                  onClick={() => setPinned(false)}
+                  style={{ color: palette.muted }}
+                  title="Открепить"
+                />
+              ) : (
+                <span style={{ color: palette.muted, fontSize: 10 }}>кликните ярлык, чтобы закрепить</span>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '108px 120px minmax(0, 1fr)', gap: 6 }}>
+              <Select
+                size="small"
+                value={draftType}
+                onChange={(value) => setDraftType(value)}
+                options={[
+                  { value: 'default', label: 'Событие' },
+                  { value: 'call_follow_up', label: 'Звонок' },
+                ]}
+              />
+              <DatePicker
+                size="small"
+                value={draftDate}
+                onChange={(value) => setDraftDate(value)}
+                format={DATE_INPUT_FORMATS}
+                style={{ width: '100%' }}
+              />
+              <Input
+                size="small"
+                value={draftText}
+                onChange={(event) => setDraftText(event.target.value)}
+                onPressEnter={() => void handleSave()}
+                placeholder="Текст события"
+              />
+            </div>
+            <Button type="primary" size="small" block style={{ marginTop: 6 }} loading={saving} onClick={() => void handleSave()}>
+              Сохранить
+            </Button>
           </div>
-        ) : (
-          <div style={{ width: 220, color: palette.muted, fontSize: 13 }}>Хронология пока не заполнена</div>
-        )
+        </div>
       }
       overlayInnerStyle={{
         background: palette.panelBg,
@@ -257,7 +362,10 @@ function ChronologyPopover({ tender, palette }: { tender: TenderRegistryWithRela
       }}
     >
       <div
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          setPinned((prev) => !prev);
+        }}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -265,12 +373,12 @@ function ChronologyPopover({ tender, palette }: { tender: TenderRegistryWithRela
           padding: '3px 7px',
           borderRadius: 8,
           background: chronologyItems.length > 0 ? palette.warningBg : palette.disabledBg,
-          border: `1px solid ${chronologyItems.length > 0 ? palette.warningBorder : palette.border}`,
+          border: `1px solid ${pinned ? palette.warning : chronologyItems.length > 0 ? palette.warningBorder : palette.border}`,
           color: chronologyItems.length > 0 ? palette.warning : palette.muted,
           fontSize: 11,
-          cursor: 'default',
+          cursor: 'pointer',
         }}
-        title="Показать хронологию"
+        title="Показать хронологию · клик — закрепить"
       >
         <FileTextOutlined />
         <span>{chronologyItems.length}</span>
@@ -349,11 +457,13 @@ function TenderRow({
   tender,
   onOpenTender,
   onQuickCall,
+  onUpdate,
   palette,
 }: {
   tender: TenderRegistryWithRelations;
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
+  onUpdate: () => Promise<void> | void;
   palette: TenderMonitorPalette;
 }) {
   const dashboardStatus = getDashboardStatus(tender);
@@ -577,7 +687,7 @@ function TenderRow({
           >
             <LinkOutlined />
           </button>
-          <ChronologyPopover tender={tender} palette={palette} />
+          <ChronologyPopover tender={tender} palette={palette} onUpdate={onUpdate} />
         </Space>
       </div>
 
@@ -602,6 +712,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   onOpenTender,
   onOpenTimeline,
   onQuickCall,
+  onUpdate,
 }) => {
   void onOpenTimeline;
 
@@ -750,6 +861,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
                     tender={tender}
                     onOpenTender={onOpenTender}
                     onQuickCall={onQuickCall}
+                    onUpdate={onUpdate}
                     palette={palette}
                   />
                 ))

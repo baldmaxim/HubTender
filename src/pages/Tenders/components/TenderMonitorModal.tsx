@@ -11,6 +11,7 @@ import type {
 } from '../../../lib/supabase';
 import { useTheme } from '../../../contexts/ThemeContext';
 import {
+  DATE_INPUT_FORMATS,
   formatArea,
   formatDate,
   formatMoneyFull,
@@ -134,7 +135,7 @@ function EditableMonitorField({
         value={typeof draft === 'string' && draft ? dayjs(draft) : null}
         onChange={(next) => setDraft(next ? next.toISOString() : null)}
         style={{ width: '100%' }}
-        format="DD.MM.YYYY"
+        format={DATE_INPUT_FORMATS}
         size="small"
       />
     );
@@ -304,7 +305,7 @@ function EditableChronologySection({ tenderId, items, palette, onUpdated }: Edit
                 size="small"
                 value={item.date ? dayjs(item.date) : null}
                 onChange={(value) => updateItem(index, { date: value ? value.toISOString() : null })}
-                format="DD.MM.YYYY"
+                format={DATE_INPUT_FORMATS}
                 style={{ width: '100%' }}
               />
               <TextArea
@@ -415,7 +416,7 @@ function EditablePackageSection({ tenderId, items, palette, onUpdated }: Editabl
                   size="small"
                   value={item.date ? dayjs(item.date) : null}
                   onChange={(value) => updateItem(index, { date: value ? value.toISOString() : null })}
-                  format="DD.MM.YYYY"
+                  format={DATE_INPUT_FORMATS}
                   style={{ width: '100%' }}
                 />
                 <Input
