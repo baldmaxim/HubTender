@@ -118,6 +118,16 @@ async function main() {
 
   await get('/api/v1/tenders?limit=5', jwt, b => (Array.isArray(b.data) ? null : 'no data array'));
 
+  // CBR exchange rates (proxied cbr.ru). Hits the live upstream — fails if cbr.ru
+  // is unreachable, which is the intended signal for this read endpoint.
+  {
+    const today = new Date().toISOString().slice(0, 10);
+    await get(`/api/v1/exchange-rates?date=${today}`, jwt, b =>
+      (b.data && typeof b.data.usd === 'number' && typeof b.data.eur === 'number' && typeof b.data.cny === 'number'
+        ? null
+        : 'missing usd/eur/cny'));
+  }
+
   // Phase 6: insurance, position-filters, tender-registry endpoints.
   await get('/api/v1/tender-registry', jwt, b => (Array.isArray(b.data) ? null : 'no data array'));
   await get('/api/v1/tender-statuses', jwt, b => (Array.isArray(b.data) ? null : 'no data array'));

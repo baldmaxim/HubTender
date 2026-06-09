@@ -63,6 +63,10 @@ type Config struct {
 	SMTPUser     string
 	SMTPPassword string
 	SMTPFrom     string
+
+	// CBRBaseURL is the Central Bank of Russia daily-rates XML endpoint used to
+	// auto-fill tender currency rates. Public URL, not a secret.
+	CBRBaseURL string
 }
 
 // Load reads configuration from environment variables via Viper.
@@ -81,6 +85,7 @@ func Load() (*Config, error) {
 	v.SetDefault("APP_REFRESH_TOKEN_TTL_DAYS", 30)
 	v.SetDefault("APP_ENV", "development")
 	v.SetDefault("SMTP_PORT", 587)
+	v.SetDefault("CBR_BASE_URL", "https://www.cbr.ru/scripts/XML_daily.asp")
 
 	dbURL := v.GetString("DATABASE_URL")
 	if dbURL == "" {
@@ -156,6 +161,7 @@ func Load() (*Config, error) {
 		SMTPUser:             v.GetString("SMTP_USER"),
 		SMTPPassword:         v.GetString("SMTP_PASSWORD"),
 		SMTPFrom:             v.GetString("SMTP_FROM"),
+		CBRBaseURL:           v.GetString("CBR_BASE_URL"),
 	}
 
 	return cfg, nil

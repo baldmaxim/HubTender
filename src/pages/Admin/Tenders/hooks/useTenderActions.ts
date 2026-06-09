@@ -6,6 +6,7 @@ import {
   adminPatchTender,
   deleteTender,
 } from '../../../../lib/api/tenders';
+import { fetchCbrRates } from '../../../../lib/api/exchangeRates';
 import {
   listActiveMarkupParameters,
   insertTenderMarkupPercentages,
@@ -20,6 +21,26 @@ export const useTenderActions = (onRefresh: () => void) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingTender, setEditingTender] = useState<Tender | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [ratesLoading, setRatesLoading] = useState(false);
+
+  // Подтянуть курсы ЦБ РФ на сегодня и заполнить поля формы. При сбое поля
+  // остаются пустыми (их уже очистил resetFields) + предупреждение.
+  const loadCbrRates = async () => {
+    setRatesLoading(true);
+    try {
+      const rates = await fetchCbrRates(dayjs().format('YYYY-MM-DD'));
+      form.setFieldsValue({
+        usd_rate: rates.usd,
+        eur_rate: rates.eur,
+        cny_rate: rates.cny,
+      });
+    } catch (err) {
+      console.error('Не удалось загрузить курсы ЦБ РФ:', err);
+      message.warning('Не удалось загрузить курсы ЦБ РФ — введите вручную');
+    } finally {
+      setRatesLoading(false);
+    }
+  };
 
   const handleEdit = (record: TenderRecord) => {
     const data = record.raw;
@@ -118,6 +139,7 @@ export const useTenderActions = (onRefresh: () => void) => {
     setEditingTender(null);
     form.resetFields();
     setIsModalVisible(true);
+    void loadCbrRates(); // не блокирует открытие модалки
   };
 
   const handleModalOk = async () => {
@@ -204,6 +226,7 @@ export const useTenderActions = (onRefresh: () => void) => {
     form,
     isModalVisible,
     isEditMode,
+    ratesLoading,
     handleEdit,
     handleDelete,
     handleArchive,

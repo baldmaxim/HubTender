@@ -21,6 +21,7 @@ import (
 
 	"github.com/su10/hubtender/backend/internal/auth"
 	"github.com/su10/hubtender/backend/internal/cache"
+	"github.com/su10/hubtender/backend/internal/cbr"
 	"github.com/su10/hubtender/backend/internal/config"
 	"github.com/su10/hubtender/backend/internal/handlers"
 	infradb "github.com/su10/hubtender/backend/internal/infrastructure/db"
@@ -171,6 +172,7 @@ func main() {
 	// 8. Repositories, cache, services, handlers
 	// -------------------------------------------------------------------------
 	inMemCache := cache.New()
+	cbrClient := cbr.NewClient(inMemCache, cfg.CBRBaseURL)
 
 	userRepo := repository.NewUserRepo(pool)
 	refRepo := repository.NewReferenceRepo(pool)
@@ -241,6 +243,7 @@ func main() {
 	refH := handlers.NewReferenceHandler(refSvc)
 	tenderH := handlers.NewTenderHandler(tenderSvc)
 	tenderWH := handlers.NewTenderWriteHandler(tenderSvc)
+	cbrH := handlers.NewCBRHandler(cbrClient)
 	positionH := handlers.NewPositionHandler(positionSvc)
 	positionWH := handlers.NewPositionWriteHandler(positionSvc)
 	positionCostsH := handlers.NewPositionCostsHandler(positionCostsSvc)
@@ -335,6 +338,7 @@ func main() {
 		// Phase 3 — tenders, positions, BOQ items.
 		// Slice 1: reads.
 		r.Get("/api/v1/tenders", tenderH.GetTenders)
+		r.Get("/api/v1/exchange-rates", cbrH.GetExchangeRates)
 		r.Get("/api/v1/tenders/{id}/overview", tenderH.GetTenderOverview)
 		r.Get("/api/v1/tenders/{id}/positions", positionH.GetPositions)
 		r.Get("/api/v1/positions/boq-preview", positionH.GetBoqPreview)

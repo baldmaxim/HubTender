@@ -250,6 +250,7 @@ const Tenders: React.FC = () => {
         onOk={actions.handleModalOk}
         onCancel={actions.handleModalCancel}
         isEditMode={actions.isEditMode}
+        ratesLoading={actions.ratesLoading}
       />
 
       {selectedTenderForUpload && (

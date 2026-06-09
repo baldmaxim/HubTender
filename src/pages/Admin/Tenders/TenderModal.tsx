@@ -10,6 +10,7 @@ import {
   Col,
   Divider,
   Space,
+  Spin,
   theme
 } from 'antd';
 import {
@@ -31,6 +32,7 @@ interface TenderModalProps {
   onOk: () => void;
   onCancel: () => void;
   isEditMode?: boolean;
+  ratesLoading?: boolean;
 }
 
 const TenderModal: React.FC<TenderModalProps> = ({
@@ -38,7 +40,8 @@ const TenderModal: React.FC<TenderModalProps> = ({
   form,
   onOk,
   onCancel,
-  isEditMode = false
+  isEditMode = false,
+  ratesLoading = false
 }) => {
   const { theme: currentTheme } = useTheme();
   const { token } = theme.useToken();
@@ -79,10 +82,7 @@ const TenderModal: React.FC<TenderModalProps> = ({
         form={form}
         layout="vertical"
         initialValues={!isEditMode ? {
-          version: 1,
-          usd_rate: 100.0,
-          eur_rate: 108.0,
-          cny_rate: 13.5
+          version: 1
         } : undefined}
       >
         <Divider orientation="left">Основная информация</Divider>
@@ -240,6 +240,13 @@ const TenderModal: React.FC<TenderModalProps> = ({
         </Row>
 
         <Divider orientation="left">Курсы валют</Divider>
+
+        {ratesLoading && (
+          <div style={{ marginBottom: 12 }}>
+            <Spin size="small" />
+            <span style={{ marginLeft: 8 }}>Загрузка курсов ЦБ РФ на сегодня…</span>
+          </div>
+        )}
 
         <Row gutter={16}>
           <Col span={8}>
