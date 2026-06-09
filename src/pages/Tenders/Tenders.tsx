@@ -297,6 +297,7 @@ const Tenders: React.FC = () => {
         }}
         constructionScopes={constructionScopes}
         statuses={statuses}
+        existingTenders={tenders}
       />
     </div>
   );

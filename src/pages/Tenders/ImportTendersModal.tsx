@@ -1,14 +1,31 @@
-import React, { useState } from 'react';
-import { Modal, Upload, message, Table, Alert } from 'antd';
+import React, { useMemo, useState } from 'react';
+import { Modal, Upload, message, Table, Alert, Tag, Space, Typography } from 'antd';
 import type { UploadFile } from 'antd/es/upload';
 import { InboxOutlined } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
-import type { ConstructionScope, TenderStatus } from '../../lib/supabase';
+import type {
+  ChronologyItem,
+  ConstructionScope,
+  TenderPackageItem,
+  TenderRegistryWithRelations,
+  TenderStatus,
+} from '../../lib/supabase';
 import {
   createTenderRegistry,
   getNextTenderRegistrySortOrder,
+  patchTenderRegistryFields,
 } from '../../lib/api/tenderRegistry';
 import dayjs from 'dayjs';
+import {
+  mergeChronologyItems,
+  mergeTenderPackageItems,
+  parseChronologyText,
+  parseExcelDate,
+  type ImportRowAction,
+  type ParsedTender,
+} from './utils/importTenders';
+
+const { Text } = Typography;
 
 interface ImportTendersModalProps {
   open: boolean;
@@ -16,23 +33,15 @@ interface ImportTendersModalProps {
   onSuccess: () => void;
   constructionScopes: ConstructionScope[];
   statuses: TenderStatus[];
+  existingTenders: TenderRegistryWithRelations[];
 }
 
-interface ParsedTender {
-  tender_number?: string;
-  title: string;
-  client_name: string;
-  object_address?: string;
-  construction_scope?: string;
-  area?: number;
-  submission_date?: string;
-  chronology?: string;
-  construction_start_date?: string;
-  site_visit_date?: string;
-  site_visit_photo_url?: string;
-  has_tender_package?: string;
-  invitation_date?: string;
-  status?: string;
+interface ClassifiedRow {
+  parsed: ParsedTender;
+  action: ImportRowAction;
+  match: TenderRegistryWithRelations | null;
+  chronologyItems: ChronologyItem[];
+  packageItems: TenderPackageItem[];
 }
 
 const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
@@ -41,30 +50,47 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
   onSuccess,
   constructionScopes,
   statuses,
+  existingTenders,
 }) => {
   const [parsedData, setParsedData] = useState<ParsedTender[]>([]);
   const [loading, setLoading] = useState(false);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
 
-  const parseExcelDate = (excelDate: unknown): string | null => {
-    if (!excelDate) return null;
-
-    // Если это уже строка в формате даты
-    if (typeof excelDate === 'string') {
-      const parsed = dayjs(excelDate, ['DD.MM.YYYY', 'YYYY-MM-DD'], true);
-      return parsed.isValid() ? parsed.toISOString() : null;
-    }
-
-    // Если это число (Excel serial date)
-    if (typeof excelDate === 'number') {
-      const date = XLSX.SSF.parse_date_code(excelDate);
-      if (date) {
-        return dayjs(`${date.y}-${date.m}-${date.d}`).toISOString();
+  const tenderByNumber = useMemo(() => {
+    const map = new Map<string, TenderRegistryWithRelations>();
+    existingTenders.forEach((tender) => {
+      const number = tender.tender_number?.trim();
+      if (number) {
+        map.set(number, tender);
       }
-    }
+    });
+    return map;
+  }, [existingTenders]);
 
-    return null;
-  };
+  const rows = useMemo<ClassifiedRow[]>(() => {
+    return parsedData.map((parsed) => {
+      const number = parsed.tender_number?.trim();
+      const match = number ? tenderByNumber.get(number) ?? null : null;
+      const action: ImportRowAction = !number ? 'skip' : match ? 'update' : 'create';
+
+      const chronologyItems = parseChronologyText(parsed.chronology);
+      const packageItems: TenderPackageItem[] = parsed.has_tender_package?.trim()
+        ? [{ date: null, text: parsed.has_tender_package.trim(), link: null }]
+        : [];
+
+      return { parsed, action, match, chronologyItems, packageItems };
+    });
+  }, [parsedData, tenderByNumber]);
+
+  const summary = useMemo(() => {
+    return rows.reduce(
+      (acc, row) => {
+        acc[row.action] += 1;
+        return acc;
+      },
+      { create: 0, update: 0, skip: 0 } as Record<ImportRowAction, number>,
+    );
+  }, [rows]);
 
   const handleFileUpload = (file: File) => {
     const reader = new FileReader();
@@ -76,28 +102,29 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(firstSheet);
 
-        // Отладка: показываем первую строку для проверки названий колонок
-        if (jsonData.length > 0) {
-          console.log('Первая строка Excel:', jsonData[0]);
-          console.log('Найденные колонки:', Object.keys(jsonData[0] as object));
-        }
-
         const parsed: ParsedTender[] = (jsonData as Record<string, unknown>[]).map((row) => {
-          const str = (v: unknown): string | undefined => v ? String(v) : undefined;
+          const str = (v: unknown): string | undefined => (v ? String(v) : undefined);
           return {
             tender_number: str(row['Номер тендера'] ?? row['Номер']),
             title: str(row['Наименование ЖК'] ?? row['Наименование']) ?? '',
             client_name: str(row['Заказчик']) ?? '',
             object_address: str(row['Адрес объекта'] ?? row['Адрес']),
             construction_scope: str(row['Работа'] ?? row['Объем строительства']),
-            area: row['Площадь по СП, м2'] ? parseFloat(String(row['Площадь по СП, м2'])) : (row['Площадь'] ? parseFloat(String(row['Площадь'])) : undefined),
+            area: row['Площадь по СП, м2']
+              ? parseFloat(String(row['Площадь по СП, м2']))
+              : row['Площадь']
+                ? parseFloat(String(row['Площадь']))
+                : undefined,
             submission_date: parseExcelDate(row['Дата подачи КП']) || undefined,
             chronology: str(row['Хронологии тендеров (дата выхода на площадку)'] ?? row['Хронология']),
             construction_start_date: parseExcelDate(row['Дата выхода на строительную площадку']) || undefined,
             site_visit_date: parseExcelDate(row['Дата посещения площадки']) || undefined,
             site_visit_photo_url: str(row['Фото посещения площадки']),
             has_tender_package: str(row['Наличие тендерного пакета']),
-            invitation_date: parseExcelDate(row['Когда поступило приглашение']) || parseExcelDate(row['Дата приглашения']) || undefined,
+            invitation_date:
+              parseExcelDate(row['Когда поступило приглашение']) ||
+              parseExcelDate(row['Дата приглашения']) ||
+              undefined,
             status: str(row['Статус']),
           };
         });
@@ -114,83 +141,95 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
   };
 
   const handleImport = async () => {
-    if (parsedData.length === 0) {
-      message.warning('Нет данных для импорта');
+    const importable = rows.filter((row) => row.action !== 'skip');
+
+    if (importable.length === 0) {
+      message.warning('Нет строк с номером тендера для импорта');
       return;
     }
 
     setLoading(true);
 
     try {
+      const scopeMap = new Map(constructionScopes.map((scope) => [scope.name.toLowerCase(), scope.id]));
+      const statusMap = new Map(statuses.map((status) => [status.name.toLowerCase(), status.id]));
+
+      const resolveScopeId = (name?: string) =>
+        name ? scopeMap.get(name.toLowerCase()) ?? null : null;
+      const resolveStatusId = (name?: string) =>
+        name ? statusMap.get(name.toLowerCase()) ?? null : null;
+
+      const createRows = importable.filter((row) => row.action === 'create');
+      const updateRows = importable.filter((row) => row.action === 'update');
+
       let nextSortOrder = await getNextTenderRegistrySortOrder();
 
-      // Создаем маппинг для объемов строительства
-      const scopeMap = new Map(
-        constructionScopes.map(scope => [scope.name.toLowerCase(), scope.id])
-      );
-
-      // Создаем маппинг для статусов
-      const statusMap = new Map(
-        statuses.map(status => [status.name.toLowerCase(), status.id])
-      );
-
-      const tendersToInsert = parsedData.map(tender => {
-        const construction_scope_id = tender.construction_scope
-          ? scopeMap.get(tender.construction_scope.toLowerCase())
-          : undefined;
-
-        const status_id = tender.status
-          ? statusMap.get(tender.status.toLowerCase())
-          : undefined;
-
-        // Конвертация старого текстового поля chronology в JSONB массив
-        const chronology_items = tender.chronology && tender.chronology.trim()
-          ? [{ date: null, text: tender.chronology, type: 'default' }]
-          : [];
-
-        // Конвертация старого текстового поля has_tender_package в JSONB массив
-        const tender_package_items = tender.has_tender_package && tender.has_tender_package.trim()
-          ? [{ date: null, text: tender.has_tender_package }]
-          : [];
-
+      const createPayloads = createRows.map((row) => {
+        const { parsed } = row;
         return {
-          tender_number: tender.tender_number || null,
-          title: tender.title,
-          client_name: tender.client_name,
-          object_address: tender.object_address || null,
-          construction_scope_id: construction_scope_id || null,
-          area: tender.area || null,
-          submission_date: tender.submission_date || null,
-          chronology_items,
-          construction_start_date: tender.construction_start_date || null,
-          site_visit_date: tender.site_visit_date || null,
-          site_visit_photo_url: tender.site_visit_photo_url || null,
-          tender_package_items,
-          invitation_date: tender.invitation_date || null,
-          status_id: status_id || null,
+          tender_number: parsed.tender_number || null,
+          title: parsed.title,
+          client_name: parsed.client_name,
+          object_address: parsed.object_address || null,
+          construction_scope_id: resolveScopeId(parsed.construction_scope),
+          area: parsed.area || null,
+          submission_date: parsed.submission_date || null,
+          chronology_items: row.chronologyItems,
+          construction_start_date: parsed.construction_start_date || null,
+          site_visit_date: parsed.site_visit_date || null,
+          site_visit_photo_url: parsed.site_visit_photo_url || null,
+          tender_package_items: row.packageItems,
+          invitation_date: parsed.invitation_date || null,
+          status_id: resolveStatusId(parsed.status),
           sort_order: nextSortOrder++,
           is_archived: false,
         };
       });
 
-      // Go: один createTenderRegistry на запись (импорт — обычно небольшой).
-      try {
-        // chronology_items.type — broader literal в legacy-парсере; на
-        // сервере поле jsonb, кастуем для прохождения TS-проверки.
-        await Promise.all(
-          tendersToInsert.map((row) =>
-            createTenderRegistry(row as unknown as Parameters<typeof createTenderRegistry>[0]),
-          ),
-        );
-        message.success(`Успешно импортировано ${tendersToInsert.length} тендеров`);
-        setParsedData([]);
-        setFileList([]);
-        onSuccess();
-      } catch (err) {
-        message.error('Ошибка импорта: ' + (err as Error).message);
+      // Слияние: дополняем хронологию/пакет, скаляры — только если у тендера пусто.
+      const buildUpdatePatch = (row: ClassifiedRow): Record<string, unknown> => {
+        const { parsed, match } = row;
+        const patch: Record<string, unknown> = {
+          chronology_items: mergeChronologyItems(match?.chronology_items, row.chronologyItems),
+          tender_package_items: mergeTenderPackageItems(match?.tender_package_items, row.packageItems),
+        };
+
+        const fillEmpty = (field: string, existing: unknown, value: unknown) => {
+          if ((existing == null || existing === '') && value != null && value !== '') {
+            patch[field] = value;
+          }
+        };
+
+        fillEmpty('object_address', match?.object_address, parsed.object_address);
+        fillEmpty('area', match?.area, parsed.area);
+        fillEmpty('submission_date', match?.submission_date, parsed.submission_date);
+        fillEmpty('construction_start_date', match?.construction_start_date, parsed.construction_start_date);
+        fillEmpty('site_visit_date', match?.site_visit_date, parsed.site_visit_date);
+        fillEmpty('site_visit_photo_url', match?.site_visit_photo_url, parsed.site_visit_photo_url);
+        fillEmpty('invitation_date', match?.invitation_date, parsed.invitation_date);
+        fillEmpty('construction_scope_id', match?.construction_scope_id, resolveScopeId(parsed.construction_scope));
+        fillEmpty('status_id', match?.status_id, resolveStatusId(parsed.status));
+
+        return patch;
+      };
+
+      await Promise.all([
+        ...createPayloads.map((payload) =>
+          createTenderRegistry(payload as unknown as Parameters<typeof createTenderRegistry>[0]),
+        ),
+        ...updateRows.map((row) => patchTenderRegistryFields(row.match!.id, buildUpdatePatch(row))),
+      ]);
+
+      const parts = [`создано ${createRows.length}`, `обновлено ${updateRows.length}`];
+      if (summary.skip > 0) {
+        parts.push(`пропущено ${summary.skip}`);
       }
+      message.success(`Импорт завершён: ${parts.join(', ')}`);
+      setParsedData([]);
+      setFileList([]);
+      onSuccess();
     } catch (error) {
-      message.error('Ошибка при импорте: ' + (error as Error).message);
+      message.error('Ошибка импорта: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -202,58 +241,116 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
     onCancel();
   };
 
+  const renderDate = (val?: string | null) => (val ? dayjs(val).format('DD.MM.YYYY') : '-');
+
   const previewColumns = [
     {
+      title: 'Действие',
+      key: 'action',
+      width: 120,
+      fixed: 'left' as const,
+      render: (_: unknown, record: ClassifiedRow) => {
+        if (record.action === 'update') return <Tag color="green">Обновление</Tag>;
+        if (record.action === 'create') return <Tag color="blue">Новый</Tag>;
+        return <Tag color="orange">Пропуск</Tag>;
+      },
+    },
+    {
       title: 'Номер тендера',
-      dataIndex: 'tender_number',
       key: 'tender_number',
       width: 120,
-      render: (val: string) => val || '-',
+      fixed: 'left' as const,
+      render: (_: unknown, record: ClassifiedRow) => record.parsed.tender_number || '-',
     },
     {
       title: 'Наименование',
-      dataIndex: 'title',
       key: 'title',
-      width: 150,
+      width: 180,
+      render: (_: unknown, record: ClassifiedRow) => record.parsed.title || '-',
     },
     {
       title: 'Заказчик',
-      dataIndex: 'client_name',
       key: 'client_name',
-      width: 150,
+      width: 160,
+      render: (_: unknown, record: ClassifiedRow) => record.parsed.client_name || '-',
     },
     {
       title: 'Адрес объекта',
-      dataIndex: 'object_address',
       key: 'object_address',
-      width: 120,
-      render: (val: string) => val || '-',
+      width: 160,
+      render: (_: unknown, record: ClassifiedRow) => record.parsed.object_address || '-',
     },
     {
       title: 'Объем строит-ва',
-      dataIndex: 'construction_scope',
       key: 'construction_scope',
-      width: 120,
+      width: 140,
+      render: (_: unknown, record: ClassifiedRow) => record.parsed.construction_scope || '-',
     },
     {
       title: 'Площадь',
-      dataIndex: 'area',
       key: 'area',
-      width: 80,
-      render: (val: number) => val ? `${val.toFixed(2)}` : '-',
-    },
-    {
-      title: 'Статус',
-      dataIndex: 'status',
-      key: 'status',
-      width: 120,
+      width: 90,
+      render: (_: unknown, record: ClassifiedRow) =>
+        record.parsed.area != null ? record.parsed.area.toFixed(2) : '-',
     },
     {
       title: 'Дата подачи КП',
-      dataIndex: 'submission_date',
       key: 'submission_date',
-      width: 100,
-      render: (val: string) => val ? dayjs(val).format('DD.MM.YYYY') : '-',
+      width: 110,
+      render: (_: unknown, record: ClassifiedRow) => renderDate(record.parsed.submission_date),
+    },
+    {
+      title: 'Хронология',
+      key: 'chronology',
+      width: 280,
+      render: (_: unknown, record: ClassifiedRow) => {
+        if (record.chronologyItems.length === 0) return '-';
+        return (
+          <Space direction="vertical" size={2} style={{ width: '100%' }}>
+            {record.chronologyItems.map((item, index) => (
+              <Text key={index} style={{ fontSize: 12 }}>
+                {item.date ? dayjs(item.date).format('DD.MM.YYYY') : 'Без даты'} — {item.text}
+              </Text>
+            ))}
+          </Space>
+        );
+      },
+    },
+    {
+      title: 'Выход на площадку',
+      key: 'construction_start_date',
+      width: 120,
+      render: (_: unknown, record: ClassifiedRow) => renderDate(record.parsed.construction_start_date),
+    },
+    {
+      title: 'Посещение площадки',
+      key: 'site_visit_date',
+      width: 120,
+      render: (_: unknown, record: ClassifiedRow) => renderDate(record.parsed.site_visit_date),
+    },
+    {
+      title: 'Фото площадки',
+      key: 'site_visit_photo_url',
+      width: 140,
+      render: (_: unknown, record: ClassifiedRow) => record.parsed.site_visit_photo_url || '-',
+    },
+    {
+      title: 'Тендерный пакет',
+      key: 'has_tender_package',
+      width: 180,
+      render: (_: unknown, record: ClassifiedRow) => record.parsed.has_tender_package || '-',
+    },
+    {
+      title: 'Приглашение',
+      key: 'invitation_date',
+      width: 110,
+      render: (_: unknown, record: ClassifiedRow) => renderDate(record.parsed.invitation_date),
+    },
+    {
+      title: 'Статус',
+      key: 'status',
+      width: 130,
+      render: (_: unknown, record: ClassifiedRow) => record.parsed.status || '-',
     },
   ];
 
@@ -265,9 +362,10 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
       onOk={handleImport}
       okText="Импортировать"
       cancelText="Отмена"
-      width={900}
+      width="95vw"
+      style={{ top: 20, maxWidth: 1600 }}
       confirmLoading={loading}
-      okButtonProps={{ disabled: parsedData.length === 0 }}
+      okButtonProps={{ disabled: summary.create + summary.update === 0 }}
     >
       <Alert
         message="Формат Excel файла"
@@ -290,20 +388,29 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
           <InboxOutlined />
         </p>
         <p className="ant-upload-text">Нажмите или перетащите файл Excel для загрузки</p>
-        <p className="ant-upload-hint">
-          Поддерживаются файлы форматов .xlsx и .xls
-        </p>
+        <p className="ant-upload-hint">Поддерживаются файлы форматов .xlsx и .xls</p>
       </Upload.Dragger>
 
       {parsedData.length > 0 && (
         <div style={{ marginTop: 16 }}>
+          <Alert
+            type={summary.skip > 0 ? 'warning' : 'info'}
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={`Новых: ${summary.create}, обновлений: ${summary.update}, пропущено: ${summary.skip}`}
+            description={
+              summary.skip > 0
+                ? 'Строки без номера тендера не будут загружены — заполните номер тендера в файле.'
+                : 'Сопоставление выполнено по номеру тендера.'
+            }
+          />
           <h4>Предварительный просмотр ({parsedData.length} записей)</h4>
           <Table
-            dataSource={parsedData}
+            dataSource={rows}
             columns={previewColumns}
-            rowKey={(record, index) => index?.toString() || '0'}
-            pagination={{ pageSize: 5 }}
-            scroll={{ x: 600 }}
+            rowKey={(_, index) => index?.toString() || '0'}
+            pagination={{ pageSize: 10 }}
+            scroll={{ x: 'max-content' }}
             size="small"
           />
         </div>
