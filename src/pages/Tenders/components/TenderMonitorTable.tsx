@@ -663,7 +663,10 @@ function TenderRow({
         ) : null}
       </div>
 
-      <div style={{ padding: '12px 0', textAlign: 'center' }}>
+      <div
+        style={{ padding: '12px 0', textAlign: 'center' }}
+        onClick={(event) => event.stopPropagation()}
+      >
         <Space size={8}>
           <button
             type="button"
