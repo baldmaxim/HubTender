@@ -26,6 +26,7 @@ import {
   WarningOutlined,
   ClockCircleOutlined,
   BarChartOutlined,
+  FundOutlined,
   LineChartOutlined,
   DeleteOutlined,
   SwapOutlined,
@@ -33,6 +34,7 @@ import {
   ImportOutlined,
   MessageOutlined,
   SafetyCertificateOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons';
 import { NotesPopoverContent } from './NotesPopover';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
@@ -312,7 +314,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     },
     {
       key: 'analytics',
-      icon: <BarChartOutlined />,
+      icon: <FundOutlined />,
       label: 'Аналитика',
       children: [
         {
@@ -339,7 +341,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     },
     {
       key: 'admin',
-      icon: <SettingOutlined />,
+      icon: <SafetyOutlined />,
       label: 'Администрирование',
       children: [
         {
@@ -372,11 +374,6 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       icon: <SettingOutlined />,
       label: 'Настройки',
       children: [
-        {
-          key: '/settings',
-          icon: <SettingOutlined />,
-          label: 'Общие настройки',
-        },
         {
           key: '/admin/import-log',
           icon: <ImportOutlined />,

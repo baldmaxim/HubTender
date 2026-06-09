@@ -333,6 +333,7 @@ const ObjectComparison: React.FC = () => {
               rowKey="key"
               pagination={false}
               scroll={{ x: scrollX }}
+              sticky
               bordered
               size="small"
               expandable={{ defaultExpandAllRows: false }}
