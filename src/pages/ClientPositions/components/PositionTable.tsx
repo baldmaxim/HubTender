@@ -53,7 +53,6 @@ interface PositionTableProps {
   onCancelDeleteSelection?: () => void;
   onBulkDeleteBoqItems?: () => void;
   onDeleteAdditionalPosition: (positionId: string, positionName: string, event: React.MouseEvent) => void;
-  onClearPositionBoqItems: (positionId: string, positionName: string, event: React.MouseEvent) => void;
   isLevelChangeMode?: boolean;
   selectedLevelChangeIds?: Set<string>;
   isLevelChanging?: boolean;
@@ -112,7 +111,6 @@ export const PositionTable: React.FC<PositionTableProps> = ({
   onCancelDeleteSelection,
   onBulkDeleteBoqItems,
   onDeleteAdditionalPosition,
-  onClearPositionBoqItems,
   isLevelChangeMode = false,
   selectedLevelChangeIds = new Set(),
   isLevelChanging = false,
@@ -366,7 +364,6 @@ export const PositionTable: React.FC<PositionTableProps> = ({
               selectedPositionDeleteIds={selectedPositionDeleteIds}
               canChangeLevel={canChangeLevel}
               canDeletePositions={canDeletePositions}
-              counts={counts}
               onToggleSelection={onToggleSelection}
               onToggleDeleteSelection={onToggleDeleteSelection}
               onToggleLevelChangeSelection={onToggleLevelChangeSelection}
@@ -376,7 +373,6 @@ export const PositionTable: React.FC<PositionTableProps> = ({
               onOpenAdditionalModal={onOpenAdditionalModal}
               onDeleteAdditionalPosition={onDeleteAdditionalPosition}
               onStartDeleteSelection={onStartDeleteSelection}
-              onClearPositionBoqItems={onClearPositionBoqItems}
               onStartLevelChange={onStartLevelChange}
               onStartPositionDeleteSelection={onStartPositionDeleteSelection}
               onToggleExpanded={() => setExpandedPositionId(isExpanded ? null : record.id)}
@@ -409,7 +405,6 @@ export const PositionTable: React.FC<PositionTableProps> = ({
     selectedDeleteIds,
     onToggleDeleteSelection,
     onStartDeleteSelection,
-    onClearPositionBoqItems,
     isLevelChangeMode,
     selectedLevelChangeIds,
     onToggleLevelChangeSelection,

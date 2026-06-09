@@ -30,7 +30,6 @@ interface PositionRowActionsProps {
   selectedPositionDeleteIds: Set<string>;
   canChangeLevel: boolean;
   canDeletePositions: boolean;
-  counts: { works: number; materials: number };
   onToggleSelection: (positionId: string, event: React.MouseEvent) => void;
   onToggleDeleteSelection?: (positionId: string, event: React.MouseEvent) => void;
   onToggleLevelChangeSelection?: (positionId: string, event: React.MouseEvent) => void;
@@ -40,7 +39,6 @@ interface PositionRowActionsProps {
   onOpenAdditionalModal: (parentId: string, event: React.MouseEvent) => void;
   onDeleteAdditionalPosition: (positionId: string, positionName: string, event: React.MouseEvent) => void;
   onStartDeleteSelection: (positionId: string, event: React.MouseEvent) => void;
-  onClearPositionBoqItems: (positionId: string, positionName: string, event: React.MouseEvent) => void;
   onStartLevelChange: (event: React.MouseEvent) => void;
   onStartPositionDeleteSelection?: (positionId: string, event: React.MouseEvent) => void;
   onToggleExpanded: () => void;
@@ -63,7 +61,6 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
   selectedPositionDeleteIds,
   canChangeLevel,
   canDeletePositions,
-  counts,
   onToggleSelection,
   onToggleDeleteSelection,
   onToggleLevelChangeSelection,
@@ -73,7 +70,6 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
   onOpenAdditionalModal,
   onDeleteAdditionalPosition,
   onStartDeleteSelection,
-  onClearPositionBoqItems,
   onStartLevelChange,
   onStartPositionDeleteSelection,
   onToggleExpanded,
@@ -122,8 +118,8 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
         );
       })()}
 
-      {/* Тег выбора для массового удаления работ/материалов */}
-      {isLeaf && isDeleteSelectionMode && (
+      {/* Тег выбора для массового удаления работ/материалов (раздел тоже кликабелен) */}
+      {isDeleteSelectionMode && (
         <Tooltip title={selectedDeleteIds.has(record.id) ? 'Отменить выбор' : 'Выбрать для удаления'} {...tooltipColor}>
           <Tag
             color={selectedDeleteIds.has(record.id) ? 'error' : 'default'}
@@ -211,20 +207,12 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
                 </Tag>
               </Tooltip>
             )}
-            {isLeaf && (
-              <Tooltip title="Удалить работы и материалы" {...tooltipColor}>
-                <Tag color="orange" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartDeleteSelection(record.id, e); }}>
-                  <ClearOutlined />
-                </Tag>
-              </Tooltip>
-            )}
-            {!isLeaf && counts.works + counts.materials > 0 && (
-              <Tooltip title="Удалить работы и материалы" {...tooltipColor}>
-                <Tag color="orange" style={actionStyle} onClick={(e) => { e.stopPropagation(); onClearPositionBoqItems(record.id, record.work_name, e); }}>
-                  <ClearOutlined />
-                </Tag>
-              </Tooltip>
-            )}
+            {/* Очистка работ/материалов — для листьев и разделов (раздел выбирает все подчинённые) */}
+            <Tooltip title="Удалить работы и материалы" {...tooltipColor}>
+              <Tag color="orange" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartDeleteSelection(record.id, e); }}>
+                <ClearOutlined />
+              </Tag>
+            </Tooltip>
             {canChangeLevel && (
               <Tooltip title="Понизить уровень иерархии" {...tooltipColor}>
                 <Tag color="geekblue" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartLevelChange(e); }}>

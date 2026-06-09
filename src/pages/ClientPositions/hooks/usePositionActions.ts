@@ -11,9 +11,10 @@ import { copyBoqItems } from '../../../utils/copyBoqItems';
 import { exportPositionsToExcel } from '../../../utils/excel';
 import { pluralize } from '../../../utils/pluralize';
 import { getErrorMessage } from '../../../utils/errors';
+import { collectSectionDescendants } from '../../../utils/positions/collectSectionDescendants';
 
 export const usePositionActions = (
-  _clientPositions: ClientPosition[],
+  clientPositions: ClientPosition[],
   setClientPositions: React.Dispatch<React.SetStateAction<ClientPosition[]>>,
   setLoading: (loading: boolean) => void,
   fetchClientPositions: (tenderId: string) => Promise<void>,
@@ -263,20 +264,25 @@ export const usePositionActions = (
     setCopiedNoteValue(null);
     setCopiedNotePositionId(null);
     setSelectedTargetIds(new Set());
-    // Включаем режим удаления с первой выбранной позицией
+    // Включаем режим удаления: раздел + все подчинённые строки (как в фильтре)
     setIsDeleteSelectionMode(true);
-    setSelectedDeleteIds(new Set([positionId]));
+    setSelectedDeleteIds(collectSectionDescendants(clientPositions, positionId));
   };
 
-  // Toggle выбора строки для массового удаления
+  // Toggle выбора строки для массового удаления (иерархически — как фильтр)
   const handleToggleDeleteSelection = (positionId: string, event: React.MouseEvent) => {
     event.stopPropagation();
+    const idsToToggle = collectSectionDescendants(clientPositions, positionId);
+    if (idsToToggle.size === 0) return;
     setSelectedDeleteIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(positionId)) {
-        newSet.delete(positionId);
-      } else {
-        newSet.add(positionId);
+      const isSelected = newSet.has(positionId);
+      for (const id of idsToToggle) {
+        if (isSelected) {
+          newSet.delete(id);
+        } else {
+          newSet.add(id);
+        }
       }
       return newSet;
     });
@@ -323,38 +329,6 @@ export const usePositionActions = (
           if (selectedTenderId) await fetchClientPositions(selectedTenderId); // resync
         } finally {
           setIsBulkDeleting(false);
-        }
-      },
-    });
-  };
-
-  // Очистка работ и материалов у одной позиции (для нелистовых)
-  const handleClearPositionBoqItems = async (
-    positionId: string,
-    positionName: string,
-    selectedTenderId: string | null,
-    event: React.MouseEvent
-  ) => {
-    event.stopPropagation();
-    if (blockedByDeadline()) return;
-
-    Modal.confirm({
-      title: 'Удалить работы и материалы?',
-      content: `Удалить все работы и материалы из позиции "${positionName}"? Это действие нельзя отменить.`,
-      okText: 'Удалить',
-      cancelText: 'Отмена',
-      okButtonProps: { danger: true },
-      rootClassName: currentTheme === 'dark' ? 'dark-modal' : '',
-      onOk: async () => {
-        try {
-          await clearPositionsBoq([positionId], selectedTenderId);
-          applyLocalBoqClear([positionId]); // оптимистично, без рефетча тендера
-
-          message.success('Работы и материалы удалены');
-        } catch (error) {
-          console.error('Ошибка очистки позиции:', error);
-          message.error('Ошибка очистки: ' + getErrorMessage(error));
-          if (selectedTenderId) await fetchClientPositions(selectedTenderId); // resync
         }
       },
     });
@@ -506,7 +480,6 @@ export const usePositionActions = (
     handleToggleDeleteSelection,
     handleCancelDeleteSelection,
     handleBulkDeleteBoqItems,
-    handleClearPositionBoqItems,
     handleExportToExcel,
     handleDeleteAdditionalPosition,
     handleStartLevelChange,

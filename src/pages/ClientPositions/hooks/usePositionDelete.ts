@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
+import type { ClientPosition } from '../../../lib/supabase';
 import { bulkDeletePositions } from '../../../lib/api/positions';
 import { pluralize } from '../../../utils/pluralize';
+import { collectSectionDescendants } from '../../../utils/positions/collectSectionDescendants';
 
 interface ClearModesCallback {
   clearOtherModes: () => void;
 }
 
 export const usePositionDelete = (
+  clientPositions: ClientPosition[],
   setLoading: (loading: boolean) => void,
   fetchClientPositions: (tenderId: string) => Promise<void>,
   applyLocalPositionRemove: (positionIds: string[]) => void,
@@ -33,18 +36,24 @@ export const usePositionDelete = (
     if (blockedByDeadline()) return;
     callbacks.clearOtherModes();
     setIsPositionDeleteMode(true);
-    setSelectedPositionDeleteIds(new Set([positionId]));
+    // Раздел + все подчинённые строки (как в фильтре)
+    setSelectedPositionDeleteIds(collectSectionDescendants(clientPositions, positionId));
   };
 
-  // Toggle выбора строки для массового удаления позиций
+  // Toggle выбора строки для массового удаления позиций (иерархически — как фильтр)
   const handleTogglePositionDeleteSelection = (positionId: string, event: React.MouseEvent) => {
     event.stopPropagation();
+    const idsToToggle = collectSectionDescendants(clientPositions, positionId);
+    if (idsToToggle.size === 0) return;
     setSelectedPositionDeleteIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(positionId)) {
-        newSet.delete(positionId);
-      } else {
-        newSet.add(positionId);
+      const isSelected = newSet.has(positionId);
+      for (const id of idsToToggle) {
+        if (isSelected) {
+          newSet.delete(id);
+        } else {
+          newSet.add(id);
+        }
       }
       return newSet;
     });

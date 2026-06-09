@@ -131,7 +131,6 @@ const ClientPositions: React.FC = () => {
     handleToggleDeleteSelection,
     handleCancelDeleteSelection,
     handleBulkDeleteBoqItems,
-    handleClearPositionBoqItems,
     handleExportToExcel,
     handleDeleteAdditionalPosition,
     isLevelChangeMode,
@@ -152,7 +151,7 @@ const ClientPositions: React.FC = () => {
     handleTogglePositionDeleteSelection,
     handleCancelPositionDeleteSelection,
     handleBulkDeletePositions,
-  } = usePositionDelete(setLoading, fetchClientPositions, applyLocalPositionRemove, currentTheme, { clearOtherModes: clearAllModes }, isReadOnlyByDeadline);
+  } = usePositionDelete(clientPositions, setLoading, fetchClientPositions, applyLocalPositionRemove, currentTheme, { clearOtherModes: clearAllModes }, isReadOnlyByDeadline);
 
   // Хук фильтрации позиций и получение информации о пользователе
   const { user } = useAuth();
@@ -461,9 +460,6 @@ const ClientPositions: React.FC = () => {
           onBulkDeleteBoqItems={() => handleBulkDeleteBoqItems(selectedTenderId)}
           onDeleteAdditionalPosition={(positionId, positionName, event) =>
             handleDeleteAdditionalPosition(positionId, positionName, selectedTenderId, event)
-          }
-          onClearPositionBoqItems={(positionId, positionName, event) =>
-            handleClearPositionBoqItems(positionId, positionName, selectedTenderId, event)
           }
           isLevelChangeMode={isLevelChangeMode}
           selectedLevelChangeIds={selectedLevelChangeIds}
