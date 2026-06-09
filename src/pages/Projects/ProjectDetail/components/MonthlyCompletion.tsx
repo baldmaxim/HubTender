@@ -24,10 +24,19 @@ import type { ProjectFull, ProjectCompletion } from '../../../../lib/supabase/ty
 
 const { Text } = Typography;
 
+export interface OptimisticCompletion {
+  year: number;
+  month: number;
+  actual_amount: number;
+  forecast_amount: number | null;
+  note: string | null;
+}
+
 interface MonthlyCompletionProps {
   project: ProjectFull;
   completionData: ProjectCompletion[];
   onSave: () => Promise<void>;
+  onOptimistic: (rows: OptimisticCompletion[]) => void;
 }
 
 interface MonthRow {
@@ -78,6 +87,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
   project,
   completionData,
   onSave,
+  onOptimistic,
 }) => {
   const [loading, setLoading] = useState(false);
   const [modifiedRows, setModifiedRows] = useState<Record<string, Partial<MonthRow>>>({});
@@ -175,35 +185,50 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
       return;
     }
 
+    const rowsToSave = modifiedKeys
+      .map((key) => displayRows.find((r) => r.key === key))
+      .filter((r): r is (typeof displayRows)[number] => !!r);
+
     setLoading(true);
     try {
-      for (const key of modifiedKeys) {
-        const row = displayRows.find((r) => r.key === key);
-        if (!row) continue;
+      // Сохраняем все изменённые строки параллельно.
+      await Promise.all(
+        rowsToSave.map((row) => {
+          const isReal = !!row.existingId && !row.existingId.startsWith('optimistic-');
+          if (isReal) {
+            return updateProjectMonthlyCompletion(row.existingId as string, {
+              actual_amount: row.actual_amount || 0,
+              forecast_amount: row.forecast_amount || null,
+              note: row.note || null,
+            });
+          }
+          return createProjectMonthlyCompletion({
+            project_id: project.id,
+            year: row.year,
+            month: row.month,
+            actual_amount: row.actual_amount || 0,
+            forecast_amount: row.forecast_amount || null,
+            note: row.note || null,
+          });
+        }),
+      );
 
-        const data = {
-          project_id: project.id,
+      // Оптимистично отражаем сохранённые значения в родителе — видны сразу.
+      onOptimistic(
+        rowsToSave.map((row) => ({
           year: row.year,
           month: row.month,
           actual_amount: row.actual_amount || 0,
           forecast_amount: row.forecast_amount || null,
           note: row.note || null,
-        };
-
-        if (row.existingId) {
-          await updateProjectMonthlyCompletion(row.existingId, {
-            actual_amount: data.actual_amount,
-            forecast_amount: data.forecast_amount,
-            note: data.note,
-          });
-        } else {
-          await createProjectMonthlyCompletion(data);
-        }
-      }
+        })),
+      );
 
       message.success('Данные сохранены');
-      setModifiedRows({});
+      // Тихая сверка (без полноэкранного спиннера) — подтянет реальные id новых строк.
       await onSave();
+      // Чистим локальные правки только после сверки, чтобы значения не мигали на старые.
+      setModifiedRows({});
     } catch (error) {
       console.error('Error saving completion:', error);
       message.error('Ошибка сохранения');

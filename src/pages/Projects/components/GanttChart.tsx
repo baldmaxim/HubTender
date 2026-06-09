@@ -22,6 +22,7 @@ import {
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { ProjectFull, ProjectCompletion } from '../../../lib/supabase/types';
 import { getErrorMessage } from '../../../utils/errors';
+import { buildGanttChartData, exportGanttCompletionWithCharts } from '../../../utils/excel';
 
 // Register Chart.js components
 ChartJS.register(
@@ -939,10 +940,24 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
         }
       }
 
-      // Create workbook and save
+      // Create workbook
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Выполнение объектов');
-      XLSX.writeFile(wb, `Выполнение_объектов_${dayjs().format('YYYY-MM-DD')}.xlsx`);
+
+      // Build native column charts (orange = факт, blue = план) under the money grid.
+      const { chartAoa, blocks } = buildGanttChartData({
+        projects: visibleProjects.map((p) => ({ id: p.id, name: p.name })),
+        months: months.map((m) => ({ year: m.year, month: m.month, label: m.label })),
+        getCompletion: (pid, year, month) => getCompletionForMonth(pid, year, month),
+      });
+
+      exportGanttCompletionWithCharts(wb, {
+        blocks,
+        chartAoa,
+        mainSheetName: 'Выполнение объектов',
+        fileName: `Выполнение_объектов_${dayjs().format('YYYY-MM-DD')}.xlsx`,
+        gridRows: visibleProjects.length + 2, // header + projects + ИТОГО
+      });
 
       message.success('Экспорт завершен успешно');
     } catch (error) {

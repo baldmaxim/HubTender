@@ -18,7 +18,7 @@ import {
 } from '../../../lib/api/projects';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { ProjectSettings } from './components/ProjectSettings';
-import { MonthlyCompletion } from './components/MonthlyCompletion';
+import { MonthlyCompletion, type OptimisticCompletion } from './components/MonthlyCompletion';
 import { AdditionalAgreements } from './components/AdditionalAgreements';
 import type { ProjectFull, ProjectCompletion } from '../../../lib/supabase/types';
 
@@ -30,6 +30,45 @@ interface TenderJoin {
   tender_number: string;
 }
 
+type RawProject = {
+  id: string;
+  name: string;
+  client_name: string;
+  contract_cost: number;
+  area: number | null;
+  contract_date: string | null;
+  construction_start_date: string | null;
+  construction_end_date: string | null;
+  tender_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  tender: TenderJoin | null;
+};
+
+const buildProjectFull = (
+  raw: RawProject,
+  agreementsSum: number,
+  completion: ProjectCompletion[],
+): ProjectFull => {
+  const completionSum = completion.reduce((sum, c) => sum + (Number(c.actual_amount) || 0), 0);
+  const finalContractCost = Number(raw.contract_cost) + agreementsSum;
+  const completionPercentage =
+    finalContractCost > 0 ? (completionSum / finalContractCost) * 100 : 0;
+  return {
+    ...raw,
+    contract_cost: Number(raw.contract_cost),
+    area: raw.area ? Number(raw.area) : null,
+    additional_agreements_sum: agreementsSum,
+    final_contract_cost: finalContractCost,
+    total_completion: completionSum,
+    completion_percentage: completionPercentage,
+    tender_name: raw.tender?.title,
+    tender_number: raw.tender?.tender_number,
+  };
+};
+
 const ProjectDetail: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -39,104 +78,108 @@ const ProjectDetail: React.FC = () => {
   const [completionData, setCompletionData] = useState<ProjectCompletion[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchProject = useCallback(async () => {
-    if (!projectId) return;
+  // Единый рефреш: один проход за project + agreements + completion.
+  // silent=true — без полноэкранного спиннера (карточка и таблица не размонтируются).
+  const refresh = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!projectId) return;
+      if (!opts?.silent) setLoading(true);
+      try {
+        const [projectData, agreementsData, completionRows] = await Promise.all([
+          getProject(projectId),
+          listProjectAgreements(projectId, 'asc'),
+          listProjectMonthlyCompletion(projectId),
+        ]);
 
-    setLoading(true);
-    try {
-      const projectData = await getProject(projectId);
-
-      const typedProject = projectData as unknown as {
-        id: string;
-        name: string;
-        client_name: string;
-        contract_cost: number;
-        area: number | null;
-        contract_date: string | null;
-        construction_start_date: string | null;
-        construction_end_date: string | null;
-        tender_id: string | null;
-        is_active: boolean;
-        created_at: string;
-        updated_at: string;
-        created_by: string | null;
-        tender: TenderJoin | null;
-      };
-
-      // Fetch additional agreements sum
-      const agreementsData = await listProjectAgreements(projectId, 'asc');
-
-      const agreementsSum = (agreementsData || []).reduce(
-        (sum, a) => sum + (Number(a.amount) || 0),
-        0
-      );
-
-      // Fetch completion total
-      const completionSums = await listProjectMonthlyCompletion(projectId);
-
-      const completionSum = (completionSums || []).reduce(
-        (sum, c) => sum + (Number(c.actual_amount) || 0),
-        0
-      );
-
-      const finalContractCost = Number(typedProject.contract_cost) + agreementsSum;
-      const completionPercentage =
-        finalContractCost > 0 ? (completionSum / finalContractCost) * 100 : 0;
-
-      setProject({
-        ...typedProject,
-        contract_cost: Number(typedProject.contract_cost),
-        area: typedProject.area ? Number(typedProject.area) : null,
-        additional_agreements_sum: agreementsSum,
-        final_contract_cost: finalContractCost,
-        total_completion: completionSum,
-        completion_percentage: completionPercentage,
-        tender_name: typedProject.tender?.title,
-        tender_number: typedProject.tender?.tender_number,
-      });
-    } catch (error) {
-      console.error('Error loading project:', error);
-      message.error('Ошибка загрузки объекта');
-      navigate('/projects');
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, navigate]);
-
-  const fetchCompletionData = useCallback(async () => {
-    if (!projectId) return;
-
-    try {
-      const data = await listProjectMonthlyCompletion(projectId);
-
-      setCompletionData(
-        (data || []).map((item) => ({
+        const raw = projectData as unknown as RawProject;
+        const agreementsSum = (agreementsData || []).reduce(
+          (sum, a) => sum + (Number(a.amount) || 0),
+          0,
+        );
+        const completion: ProjectCompletion[] = (completionRows || []).map((item) => ({
           ...item,
           actual_amount: Number(item.actual_amount),
           forecast_amount: item.forecast_amount ? Number(item.forecast_amount) : null,
-        }))
-      );
-    } catch (error) {
-      console.error('Error loading completion data:', error);
-    }
-  }, [projectId]);
+        }));
+
+        setCompletionData(completion);
+        setProject(buildProjectFull(raw, agreementsSum, completion));
+      } catch (error) {
+        console.error('Error loading project:', error);
+        message.error('Ошибка загрузки объекта');
+        if (!opts?.silent) navigate('/projects');
+      } finally {
+        if (!opts?.silent) setLoading(false);
+      }
+    },
+    [projectId, navigate],
+  );
+
+  // Оптимистично отразить сохранённые строки сразу, до фоновой сверки.
+  const applyCompletionOptimistic = useCallback(
+    (saved: OptimisticCompletion[]) => {
+      setCompletionData((prev) => {
+        const next = [...prev];
+        saved.forEach((s) => {
+          const idx = next.findIndex((c) => c.year === s.year && c.month === s.month);
+          if (idx >= 0) {
+            next[idx] = {
+              ...next[idx],
+              actual_amount: s.actual_amount,
+              forecast_amount: s.forecast_amount,
+              note: s.note,
+            };
+          } else {
+            next.push({
+              id: `optimistic-${s.year}-${s.month}`,
+              project_id: projectId ?? '',
+              year: s.year,
+              month: s.month,
+              actual_amount: s.actual_amount,
+              forecast_amount: s.forecast_amount,
+              note: s.note,
+              created_at: '',
+            });
+          }
+        });
+        return next;
+      });
+    },
+    [projectId],
+  );
 
   useEffect(() => {
-    fetchProject();
-    fetchCompletionData();
-  }, [fetchProject, fetchCompletionData]);
+    refresh();
+  }, [refresh]);
+
+  // Держим агрегаты проекта (закрыто/процент) в синхроне с completionData.
+  useEffect(() => {
+    setProject((p) => {
+      if (!p) return p;
+      const completionSum = completionData.reduce((s, c) => s + (Number(c.actual_amount) || 0), 0);
+      const finalContractCost = p.final_contract_cost ?? 0;
+      const completionPercentage =
+        finalContractCost > 0 ? (completionSum / finalContractCost) * 100 : 0;
+      if (
+        p.total_completion === completionSum &&
+        p.completion_percentage === completionPercentage
+      ) {
+        return p;
+      }
+      return { ...p, total_completion: completionSum, completion_percentage: completionPercentage };
+    });
+  }, [completionData]);
 
   const handleBack = () => {
     navigate('/projects');
   };
 
   const handleSave = async () => {
-    await fetchProject();
+    await refresh();
   };
 
   const handleCompletionSave = async () => {
-    await fetchProject();
-    await fetchCompletionData();
+    await refresh({ silent: true });
   };
 
   if (loading) {
@@ -192,6 +235,7 @@ const ProjectDetail: React.FC = () => {
           project={project}
           completionData={completionData}
           onSave={handleCompletionSave}
+          onOptimistic={applyCompletionOptimistic}
         />
       ),
     },
