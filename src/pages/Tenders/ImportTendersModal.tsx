@@ -21,6 +21,7 @@ import {
   mergeTenderPackageItems,
   parseChronologyText,
   parseExcelDate,
+  parseTenderPackageText,
   type ImportRowAction,
   type ParsedTender,
 } from './utils/importTenders';
@@ -74,9 +75,7 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
       const action: ImportRowAction = !number ? 'skip' : match ? 'update' : 'create';
 
       const chronologyItems = parseChronologyText(parsed.chronology);
-      const packageItems: TenderPackageItem[] = parsed.has_tender_package?.trim()
-        ? [{ date: null, text: parsed.has_tender_package.trim(), link: null }]
-        : [];
+      const packageItems = parseTenderPackageText(parsed.has_tender_package);
 
       return { parsed, action, match, chronologyItems, packageItems };
     });
@@ -337,8 +336,19 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
     {
       title: 'Тендерный пакет',
       key: 'has_tender_package',
-      width: 180,
-      render: (_: unknown, record: ClassifiedRow) => record.parsed.has_tender_package || '-',
+      width: 280,
+      render: (_: unknown, record: ClassifiedRow) => {
+        if (record.packageItems.length === 0) return '-';
+        return (
+          <Space direction="vertical" size={2} style={{ width: '100%' }}>
+            {record.packageItems.map((item, index) => (
+              <Text key={index} style={{ fontSize: 12 }}>
+                {item.date ? dayjs(item.date).format('DD.MM.YYYY') : 'Без даты'} — {item.text}
+              </Text>
+            ))}
+          </Space>
+        );
+      },
     },
     {
       title: 'Приглашение',

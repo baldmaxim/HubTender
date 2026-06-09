@@ -52,12 +52,12 @@ export function parseDdmmyyyy(value: string): string | null {
 }
 
 /**
- * Разобрать многострочный текст хронологии в отдельные события.
+ * Разобрать многострочный текст в отдельные сегменты «дата + текст».
  * Пример:
  *   "1) 15.10.2025 - Получили приглашение\n2) 16.10.2025 - Зарегистрировались"
  *   → [{ date: 15.10, text: "Получили приглашение" }, { date: 16.10, text: "Зарегистрировались" }]
  */
-export function parseChronologyText(raw?: string | null): ChronologyItem[] {
+function parseDatedSegments(raw?: string | null): Array<{ date: string | null; text: string }> {
   if (!raw) return [];
 
   const text = String(raw).replace(/\r\n?/g, '\n').trim();
@@ -79,12 +79,22 @@ export function parseChronologyText(raw?: string | null): ChronologyItem[] {
     if (match) {
       const iso = parseDdmmyyyy(match[1]);
       if (iso) {
-        return { date: iso, text: match[2].trim(), type: 'default' as const };
+        return { date: iso, text: match[2].trim() };
       }
     }
 
-    return { date: null, text: withoutBullet, type: 'default' as const };
+    return { date: null, text: withoutBullet };
   });
+}
+
+/** Многострочный текст хронологии → события { date, text, type }. */
+export function parseChronologyText(raw?: string | null): ChronologyItem[] {
+  return parseDatedSegments(raw).map((segment) => ({ ...segment, type: 'default' as const }));
+}
+
+/** Многострочный текст «Наличие тендерного пакета» → позиции { date, text, link }. */
+export function parseTenderPackageText(raw?: string | null): TenderPackageItem[] {
+  return parseDatedSegments(raw).map((segment) => ({ ...segment, link: null }));
 }
 
 const normalize = (value?: string | null) => (value || '').trim().toLocaleLowerCase('ru-RU');
