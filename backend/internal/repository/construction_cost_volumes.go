@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -53,53 +52,41 @@ func (r *ConstructionCostVolumesRepo) ListByTender(ctx context.Context, tenderID
 
 // UpsertVolume sets the volume and notes for the (tender_id, detail_cost_category_id|group_key)
 // pair. Exactly one of detailCostCategoryID and groupKey must be non-empty.
+//
+// Атомарный upsert через INSERT ... ON CONFLICT по партиальным уникальным индексам
+// construction_cost_volumes_tender_detail_key / _tender_group_key. Это исключает гонку
+// двойного INSERT (которая порождала дубли строк и «несохраняющийся» объём) и делает
+// повторный вызов идемпотентным.
 func (r *ConstructionCostVolumesRepo) UpsertVolume(
 	ctx context.Context, tenderID string, detailCostCategoryID, groupKey *string, volume float64, notes *string,
 ) error {
-	if (detailCostCategoryID == nil || *detailCostCategoryID == "") && (groupKey == nil || *groupKey == "") {
+	hasDetail := detailCostCategoryID != nil && *detailCostCategoryID != ""
+	hasGroup := groupKey != nil && *groupKey != ""
+	if !hasDetail && !hasGroup {
 		return errors.New("ccvRepo.UpsertVolume: detail_cost_category_id or group_key required")
 	}
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("ccvRepo.UpsertVolume: begin: %w", err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck
 
-	var existingID string
-	var lookupErr error
-	if detailCostCategoryID != nil && *detailCostCategoryID != "" {
-		lookupErr = tx.QueryRow(ctx, `
-			SELECT id::text FROM public.construction_cost_volumes
-			WHERE tender_id = $1 AND detail_cost_category_id = $2
-		`, tenderID, *detailCostCategoryID).Scan(&existingID)
-	} else {
-		lookupErr = tx.QueryRow(ctx, `
-			SELECT id::text FROM public.construction_cost_volumes
-			WHERE tender_id = $1 AND group_key = $2
-		`, tenderID, *groupKey).Scan(&existingID)
-	}
-
-	if lookupErr != nil && !errors.Is(lookupErr, pgx.ErrNoRows) {
-		return fmt.Errorf("ccvRepo.UpsertVolume: lookup: %w", lookupErr)
-	}
-
-	if existingID != "" {
-		if _, err := tx.Exec(ctx, `
-			UPDATE public.construction_cost_volumes
-			   SET volume = $1, notes = $2, updated_at = NOW()
-			 WHERE id = $3
-		`, volume, notes, existingID); err != nil {
-			return fmt.Errorf("ccvRepo.UpsertVolume: update: %w", err)
-		}
-	} else {
-		if _, err := tx.Exec(ctx, `
+	if hasDetail {
+		if _, err := r.pool.Exec(ctx, `
 			INSERT INTO public.construction_cost_volumes
-			    (tender_id, detail_cost_category_id, group_key, volume, notes)
-			VALUES ($1, $2, $3, $4, $5)
-		`, tenderID, detailCostCategoryID, groupKey, volume, notes); err != nil {
-			return fmt.Errorf("ccvRepo.UpsertVolume: insert: %w", err)
+			    (tender_id, detail_cost_category_id, volume, notes)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (tender_id, detail_cost_category_id) WHERE detail_cost_category_id IS NOT NULL
+			DO UPDATE SET volume = EXCLUDED.volume, notes = EXCLUDED.notes, updated_at = NOW()
+		`, tenderID, *detailCostCategoryID, volume, notes); err != nil {
+			return fmt.Errorf("ccvRepo.UpsertVolume: detail upsert: %w", err)
 		}
+		return nil
 	}
 
-	return tx.Commit(ctx)
+	if _, err := r.pool.Exec(ctx, `
+		INSERT INTO public.construction_cost_volumes
+		    (tender_id, group_key, volume, notes)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (tender_id, group_key) WHERE group_key IS NOT NULL
+		DO UPDATE SET volume = EXCLUDED.volume, notes = EXCLUDED.notes, updated_at = NOW()
+	`, tenderID, *groupKey, volume, notes); err != nil {
+		return fmt.Errorf("ccvRepo.UpsertVolume: group upsert: %w", err)
+	}
+	return nil
 }

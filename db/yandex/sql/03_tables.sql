@@ -295,7 +295,8 @@ CREATE TABLE IF NOT EXISTS public.construction_cost_volumes (
     volume numeric DEFAULT 0,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    group_key text
+    group_key text,
+    notes text
 );
 
 CREATE TABLE IF NOT EXISTS public.tender_insurance (

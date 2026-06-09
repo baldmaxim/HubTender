@@ -287,6 +287,11 @@ CREATE INDEX IF NOT EXISTS idx_client_positions_tender_id ON public.client_posit
 -- construction_cost_volumes
 CREATE INDEX IF NOT EXISTS idx_construction_cost_volumes_detail_cost ON public.construction_cost_volumes USING btree (detail_cost_category_id);
 CREATE INDEX IF NOT EXISTS idx_construction_cost_volumes_tender ON public.construction_cost_volumes USING btree (tender_id);
+-- Партиальные UNIQUE-индексы: один объём на (tender, detail) и на (tender, group_key).
+-- Были в Supabase PROD, потеряны при cutover в Yandex — из-за их отсутствия
+-- неатомарный upsert порождал дубли строк («объём не сохраняется»). Восстановлены.
+CREATE UNIQUE INDEX IF NOT EXISTS construction_cost_volumes_tender_detail_key ON public.construction_cost_volumes USING btree (tender_id, detail_cost_category_id) WHERE (detail_cost_category_id IS NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS construction_cost_volumes_tender_group_key ON public.construction_cost_volumes USING btree (tender_id, group_key) WHERE (group_key IS NOT NULL);
 
 -- cost_categories
 CREATE INDEX IF NOT EXISTS idx_cost_categories_created_at ON public.cost_categories USING btree (created_at DESC);

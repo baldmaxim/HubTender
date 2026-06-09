@@ -92,12 +92,8 @@ const CostTable: React.FC<CostTableProps> = ({
                 }
               }}
               onPressEnter={(e) => {
-                const target = e.target as HTMLInputElement;
-                const newValue = parseFloat(target.value.replace(',', '.').replace(/\s/g, ''));
-                if (!isNaN(newValue)) {
-                  onVolumeChange(newValue, record);
-                  target.blur();
-                }
+                // Только blur — сохранение выполнит onBlur один раз (без двойного POST).
+                (e.target as HTMLInputElement).blur();
               }}
               min={0}
               step={0.01}
@@ -119,12 +115,8 @@ const CostTable: React.FC<CostTableProps> = ({
               }
             }}
             onPressEnter={(e) => {
-              const target = e.target as HTMLInputElement;
-              const newValue = parseFloat(target.value.replace(',', '.').replace(/\s/g, ''));
-              if (!isNaN(newValue)) {
-                onVolumeChange(newValue, record);
-                target.blur();
-              }
+              // Только blur — сохранение выполнит onBlur один раз (без двойного POST).
+              (e.target as HTMLInputElement).blur();
             }}
             min={0}
             step={0.01}
