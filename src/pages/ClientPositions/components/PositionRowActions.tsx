@@ -192,7 +192,7 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
             {!record.is_additional && (
               <Tooltip title="Добавить ДОП работу" {...tooltipColor}>
                 <Tag color="success" style={actionStyle} onClick={(e) => { e.stopPropagation(); onOpenAdditionalModal(record.id, e); }}>
@@ -213,19 +213,24 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
                 <ClearOutlined />
               </Tag>
             </Tooltip>
-            {canChangeLevel && (
-              <Tooltip title="Понизить уровень иерархии" {...tooltipColor}>
-                <Tag color="geekblue" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartLevelChange(e); }}>
-                  <VerticalAlignBottomOutlined />
-                </Tag>
-              </Tooltip>
-            )}
-            {canDeletePositions && (
-              <Tooltip title="Удалить строки заказчика" {...tooltipColor}>
-                <Tag color="red" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartPositionDeleteSelection?.(record.id, e); }}>
-                  <DeleteOutlined />
-                </Tag>
-              </Tooltip>
+            {/* Вертикальная стопка: удаление строк заказчика сверху, понижение уровня снизу */}
+            {(canDeletePositions || canChangeLevel) && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {canDeletePositions && (
+                  <Tooltip title="Удалить строки заказчика" {...tooltipColor}>
+                    <Tag color="red" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartPositionDeleteSelection?.(record.id, e); }}>
+                      <DeleteOutlined />
+                    </Tag>
+                  </Tooltip>
+                )}
+                {canChangeLevel && (
+                  <Tooltip title="Понизить уровень иерархии" {...tooltipColor}>
+                    <Tag color="geekblue" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartLevelChange(e); }}>
+                      <VerticalAlignBottomOutlined />
+                    </Tag>
+                  </Tooltip>
+                )}
+              </div>
             )}
           </div>
         </div>
