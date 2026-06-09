@@ -13,6 +13,15 @@ const NS_DRAWING_MAIN = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 const NS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const NS_SS_DRAWING = 'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing';
 const NS_PKG_REL = 'http://schemas.openxmlformats.org/package/2006/relationships';
+const NS_MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+const NS_C14 = 'http://schemas.microsoft.com/office/drawing/2007/8/2/chart';
+
+const FONT = 'Georgia';
+// Дефолтные текстовые свойства графика (шрифт Georgia для текста и чисел).
+const TXPR =
+  '<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr>' +
+  `<a:defRPr><a:latin typeface="${FONT}"/><a:cs typeface="${FONT}"/></a:defRPr>` +
+  '</a:pPr><a:endParaRPr lang="ru-RU"/></a:p></c:txPr>';
 
 export function xmlEscape(s: string): string {
   return s
@@ -86,20 +95,10 @@ export function buildChartXml(block: ChartBlock, i: number): string {
   const catId = 100000000 + i * 10;
   const valId = catId + 1;
 
-  const fakt = seriesXml({
+  // План — слева (order 0), Факт — справа (order 1); легенда в том же порядке.
+  const plan = seriesXml({
     idx: 0,
     order: 0,
-    name: block.faktName,
-    nameRef: `ChartData!$A$${block.startRow + 1}`,
-    color: FAKT_COLOR,
-    catRef: block.catRef,
-    catLabels: block.catLabels,
-    valRef: block.faktRef,
-    vals: block.faktPts,
-  });
-  const plan = seriesXml({
-    idx: 1,
-    order: 1,
     name: block.planName,
     nameRef: `ChartData!$A$${block.startRow + 2}`,
     color: PLAN_COLOR,
@@ -108,31 +107,48 @@ export function buildChartXml(block: ChartBlock, i: number): string {
     valRef: block.planRef,
     vals: block.planPts,
   });
+  const fakt = seriesXml({
+    idx: 1,
+    order: 1,
+    name: block.faktName,
+    nameRef: `ChartData!$A$${block.startRow + 1}`,
+    color: FAKT_COLOR,
+    catRef: block.catRef,
+    catLabels: block.catLabels,
+    valRef: block.faktRef,
+    vals: block.faktPts,
+  });
 
   return (
     XML_DECL +
-    `<c:chartSpace xmlns:c="${NS_CHART}" xmlns:a="${NS_DRAWING_MAIN}" xmlns:r="${NS_REL}">` +
+    `<c:chartSpace xmlns:c="${NS_CHART}" xmlns:a="${NS_DRAWING_MAIN}" xmlns:r="${NS_REL}" xmlns:mc="${NS_MC}">` +
+    // Встроенный стиль диаграммы 8 (Конструктор → Стили диаграмм)
+    `<mc:AlternateContent><mc:Choice xmlns:c14="${NS_C14}" Requires="c14"><c14:style val="108"/></mc:Choice>` +
+    '<mc:Fallback><c:style val="8"/></mc:Fallback></mc:AlternateContent>' +
     '<c:chart>' +
     '<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r>' +
+    `<a:rPr lang="ru-RU"><a:latin typeface="${FONT}"/><a:cs typeface="${FONT}"/></a:rPr>` +
     `<a:t>${xmlEscape(block.title)}</a:t>` +
     '</a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>' +
     '<c:autoTitleDeleted val="0"/>' +
     '<c:plotArea><c:layout/>' +
     '<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>' +
-    fakt +
     plan +
+    fakt +
     '<c:gapWidth val="150"/>' +
     `<c:axId val="${catId}"/><c:axId val="${valId}"/>` +
     '</c:barChart>' +
     `<c:catAx><c:axId val="${catId}"/><c:scaling><c:orientation val="minMax"/></c:scaling>` +
-    `<c:delete val="0"/><c:axPos val="b"/><c:crossAx val="${valId}"/></c:catAx>` +
+    `<c:delete val="0"/><c:axPos val="b"/>${TXPR}<c:crossAx val="${valId}"/></c:catAx>` +
     `<c:valAx><c:axId val="${valId}"/><c:scaling><c:orientation val="minMax"/></c:scaling>` +
-    `<c:delete val="0"/><c:axPos val="l"/><c:numFmt formatCode="#,##0" sourceLinked="0"/>` +
+    `<c:delete val="0"/><c:axPos val="l"/><c:numFmt formatCode="#,##0" sourceLinked="0"/>${TXPR}` +
     `<c:crossAx val="${catId}"/></c:valAx>` +
     '</c:plotArea>' +
-    '<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>' +
+    `<c:legend><c:legendPos val="b"/><c:overlay val="0"/>${TXPR}</c:legend>` +
     '<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/>' +
-    '</c:chart></c:chartSpace>'
+    '</c:chart>' +
+    TXPR +
+    '</c:chartSpace>'
   );
 }
 
