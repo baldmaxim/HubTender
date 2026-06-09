@@ -749,68 +749,73 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
   // Export completion data to Excel (only visible projects)
   const handleExport = () => {
     try {
-      // Create header row with months
-      const headers = ['Объект', ...months.map(m => m.label), 'ИТОГО'];
+      // Header: Объект | Тип | <месяцы> | ИТОГО
+      const headers = ['Объект', 'Тип', ...months.map((m) => m.label), 'ИТОГО'];
 
-      // Create data rows (one row per visible project)
+      // Две строки на объект (План сверху, Факт снизу) + метаданные для стилей.
       const rows: (string | number)[][] = [];
-
-      // Determine which months are after current date (for styling)
-      const now = dayjs();
-      const futureMonthIndices = new Set<number>();
-      months.forEach((month, idx) => {
-        const monthDate = dayjs(`${month.year}-${month.month}-01`);
-        if (monthDate.isAfter(now, 'month')) {
-          futureMonthIndices.add(idx);
-        }
-      });
+      const rowMeta: { kind: 'plan' | 'fact'; isItogo: boolean }[] = [];
 
       visibleProjects.forEach((project) => {
-        const row: (string | number)[] = [project.name];
-        let projectTotal = 0;
+        const planCells: (string | number)[] = [];
+        const factCells: (string | number)[] = [];
+        let planTotal = 0;
+        let factTotal = 0;
 
-        // Add data for each month
         months.forEach((month) => {
           const completion = getCompletionForMonth(project.id, month.year, month.month);
-          let value: number | string = '';
-
-          if (completion && completion.actual_amount > 0) {
-            value = completion.actual_amount;
-            projectTotal += completion.actual_amount;
-          } else if (completion && completion.forecast_amount && completion.forecast_amount > 0) {
-            value = completion.forecast_amount;
-            projectTotal += completion.forecast_amount;
-          }
-          // Если нет данных, оставляем пустую строку ''
-
-          row.push(value);
+          const plan =
+            completion && completion.forecast_amount && completion.forecast_amount > 0
+              ? completion.forecast_amount
+              : '';
+          const fact = completion && completion.actual_amount > 0 ? completion.actual_amount : '';
+          if (typeof plan === 'number') planTotal += plan;
+          if (typeof fact === 'number') factTotal += fact;
+          planCells.push(plan);
+          factCells.push(fact);
         });
 
-        // Add total for this project
-        row.push(projectTotal);
-        rows.push(row);
+        rows.push([project.name, 'План', ...planCells, planTotal || '']);
+        rowMeta.push({ kind: 'plan', isItogo: false });
+        rows.push(['', 'Факт', ...factCells, factTotal || '']);
+        rowMeta.push({ kind: 'fact', isItogo: false });
       });
 
-      // Add ИТОГО row (sum across all projects)
-      const totalsRow: (string | number)[] = ['ИТОГО'];
-      let grandTotal = 0;
-
-      months.forEach(month => {
-        const key = `${month.year}-${month.month}`;
-        const monthTotal = monthlyTotals[key] || 0;
-        // Не выводим нули в строке ИТОГО
-        totalsRow.push(monthTotal > 0 ? monthTotal : '');
-        grandTotal += monthTotal;
+      // ИТОГО двумя строками: суммы плана и факта по месяцам (по всем объектам).
+      const planSums = months.map(() => 0);
+      const factSums = months.map(() => 0);
+      visibleProjects.forEach((project) => {
+        months.forEach((month, mi) => {
+          const completion = getCompletionForMonth(project.id, month.year, month.month);
+          if (completion && completion.forecast_amount && completion.forecast_amount > 0) {
+            planSums[mi] += completion.forecast_amount;
+          }
+          if (completion && completion.actual_amount > 0) {
+            factSums[mi] += completion.actual_amount;
+          }
+        });
       });
-      totalsRow.push(grandTotal);
-      rows.push(totalsRow);
+      const grandPlan = planSums.reduce((a, b) => a + b, 0);
+      const grandFact = factSums.reduce((a, b) => a + b, 0);
+      rows.push(['ИТОГО', 'План', ...planSums.map((v) => v || ''), grandPlan || '']);
+      rowMeta.push({ kind: 'plan', isItogo: true });
+      rows.push(['', 'Факт', ...factSums.map((v) => v || ''), grandFact || '']);
+      rowMeta.push({ kind: 'fact', isItogo: true });
 
       // Create worksheet
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
-      // Set column widths
-      const colWidths = [{ wch: 30 }, ...months.map(() => ({ wch: 12 })), { wch: 15 }];
-      ws['!cols'] = colWidths;
+      // Объединяем имя объекта (колонка 0) по двум его строкам + ИТОГО по двум строкам.
+      const merges = visibleProjects.map((_, p) => ({
+        s: { r: 1 + p * 2, c: 0 },
+        e: { r: 1 + p * 2 + 1, c: 0 },
+      }));
+      const itogoTop = 1 + visibleProjects.length * 2;
+      merges.push({ s: { r: itogoTop, c: 0 }, e: { r: itogoTop + 1, c: 0 } });
+      ws['!merges'] = merges;
+
+      // Set column widths: Объект | Тип | месяцы | ИТОГО
+      ws['!cols'] = [{ wch: 30 }, { wch: 8 }, ...months.map(() => ({ wch: 12 })), { wch: 15 }];
 
       // Style header row
       const headerStyle = {
@@ -866,11 +871,22 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
         },
       };
 
-      // Style for forecast numbers (orange background)
-      const forecastStyle = {
+      // Style for "Тип" column (План/Факт label)
+      const typeStyle = {
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'thin', color: { rgb: 'D9D9D9' } },
+          bottom: { style: 'thin', color: { rgb: 'D9D9D9' } },
+          left: { style: 'thin', color: { rgb: 'D9D9D9' } },
+          right: { style: 'thin', color: { rgb: 'D9D9D9' } },
+        },
+      };
+
+      // Style for plan numbers (yellow background)
+      const planStyle = {
         numFmt: '#,##0',
         alignment: { horizontal: 'right', vertical: 'center' },
-        fill: { fgColor: { rgb: 'FFE7BA' } }, // Light orange background
+        fill: { fgColor: { rgb: 'FFE699' } }, // Yellow background
         border: {
           top: { style: 'thin', color: { rgb: 'D9D9D9' } },
           bottom: { style: 'thin', color: { rgb: 'D9D9D9' } },
@@ -905,36 +921,55 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
         },
       };
 
-      // Apply styles to all cells
+      // ИТОГО — колонка «Тип»
+      const totalTypeStyle = {
+        font: { bold: true },
+        fill: { fgColor: { rgb: 'F0F0F0' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'medium', color: { rgb: '000000' } },
+          bottom: { style: 'thin', color: { rgb: 'D9D9D9' } },
+          left: { style: 'thin', color: { rgb: 'D9D9D9' } },
+          right: { style: 'thin', color: { rgb: 'D9D9D9' } },
+        },
+      };
+
+      // ИТОГО — строка «План» (жёлтая заливка)
+      const totalPlanStyle = {
+        numFmt: '#,##0',
+        font: { bold: true },
+        fill: { fgColor: { rgb: 'FFE699' } },
+        alignment: { horizontal: 'right', vertical: 'center' },
+        border: {
+          top: { style: 'medium', color: { rgb: '000000' } },
+          bottom: { style: 'thin', color: { rgb: 'D9D9D9' } },
+          left: { style: 'thin', color: { rgb: 'D9D9D9' } },
+          right: { style: 'thin', color: { rgb: 'D9D9D9' } },
+        },
+      };
+
+      // Apply styles per row metadata (План — жёлтый, Факт — обычный).
       for (let r = 1; r <= rows.length; r++) {
-        const isLastRow = r === rows.length;
+        const meta = rowMeta[r - 1];
 
         for (let c = 0; c < headers.length; c++) {
           const cellRef = XLSX.utils.encode_cell({ r, c });
           if (!ws[cellRef]) continue;
 
           if (c === 0) {
-            // First column (project names)
-            ws[cellRef].s = isLastRow ? totalNameStyle : nameStyle;
+            // Объект
+            ws[cellRef].s = meta.isItogo ? totalNameStyle : nameStyle;
+          } else if (c === 1) {
+            // Тип (План/Факт)
+            ws[cellRef].s = meta.isItogo ? totalTypeStyle : typeStyle;
           } else {
-            // Number columns
-            if (isLastRow) {
-              ws[cellRef].s = totalRowStyle;
+            // Месяцы и колонка ИТОГО
+            const cellValue = ws[cellRef].v;
+            const isEmpty = cellValue === '' || cellValue === null || cellValue === undefined;
+            if (meta.isItogo) {
+              ws[cellRef].s = isEmpty || meta.kind === 'fact' ? totalRowStyle : totalPlanStyle;
             } else {
-              // Check if cell has value
-              const cellValue = ws[cellRef].v;
-              const isEmpty = cellValue === '' || cellValue === null || cellValue === undefined;
-
-              if (isEmpty) {
-                // Empty cell - no fill, just borders
-                ws[cellRef].s = emptyStyle;
-              } else {
-                // Check if this month is in the future (after current date)
-                // Column index: c-1 because first column (c=0) is project name
-                const monthIdx = c - 1;
-                const isFutureMonth = futureMonthIndices.has(monthIdx);
-                ws[cellRef].s = isFutureMonth ? forecastStyle : numberStyle;
-              }
+              ws[cellRef].s = isEmpty ? emptyStyle : meta.kind === 'plan' ? planStyle : numberStyle;
             }
           }
         }
@@ -956,7 +991,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
         chartAoa,
         mainSheetName: 'Выполнение объектов',
         fileName: `Выполнение_объектов_${dayjs().format('YYYY-MM-DD')}.xlsx`,
-        gridRows: visibleProjects.length + 2, // header + projects + ИТОГО
+        gridRows: visibleProjects.length * 2 + 3, // header + 2 строки/объект + 2 строки ИТОГО
       });
 
       message.success('Экспорт завершен успешно');
