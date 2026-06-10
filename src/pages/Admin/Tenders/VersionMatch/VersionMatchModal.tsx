@@ -180,11 +180,6 @@ export function VersionMatchModal({ open, onClose, tender }: VersionMatchModalPr
               <Text>Все данные успешно перенесены.</Text>
             </Space>
           }
-          extra={
-            <Button type="primary" onClick={handleClose}>
-              Закрыть
-            </Button>
-          }
         />
       )}
 
