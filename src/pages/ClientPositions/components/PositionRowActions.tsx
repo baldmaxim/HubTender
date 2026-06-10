@@ -172,67 +172,68 @@ export const PositionRowActions: React.FC<PositionRowActionsProps> = ({
         </Tooltip>
       )}
 
-      {/* Раскрывающиеся кнопки действий */}
+      {/* Раскрывающиеся кнопки действий: ряд вертикальных пар, чтобы все колонки выравнивались по двум рядам */}
       {isExpanded && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {isLeaf && (
-            <div style={{ display: 'flex', gap: 4 }}>
-              {copiedPositionId !== record.id && (
-                <Tooltip title="Скопировать работы и материалы" {...tooltipColor}>
-                  <Tag color="blue" style={actionStyle} onClick={(e) => { e.stopPropagation(); onCopyPosition(record.id, e); }}>
-                    <CopyOutlined />
-                  </Tag>
-                </Tooltip>
-              )}
-              <Tooltip title="Скопировать примечание ГП" {...tooltipColor}>
-                <Tag color="purple" style={actionStyle} onClick={(e) => { e.stopPropagation(); onCopyNote(record.id, record.manual_note ?? null, e); }}>
-                  <FileTextOutlined />
+        <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
+          {/* Колонка 1: копировать работы (лист) / добавить или удалить ДОП */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {isLeaf && copiedPositionId !== record.id && (
+              <Tooltip title="Скопировать работы и материалы" {...tooltipColor}>
+                <Tag color="blue" style={actionStyle} onClick={(e) => { e.stopPropagation(); onCopyPosition(record.id, e); }}>
+                  <CopyOutlined />
                 </Tag>
               </Tooltip>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
-            {!record.is_additional && (
+            )}
+            {!record.is_additional ? (
               <Tooltip title="Добавить ДОП работу" {...tooltipColor}>
                 <Tag color="success" style={actionStyle} onClick={(e) => { e.stopPropagation(); onOpenAdditionalModal(record.id, e); }}>
                   <PlusOutlined />
                 </Tag>
               </Tooltip>
-            )}
-            {record.is_additional && (
+            ) : (
               <Tooltip title="Удалить ДОП работу" {...tooltipColor}>
                 <Tag color="error" style={actionStyle} onClick={(e) => { e.stopPropagation(); onDeleteAdditionalPosition(record.id, record.work_name, e); }}>
                   <DeleteOutlined />
                 </Tag>
               </Tooltip>
             )}
-            {/* Очистка работ/материалов — для листьев и разделов (раздел выбирает все подчинённые) */}
+          </div>
+
+          {/* Колонка 2: примечание ГП (лист) / очистка работ и материалов (раздел выбирает все подчинённые) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {isLeaf && (
+              <Tooltip title="Скопировать примечание ГП" {...tooltipColor}>
+                <Tag color="purple" style={actionStyle} onClick={(e) => { e.stopPropagation(); onCopyNote(record.id, record.manual_note ?? null, e); }}>
+                  <FileTextOutlined />
+                </Tag>
+              </Tooltip>
+            )}
             <Tooltip title="Удалить работы и материалы" {...tooltipColor}>
               <Tag color="orange" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartDeleteSelection(record.id, e); }}>
                 <ClearOutlined />
               </Tag>
             </Tooltip>
-            {/* Вертикальная стопка: удаление строк заказчика сверху, понижение уровня снизу */}
-            {(canDeletePositions || canChangeLevel) && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {canDeletePositions && (
-                  <Tooltip title="Удалить строки заказчика" {...tooltipColor}>
-                    <Tag color="red" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartPositionDeleteSelection?.(record.id, e); }}>
-                      <DeleteOutlined />
-                    </Tag>
-                  </Tooltip>
-                )}
-                {canChangeLevel && (
-                  <Tooltip title="Понизить уровень иерархии" {...tooltipColor}>
-                    <Tag color="geekblue" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartLevelChange(e); }}>
-                      <VerticalAlignBottomOutlined />
-                    </Tag>
-                  </Tooltip>
-                )}
-              </div>
-            )}
           </div>
+
+          {/* Колонка 3: удаление строк заказчика сверху, понижение уровня снизу */}
+          {(canDeletePositions || canChangeLevel) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {canDeletePositions && (
+                <Tooltip title="Удалить строки заказчика" {...tooltipColor}>
+                  <Tag color="red" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartPositionDeleteSelection?.(record.id, e); }}>
+                    <DeleteOutlined />
+                  </Tag>
+                </Tooltip>
+              )}
+              {canChangeLevel && (
+                <Tooltip title="Понизить уровень иерархии" {...tooltipColor}>
+                  <Tag color="geekblue" style={actionStyle} onClick={(e) => { e.stopPropagation(); onStartLevelChange(e); }}>
+                    <VerticalAlignBottomOutlined />
+                  </Tag>
+                </Tooltip>
+              )}
+            </div>
+          )}
         </div>
       )}
 
