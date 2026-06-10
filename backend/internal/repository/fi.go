@@ -47,6 +47,7 @@ type FITenderRow struct {
 	ConstructionScope  *string  `json:"construction_scope,omitempty"`
 	AreaSP             *float64 `json:"area_sp,omitempty"`
 	AreaClient         *float64 `json:"area_client,omitempty"`
+	VolumeTitle        *string  `json:"volume_title,omitempty"`
 	UploadFolder       *string  `json:"upload_folder,omitempty"`
 	BsmLink            *string  `json:"bsm_link,omitempty"`
 	TzLink             *string  `json:"tz_link,omitempty"`
@@ -66,7 +67,7 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 		       usd_rate, eur_rate, cny_rate,
 		       markup_tactic_id::text, cached_grand_total,
 		       housing_class::text, construction_scope::text,
-		       area_sp, area_client,
+		       area_sp, area_client, volume_title,
 		       upload_folder, bsm_link, tz_link, qa_form_link, project_folder_link,
 		       submission_deadline::text
 		FROM public.tenders
@@ -74,7 +75,7 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 	`, id).Scan(&t.ID, &t.Title, &t.TenderNumber, &t.ClientName, &t.Version, &t.IsArchived,
 		&t.USDRate, &t.EURRate, &t.CNYRate, &t.MarkupTacticID, &t.CachedGrandTotal,
 		&t.HousingClass, &t.ConstructionScope,
-		&t.AreaSP, &t.AreaClient,
+		&t.AreaSP, &t.AreaClient, &t.VolumeTitle,
 		&t.UploadFolder, &t.BsmLink, &t.TzLink, &t.QaFormLink, &t.ProjectFolderLink,
 		&t.SubmissionDeadline)
 	if err != nil {
