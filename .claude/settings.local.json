@@ -28,7 +28,14 @@
       "mcp__claude_ai_Supabase__get_advisors",
       "PowerShell($env:ALLOW_AUTH_IMPORT=\"true\"; $env:ALLOW_DISABLE_IMPORT_TRIGGERS=\"true\"; $env:ALLOW_CLEAN_AUTH=\"true\"; $env:ALLOW_CLEAN_PROD=\"true\"; npm run old-to-prod:migrate -- --use-mcp-preflight --clean-auth --clean-prod --confirm --batch-size=5000 2>&1 | Out-File -FilePath .old-to-prod-export\\\\_mcp_cache\\\\migrate-real4.log -Encoding utf8; \"EXIT $LASTEXITCODE\" | Out-File -Append .old-to-prod-export\\\\_mcp_cache\\\\migrate-real4.log -Encoding utf8)",
       "PowerShell($sw=[Diagnostics.Stopwatch]::StartNew\\(\\); npm run old-to-prod:check 2>&1 | Out-File .old-to-prod-export\\\\_mcp_cache\\\\check-poolrecover.log -Encoding utf8; $code=$LASTEXITCODE; $sw.Stop\\(\\); \"EXIT $code in $\\([math]::Round\\($sw.Elapsed.TotalSeconds,1\\)\\)s\" | Out-File -Append .old-to-prod-export\\\\_mcp_cache\\\\check-poolrecover.log -Encoding utf8; Get-Content .old-to-prod-export\\\\_mcp_cache\\\\check-poolrecover.log)",
-      "PowerShell(git -c credential.credentialStore=wincredman push origin main)"
+      "PowerShell(git -c credential.credentialStore=wincredman push origin main)",
+      "PowerShell(git add src/pages/Tenders/components/TenderMonitorTable.tsx)",
+      "PowerShell(git commit -m \"���祭� ⥭��஢: ���� �� ���� �஭������ ���뢠�� ������� �� ������� �஭������, 客�� - ⮫쪮 ��ᬮ��\")",
+      "Skill(push)",
+      "Skill(push:*)",
+      "PowerShell($env:GCM_CREDENTIAL_STORE = 'dpapi'; git push origin main)",
+      "PowerShell(git add .claude/settings.local.json)",
+      "PowerShell(git commit -m \"�������� ������� ����ன�� Claude Code \\(allowlist ࠧ�襭��\\)\")"
     ],
     "deny": [],
     "ask": [],
