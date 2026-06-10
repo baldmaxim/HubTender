@@ -82,6 +82,12 @@ func (h *ImportBoqHandler) BulkImport(w http.ResponseWriter, r *http.Request) {
 			apierr.BadRequest(bulkErr.Message).Render(w)
 			return
 		}
+		if p := apierr.ProblemFromPgErr(err, map[string]string{
+			"boq_items_base_quantity_positive": "Количество позиции должно быть больше нуля",
+		}); p != nil {
+			p.Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to import BOQ items")
 		return
 	}

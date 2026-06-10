@@ -98,6 +98,12 @@ func (h *TenderWriteHandler) CreateTender(w http.ResponseWriter, r *http.Request
 
 	t, err := h.svc.CreateTender(r.Context(), in)
 	if err != nil {
+		if p := apierr.ProblemFromPgErr(err, map[string]string{
+			"tenders_tender_number_version_key": "Тендер с таким номером и версией уже существует",
+		}); p != nil {
+			p.Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to create tender")
 		return
 	}

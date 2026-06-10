@@ -228,6 +228,12 @@ func (h *NomenclaturesHandler) DeleteMaterialName(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.svc.DeleteMaterialName(r.Context(), id); err != nil {
+		if p := apierr.ProblemFromPgErr(err, map[string]string{
+			"boq_items_material_name_id_fkey": "Нельзя удалить: материал используется в позициях BOQ",
+		}); p != nil {
+			p.Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to delete material name")
 		return
 	}

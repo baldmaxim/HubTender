@@ -1,6 +1,8 @@
 package apierr
 
 import (
+	"context"
+	"errors"
 	"net/http"
 
 	"github.com/getsentry/sentry-go"
@@ -26,6 +28,16 @@ import (
 // "kN" / "vN" — keep them short (tender_id, position_id, etc.). Caller is
 // responsible for NOT putting tokens / passwords / DSNs into either.
 func InternalFromErr(w http.ResponseWriter, r *http.Request, err error, detail string, kv ...any) {
+	// Клиент оборвал запрос (навигация / AbortController): r.Context() отменён.
+	// Это не серверная ошибка — не капчим в Sentry, отдаём 499. Только
+	// context.Canceled: context.DeadlineExceeded (серверные таймауты) должен
+	// и дальше попадать в Sentry.
+	if errors.Is(err, context.Canceled) || r.Context().Err() == context.Canceled {
+		log.Debug().Str("method", r.Method).Str("path", r.URL.Path).Msg("request canceled by client")
+		New(499, "Client Closed Request", "Запрос отменён клиентом").Render(w)
+		return
+	}
+
 	rid := r.Header.Get("X-Request-ID")
 
 	event := log.Error().

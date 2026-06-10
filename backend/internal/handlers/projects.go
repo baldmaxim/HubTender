@@ -220,6 +220,12 @@ func (h *ProjectsHandler) CreateMonthlyCompletion(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.svc.CreateMonthlyCompletion(r.Context(), in); err != nil {
+		if p := apierr.ProblemFromPgErr(err, map[string]string{
+			"project_monthly_completion_unique": "Закрытие за этот месяц уже существует",
+		}); p != nil {
+			p.Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to create monthly completion")
 		return
 	}

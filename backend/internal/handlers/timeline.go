@@ -261,6 +261,12 @@ func (h *TimelineHandler) CreateIteration(w http.ResponseWriter, r *http.Request
 		UserAmount:      req.UserAmount,
 	})
 	if err != nil {
+		if p := apierr.ProblemFromPgErr(err, map[string]string{
+			"tender_iterations_group_id_user_id_iteration_number_key": "Итерация с таким номером уже отправлена",
+		}); p != nil {
+			p.Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to create iteration")
 		return
 	}
