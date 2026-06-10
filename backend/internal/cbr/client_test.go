@@ -1,9 +1,13 @@
 package cbr
 
 import (
+	"context"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // sampleXML mirrors the real CBR daily feed: windows-1251 declared, comma
@@ -44,6 +48,27 @@ func TestParseValCurs_MissingCurrency(t *testing.T) {
 		`<ValCurs Date="09.06.2026"><Valute ID="R01235"><CharCode>USD</CharCode><Nominal>1</Nominal><Value>73,2644</Value></Valute></ValCurs>`
 	if _, err := parseValCurs(strings.NewReader(xml)); err == nil {
 		t.Error("expected error when EUR/CNY are absent, got nil")
+	}
+}
+
+func TestFetch_SetsBrowserUserAgent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// cbr.ru за DDoS-Guard отдаёт 403 на дефолтный Go-http-client/1.1.
+		if !strings.HasPrefix(r.Header.Get("User-Agent"), "Mozilla/5.0") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write([]byte(sampleXML))
+	}))
+	defer srv.Close()
+
+	c := NewClient(nil, srv.URL)
+	r, err := c.RatesForDate(context.Background(), time.Date(2026, 6, 9, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("RatesForDate: %v", err)
+	}
+	if !almost(r.USD, 73.26) {
+		t.Errorf("USD = %v, want 73.26", r.USD)
 	}
 }
 

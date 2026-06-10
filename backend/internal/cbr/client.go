@@ -27,6 +27,11 @@ const (
 	defaultTTL     = 6 * time.Hour
 	httpTimeout    = 8 * time.Second
 
+	// userAgent представляет клиента браузером: cbr.ru за DDoS-Guard отдаёт 403
+	// на дефолтный Go-http-client/1.1, и тогда курсы не подтягиваются.
+	userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+		"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
 	charUSD = "USD"
 	charEUR = "EUR"
 	charCNY = "CNY"
@@ -112,6 +117,8 @@ func (c *Client) fetch(ctx context.Context, reqDate string) (*Rates, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cbr: build request: %w", err)
 	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "application/xml,text/xml,*/*")
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("cbr: request: %w", err)
