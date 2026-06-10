@@ -33,6 +33,8 @@ const { Text } = Typography;
 interface AdditionalAgreementsProps {
   project: ProjectFull;
   onSave: () => Promise<void>;
+  /** Только просмотр — без добавления/редактирования/удаления (Генеральный директор) */
+  readOnly?: boolean;
 }
 
 const formatMoney = (value: number): string => {
@@ -70,6 +72,7 @@ const parseNumber = (value: string | undefined): number => {
 export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
   project,
   onSave,
+  readOnly,
 }) => {
   const { theme } = useTheme();
   const [form] = Form.useForm();
@@ -279,6 +282,9 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
     },
   ];
 
+  // В режиме «только просмотр» убираем колонку действий (редактировать/удалить)
+  const visibleColumns = readOnly ? columns.filter((column) => column.key !== 'actions') : columns;
+
   const totalAgreementsSum = agreements.reduce((sum, a) => sum + a.amount, 0);
   const totalWithContract = project.contract_cost + totalAgreementsSum;
 
@@ -335,7 +341,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
       </Row>
 
       {/* Add button */}
-      {!addingNew && (
+      {!addingNew && !readOnly && (
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -409,7 +415,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
       {/* Table */}
       <Form form={editForm} component={false}>
         <Table
-          columns={columns}
+          columns={visibleColumns}
           dataSource={agreements}
           rowKey="id"
           loading={loading}

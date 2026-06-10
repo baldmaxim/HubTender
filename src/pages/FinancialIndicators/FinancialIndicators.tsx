@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, Drawer, Space, message } from 'antd';
 import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { getVersionColorByTitle } from '../../utils/versionColor';
 import { getTenderById } from '../../lib/api/fi';
 import { adminPatchTender } from '../../lib/api/tenders';
@@ -24,6 +25,7 @@ import { useFinancialData } from './hooks/useFinancialData';
 import { IndicatorsCharts } from './components/IndicatorsCharts';
 import { IndicatorsTable } from './components/IndicatorsTable';
 import { IndicatorsFilters } from './components/IndicatorsFilters';
+import './FinancialIndicators.css';
 
 
 ChartJS.register(
@@ -41,7 +43,13 @@ const { Title, Text } = Typography;
 
 const FinancialIndicators: React.FC = () => {
   const { theme: currentTheme } = useTheme();
-  const { isPhone } = useIsMobile();
+  const { user } = useAuth();
+  // Генеральный директор — только просмотр (без обновления и редактирования)
+  const readOnly = user?.role_code === 'general_director';
+  const { isPhone, screens } = useIsMobile();
+  // Кнопка/зум на весь экран нужны там, где широкая таблица может не помещаться,
+  // но это не телефон (на телефоне — карточный вид): планшеты, landscape-телефоны, узкие ноуты.
+  const showFullscreenTable = !isPhone && !screens.lg;
   const {
     tenders,
     loading,
@@ -168,7 +176,7 @@ const FinancialIndicators: React.FC = () => {
 
   if (!selectedTenderId) {
     return (
-      <div>
+      <div className="financial-indicators-page">
         <Card bordered={false} style={{ height: '100%' }}>
           <div style={{ textAlign: 'center', padding: '40px 20px' }}>
             <Title level={4} style={{ marginBottom: 24 }}>
@@ -292,11 +300,12 @@ const FinancialIndicators: React.FC = () => {
       tenderId={selectedTenderId}
       isPhone={isPhone}
       onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
+      readOnly={readOnly}
     />
   );
 
   return (
-    <div>
+    <div className="financial-indicators-page">
       <div style={{ marginBottom: 16 }}>
         <Button
           type="primary"
@@ -325,6 +334,7 @@ const FinancialIndicators: React.FC = () => {
         onTenderTitleChange={handleTenderTitleChange}
         onVersionChange={handleVersionChange}
         onRefresh={() => fetchFinancialIndicators(selectedTenderId)}
+        readOnly={readOnly}
       />
 
       <Card bordered={false}>
@@ -347,18 +357,20 @@ const FinancialIndicators: React.FC = () => {
               />
             </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <Title level={3} style={{ margin: 0, textAlign: 'center', color: '#ff4d4f' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Title level={3} style={{ margin: 0, textAlign: 'center', color: '#ff4d4f', fontSize: isPhone ? 18 : undefined }}>
                 {volumeTitle}
               </Title>
-              <EditOutlined
-                style={{ fontSize: 16, cursor: 'pointer', color: '#1890ff' }}
-                onClick={() => setEditingVolumeTitle(true)}
-              />
+              {!readOnly && (
+                <EditOutlined
+                  style={{ fontSize: 16, cursor: 'pointer', color: '#1890ff' }}
+                  onClick={() => setEditingVolumeTitle(true)}
+                />
+              )}
             </div>
           )}
           {selectedTenderTitle && (
-            <Title level={4} style={{ margin: '8px 0 0 0', textAlign: 'center', color: '#ff4d4f' }}>
+            <Title level={4} style={{ margin: '8px 0 0 0', textAlign: 'center', color: '#ff4d4f', fontSize: isPhone ? 15 : undefined }}>
               {selectedTenderTitle}
             </Title>
           )}
@@ -374,7 +386,6 @@ const FinancialIndicators: React.FC = () => {
             activeKey={activeTab}
             onChange={(key) => {
               setActiveTab(key as 'table' | 'charts');
-              if (key === 'table' && isPhone) setTableFullscreen(true);
             }}
             items={[
               {
@@ -406,7 +417,7 @@ const FinancialIndicators: React.FC = () => {
                 ),
                 children: (
                   <>
-                    {isPhone && (
+                    {showFullscreenTable && (
                       <div style={{ marginBottom: 8, textAlign: 'right' }}>
                         <Button icon={<FullscreenOutlined />} onClick={() => setTableFullscreen(true)}>
                           На весь экран

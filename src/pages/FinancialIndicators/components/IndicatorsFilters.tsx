@@ -13,6 +13,8 @@ interface IndicatorsFiltersProps {
   onTenderTitleChange: (title: string) => void;
   onVersionChange: (version: number) => void;
   onRefresh: () => void;
+  /** Только просмотр — скрывает кнопку «Обновить» (Генеральный директор) */
+  readOnly?: boolean;
 }
 
 export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
@@ -23,6 +25,7 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
   onTenderTitleChange,
   onVersionChange,
   onRefresh,
+  readOnly,
 }) => {
   const { isPhone } = useIsMobile();
 
@@ -70,7 +73,7 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
         <Space size="small">
           <Text type="secondary">Версия:</Text>
           <Select
-            style={{ width: isPhone ? '50%' : 150 }}
+            style={{ width: isPhone ? 140 : 150 }}
             placeholder="Выберите версию"
             value={selectedVersion}
             onChange={onVersionChange}
@@ -78,9 +81,11 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
           />
         </Space>
       )}
-      <Button icon={<ReloadOutlined />} onClick={onRefresh}>
-        Обновить
-      </Button>
+      {!readOnly && (
+        <Button icon={<ReloadOutlined />} onClick={onRefresh}>
+          Обновить
+        </Button>
+      )}
     </div>
   );
 };

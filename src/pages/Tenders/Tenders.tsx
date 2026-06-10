@@ -78,6 +78,7 @@ const Tenders: React.FC = () => {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDirector = user?.role_code === 'director' || user?.role_code === 'general_director';
+  const isGeneralDirector = user?.role_code === 'general_director';
   const palette = getTenderMonitorPalette(theme === 'dark');
 
   const [activeTab, setActiveTab] = useState<TenderMonitorTab>('all');
@@ -274,6 +275,7 @@ const Tenders: React.FC = () => {
           onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
           onQuickCall={handleQuickCall}
           onUpdate={refetch}
+          readOnly={isGeneralDirector}
         />
       </div>
 
@@ -286,6 +288,7 @@ const Tenders: React.FC = () => {
         onClose={() => setDetailOpen(false)}
         onQuickCall={handleQuickCall}
         onUpdate={refetch}
+        readOnly={isGeneralDirector}
       />
 
       <ImportTendersModal

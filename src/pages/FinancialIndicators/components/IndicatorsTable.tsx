@@ -6,6 +6,7 @@ import type { IndicatorRow } from '../hooks/useFinancialData';
 import { exportFinancialIndicatorsToExcel } from '../utils/exportToExcel';
 import { adminPatchTender } from '../../../lib/api/tenders';
 import { getErrorMessage } from '../../../utils/errors';
+import { IndicatorsTableCards } from './IndicatorsTableCards';
 
 const { Text } = Typography;
 
@@ -20,6 +21,8 @@ interface IndicatorsTableProps {
   tenderId: string;
   isPhone?: boolean;
   onAreaUpdated: () => void;
+  /** Только просмотр — скрывает карандаши редактирования площади (Генеральный директор) */
+  readOnly?: boolean;
 }
 
 export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
@@ -33,6 +36,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
   tenderId,
   isPhone,
   onAreaUpdated,
+  readOnly,
 }) => {
   const [editingSp, setEditingSp] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
@@ -132,13 +136,15 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
               <span>{formatNumber(spTotal)} м²</span>
-              <EditOutlined
-                style={{ fontSize: 12, cursor: 'pointer', color: '#1890ff' }}
-                onClick={() => {
-                  setTempSpValue(spTotal);
-                  setEditingSp(true);
-                }}
-              />
+              {!readOnly && (
+                <EditOutlined
+                  style={{ fontSize: 12, cursor: 'pointer', color: '#1890ff' }}
+                  onClick={() => {
+                    setTempSpValue(spTotal);
+                    setEditingSp(true);
+                  }}
+                />
+              )}
             </div>
           )}
         </div>
@@ -176,13 +182,15 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
               <span>{formatNumber(customerTotal)} м²</span>
-              <EditOutlined
-                style={{ fontSize: 12, cursor: 'pointer', color: '#1890ff' }}
-                onClick={() => {
-                  setTempCustomerValue(customerTotal);
-                  setEditingCustomer(true);
-                }}
-              />
+              {!readOnly && (
+                <EditOutlined
+                  style={{ fontSize: 12, cursor: 'pointer', color: '#1890ff' }}
+                  onClick={() => {
+                    setTempCustomerValue(customerTotal);
+                    setEditingCustomer(true);
+                  }}
+                />
+              )}
             </div>
           )}
         </div>
@@ -220,20 +228,32 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
           Экспорт в Excel
         </Button>
       </div>
-      <Table
-        columns={columns}
-        dataSource={data}
-        pagination={false}
-        bordered
-        size="small"
-        scroll={isPhone ? { x: 1080 } : undefined}
-        rowClassName={(record) => {
-          if (record.is_header) return `header-row-${currentTheme}`;
-          if (record.is_total) return `total-row-${currentTheme}`;
-          if (record.is_yellow) return `yellow-row-${currentTheme}`;
-          return '';
-        }}
-      />
+      {isPhone ? (
+        <IndicatorsTableCards
+          data={data}
+          spTotal={spTotal}
+          customerTotal={customerTotal}
+          formatNumber={formatNumber}
+          currentTheme={currentTheme}
+          onUpdateArea={handleUpdateArea}
+          readOnly={readOnly}
+        />
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={data}
+          pagination={false}
+          bordered
+          size="small"
+          scroll={{ x: 1080 }}
+          rowClassName={(record) => {
+            if (record.is_header) return `header-row-${currentTheme}`;
+            if (record.is_total) return `total-row-${currentTheme}`;
+            if (record.is_yellow) return `yellow-row-${currentTheme}`;
+            return '';
+          }}
+        />
+      )}
       <style>{`
         .header-row-light {
           background-color: #e6f7ff !important;

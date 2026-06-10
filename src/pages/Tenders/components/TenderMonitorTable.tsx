@@ -45,6 +45,8 @@ interface TenderMonitorTableProps {
   onOpenTimeline: (tender: TenderRegistryWithRelations) => void;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
   onUpdate: () => Promise<void> | void;
+  /** Режим «только просмотр» — скрывает кнопки звонка (Генеральный директор) */
+  readOnly?: boolean;
 }
 
 type TableColumn = {
@@ -368,12 +370,14 @@ function TenderRow({
   onOpenTimeline,
   onQuickCall,
   palette,
+  readOnly,
 }: {
   tender: TenderRegistryWithRelations;
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
   onOpenTimeline: (tender: TenderRegistryWithRelations) => void;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
   palette: TenderMonitorPalette;
+  readOnly?: boolean;
 }) {
   const dashboardStatus = getDashboardStatus(tender);
   const badgeStyle = getStatusBadgeStyle(dashboardStatus);
@@ -448,7 +452,7 @@ function TenderRow({
           {formatDate(tender.submission_date)}
         </div>
         {dashboardStatus === 'calc' && daysToSubmission != null ? (
-          canSubmissionCall ? (
+          canSubmissionCall && !readOnly ? (
             <div style={{ marginTop: 5 }}>
               <button
                 type="button"
@@ -546,7 +550,7 @@ function TenderRow({
         {dashboardStatus === 'sent' && daysSinceControl != null ? (
           <div style={{ marginTop: 6 }}>
             <span style={{ color: palette.danger, fontSize: 12, marginRight: 6 }}>{daysSinceControl}д</span>
-            {canQuickCall ? (
+            {canQuickCall && !readOnly ? (
               <button
                 type="button"
                 className="tender-monitor-call-button"
@@ -625,6 +629,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   onOpenTimeline,
   onQuickCall,
   onUpdate,
+  readOnly,
 }) => {
   void onUpdate;
 
@@ -775,6 +780,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
                     onOpenTimeline={onOpenTimeline}
                     onQuickCall={onQuickCall}
                     palette={palette}
+                    readOnly={readOnly}
                   />
                 ))
               ) : (

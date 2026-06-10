@@ -14,6 +14,7 @@ import {
   DATE_INPUT_FORMATS,
   formatArea,
   formatDate,
+  formatDateTime,
   formatMoneyFull,
   formatRubPerSquare,
   getChronologyItems,
@@ -30,6 +31,10 @@ import { getTenderMonitorPalette, type TenderMonitorPalette } from '../utils/ten
 
 const { Text } = Typography;
 const { TextArea } = Input;
+
+// Режим «только просмотр» полей карточки (Генеральный директор) —
+// прокидывается через контекст, чтобы не передавать проп в каждое поле.
+const FieldReadOnlyContext = React.createContext(false);
 
 type ModalTab = 'info' | 'timeline' | 'package';
 type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'select';
@@ -59,6 +64,7 @@ function EditableMonitorField({
   buildUpdatePayload,
   onUpdated,
 }: EditableMonitorFieldProps) {
+  const readOnly = React.useContext(FieldReadOnlyContext);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<string | number | null>(value ?? null);
@@ -211,7 +217,7 @@ function EditableMonitorField({
           )}
         </div>
 
-        {!editing ? (
+        {!editing && !readOnly ? (
           <Button
             type="text"
             size="small"
@@ -488,6 +494,93 @@ function InfoCard({ label, value, palette }: { label: string; value: React.React
   );
 }
 
+// Хронология в режиме «только просмотр» (без редактирования) — для Генерального директора
+function ReadOnlyChronologySection({
+  items,
+  palette,
+}: {
+  items: ChronologyItem[];
+  palette: TenderMonitorPalette;
+}) {
+  if (items.length === 0) {
+    return <Text style={{ color: palette.muted, fontSize: 12 }}>Хронология пока не заполнена</Text>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {items.map((item, index) => (
+        <div
+          key={`${item.date || 'empty'}-${index}`}
+          style={{
+            padding: '10px 12px',
+            background: palette.sectionBg,
+            borderRadius: 10,
+            border: `1px solid ${item.type === 'call_follow_up' ? palette.dangerBorder : palette.borderSoft}`,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+            <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDateTime(item.date)}</span>
+            {item.type === 'call_follow_up' ? <Tag color="error" style={{ marginInlineEnd: 0 }}>Звонок</Tag> : null}
+          </div>
+          <div style={{ color: palette.textSecondary, fontSize: 12, lineHeight: 1.35 }}>{item.text}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Тендерный пакет в режиме «только просмотр» (без редактирования) — для Генерального директора
+function ReadOnlyPackageSection({
+  items,
+  palette,
+}: {
+  items: Array<{ date: string | null; text: string; link?: string | null }>;
+  palette: TenderMonitorPalette;
+}) {
+  const visibleItems = items.filter((item) => item.text?.trim());
+
+  if (visibleItems.length === 0) {
+    return <Text style={{ color: palette.muted, fontSize: 12 }}>Тендерный пакет не заполнен</Text>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {visibleItems.map((item, index) => {
+        const href = getPackageLinkHref(item.link);
+
+        return (
+          <div
+            key={`${item.date || 'empty'}-${index}`}
+            style={{
+              padding: '10px 12px',
+              background: palette.sectionBg,
+              borderRadius: 10,
+              border: `1px solid ${palette.borderSoft}`,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
+              <div style={{ color: palette.text, fontSize: 12, fontWeight: 600, wordBreak: 'break-word' }}>{item.text}</div>
+              {item.date ? (
+                <span style={{ color: palette.muted, fontSize: 11, flexShrink: 0 }}>{formatDate(item.date)}</span>
+              ) : null}
+            </div>
+            {href ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: palette.info, fontSize: 11, wordBreak: 'break-word' }}
+              >
+                Открыть ссылку
+              </a>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 interface TenderMonitorModalProps {
   open: boolean;
   tender: TenderRegistryWithRelations | null;
@@ -497,6 +590,8 @@ interface TenderMonitorModalProps {
   onClose: () => void;
   onQuickCall?: (tender: TenderRegistryWithRelations) => Promise<void> | void;
   onUpdate: () => Promise<void> | void;
+  /** Режим «только просмотр» — скрывает ярлыки редактирования и кнопку звонка (Генеральный директор) */
+  readOnly?: boolean;
 }
 
 export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
@@ -508,6 +603,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
   onClose,
   onQuickCall,
   onUpdate,
+  readOnly,
 }) => {
   const { theme } = useTheme();
   const palette = getTenderMonitorPalette(theme === 'dark');
@@ -595,7 +691,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
           </div>
 
           <Space size={6}>
-            {canQuickCall && onQuickCall ? (
+            {canQuickCall && onQuickCall && !readOnly ? (
               <Button type="primary" danger icon={<PhoneOutlined />} size="small" onClick={() => void onQuickCall(tender)}>
                 Позвонить
               </Button>
@@ -633,6 +729,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
 
         <div style={{ paddingTop: 14 }}>
           {activeTab === 'info' ? (
+            <FieldReadOnlyContext.Provider value={!!readOnly}>
             <div
               style={{
                 display: 'grid',
@@ -701,14 +798,23 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 onUpdated={onUpdate}
               />
             </div>
+            </FieldReadOnlyContext.Provider>
           ) : null}
 
           {activeTab === 'timeline' ? (
-            <EditableChronologySection tenderId={tender.id} items={chronologyItems} palette={palette} onUpdated={onUpdate} />
+            readOnly ? (
+              <ReadOnlyChronologySection items={chronologyItems} palette={palette} />
+            ) : (
+              <EditableChronologySection tenderId={tender.id} items={chronologyItems} palette={palette} onUpdated={onUpdate} />
+            )
           ) : null}
 
           {activeTab === 'package' ? (
-            <EditablePackageSection tenderId={tender.id} items={packageItems} palette={palette} onUpdated={onUpdate} />
+            readOnly ? (
+              <ReadOnlyPackageSection items={packageItems} palette={palette} />
+            ) : (
+              <EditablePackageSection tenderId={tender.id} items={packageItems} palette={palette} onUpdated={onUpdate} />
+            )
           ) : null}
         </div>
       </div>

@@ -1279,20 +1279,20 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       title: '№',
       dataIndex: 'key',
       key: 'key',
-      width: 50,
+      width: isPhone ? 28 : 50,
       render: (_: unknown, __: unknown, index: number) => index + 1,
     },
     {
       title: 'Показатель',
       dataIndex: 'indicator_name',
       key: 'indicator_name',
-      width: 300,
+      width: isPhone ? undefined : 300,
     },
     {
       title: 'Сумма (руб.)',
       dataIndex: 'amount',
       key: 'amount',
-      width: 150,
+      width: isPhone ? 72 : 150,
       align: 'right' as const,
       render: (val: number) => <Text strong>{formatNumber(val)}</Text>,
     },
@@ -1300,7 +1300,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       title: 'Цена за м² (руб./м²)',
       dataIndex: 'price_per_m2',
       key: 'price_per_m2',
-      width: 150,
+      width: isPhone ? 72 : 150,
       align: 'right' as const,
       render: (val: number) => <Text>{formatNumber(Math.round(val))}</Text>,
     },
@@ -1959,12 +1959,13 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
             </div>
 
             <Table
+              className="fi-summary-table"
               dataSource={getSummaryTableData()}
               columns={summaryTableColumns}
               pagination={false}
               size="small"
               bordered
-              scroll={{ x: 650 }}
+              scroll={isPhone ? undefined : { x: 650 }}
               summary={(pageData) => {
                 const totalAmount = pageData.reduce((sum, item) => sum + item.amount, 0);
                 const totalAreaM2 = spTotal;

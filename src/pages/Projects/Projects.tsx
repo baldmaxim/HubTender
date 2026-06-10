@@ -7,6 +7,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useProjectsData } from './hooks/useProjectsData';
 import { useProjectActions } from './hooks/useProjectActions';
 import { ProjectsList } from './components/ProjectsList';
@@ -18,6 +19,9 @@ import type { ProjectFull } from '../../lib/supabase/types';
 
 const Projects: React.FC = () => {
   const { theme } = useTheme();
+  const { user } = useAuth();
+  // Генеральный директор — только просмотр (без добавления/редактирования объектов)
+  const readOnly = user?.role_code === 'general_director';
   const [activeTab, setActiveTab] = useState<string>('list');
   const [searchText, setSearchText] = useState('');
 
@@ -95,9 +99,11 @@ const Projects: React.FC = () => {
                 style={{ width: 280 }}
                 allowClear
               />
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleAddProject}>
-                Добавить объект
-              </Button>
+              {!readOnly && (
+                <Button type="primary" icon={<PlusOutlined />} onClick={handleAddProject}>
+                  Добавить объект
+                </Button>
+              )}
             </Space>
           }
         />

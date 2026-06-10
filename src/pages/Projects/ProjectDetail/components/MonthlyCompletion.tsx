@@ -37,6 +37,8 @@ interface MonthlyCompletionProps {
   completionData: ProjectCompletion[];
   onSave: () => Promise<void>;
   onOptimistic: (rows: OptimisticCompletion[]) => void;
+  /** Только просмотр — поля выполнения недоступны для редактирования (Генеральный директор) */
+  readOnly?: boolean;
 }
 
 interface MonthRow {
@@ -88,6 +90,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
   completionData,
   onSave,
   onOptimistic,
+  readOnly,
 }) => {
   const [loading, setLoading] = useState(false);
   const [modifiedRows, setModifiedRows] = useState<Record<string, Partial<MonthRow>>>({});
@@ -278,56 +281,65 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
       dataIndex: 'actual_amount',
       key: 'actual_amount',
       width: 200,
-      render: (value: number, record) => (
-        <InputNumber
-          value={value}
-          min={0 as number}
-          precision={2}
-          decimalSeparator=","
-          style={{ width: '100%' }}
-          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-          parser={parseNumber}
-          onChange={(v) => handleCellChange(record.key, 'actual_amount', v || 0)}
-          status={record.isModified ? 'warning' : undefined}
-          controls={false}
-          onKeyDown={handleKeyDown}
-        />
-      ),
+      render: (value: number, record) =>
+        readOnly ? (
+          <Text>{value ? value.toLocaleString('ru-RU') : '—'}</Text>
+        ) : (
+          <InputNumber
+            value={value}
+            min={0 as number}
+            precision={2}
+            decimalSeparator=","
+            style={{ width: '100%' }}
+            formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
+            parser={parseNumber}
+            onChange={(v) => handleCellChange(record.key, 'actual_amount', v || 0)}
+            status={record.isModified ? 'warning' : undefined}
+            controls={false}
+            onKeyDown={handleKeyDown}
+          />
+        ),
     },
     {
       title: 'Прогноз (₽)',
       dataIndex: 'forecast_amount',
       key: 'forecast_amount',
       width: 200,
-      render: (value: number | null, record) => (
-        <InputNumber
-          value={value}
-          min={0 as number}
-          precision={2}
-          decimalSeparator=","
-          style={{ width: '100%' }}
-          placeholder="—"
-          formatter={(v) => (v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '')}
-          parser={(v) => (v ? (parseNumber(v) ?? 0) : 0)}
-          onChange={(v) => handleCellChange(record.key, 'forecast_amount', v)}
-          status={record.isModified ? 'warning' : undefined}
-          controls={false}
-          onKeyDown={handleKeyDown}
-        />
-      ),
+      render: (value: number | null, record) =>
+        readOnly ? (
+          <Text>{value ? value.toLocaleString('ru-RU') : '—'}</Text>
+        ) : (
+          <InputNumber
+            value={value}
+            min={0 as number}
+            precision={2}
+            decimalSeparator=","
+            style={{ width: '100%' }}
+            placeholder="—"
+            formatter={(v) => (v ? `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : '')}
+            parser={(v) => (v ? (parseNumber(v) ?? 0) : 0)}
+            onChange={(v) => handleCellChange(record.key, 'forecast_amount', v)}
+            status={record.isModified ? 'warning' : undefined}
+            controls={false}
+            onKeyDown={handleKeyDown}
+          />
+        ),
     },
     {
       title: 'Примечание',
       dataIndex: 'note',
       key: 'note',
-      render: (value: string | null, record) => (
-        <Input
-          value={value || ''}
-          placeholder="—"
-          onChange={(e) => handleCellChange(record.key, 'note', e.target.value || null)}
-          style={record.isModified ? { borderColor: '#faad14' } : undefined}
-        />
-      ),
+      render: (value: string | null, record) =>
+        readOnly ? (
+          <Text>{value || '—'}</Text>
+        ) : (
+          <Input
+            value={value || ''}
+            placeholder="—"
+            onChange={(e) => handleCellChange(record.key, 'note', e.target.value || null)}
+            style={record.isModified ? { borderColor: '#faad14' } : undefined}
+          />
+        ),
     },
   ];
 
@@ -389,17 +401,19 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
       </Row>
 
       {/* Actions */}
-      <Space style={{ marginBottom: 16 }}>
-        <Button
-          type="primary"
-          icon={<SaveOutlined />}
-          onClick={handleSaveAll}
-          loading={loading}
-          disabled={Object.keys(modifiedRows).length === 0}
-        >
-          Сохранить изменения ({Object.keys(modifiedRows).length})
-        </Button>
-      </Space>
+      {!readOnly && (
+        <Space style={{ marginBottom: 16 }}>
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={handleSaveAll}
+            loading={loading}
+            disabled={Object.keys(modifiedRows).length === 0}
+          >
+            Сохранить изменения ({Object.keys(modifiedRows).length})
+          </Button>
+        </Space>
+      )}
 
       {/* Table */}
       <Table

@@ -17,6 +17,7 @@ import {
   listProjectMonthlyCompletion,
 } from '../../../lib/api/projects';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { ProjectSettings } from './components/ProjectSettings';
 import { MonthlyCompletion, type OptimisticCompletion } from './components/MonthlyCompletion';
 import { AdditionalAgreements } from './components/AdditionalAgreements';
@@ -73,6 +74,9 @@ const ProjectDetail: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { user } = useAuth();
+  // Генеральный директор — только просмотр (без редактирования данных объекта)
+  const readOnly = user?.role_code === 'general_director';
   const [activeTab, setActiveTab] = useState<string>('settings');
   const [project, setProject] = useState<ProjectFull | null>(null);
   const [completionData, setCompletionData] = useState<ProjectCompletion[]>([]);
@@ -210,7 +214,7 @@ const ProjectDetail: React.FC = () => {
           Настройки объекта
         </span>
       ),
-      children: <ProjectSettings project={project} onSave={handleSave} />,
+      children: <ProjectSettings project={project} onSave={handleSave} readOnly={readOnly} />,
     },
     {
       key: 'agreements',
@@ -220,7 +224,7 @@ const ProjectDetail: React.FC = () => {
           Доп. соглашения
         </span>
       ),
-      children: <AdditionalAgreements project={project} onSave={handleSave} />,
+      children: <AdditionalAgreements project={project} onSave={handleSave} readOnly={readOnly} />,
     },
     {
       key: 'completion',
@@ -236,6 +240,7 @@ const ProjectDetail: React.FC = () => {
           completionData={completionData}
           onSave={handleCompletionSave}
           onOptimistic={applyCompletionOptimistic}
+          readOnly={readOnly}
         />
       ),
     },

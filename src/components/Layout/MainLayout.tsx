@@ -86,6 +86,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     : null;
   const { theme: currentTheme, toggleTheme } = useTheme();
   const { user, signOut } = useAuth();
+  const isGeneralDirector = user?.role_code === 'general_director';
   const {
     token: { colorBgContainer },
   } = theme.useToken();
@@ -452,19 +453,27 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             return key ? hasPageAccess(user, key) : true;
           });
 
-          // Проверяем, есть ли реальные страницы (не только разделители)
-          const hasAccessiblePages = filteredChildren.some(
+          // Реальные доступные страницы (без разделителей)
+          const accessiblePages = filteredChildren.filter(
             (child) => !(child && 'type' in child && child.type === 'divider')
           );
 
-          // Если после фильтрации остались доступные страницы, оставляем родительский пункт
-          if (hasAccessiblePages) {
-            return {
-              ...item,
-              children: filteredChildren,
-            };
+          // Нет доступных страниц — убираем группу целиком
+          if (accessiblePages.length === 0) {
+            return null;
           }
-          return null;
+
+          // Доступна ровно одна страница — показываем прямую ссылку на неё,
+          // без промежуточного раскрытия группы (убираем двойной переход)
+          if (accessiblePages.length === 1) {
+            return accessiblePages[0];
+          }
+
+          // Иначе оставляем родительский пункт с отфильтрованными детьми
+          return {
+            ...item,
+            children: filteredChildren,
+          };
         }
 
         // Для обычных пунктов проверяем доступ
@@ -545,7 +554,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       <Layout>
         <Header
           style={{
-            padding: '0 24px',
+            padding: isPhone ? '0 12px' : '0 24px',
             background: currentTheme === 'dark' ? '#0a0a0a' : '#fff',
             display: 'flex',
             alignItems: 'center',
@@ -567,33 +576,35 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-            {/* Заметки к тендеру */}
-            <Popover
-              content={
-                <NotesPopoverContent
-                  tenderId={currentTenderId}
-                  userId={user?.id ?? null}
-                  roleCode={user?.role_code ?? ''}
-                  currentTheme={currentTheme}
+          <div style={{ display: 'flex', alignItems: 'center', gap: isPhone ? '12px' : '24px' }}>
+            {/* Заметки к тендеру — скрыты для Генерального директора */}
+            {!isGeneralDirector && (
+              <Popover
+                content={
+                  <NotesPopoverContent
+                    tenderId={currentTenderId}
+                    userId={user?.id ?? null}
+                    roleCode={user?.role_code ?? ''}
+                    currentTheme={currentTheme}
+                  />
+                }
+                title="Заметки к тендеру"
+                trigger="click"
+                open={notesOpen}
+                onOpenChange={setNotesOpen}
+                placement="bottomRight"
+                destroyOnHidden
+              >
+                <MessageOutlined
+                  style={{
+                    fontSize: isPhone ? '20px' : '24px',
+                    cursor: 'pointer',
+                    color: currentTenderId ? '#10b981' : '#8c8c8c',
+                    fontWeight: 'bold',
+                  }}
                 />
-              }
-              title="Заметки к тендеру"
-              trigger="click"
-              open={notesOpen}
-              onOpenChange={setNotesOpen}
-              placement="bottomRight"
-              destroyOnHidden
-            >
-              <MessageOutlined
-                style={{
-                  fontSize: '24px',
-                  cursor: 'pointer',
-                  color: currentTenderId ? '#10b981' : '#8c8c8c',
-                  fontWeight: 'bold',
-                }}
-              />
-            </Popover>
+              </Popover>
+            )}
 
             {/* Калькулятор */}
             <Popover
@@ -626,7 +637,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               onOpenChange={setCalcOpen}
               placement="bottomRight"
             >
-              <CalculatorOutlined style={{ fontSize: '24px', cursor: 'pointer', color: '#1890ff', fontWeight: 'bold' }} />
+              <CalculatorOutlined style={{ fontSize: isPhone ? '20px' : '24px', cursor: 'pointer', color: '#1890ff', fontWeight: 'bold' }} />
             </Popover>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -768,7 +779,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               trigger={['click']}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                <span>{user?.full_name || 'Пользователь'}</span>
+                {!isPhone && <span>{user?.full_name || 'Пользователь'}</span>}
                 <Avatar style={{
                   backgroundColor: user?.role_color ? `var(--ant-${user.role_color}-6, #10b981)` : '#10b981'
                 }}>

@@ -1,0 +1,52 @@
+/* Адаптив страницы «Финансовые показатели». Скоупим под .financial-indicators-page,
+   чтобы media-queries не текли на остальное приложение. */
+
+/* Защита от горизонтального скролла страницы: скролл — только внутри таблиц. */
+.financial-indicators-page {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Планшеты (iPad portrait, landscape-телефоны) */
+@media (max-width: 991px) {
+  .financial-indicators-page .ant-card-body {
+    padding: 16px;
+  }
+}
+
+/* Телефоны */
+@media (max-width: 575px) {
+  .financial-indicators-page .ant-card-body {
+    padding: 12px;
+  }
+
+  /* Компактнее вкладки Графики/Таблица */
+  .financial-indicators-page .ant-tabs-tab {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .financial-indicators-page .ant-tabs-tab + .ant-tabs-tab {
+    margin-left: 8px;
+  }
+
+  /* Уменьшаем шрифт встроенных таблиц детализации (вкладка «Графики») */
+  .financial-indicators-page .ant-table-small .ant-table-cell {
+    font-size: 12px;
+    padding: 6px 8px;
+  }
+
+  /* «Краткая сводка» — ужимаем текст ≈вдвое, чтобы блок влезал без скролла */
+  .financial-indicators-page .fi-summary-table .ant-table-cell {
+    font-size: 10px;
+    padding: 4px 4px;
+    word-break: break-word;
+  }
+  .financial-indicators-page .fi-summary-table .ant-table-thead .ant-table-cell {
+    white-space: normal;
+  }
+
+  /* Заголовки карточек графиков компактнее */
+  .financial-indicators-page .ant-card-head-title {
+    font-size: 14px;
+  }
+}

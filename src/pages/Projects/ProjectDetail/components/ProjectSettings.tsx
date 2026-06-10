@@ -29,6 +29,8 @@ const { Text } = Typography;
 interface ProjectSettingsProps {
   project: ProjectFull;
   onSave: () => Promise<void>;
+  /** Только просмотр — поля недоступны для редактирования (Генеральный директор) */
+  readOnly?: boolean;
 }
 
 const formatMoney = (value: number): string => {
@@ -49,7 +51,7 @@ const formatMoney = (value: number): string => {
   return value.toLocaleString('ru-RU');
 };
 
-export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSave }) => {
+export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSave, readOnly }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [tenders, setTenders] = useState<Tender[]>([]);
@@ -185,7 +187,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
       <Divider />
 
       {/* Edit form */}
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" disabled={readOnly}>
         <Row gutter={24}>
           <Col span={24}>
             <Form.Item name="tender_id" label="Связь с тендером (опционально)">
@@ -272,11 +274,13 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
           </Col>
         </Row>
 
-        <Form.Item>
-          <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={loading}>
-            Сохранить изменения
-          </Button>
-        </Form.Item>
+        {!readOnly && (
+          <Form.Item>
+            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={loading}>
+              Сохранить изменения
+            </Button>
+          </Form.Item>
+        )}
       </Form>
     </div>
   );
