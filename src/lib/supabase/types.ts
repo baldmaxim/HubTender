@@ -993,7 +993,6 @@ export interface UserPositionFilter {
 // Все страницы портала (для Transfer component и проверки доступа)
 export const ALL_PAGES = [
   '/dashboard',
-  '/tender-dashboard',
   '/tenders',
   '/tender-timeline',
   '/tasks',
@@ -1029,7 +1028,6 @@ export const DEFAULT_ROLE_PAGES: Record<UserRole, string[]> = {
   'Разработчик': [], // Полный доступ (для отладки и разработки)
   'Старший группы': [
     '/dashboard',
-    '/tender-dashboard',
     '/tender-timeline',
     '/tasks',
     '/positions',
@@ -1046,7 +1044,6 @@ export const DEFAULT_ROLE_PAGES: Record<UserRole, string[]> = {
   ],
   'Инженер': [
     '/dashboard',
-    '/tender-dashboard',
     '/tender-timeline',
     '/tasks',
     '/positions',
@@ -1060,7 +1057,6 @@ export const DEFAULT_ROLE_PAGES: Record<UserRole, string[]> = {
 
 // Названия страниц (соответствуют левому боковому меню)
 export const PAGE_LABELS: Record<string, string> = {
-  '/tender-dashboard': 'Тендерный монитор',
   '/dashboard': 'Дашборд',
   '/tenders': 'Перечень тендеров',
   '/tender-timeline': 'Хронология расчёта тендеров',
@@ -1093,11 +1089,15 @@ export const PAGE_LABELS: Record<string, string> = {
 export const PAGES_STRUCTURE = [
   {
     title: null, // Без группы
-    pages: ['/dashboard', '/tasks', '/positions'],
+    pages: ['/dashboard', '/positions'],
   },
   {
     title: 'Данные по тендерам',
-    pages: ['/tender-dashboard', '/tenders', '/tender-timeline'],
+    pages: ['/tenders', '/tender-timeline'],
+  },
+  {
+    title: null, // Без группы
+    pages: ['/tasks'],
   },
   {
     title: 'Коммерция',
@@ -1105,31 +1105,27 @@ export const PAGES_STRUCTURE = [
   },
   {
     title: 'Библиотеки',
-    pages: ['/library', '/library/templates'],
+    pages: ['/library', '/library/templates', '/admin/nomenclatures', '/admin/construction_cost'],
   },
   {
     title: null, // Без группы
-    pages: ['/bsm', '/costs', '/financial-indicators'],
+    pages: ['/financial-indicators'],
   },
   {
     title: 'Аналитика',
-    pages: ['/analytics/comparison', '/projects'],
+    pages: ['/costs', '/analytics/comparison', '/bsm', '/projects'],
   },
   {
     title: 'Администрирование',
-    pages: [
-      '/admin/nomenclatures',
-      '/admin/tenders',
-      '/admin/construction_cost',
-      '/admin/markup',
-      '/admin/markup_constructor',
-      '/admin/import-log',
-      '/admin/insurance',
-    ],
+    pages: ['/admin/tenders', '/admin/markup', '/admin/markup_constructor'],
   },
   {
     title: null, // Без группы
-    pages: ['/users', '/settings'],
+    pages: ['/users'],
+  },
+  {
+    title: 'Настройки',
+    pages: ['/admin/import-log', '/admin/insurance'],
   },
 ] as const;
 
@@ -1173,12 +1169,6 @@ export const hasPageAccess = (user: AuthUser, pagePath: string): boolean => {
 
   // Специальная логика: если есть доступ к /projects, автоматически разрешен доступ к /projects/:projectId
   // Эти страницы являются одним целым - просмотр списка объектов и деталей конкретного объекта
-  if (pagePath === '/tender-dashboard') {
-    if (user.allowed_pages.includes('/dashboard') || user.allowed_pages.includes('/tenders')) {
-      return true;
-    }
-  }
-
   if (pagePath.match(/^\/projects\/[^/]+$/)) {
     // Проверяем, есть ли доступ к родительской странице /projects
     if (user.allowed_pages.includes('/projects')) {
