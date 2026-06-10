@@ -323,6 +323,30 @@ type TenderRegistryPatch struct {
 	ManualTotalCost       *float64         `json:"manual_total_cost"`
 	IsArchived            *bool            `json:"is_archived"`
 	SortOrder             *int             `json:"sort_order"`
+
+	// present — множество ключей, реально пришедших в JSON-теле. Позволяет
+	// PatchFields отличить явный null (очистить столбец) от отсутствия поля
+	// (не трогать) для nullable-колонок вроде status_id.
+	present map[string]bool
+}
+
+// UnmarshalJSON декодирует патч и одновременно фиксирует набор присутствующих
+// ключей. Без этого JSON `status_id: null` неотличим от отсутствия поля
+// (оба дают *string == nil), и очистка статуса («Направлено») молча теряется.
+func (p *TenderRegistryPatch) UnmarshalJSON(b []byte) error {
+	type alias TenderRegistryPatch
+	if err := json.Unmarshal(b, (*alias)(p)); err != nil {
+		return err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	p.present = make(map[string]bool, len(raw))
+	for k := range raw {
+		p.present[k] = true
+	}
+	return nil
 }
 
 // PatchFields applies non-nil fields to a tender_registry row.
@@ -378,8 +402,11 @@ func (r *TenderRegistryRepo) PatchFields(ctx context.Context, id string, p Tende
 	if p.InvitationDate != nil {
 		add("invitation_date", *p.InvitationDate)
 	}
-	if p.StatusID != nil {
-		add("status_id", *p.StatusID)
+	// status_id nullable: явный null («Направлено») должен очищать столбец.
+	// Ориентируемся на присутствие ключа, а не на nil; pgx пишет NULL для
+	// nil-указателя.
+	if p.present["status_id"] {
+		add("status_id", p.StatusID)
 	}
 	if p.CommissionDate != nil {
 		add("commission_date", *p.CommissionDate)

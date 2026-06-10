@@ -647,7 +647,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 tenderId={tender.id}
                 field="status_id"
                 label="Статус"
-                value={tender.status?.name === 'Направлено' ? '__sent__' : tender.status_id}
+                value={dashboardStatus === 'sent' ? '__sent__' : tender.status_id}
                 displayValue={tender.status?.name || (dashboardStatus === 'sent' ? 'Направлено' : '—')}
                 type="select"
                 options={statusOptionsWithSent}
