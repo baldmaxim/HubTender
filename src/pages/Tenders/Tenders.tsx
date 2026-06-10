@@ -6,6 +6,7 @@ import { patchTenderRegistryFields } from '../../lib/api/tenderRegistry';
 import type { TenderRegistryWithRelations } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { useTenderData } from './hooks/useTenderData';
 import { TenderAddForm } from './components';
 import ImportTendersModal from './ImportTendersModal';
@@ -77,6 +78,7 @@ const Tenders: React.FC = () => {
   const { message } = App.useApp();
   const { user } = useAuth();
   const { theme } = useTheme();
+  const { isMobile } = useIsMobile();
   const isDirector = user?.role_code === 'director' || user?.role_code === 'general_director';
   const isGeneralDirector = user?.role_code === 'general_director';
   const palette = getTenderMonitorPalette(theme === 'dark');
@@ -202,7 +204,7 @@ const Tenders: React.FC = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div>
-            <div style={{ color: palette.text, fontSize: 30, fontWeight: 700, marginBottom: 6 }}>Перечень тендеров</div>
+            <div style={{ color: palette.text, fontSize: isMobile ? 22 : 30, fontWeight: 700, marginBottom: 6 }}>Перечень тендеров</div>
             <div style={{ color: palette.muted, fontSize: 14 }}>
               Реестр с контролем подачи КП, звонков и общей хронологии тендера.
             </div>

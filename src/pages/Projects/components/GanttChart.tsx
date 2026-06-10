@@ -20,6 +20,7 @@ import {
   type ChartDataset,
 } from 'chart.js';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import type { ProjectFull, ProjectCompletion } from '../../../lib/supabase/types';
 import { getErrorMessage } from '../../../utils/errors';
 import { buildGanttChartData, exportGanttCompletionWithCharts } from '../../../utils/excel';
@@ -86,6 +87,7 @@ const MONTH_NAMES_SHORT = [
 
 export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData }) => {
   const { theme } = useTheme();
+  const { isPhone } = useIsMobile();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
   const [chartModalProject, setChartModalProject] = useState<{ project: ProjectFull; colorIndex: number } | null>(null);
@@ -112,7 +114,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
   }, []);
 
   // Generate months timeline - from earliest project date to current + 4 years
-  const { months, monthWidth } = useMemo(() => {
+  const { months, monthWidth: baseMonthWidth } = useMemo(() => {
     if (visibleProjects.length === 0) return { months: [], monthWidth: 80 };
 
     const now = dayjs();
@@ -160,6 +162,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
 
     return { months: monthsList, monthWidth: 80 };
   }, [visibleProjects, completionData]);
+
+  // На телефоне ужимаем ширину месяца, чтобы таймлайну осталось место
+  const monthWidth = isPhone ? 56 : baseMonthWidth;
 
   // Calculate totals across all visible projects
   const totals = useMemo(() => {
@@ -1020,10 +1025,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
     );
   }
 
+  // На телефоне ужимаем фиксированные колонки, чтобы таймлайну осталось место
   const rowHeight = 70;
   const headerHeight = 60;
-  const projectNameWidth = 200;
-  const chartWidth = 150;
+  const projectNameWidth = isPhone ? 128 : 200;
+  const chartWidth = isPhone ? 84 : 150;
   const gridWidth = months.length * monthWidth;
 
   return (

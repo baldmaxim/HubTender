@@ -63,6 +63,10 @@ export const ProjectCards: React.FC<ProjectCardsProps> = ({ data, loading }) => 
           : null;
         const isPastDeadline = endDate && endDate.isBefore(dayjs(), 'day');
         const isNearDeadline = endDate && endDate.diff(dayjs(), 'day') <= 30 && !isPastDeadline;
+        const ratePerM2 =
+          project.area && project.area > 0
+            ? Math.round((project.final_contract_cost ?? 0) / project.area)
+            : null;
 
         return (
           <Col xs={24} sm={12} lg={8} xl={6} key={project.id}>
@@ -108,19 +112,31 @@ export const ProjectCards: React.FC<ProjectCardsProps> = ({ data, loading }) => 
                       <EnvironmentOutlined style={{ color: '#8c8c8c', fontSize: 12 }} />
                       <Text type="secondary" style={{ fontSize: 12 }}>
                         {project.area.toLocaleString('ru-RU')} м²
+                        {ratePerM2 != null && (
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {' · '}{ratePerM2.toLocaleString('ru-RU')} ₽/м²
+                          </Text>
+                        )}
                       </Text>
                     </div>
                   )}
 
-                  {endDate && (
+                  {(project.contract_date || endDate) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <CalendarOutlined style={{ color: '#8c8c8c', fontSize: 12 }} />
-                      <Tag
-                        color={isPastDeadline ? 'red' : isNearDeadline ? 'orange' : 'default'}
-                        style={{ fontSize: 10, margin: 0 }}
-                      >
-                        до {endDate.format('DD.MM.YYYY')}
-                      </Tag>
+                      {project.contract_date && (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          с {dayjs(project.contract_date).format('DD.MM.YYYY')}
+                        </Text>
+                      )}
+                      {endDate && (
+                        <Tag
+                          color={isPastDeadline ? 'red' : isNearDeadline ? 'orange' : 'default'}
+                          style={{ fontSize: 10, margin: 0 }}
+                        >
+                          до {endDate.format('DD.MM.YYYY')}
+                        </Tag>
+                      )}
                     </div>
                   )}
                 </Space>

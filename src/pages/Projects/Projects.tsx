@@ -8,9 +8,11 @@ import {
 } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { useProjectsData } from './hooks/useProjectsData';
 import { useProjectActions } from './hooks/useProjectActions';
 import { ProjectsList } from './components/ProjectsList';
+import { ProjectCards } from './components/ProjectCards';
 import { GanttChart } from './components/GanttChart';
 import { ProjectModal } from './components/ProjectModal';
 
@@ -20,6 +22,7 @@ import type { ProjectFull } from '../../lib/supabase/types';
 const Projects: React.FC = () => {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { isPhone, screens } = useIsMobile();
   // Генеральный директор — только просмотр (без добавления/редактирования объектов)
   const readOnly = user?.role_code === 'general_director';
   const [activeTab, setActiveTab] = useState<string>('list');
@@ -61,7 +64,11 @@ const Projects: React.FC = () => {
           Список объектов
         </span>
       ),
-      children: <ProjectsList data={filteredProjects} loading={loading} agreementsMap={agreementsMap} />,
+      children: !screens.lg ? (
+        <ProjectCards data={filteredProjects} loading={loading} />
+      ) : (
+        <ProjectsList data={filteredProjects} loading={loading} agreementsMap={agreementsMap} />
+      ),
     },
     {
       key: 'schedule',
@@ -88,15 +95,15 @@ const Projects: React.FC = () => {
           activeKey={activeTab}
           onChange={setActiveTab}
           items={tabItems}
-          size="large"
+          size={isPhone ? 'middle' : 'large'}
           tabBarExtraContent={
-            <Space>
+            <Space wrap>
               <Input
                 placeholder="Поиск по названию или заказчику"
                 prefix={<SearchOutlined />}
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
-                style={{ width: 280 }}
+                style={{ width: isPhone ? 160 : 280 }}
                 allowClear
               />
               {!readOnly && (
