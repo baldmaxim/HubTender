@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
-import { Button, DatePicker, Empty, Input, Popover, Select, Skeleton, Space, Tag, message } from 'antd';
-import dayjs, { type Dayjs } from 'dayjs';
+import { Empty, Input, Popover, Skeleton, Space, Tag } from 'antd';
 import {
-  CloseOutlined,
   EnvironmentFilled,
   FileTextOutlined,
   LinkOutlined,
   PhoneOutlined,
 } from '@ant-design/icons';
-import { patchTenderRegistryFields } from '../../../lib/api/tenderRegistry';
 import type { TenderRegistryWithRelations } from '../../../lib/supabase';
 import { useTheme } from '../../../contexts/ThemeContext';
 import {
-  DATE_INPUT_FORMATS,
   formatArea,
   formatDate,
   formatDateTime,
@@ -224,61 +220,21 @@ function MapPopover({ tender, palette }: { tender: TenderRegistryWithRelations; 
 function ChronologyPopover({
   tender,
   palette,
-  onUpdate,
+  onOpenTimeline,
 }: {
   tender: TenderRegistryWithRelations;
   palette: TenderMonitorPalette;
-  onUpdate: () => Promise<void> | void;
+  onOpenTimeline: (tender: TenderRegistryWithRelations) => void;
 }) {
   const chronologyItems = getChronologyItems(tender);
   const [open, setOpen] = useState(false);
-  const [pinned, setPinned] = useState(false);
-  const [draftType, setDraftType] = useState<'default' | 'call_follow_up'>('default');
-  const [draftDate, setDraftDate] = useState<Dayjs | null>(dayjs());
-  const [draftText, setDraftText] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    const trimmed = draftText.trim();
-
-    if (!trimmed) {
-      message.warning('Введите текст события');
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const newItem = {
-        date: (draftDate ?? dayjs()).toISOString(),
-        text: trimmed,
-        type: draftType,
-      };
-      const existing = tender.chronology_items || [];
-
-      try {
-        await patchTenderRegistryFields(tender.id, { chronology_items: [...existing, newItem] });
-      } catch (err) {
-        message.error((err as Error).message);
-        return;
-      }
-
-      setDraftText('');
-      setDraftType('default');
-      setDraftDate(dayjs());
-      await onUpdate();
-      message.success('Событие добавлено');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <Popover
       trigger="hover"
       placement="leftTop"
       mouseEnterDelay={0.15}
-      open={open || pinned}
+      open={open}
       onOpenChange={(next) => setOpen(next)}
       content={
         <div style={{ width: 340, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -305,54 +261,6 @@ function ChronologyPopover({
           ) : (
             <div style={{ color: palette.muted, fontSize: 13 }}>Хронология пока не заполнена</div>
           )}
-
-          <div style={{ borderTop: `1px solid ${palette.border}`, paddingTop: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ color: palette.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                Добавить событие
-              </span>
-              {pinned ? (
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<CloseOutlined />}
-                  onClick={() => setPinned(false)}
-                  style={{ color: palette.muted }}
-                  title="Открепить"
-                />
-              ) : (
-                <span style={{ color: palette.muted, fontSize: 10 }}>кликните ярлык, чтобы закрепить</span>
-              )}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '108px 120px minmax(0, 1fr)', gap: 6 }}>
-              <Select
-                size="small"
-                value={draftType}
-                onChange={(value) => setDraftType(value)}
-                options={[
-                  { value: 'default', label: 'Событие' },
-                  { value: 'call_follow_up', label: 'Звонок' },
-                ]}
-              />
-              <DatePicker
-                size="small"
-                value={draftDate}
-                onChange={(value) => setDraftDate(value)}
-                format={DATE_INPUT_FORMATS}
-                style={{ width: '100%' }}
-              />
-              <Input
-                size="small"
-                value={draftText}
-                onChange={(event) => setDraftText(event.target.value)}
-                onPressEnter={() => void handleSave()}
-                placeholder="Текст события"
-              />
-            </div>
-            <Button type="primary" size="small" block style={{ marginTop: 6 }} loading={saving} onClick={() => void handleSave()}>
-              Сохранить
-            </Button>
-          </div>
         </div>
       }
       overlayInnerStyle={{
@@ -364,7 +272,8 @@ function ChronologyPopover({
       <div
         onClick={(event) => {
           event.stopPropagation();
-          setPinned((prev) => !prev);
+          setOpen(false);
+          onOpenTimeline(tender);
         }}
         style={{
           display: 'inline-flex',
@@ -373,12 +282,12 @@ function ChronologyPopover({
           padding: '3px 7px',
           borderRadius: 8,
           background: chronologyItems.length > 0 ? palette.warningBg : palette.disabledBg,
-          border: `1px solid ${pinned ? palette.warning : chronologyItems.length > 0 ? palette.warningBorder : palette.border}`,
+          border: `1px solid ${chronologyItems.length > 0 ? palette.warningBorder : palette.border}`,
           color: chronologyItems.length > 0 ? palette.warning : palette.muted,
           fontSize: 11,
           cursor: 'pointer',
         }}
-        title="Показать хронологию · клик — закрепить"
+        title="Клик — редактировать хронологию"
       >
         <FileTextOutlined />
         <span>{chronologyItems.length}</span>
@@ -456,14 +365,14 @@ function SectionHeader({
 function TenderRow({
   tender,
   onOpenTender,
+  onOpenTimeline,
   onQuickCall,
-  onUpdate,
   palette,
 }: {
   tender: TenderRegistryWithRelations;
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
+  onOpenTimeline: (tender: TenderRegistryWithRelations) => void;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
-  onUpdate: () => Promise<void> | void;
   palette: TenderMonitorPalette;
 }) {
   const dashboardStatus = getDashboardStatus(tender);
@@ -690,7 +599,7 @@ function TenderRow({
           >
             <LinkOutlined />
           </button>
-          <ChronologyPopover tender={tender} palette={palette} onUpdate={onUpdate} />
+          <ChronologyPopover tender={tender} palette={palette} onOpenTimeline={onOpenTimeline} />
         </Space>
       </div>
 
@@ -717,7 +626,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   onQuickCall,
   onUpdate,
 }) => {
-  void onOpenTimeline;
+  void onUpdate;
 
   const { theme } = useTheme();
   const palette = getTenderMonitorPalette(theme === 'dark');
@@ -863,8 +772,8 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
                     key={tender.id}
                     tender={tender}
                     onOpenTender={onOpenTender}
+                    onOpenTimeline={onOpenTimeline}
                     onQuickCall={onQuickCall}
-                    onUpdate={onUpdate}
                     palette={palette}
                   />
                 ))
