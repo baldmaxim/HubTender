@@ -22,6 +22,12 @@ type additionalPositionRow struct {
 	positionNumber   float64
 }
 
+// addPosPair maps a source additional position id to its new counterpart.
+type addPosPair struct {
+	oldPosID string
+	newPosID string
+}
+
 // copyAdditionalPositions copies is_additional=true positions from the source
 // tender to the new tender, resolving parent references via oldToNew or by
 // item_no fallback (verbatim behaviour from execute_version_transfer lines 817-1073).
@@ -71,6 +77,7 @@ func copyAdditionalPositions(
 		return 0, 0, 0, 0, fmt.Errorf("transferRepo: iterate additional positions: %w", err)
 	}
 
+	var addPosPairs []addPosPair
 	for _, ap := range additionals {
 		if ap.parentPositionID == nil {
 			skipped++
@@ -95,37 +102,25 @@ func copyAdditionalPositions(
 			return 0, 0, 0, 0, err
 		}
 		copied++
-
-		b, p, err := copyAdditionalBoqItems(
-			ctx, tx, ap.id, newAddPosID, newTenderID, oldItemIDToNew,
-		)
-		if err != nil {
-			return 0, 0, 0, 0, err
-		}
-		boqCopied += b
-		parentLinksRestored += p
-
-		// Update total_material / total_works on the new additional position.
-		if _, err := tx.Exec(ctx, `
-			UPDATE public.client_positions
-			SET
-				total_material = COALESCE((
-					SELECT SUM(CASE
-						WHEN boq_item_type IN ('мат', 'суб-мат', 'мат-комп.')
-						THEN COALESCE(total_amount, 0) ELSE 0 END)
-					FROM public.boq_items WHERE client_position_id = $1::uuid
-				), 0),
-				total_works = COALESCE((
-					SELECT SUM(CASE
-						WHEN boq_item_type IN ('раб', 'суб-раб', 'раб-комп.')
-						THEN COALESCE(total_amount, 0) ELSE 0 END)
-					FROM public.boq_items WHERE client_position_id = $1::uuid
-				), 0)
-			WHERE id = $1::uuid
-		`, newAddPosID); err != nil {
-			return 0, 0, 0, 0, fmt.Errorf("transferRepo: update additional position totals: %w", err)
-		}
+		addPosPairs = append(addPosPairs, addPosPair{oldPosID: ap.id, newPosID: newAddPosID})
 	}
+
+	// Batched BOQ copy across all additional positions in one set-based insert +
+	// one bulk parent UPDATE. Parents resolve against the global oldItemIDToNew
+	// (matched-position items already merged), since an additional material's
+	// parent work may live in a matched position.
+	//
+	// Per-position total_material/total_works updates are intentionally dropped:
+	// Step 11 in ExecuteVersionTransfer recomputes totals for every position in
+	// the new tender (additional included) in a single statement afterwards.
+	bc, pl, err := copyAdditionalBoqItemsBatched(
+		ctx, tx, newTenderID, addPosPairs, oldItemIDToNew,
+	)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	boqCopied = bc
+	parentLinksRestored = pl
 
 	return copied, skipped, boqCopied, parentLinksRestored, nil
 }
@@ -235,153 +230,43 @@ func insertAdditionalPosition(
 	return newPosID, nil
 }
 
-// copyAdditionalBoqItems copies BOQ items from one additional position to its
-// new counterpart, restores parent links, and records new IDs into oldItemIDToNew.
-func copyAdditionalBoqItems(
+// copyAdditionalBoqItemsBatched copies BOQ items for ALL additional positions
+// in one set-based insert (parents NULL) + one bulk parent UPDATE, instead of a
+// per-position/per-row loop. addPosPairs maps each source additional position to
+// its new counterpart.
+//
+// Parent links resolve against the global oldItemIDToNew, which already contains
+// matched-position items (an additional material's parent work may live in a
+// matched position) and is extended in-place with the additional items' own ids
+// by bulkCopyBoqItems before parent resolution — so within-batch parents resolve
+// too. Returns (boqCopied, parentLinksRestored, error).
+func copyAdditionalBoqItemsBatched(
 	ctx context.Context,
 	tx pgx.Tx,
-	oldPosID string,
-	newPosID string,
 	newTenderID string,
+	addPosPairs []addPosPair,
 	oldItemIDToNew map[string]string,
 ) (int, int, error) {
-	type addBoqRow struct {
-		oldItemID                   string
-		sortNumber                  int
-		boqItemType                 string
-		materialType                *string
-		materialNameID              *string
-		workNameID                  *string
-		unitCode                    *string
-		quantity                    *float64
-		baseQuantity                *float64
-		consumptionCoeff            *float64
-		conversionCoeff             *float64
-		deliveryPriceType           *string
-		deliveryAmount              *float64
-		currencyType                *string
-		totalAmount                 *float64
-		detailCostCategoryID        *string
-		quoteLink                   *string
-		commercialMarkup            *float64
-		totalCommercialMaterialCost *float64
-		totalCommercialWorkCost     *float64
-		description                 *string
-		unitRate                    *float64
-		parentWorkItemID            *string
+	if len(addPosPairs) == 0 {
+		return 0, 0, nil
 	}
 
-	rows, err := tx.Query(ctx, `
-		SELECT
-			id::text, sort_number,
-			boq_item_type::text, material_type::text,
-			material_name_id::text, work_name_id::text,
-			unit_code, quantity, base_quantity,
-			consumption_coefficient, conversion_coefficient,
-			delivery_price_type::text, delivery_amount,
-			currency_type::text, total_amount,
-			detail_cost_category_id::text, quote_link,
-			commercial_markup,
-			total_commercial_material_cost, total_commercial_work_cost,
-			description, unit_rate,
-			parent_work_item_id::text
-		FROM public.boq_items
-		WHERE client_position_id = $1::uuid
-		ORDER BY sort_number, id
-	`, oldPosID)
+	oldPosIDs := make([]string, len(addPosPairs))
+	newPosIDs := make([]string, len(addPosPairs))
+	for i, p := range addPosPairs {
+		oldPosIDs[i] = p.oldPosID
+		newPosIDs[i] = p.newPosID
+	}
+
+	mapped, err := bulkCopyBoqItems(ctx, tx, newTenderID, oldPosIDs, newPosIDs, oldItemIDToNew)
 	if err != nil {
-		return 0, 0, fmt.Errorf("transferRepo: fetch additional BOQ: %w", err)
+		return 0, 0, err
 	}
 
-	var sources []addBoqRow
-	for rows.Next() {
-		var s addBoqRow
-		if err := rows.Scan(
-			&s.oldItemID, &s.sortNumber,
-			&s.boqItemType, &s.materialType,
-			&s.materialNameID, &s.workNameID,
-			&s.unitCode, &s.quantity, &s.baseQuantity,
-			&s.consumptionCoeff, &s.conversionCoeff,
-			&s.deliveryPriceType, &s.deliveryAmount,
-			&s.currencyType, &s.totalAmount,
-			&s.detailCostCategoryID, &s.quoteLink,
-			&s.commercialMarkup,
-			&s.totalCommercialMaterialCost, &s.totalCommercialWorkCost,
-			&s.description, &s.unitRate, &s.parentWorkItemID,
-		); err != nil {
-			rows.Close()
-			return 0, 0, fmt.Errorf("transferRepo: scan additional BOQ row: %w", err)
-		}
-		sources = append(sources, s)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return 0, 0, fmt.Errorf("transferRepo: iterate additional BOQ rows: %w", err)
+	parentLinksRestored, err := restoreParentLinks(ctx, tx, mapped, oldItemIDToNew)
+	if err != nil {
+		return 0, 0, err
 	}
 
-	const insertQ = `
-		INSERT INTO public.boq_items (
-			tender_id, client_position_id, sort_number,
-			boq_item_type, material_type, material_name_id, work_name_id,
-			unit_code, quantity, base_quantity,
-			consumption_coefficient, conversion_coefficient,
-			delivery_price_type, delivery_amount,
-			currency_type, total_amount,
-			detail_cost_category_id, quote_link, commercial_markup,
-			total_commercial_material_cost, total_commercial_work_cost,
-			parent_work_item_id, description, unit_rate
-		) VALUES (
-			$1::uuid, $2::uuid, $3,
-			$4::public.boq_item_type, $5::public.material_type, $6::uuid, $7::uuid,
-			$8, $9, $10, $11, $12,
-			$13::public.delivery_price_type, $14,
-			$15::public.currency_type, $16,
-			$17::uuid, $18, $19, $20, $21,
-			NULL, $22, $23
-		)
-		RETURNING id::text
-	`
-
-	newIDs := make([]string, len(sources))
-
-	for i, s := range sources {
-		var newItemID string
-		if err := tx.QueryRow(ctx, insertQ,
-			newTenderID, newPosID, s.sortNumber,
-			s.boqItemType, s.materialType, s.materialNameID, s.workNameID,
-			s.unitCode, s.quantity, s.baseQuantity,
-			s.consumptionCoeff, s.conversionCoeff,
-			s.deliveryPriceType, s.deliveryAmount,
-			s.currencyType, s.totalAmount,
-			s.detailCostCategoryID, s.quoteLink, s.commercialMarkup,
-			s.totalCommercialMaterialCost, s.totalCommercialWorkCost,
-			s.description, s.unitRate,
-		).Scan(&newItemID); err != nil {
-			return 0, 0, fmt.Errorf("transferRepo: insert additional BOQ item: %w", err)
-		}
-		oldItemIDToNew[s.oldItemID] = newItemID
-		newIDs[i] = newItemID
-	}
-
-	parentLinksRestored := 0
-	for i, s := range sources {
-		if s.parentWorkItemID == nil {
-			continue
-		}
-		// Используем глобальный oldItemIDToNew — родитель материала может быть
-		// в сматченной (основной) позиции, а не только в текущей ДОП.
-		newParentID, ok := oldItemIDToNew[*s.parentWorkItemID]
-		if !ok {
-			continue
-		}
-		tag, err := tx.Exec(ctx, `
-			UPDATE public.boq_items SET parent_work_item_id = $1::uuid WHERE id = $2::uuid
-		`, newParentID, newIDs[i])
-		if err != nil {
-			return 0, 0, fmt.Errorf("transferRepo: restore additional parent link: %w", err)
-		}
-		parentLinksRestored += int(tag.RowsAffected())
-	}
-
-	return len(sources), parentLinksRestored, nil
+	return len(mapped), parentLinksRestored, nil
 }

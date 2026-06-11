@@ -1616,6 +1616,15 @@ CREATE OR REPLACE FUNCTION public.trg_boq_items_update_grand_total()
    SET search_path = public, pg_temp
 AS $function$
 BEGIN
+  -- Bulk fast-path: when a bulk operation (e.g. version transfer) sets
+  -- `app.skip_grand_total='on'` (SET LOCAL, transaction-scoped), skip the
+  -- per-row O(N) recompute. The caller MUST call
+  -- recalculate_tender_grand_total(tender_id) once before commit.
+  -- current_setting(..., true) returns NULL when unset → default path unchanged.
+  IF current_setting('app.skip_grand_total', true) = 'on' THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
   IF TG_OP = 'DELETE' THEN
     PERFORM public.recalculate_tender_grand_total(OLD.tender_id);
     RETURN OLD;
