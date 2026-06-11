@@ -58,6 +58,7 @@ type createBoqItemReq struct {
 	WorkNameID             *string  `json:"work_name_id" validate:"omitempty,uuid"`
 	ParentWorkItemID       *string  `json:"parent_work_item_id" validate:"omitempty,uuid"`
 	SortNumber             *int     `json:"sort_number" validate:"omitempty,gte=0"`
+	QuoteLink              *string  `json:"quote_link"`
 }
 
 // updateBoqItemReq is the request body for PATCH /api/v1/items/:id.
@@ -79,6 +80,7 @@ type updateBoqItemReq struct {
 	WorkNameID             *string  `json:"work_name_id" validate:"omitempty,uuid"`
 	ParentWorkItemID       *string  `json:"parent_work_item_id" validate:"omitempty,uuid"`
 	SortNumber             *int     `json:"sort_number" validate:"omitempty,gte=0"`
+	QuoteLink              *string  `json:"quote_link"`
 }
 
 // CreateBoqItem handles POST /api/v1/positions/:posId/items.
@@ -127,6 +129,7 @@ func (h *BoqWriteHandler) CreateBoqItem(w http.ResponseWriter, r *http.Request) 
 		WorkNameID:             req.WorkNameID,
 		ParentWorkItemID:       req.ParentWorkItemID,
 		SortNumber:             req.SortNumber,
+		QuoteLink:              req.QuoteLink,
 		CreatedBy:              authUser.ID,
 	}
 
@@ -205,6 +208,7 @@ func (h *BoqWriteHandler) UpdateBoqItem(w http.ResponseWriter, r *http.Request) 
 		WorkNameID:             req.WorkNameID,
 		ParentWorkItemID:       req.ParentWorkItemID,
 		SortNumber:             req.SortNumber,
+		QuoteLink:              req.QuoteLink,
 		ChangedBy:              authUser.ID,
 	}
 

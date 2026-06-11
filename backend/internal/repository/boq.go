@@ -35,6 +35,7 @@ type BoqItemRow struct {
 	ParentWorkItemID       *string   `json:"parent_work_item_id"`
 	MaterialNameID         *string   `json:"material_name_id"`
 	WorkNameID             *string   `json:"work_name_id"`
+	QuoteLink              *string   `json:"quote_link"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }

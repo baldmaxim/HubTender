@@ -89,6 +89,9 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItem
 	if in.SortNumber != nil {
 		set("sort_number", *in.SortNumber)
 	}
+	if in.QuoteLink != nil {
+		set("quote_link", *in.QuoteLink)
+	}
 
 	var newItem *BoqItemRow
 	if setClauses == "" {

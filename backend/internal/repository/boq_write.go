@@ -68,6 +68,7 @@ type CreateBoqItemInput struct {
 	WorkNameID             *string
 	ParentWorkItemID       *string
 	SortNumber             *int
+	QuoteLink              *string
 	CreatedBy              string // app users UUID for audit (changed_by)
 }
 
@@ -90,6 +91,7 @@ type UpdateBoqItemInput struct {
 	WorkNameID             *string
 	ParentWorkItemID       *string
 	SortNumber             *int
+	QuoteLink              *string
 	ChangedBy              string // app users UUID for audit (changed_by)
 }
 
@@ -104,7 +106,7 @@ const boqScanCols = `
 	currency_type::text, delivery_price_type::text, delivery_amount,
 	consumption_coefficient, total_amount, sort_number,
 	detail_cost_category_id::text, parent_work_item_id::text,
-	material_name_id::text, work_name_id::text,
+	material_name_id::text, work_name_id::text, quote_link,
 	COALESCE(created_at,NOW()), COALESCE(updated_at,NOW())
 `
 
@@ -130,7 +132,7 @@ func scanBoqItemRow(row interface{ Scan(...any) error }) (*BoqItemRow, error) {
 		&b.CurrencyType, &b.DeliveryPriceType, &b.DeliveryAmount,
 		&b.ConsumptionCoefficient, &b.TotalAmount, &b.SortNumber,
 		&b.DetailCostCategoryID, &b.ParentWorkItemID,
-		&b.MaterialNameID, &b.WorkNameID,
+		&b.MaterialNameID, &b.WorkNameID, &b.QuoteLink,
 		&b.CreatedAt, &b.UpdatedAt,
 	); err != nil {
 		return nil, err
@@ -169,6 +171,7 @@ func changedFields(old, new *BoqItemRow) []string {
 		{"parent_work_item_id", old.ParentWorkItemID, new.ParentWorkItemID},
 		{"material_name_id", old.MaterialNameID, new.MaterialNameID},
 		{"work_name_id", old.WorkNameID, new.WorkNameID},
+		{"quote_link", old.QuoteLink, new.QuoteLink},
 	}
 	var out []string
 	for _, p := range pairs {
@@ -260,8 +263,8 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		     unit_rate, currency_type, delivery_price_type,
 		     delivery_amount, consumption_coefficient, total_amount,
 		     detail_cost_category_id, material_name_id, work_name_id,
-		     parent_work_item_id, sort_number)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+		     parent_work_item_id, sort_number, quote_link)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
 		RETURNING ` + boqScanCols
 	row := tx.QueryRow(ctx, q,
 		in.ClientPositionID, in.TenderID, in.BoqItemType,
@@ -271,7 +274,7 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		in.DeliveryAmount, in.ConsumptionCoefficient, totalAmount,
 		in.DetailCostCategoryID,
 		in.MaterialNameID, in.WorkNameID,
-		in.ParentWorkItemID, sortNum,
+		in.ParentWorkItemID, sortNum, in.QuoteLink,
 	)
 	item, err := scanBoqItemRow(row)
 	if err != nil {
