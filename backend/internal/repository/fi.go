@@ -57,6 +57,12 @@ type FITenderRow struct {
 	// without it инженер/старший_группы видят canEdit=true даже после
 	// истечения срока сдачи версии тендера.
 	SubmissionDeadline *string `json:"submission_deadline,omitempty"`
+	// FinancialApproved is the «Финансовые показатели» approval status, bound to
+	// this tender version. Read here so the FI page (and its realtime refresh via
+	// getTenderById) reflects the current status live.
+	FinancialApproved   *bool   `json:"financial_approved"`
+	FinancialApprovedBy *string `json:"financial_approved_by,omitempty"`
+	FinancialApprovedAt *string `json:"financial_approved_at,omitempty"`
 }
 
 func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, error) {
@@ -69,7 +75,8 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 		       housing_class::text, construction_scope::text,
 		       area_sp, area_client, volume_title,
 		       upload_folder, bsm_link, tz_link, qa_form_link, project_folder_link,
-		       submission_deadline::text
+		       submission_deadline::text,
+		       financial_approved, financial_approved_by::text, financial_approved_at::text
 		FROM public.tenders
 		WHERE id = $1
 	`, id).Scan(&t.ID, &t.Title, &t.TenderNumber, &t.ClientName, &t.Version, &t.IsArchived,
@@ -77,7 +84,8 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 		&t.HousingClass, &t.ConstructionScope,
 		&t.AreaSP, &t.AreaClient, &t.VolumeTitle,
 		&t.UploadFolder, &t.BsmLink, &t.TzLink, &t.QaFormLink, &t.ProjectFolderLink,
-		&t.SubmissionDeadline)
+		&t.SubmissionDeadline,
+		&t.FinancialApproved, &t.FinancialApprovedBy, &t.FinancialApprovedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

@@ -354,6 +354,7 @@ func main() {
 		r.Post("/api/v1/tenders", tenderWH.CreateTender)
 		r.Patch("/api/v1/tenders/{id}", tenderWH.UpdateTender)
 		r.Patch("/api/v1/tenders/{id}/admin-fields", tenderWH.AdminPatchTender)
+		r.Post("/api/v1/tenders/{id}/financial-approval", tenderWH.ApproveFinancial)
 		r.Delete("/api/v1/tenders/{id}", tenderWH.DeleteTender)
 
 		r.Post("/api/v1/positions", positionWH.CreatePosition)

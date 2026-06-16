@@ -29,6 +29,8 @@ type tenderRepoer interface {
 	UpdateTender(ctx context.Context, id string, in repository.UpdateTenderInput) (*repository.TenderRow, error)
 	AdminPatchTender(ctx context.Context, id string, p repository.AdminTenderPatch) error
 	DeleteTender(ctx context.Context, id string) error
+	GetUserRoleCode(ctx context.Context, userID string) (string, error)
+	ApproveFinancial(ctx context.Context, tenderID, userID string) error
 }
 
 // TenderService provides cached access to tender data.
@@ -190,6 +192,30 @@ func (s *TenderService) AdminPatchTender(
 		return fmt.Errorf("tenderService.AdminPatchTender: %w", err)
 	}
 	s.cache.Delete("tender:overview:" + id)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	return nil
+}
+
+// ApproveFinancial sets the «Финансовые показатели» approval status for a tender
+// version. Only Генеральный директор (role_code = general_director) is allowed —
+// any other role gets ErrForbidden. Irreversible (the repo only flips false→true).
+func (s *TenderService) ApproveFinancial(ctx context.Context, tenderID, userID string) error {
+	roleCode, err := s.repo.GetUserRoleCode(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("tenderService.ApproveFinancial: role lookup: %w", err)
+	}
+	if roleCode != "general_director" {
+		return ErrForbidden
+	}
+
+	if err := s.repo.ApproveFinancial(ctx, tenderID, userID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return pgx.ErrNoRows
+		}
+		return fmt.Errorf("tenderService.ApproveFinancial: %w", err)
+	}
+
+	s.cache.Delete("tender:overview:" + tenderID)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
+	"github.com/su10/hubtender/backend/internal/services"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
 
@@ -23,6 +24,7 @@ type tenderWriteServicer interface {
 	UpdateTender(ctx context.Context, id string, in repository.UpdateTenderInput) (*repository.TenderRow, error)
 	AdminPatchTender(ctx context.Context, id string, p repository.AdminTenderPatch) error
 	DeleteTender(ctx context.Context, id string) error
+	ApproveFinancial(ctx context.Context, tenderID, userID string) error
 }
 
 // TenderWriteHandler handles mutating tender endpoints.
@@ -199,6 +201,37 @@ func (h *TenderWriteHandler) AdminPatchTender(w http.ResponseWriter, r *http.Req
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ApproveFinancial handles POST /api/v1/tenders/{id}/financial-approval —
+// согласование «Финансовых показателей» версии тендера. Доступно только
+// Генеральному директору (проверка роли в сервисе). Необратимо.
+func (h *TenderWriteHandler) ApproveFinancial(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing tender id").Render(w)
+		return
+	}
+
+	if err := h.svc.ApproveFinancial(r.Context(), id, authUser.ID); err != nil {
+		if errors.Is(err, services.ErrForbidden) {
+			apierr.Forbidden("только Генеральный директор может согласовывать финансовые показатели").Render(w)
+			return
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			apierr.NotFound("tender not found").Render(w)
+			return
+		}
+		apierr.InternalFromErr(w, r, err, "failed to approve financial indicators")
+		return
+	}
+
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: map[string]any{"financial_approved": true}})
 }
 
 // DeleteTender handles DELETE /api/v1/tenders/{id}.

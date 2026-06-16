@@ -16,6 +16,18 @@ export async function getTenderById(id: string): Promise<Tender> {
   return res.data;
 }
 
+/**
+ * Согласовать «Финансовые показатели» версии тендера (только Генеральный
+ * директор; роль проверяется на бэкенде). Необратимо.
+ * Go path: POST /api/v1/tenders/:id/financial-approval.
+ */
+export async function approveFinancial(tenderId: string): Promise<void> {
+  await apiFetch<undefined>(
+    `/api/v1/tenders/${encodeURIComponent(tenderId)}/financial-approval`,
+    { method: 'POST' },
+  );
+}
+
 export async function tryGetMarkupTactic(id: string | null): Promise<MarkupTactic | null> {
   if (!id) return null;
   // Reuse the markup api helper — it already handles Go/Supabase + 404.

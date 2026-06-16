@@ -2,8 +2,11 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // AdminTenderPatch is the admin-modal patch shape (no ETag check, all fields).
@@ -117,6 +120,52 @@ func (r *TenderRepo) AdminPatchTender(ctx context.Context, id string, p AdminTen
 		return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
 	}
 	return nil
+}
+
+// GetUserRoleCode returns the role_code for a user from public.users.
+// Used by ApproveFinancial to enforce the general_director-only rule.
+func (r *TenderRepo) GetUserRoleCode(ctx context.Context, userID string) (string, error) {
+	var code string
+	if err := r.pool.QueryRow(ctx,
+		`SELECT role_code FROM public.users WHERE id = $1`, userID,
+	).Scan(&code); err != nil {
+		return "", fmt.Errorf("tenderRepo.GetUserRoleCode: %w", err)
+	}
+	return code, nil
+}
+
+// ApproveFinancial marks the «Финансовые показатели» as approved for the given
+// tender version (one public.tenders row). Irreversible by design: it only
+// flips false→true, so the WHERE clause makes a repeat call a no-op. Returns
+// pgx.ErrNoRows when the tender does not exist.
+func (r *TenderRepo) ApproveFinancial(ctx context.Context, tenderID, userID string) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE public.tenders
+		   SET financial_approved = true,
+		       financial_approved_by = $2,
+		       financial_approved_at = NOW(),
+		       updated_at = NOW()
+		 WHERE id = $1 AND financial_approved = false
+	`, tenderID, userID)
+	if err != nil {
+		return fmt.Errorf("tenderRepo.ApproveFinancial: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		return nil // just approved
+	}
+	// 0 rows updated: either the tender is missing, or it was already approved
+	// (idempotent success). Disambiguate with a presence check.
+	var approved bool
+	err = r.pool.QueryRow(ctx,
+		`SELECT financial_approved FROM public.tenders WHERE id = $1`, tenderID,
+	).Scan(&approved)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return pgx.ErrNoRows
+	}
+	if err != nil {
+		return fmt.Errorf("tenderRepo.ApproveFinancial: verify: %w", err)
+	}
+	return nil // already approved → no-op success
 }
 
 // DeleteTender removes the tender (cascade is handled by FKs).

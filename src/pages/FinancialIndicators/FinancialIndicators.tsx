@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, Drawer, Space, message } from 'antd';
+import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, Drawer, Space, Popconfirm, message } from 'antd';
 import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getVersionColorByTitle } from '../../utils/versionColor';
-import { getTenderById } from '../../lib/api/fi';
+import { getTenderById, approveFinancial } from '../../lib/api/fi';
 import { adminPatchTender } from '../../lib/api/tenders';
 import { getErrorMessage } from '../../utils/errors';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
@@ -71,6 +71,9 @@ const FinancialIndicators: React.FC = () => {
   const [tempVolumeTitle, setTempVolumeTitle] = useState('Полный объём строительства');
   const [tableFullscreen, setTableFullscreen] = useState(false);
   const [tableScale, setTableScale] = useState(1);
+  // Статус согласования «Финансовых показателей» текущей версии тендера.
+  const [financialApproved, setFinancialApproved] = useState(false);
+  const isGeneralDirector = user?.role_code === 'general_director';
 
   const loadVolumeTitle = useCallback(async (tenderId: string) => {
     try {
@@ -78,6 +81,7 @@ const FinancialIndicators: React.FC = () => {
       const title = (data as { volume_title?: string | null })?.volume_title || 'Полный объём строительства';
       setVolumeTitle(title);
       setTempVolumeTitle(title);
+      setFinancialApproved(Boolean((data as { financial_approved?: boolean })?.financial_approved));
     } catch (error) {
       console.error('Ошибка загрузки заголовка:', error);
     }
@@ -121,6 +125,17 @@ const FinancialIndicators: React.FC = () => {
   const handleCancelVolumeTitle = () => {
     setTempVolumeTitle(volumeTitle);
     setEditingVolumeTitle(false);
+  };
+
+  const handleApprove = async () => {
+    if (!selectedTenderId) return;
+    try {
+      await approveFinancial(selectedTenderId);
+      setFinancialApproved(true);
+      message.success('Согласовано');
+    } catch (error) {
+      message.error('Ошибка согласования: ' + getErrorMessage(error));
+    }
   };
 
   const formatNumber = (value: number | undefined) => {
@@ -378,6 +393,46 @@ const FinancialIndicators: React.FC = () => {
             <Text type="secondary">
               {dayjs().format('DD.MM.YYYY')}
             </Text>
+          </div>
+
+          {/* Статус согласования + кнопка (только Генеральный директор). Адаптив:
+              на телефоне тег и кнопка переносятся, кнопка — во всю ширину. */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              gap: isPhone ? 6 : 8,
+              marginTop: 12,
+              maxWidth: '100%',
+            }}
+          >
+            <Tag
+              color={financialApproved ? 'green' : 'red'}
+              style={{ margin: 0, fontSize: isPhone ? 12 : 14, padding: isPhone ? '2px 10px' : '4px 14px' }}
+            >
+              {financialApproved ? 'Согласовано' : 'Не согласовано'}
+            </Tag>
+            {isGeneralDirector && !financialApproved && (
+              <Popconfirm
+                title="Согласовать финансовые показатели?"
+                description="Действие необратимо — изменить статус обратно нельзя."
+                okText="Согласовать"
+                cancelText="Отмена"
+                onConfirm={handleApprove}
+              >
+                <Button
+                  type="primary"
+                  icon={<CheckOutlined />}
+                  size={isPhone ? 'middle' : 'large'}
+                  block={isPhone}
+                  style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
+                >
+                  Согласовать
+                </Button>
+              </Popconfirm>
+            )}
           </div>
         </div>
 
