@@ -17,8 +17,8 @@ func NewImportLogService(repo *repository.ImportLogRepo) *ImportLogService {
 	return &ImportLogService{repo: repo}
 }
 
-func (s *ImportLogService) ListSessions(ctx context.Context, tenderID string) ([]repository.ImportSessionRow, error) {
-	return s.repo.ListSessions(ctx, tenderID)
+func (s *ImportLogService) ListSessions(ctx context.Context, tenderID, restrictUserID string) ([]repository.ImportSessionRow, error) {
+	return s.repo.ListSessions(ctx, tenderID, restrictUserID)
 }
 func (s *ImportLogService) UsersByIDs(ctx context.Context, ids []string) ([]repository.ImportLogUserRow, error) {
 	return s.repo.UsersByIDs(ctx, ids)
@@ -29,8 +29,8 @@ func (s *ImportLogService) TendersByIDs(ctx context.Context, ids []string) ([]re
 func (s *ImportLogService) ListAllTendersForFilter(ctx context.Context) ([]repository.TenderShort, error) {
 	return s.repo.ListAllTendersForFilter(ctx)
 }
-func (s *ImportLogService) CancelSession(ctx context.Context, sessionID, cancelledBy string) (*repository.CancelResult, error) {
-	res, err := s.repo.CancelSession(ctx, sessionID, cancelledBy)
+func (s *ImportLogService) CancelSession(ctx context.Context, sessionID, cancelledBy string, requireOwnership bool) (*repository.CancelResult, error) {
+	res, err := s.repo.CancelSession(ctx, sessionID, cancelledBy, requireOwnership)
 	if err != nil {
 		return nil, fmt.Errorf("importLogService.CancelSession: %w", err)
 	}

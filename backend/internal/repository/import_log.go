@@ -5,9 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// Sentinel errors returned by CancelSession so handlers can map them to the
+// right HTTP status via errors.Is.
+var (
+	ErrImportSessionForbidden = errors.New("import session: not owner")
+	ErrImportSessionNotFound  = errors.New("import session: not found")
 )
 
 // ImportLogRepo handles import_sessions reads + atomic session-cancel.
@@ -33,34 +41,36 @@ type ImportSessionRow struct {
 	PositionsSnapshot json.RawMessage `json:"positions_snapshot,omitempty"`
 }
 
-// ListSessions returns up to 200 latest sessions, filtered by tenderID.
-func (r *ImportLogRepo) ListSessions(ctx context.Context, tenderID string) ([]ImportSessionRow, error) {
+// ListSessions returns up to 200 latest sessions, optionally filtered by
+// tenderID and/or restrictUserID (when non-empty, only that user's sessions).
+func (r *ImportLogRepo) ListSessions(ctx context.Context, tenderID, restrictUserID string) ([]ImportSessionRow, error) {
 	var (
-		rows pgx.Rows
-		err  error
+		where []string
+		args  []any
 	)
 	if tenderID != "" {
-		rows, err = r.pool.Query(ctx, `
-			SELECT id::text, user_id::text, tender_id::text, file_name, items_count,
-			       to_char(imported_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-			       to_char(cancelled_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-			       cancelled_by::text, positions_snapshot
-			FROM public.import_sessions
-			WHERE tender_id = $1
-			ORDER BY imported_at DESC
-			LIMIT 200
-		`, tenderID)
-	} else {
-		rows, err = r.pool.Query(ctx, `
-			SELECT id::text, user_id::text, tender_id::text, file_name, items_count,
-			       to_char(imported_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-			       to_char(cancelled_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-			       cancelled_by::text, positions_snapshot
-			FROM public.import_sessions
-			ORDER BY imported_at DESC
-			LIMIT 200
-		`)
+		args = append(args, tenderID)
+		where = append(where, fmt.Sprintf("tender_id = $%d", len(args)))
 	}
+	if restrictUserID != "" {
+		args = append(args, restrictUserID)
+		where = append(where, fmt.Sprintf("user_id = $%d", len(args)))
+	}
+	clause := ""
+	if len(where) > 0 {
+		clause = "WHERE " + strings.Join(where, " AND ")
+	}
+	query := fmt.Sprintf(`
+		SELECT id::text, user_id::text, tender_id::text, file_name, items_count,
+		       to_char(imported_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		       to_char(cancelled_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		       cancelled_by::text, positions_snapshot
+		FROM public.import_sessions
+		%s
+		ORDER BY imported_at DESC
+		LIMIT 200
+	`, clause)
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("importLogRepo.ListSessions: %w", err)
 	}
@@ -194,25 +204,31 @@ type CancelResult struct {
 //   1. deletes boq_items rows tagged with import_session_id
 //   2. restores client_positions.manual_volume / manual_note from snapshot
 //   3. marks import_sessions row as cancelled
-func (r *ImportLogRepo) CancelSession(ctx context.Context, sessionID, cancelledBy string) (*CancelResult, error) {
+func (r *ImportLogRepo) CancelSession(ctx context.Context, sessionID, cancelledBy string, requireOwnership bool) (*CancelResult, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("importLogRepo.CancelSession: begin: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	var snapshot []byte
+	var (
+		ownerID  string
+		snapshot []byte
+	)
 	err = tx.QueryRow(ctx, `
-		SELECT positions_snapshot
+		SELECT user_id::text, positions_snapshot
 		FROM public.import_sessions
 		WHERE id = $1
 		FOR UPDATE
-	`, sessionID).Scan(&snapshot)
+	`, sessionID).Scan(&ownerID, &snapshot)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("importLogRepo.CancelSession: session not found")
+			return nil, ErrImportSessionNotFound
 		}
 		return nil, fmt.Errorf("importLogRepo.CancelSession: load: %w", err)
+	}
+	if requireOwnership && ownerID != cancelledBy {
+		return nil, ErrImportSessionForbidden
 	}
 
 	tag, err := tx.Exec(ctx, `

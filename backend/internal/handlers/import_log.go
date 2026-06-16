@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,13 +11,22 @@ import (
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
 
+// importLogFullAccessRoles see every user's import sessions and may cancel any
+// of them. All other roles are restricted to their own sessions.
+var importLogFullAccessRoles = map[string]bool{
+	"administrator":      true,
+	"developer":          true,
+	"director":           true,
+	"veduschiy_inzhener": true,
+}
+
 // importLogServicer is the interface ImportLogHandler depends on.
 type importLogServicer interface {
-	ListSessions(ctx context.Context, tenderID string) ([]repository.ImportSessionRow, error)
+	ListSessions(ctx context.Context, tenderID, restrictUserID string) ([]repository.ImportSessionRow, error)
 	UsersByIDs(ctx context.Context, ids []string) ([]repository.ImportLogUserRow, error)
 	TendersByIDs(ctx context.Context, ids []string) ([]repository.TenderShort, error)
 	ListAllTendersForFilter(ctx context.Context) ([]repository.TenderShort, error)
-	CancelSession(ctx context.Context, sessionID, cancelledBy string) (*repository.CancelResult, error)
+	CancelSession(ctx context.Context, sessionID, cancelledBy string, requireOwnership bool) (*repository.CancelResult, error)
 }
 
 // ImportLogHandler serves Admin/ImportLog endpoints.
@@ -30,9 +40,19 @@ func NewImportLogHandler(svc importLogServicer) *ImportLogHandler {
 }
 
 // ListSessions handles GET /api/v1/import-sessions[?tender_id=...].
+// Restricted roles see only their own sessions; privileged roles see all.
 func (h *ImportLogHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
 	tenderID := r.URL.Query().Get("tender_id")
-	rows, err := h.svc.ListSessions(r.Context(), tenderID)
+	restrictUserID := ""
+	if !importLogFullAccessRoles[authUser.Role] {
+		restrictUserID = authUser.ID
+	}
+	rows, err := h.svc.ListSessions(r.Context(), tenderID, restrictUserID)
 	if err != nil {
 		apierr.InternalFromErr(w, r, err, "failed to list import sessions")
 		return
@@ -97,9 +117,17 @@ func (h *ImportLogHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		apierr.Unauthorized("missing auth context").Render(w)
 		return
 	}
-	res, err := h.svc.CancelSession(r.Context(), sessionID, authUser.ID)
+	requireOwnership := !importLogFullAccessRoles[authUser.Role]
+	res, err := h.svc.CancelSession(r.Context(), sessionID, authUser.ID, requireOwnership)
 	if err != nil {
-		apierr.InternalFromErr(w, r, err, "failed to cancel import session")
+		switch {
+		case errors.Is(err, repository.ErrImportSessionForbidden):
+			apierr.Forbidden("можно отменять только свои импорты").Render(w)
+		case errors.Is(err, repository.ErrImportSessionNotFound):
+			apierr.NotFound("import session not found").Render(w)
+		default:
+			apierr.InternalFromErr(w, r, err, "failed to cancel import session")
+		}
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: res})

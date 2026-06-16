@@ -36,6 +36,7 @@ const CtxUser ctxKey = "user"
 type AuthUser struct {
 	ID     string
 	Email  string
+	Role   string // public.users.role_code, e.g. "administrator"
 	Issuer string
 }
 
@@ -98,7 +99,7 @@ func verifyAppToken(cfg VerifyConfig, raw string) (*AuthUser, error) {
 	if err != nil || sub == "" {
 		return nil, fmt.Errorf("token missing sub claim")
 	}
-	return &AuthUser{ID: sub, Email: claims.Email, Issuer: cfg.AppIssuer}, nil
+	return &AuthUser{ID: sub, Email: claims.Email, Role: claims.Role, Issuer: cfg.AppIssuer}, nil
 }
 
 // JWTAuth returns a chi middleware that validates the Bearer JWT against the

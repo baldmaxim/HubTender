@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   App,
   Card,
@@ -29,6 +29,10 @@ import {
 } from '../../../lib/api/importLog';
 
 const { Text } = Typography;
+
+// Роли с полным доступом: видят импорты всех пользователей и могут отменить любой.
+// Остальные роли видят и отменяют только свои импорты.
+const FULL_ACCESS_ROLES = ['administrator', 'developer', 'director', 'veduschiy_inzhener'];
 
 interface ImportSessionRow {
   id: string;
@@ -64,6 +68,12 @@ const ImportLog: React.FC = () => {
   const [tenders, setTenders] = useState<{ id: string; title: string; tender_number: string; version: number }[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  const canSeeAll = FULL_ACCESS_ROLES.includes(user?.role_code || '');
+  const visibleSessions = useMemo(
+    () => (canSeeAll ? sessions : sessions.filter((s) => s.user_id === user?.id)),
+    [sessions, canSeeAll, user?.id],
+  );
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
@@ -291,6 +301,7 @@ const ImportLog: React.FC = () => {
       align: 'center',
       render: (_, row) => {
         if (row.cancelled_at) return null;
+        if (!canSeeAll && row.user_id !== user?.id) return null;
         return (
           <Tooltip title="Отменить импорт и удалить вставленные элементы">
             <Button
@@ -334,7 +345,7 @@ const ImportLog: React.FC = () => {
     >
       <Table
         columns={columns}
-        dataSource={sessions}
+        dataSource={visibleSessions}
         rowKey="id"
         loading={loading}
         pagination={{
