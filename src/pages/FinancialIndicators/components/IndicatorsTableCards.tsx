@@ -143,9 +143,15 @@ export const IndicatorsTableCards: React.FC<IndicatorsTableCardsProps> = ({
               gap: 6,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {name}
-              {record.coefficient && <Tag style={{ margin: 0, flexShrink: 0 }}>{record.coefficient}</Tag>}
+              {record.coefficient && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {record.coefficient.split(',').map((part, i) => (
+                    <Tag key={i} style={{ margin: 0, fontSize: 11 }}>{part.trim()}</Tag>
+                  ))}
+                </div>
+              )}
             </div>
 
             {record.is_header ? null : (

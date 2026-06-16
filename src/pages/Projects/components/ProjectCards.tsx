@@ -108,7 +108,7 @@ export const ProjectCards: React.FC<ProjectCardsProps> = ({ data, loading }) => 
                   </div>
 
                   {project.area && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <EnvironmentOutlined style={{ color: '#8c8c8c', fontSize: 12 }} />
                       <Text type="secondary" style={{ fontSize: 12 }}>
                         {project.area.toLocaleString('ru-RU')} м²
@@ -122,7 +122,7 @@ export const ProjectCards: React.FC<ProjectCardsProps> = ({ data, loading }) => 
                   )}
 
                   {(project.contract_date || endDate) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <CalendarOutlined style={{ color: '#8c8c8c', fontSize: 12 }} />
                       {project.contract_date && (
                         <Text type="secondary" style={{ fontSize: 12 }}>

@@ -1,16 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Layout, Menu, Avatar, Badge, Switch, theme, Dropdown, List, Typography, Space, Empty, Button, Popover, Input, Tag } from 'antd';
-import type { MenuProps, InputRef } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Layout, Menu, Avatar, Switch, theme, Dropdown, Typography, Tag } from 'antd';
+import type { MenuProps } from 'antd';
 const { Text } = Typography;
 import {
   DashboardOutlined,
   ShoppingCartOutlined,
-  CalculatorOutlined,
   BookOutlined,
   DollarOutlined,
   SettingOutlined,
   UserOutlined,
-  BellOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
@@ -20,23 +18,20 @@ import {
   FileTextOutlined,
   BankOutlined,
   PercentageOutlined,
-  CheckCircleOutlined,
   CheckSquareOutlined,
-  InfoCircleOutlined,
-  WarningOutlined,
   ClockCircleOutlined,
   BarChartOutlined,
   FundOutlined,
   LineChartOutlined,
-  DeleteOutlined,
   SwapOutlined,
   BuildOutlined,
   ImportOutlined,
-  MessageOutlined,
   SafetyCertificateOutlined,
   SafetyOutlined,
 } from '@ant-design/icons';
-import { NotesPopoverContent } from './NotesPopover';
+import { CalculatorWidget } from './CalculatorWidget';
+import { NotesWidget } from './NotesWidget';
+import { NotificationsBell } from './NotificationsBell';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -66,13 +61,11 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [calcValue, setCalcValue] = useState('0');
-  const [calcOpen, setCalcOpen] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(false);
-  const calcInputRef = useRef<InputRef>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { isPhone } = useIsMobile();
+  const { isPhone, screens } = useIsMobile();
+  // «Мобильный» layout = <992px (телефон + планшет), как и переключение на карточный вид.
+  const isMobileLayout = !screens.lg;
 
   // На телефоне (<576px) автоматически сворачивать боковое меню в icon-режим,
   // освобождая место под контент. Планшет/десктоп не затрагиваем.
@@ -112,22 +105,6 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     }
   };
 
-  // Функция для получения иконки по типу уведомления
-  const getNotificationIcon = (type: Notification['type']) => {
-    switch (type) {
-      case 'success':
-        return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
-      case 'info':
-        return <InfoCircleOutlined style={{ color: '#1890ff' }} />;
-      case 'warning':
-        return <WarningOutlined style={{ color: '#faad14' }} />;
-      case 'pending':
-        return <ClockCircleOutlined style={{ color: '#8c8c8c' }} />;
-      default:
-        return <InfoCircleOutlined style={{ color: '#1890ff' }} />;
-    }
-  };
-
   const clearAllNotifications = async () => {
     try {
       await deleteAllNotifications();
@@ -137,94 +114,6 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       console.error('Ошибка очистки уведомлений:', error);
     }
   };
-
-  // Функция форматирования чисел с разрядами
-  const formatCalcDisplay = (value: string): string => {
-    // Разбиваем выражение на части (числа и операторы, включая ^ и sqrt)
-    const parts = value.split(/([+\-*/()^]|sqrt)/);
-
-    return parts.map(part => {
-      // Пропускаем операторы и пустые строки
-      if (/^[+\-*/()^]\s*$/.test(part) || part === '' || part === 'sqrt') return part;
-
-      // Убираем существующие пробелы
-      const clean = part.replace(/\s/g, '');
-
-      // Проверяем, является ли это числом
-      if (/^-?\d+,?\d*$/.test(clean)) {
-        const [integer, decimal] = clean.split(',');
-        // Форматируем целую часть с пробелами
-        const formattedInteger = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-        return decimal !== undefined ? `${formattedInteger},${decimal}` : formattedInteger;
-      }
-
-      return part;
-    }).join('');
-  };
-
-  // Функции калькулятора
-  const handleCalcClick = (value: string) => {
-    if (value === '=') {
-      try {
-        // Убираем пробелы и заменяем запятые на точки для вычислений
-        let evalValue = calcValue.replace(/\s/g, '').replace(/,/g, '.');
-        // Заменяем ^ на ** для возведения в степень
-        evalValue = evalValue.replace(/\^/g, '**');
-        // Обрабатываем sqrt как функцию
-        evalValue = evalValue.replace(/sqrt\(([^)]+)\)/g, 'Math.sqrt($1)');
-        const result = eval(evalValue);
-        const resultStr = String(result).replace('.', ',');
-        setCalcValue(resultStr);
-      } catch {
-        setCalcValue('Ошибка');
-      }
-    }
-  };
-
-  const handleCalcInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    // Разрешаем цифры, операторы, запятую, ^, и буквы для sqrt
-    if (/^[0-9+\-*/.(),^sqrtа-яА-ЯёЁ\s]*$/.test(newValue) || newValue === '') {
-      // Убираем все пробелы для проверки
-      const cleanValue = newValue.replace(/\s/g, '');
-      const cleanCurrentValue = calcValue.replace(/\s/g, '');
-
-      // Если текущее значение "0" и пользователь вводит что-то
-      if (cleanCurrentValue === '0' && cleanValue.length > 0) {
-        // Если новое значение начинается с цифры (не оператора)
-        if (/^[0-9]/.test(cleanValue)) {
-          // Убираем все начальные и конечные нули, кроме случая "0,"
-          const withoutZero = cleanValue.replace(/^0+|0+$/g, '').replace(/^$/, '0');
-          setCalcValue(withoutZero);
-        } else {
-          // Если начинается с оператора, сохраняем как есть
-          setCalcValue(cleanValue);
-        }
-      } else {
-        setCalcValue(newValue || '0');
-      }
-    }
-  };
-
-  // Обработка клавиатурных событий для калькулятора
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!calcOpen) return;
-
-      const key = e.key;
-      if (key === 'Enter') {
-        e.preventDefault();
-        handleCalcClick('=');
-      } else if (key === 'Escape') {
-        e.preventDefault();
-        setCalcValue('0');
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calcOpen, calcValue]);
 
   const menuItems: MenuProps['items'] = [
     // {
@@ -395,6 +284,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     if (e.domEvent && 'button' in e.domEvent && !e.domEvent.button) {
       e.domEvent.preventDefault();
       navigate(e.key);
+      // На мобильных после выбора пункта сворачиваем меню, освобождая место под контент
+      if (isMobileLayout) setCollapsed(true);
     }
   };
 
@@ -491,7 +382,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         trigger={null}
         collapsible
         collapsed={collapsed}
-        collapsedWidth={isPhone ? 48 : 80}
+        collapsedWidth={isMobileLayout ? 0 : 80}
         className={`sidebar-${currentTheme}`}
         style={{
           background: currentTheme === 'dark' ? '#0a0a0a' : '#fff',
@@ -579,66 +470,18 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: isPhone ? '12px' : '24px' }}>
             {/* Заметки к тендеру — скрыты для Генерального директора */}
             {!isGeneralDirector && (
-              <Popover
-                content={
-                  <NotesPopoverContent
-                    tenderId={currentTenderId}
-                    userId={user?.id ?? null}
-                    roleCode={user?.role_code ?? ''}
-                    currentTheme={currentTheme}
-                  />
-                }
-                title="Заметки к тендеру"
-                trigger="click"
-                open={notesOpen}
-                onOpenChange={setNotesOpen}
-                placement="bottomRight"
-                destroyOnHidden
-              >
-                <MessageOutlined
-                  style={{
-                    fontSize: isPhone ? '20px' : '24px',
-                    cursor: 'pointer',
-                    color: currentTenderId ? '#10b981' : '#8c8c8c',
-                    fontWeight: 'bold',
-                  }}
-                />
-              </Popover>
+              <NotesWidget
+                tenderId={currentTenderId}
+                userId={user?.id ?? null}
+                roleCode={user?.role_code ?? ''}
+                currentTheme={currentTheme}
+                isMobileLayout={isMobileLayout}
+                isPhone={isPhone}
+              />
             )}
 
             {/* Калькулятор */}
-            <Popover
-              content={
-                <div style={{ width: '300px' }}>
-                  <Input
-                    ref={calcInputRef}
-                    value={formatCalcDisplay(calcValue)}
-                    onChange={handleCalcInputChange}
-                    placeholder="Введите выражение..."
-                    style={{
-                      marginBottom: '8px',
-                      fontSize: '18px',
-                      textAlign: 'right',
-                      fontWeight: 'bold',
-                    }}
-                    onPressEnter={() => handleCalcClick('=')}
-                  />
-                  <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>
-                    Операции: +, -, *, /, ^(степень), sqrt(x)
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#888' }}>
-                    Enter — вычислить, Esc — очистить
-                  </div>
-                </div>
-              }
-              title="Калькулятор"
-              trigger="click"
-              open={calcOpen}
-              onOpenChange={setCalcOpen}
-              placement="bottomRight"
-            >
-              <CalculatorOutlined style={{ fontSize: isPhone ? '20px' : '24px', cursor: 'pointer', color: '#1890ff', fontWeight: 'bold' }} />
-            </Popover>
+            <CalculatorWidget isMobileLayout={isMobileLayout} isPhone={isPhone} />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <SunOutlined style={{ fontSize: '16px', color: currentTheme === 'light' ? '#faad14' : '#888' }} />
@@ -650,93 +493,12 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               <MoonOutlined style={{ fontSize: '16px', color: currentTheme === 'dark' ? '#10b981' : '#888' }} />
             </div>
 
-            <Dropdown
-              popupRender={() => (
-                <div
-                  style={{
-                    backgroundColor: currentTheme === 'dark' ? '#1f1f1f' : '#fff',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                    width: '400px',
-                    maxHeight: '500px',
-                    overflow: 'auto',
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: '16px',
-                      borderBottom: currentTheme === 'dark' ? '1px solid #303030' : '1px solid #f0f0f0',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Text strong style={{ fontSize: '16px' }}>Уведомления</Text>
-                    {notifications.length > 0 && (
-                      <Button
-                        size="small"
-                        type="text"
-                        icon={<DeleteOutlined />}
-                        onClick={clearAllNotifications}
-                        danger
-                      >
-                        Очистить
-                      </Button>
-                    )}
-                  </div>
-                  {notifications.length > 0 ? (
-                    <List
-                      dataSource={notifications}
-                      renderItem={(item) => (
-                        <List.Item
-                          style={{
-                            padding: '12px 16px',
-                            borderBottom: currentTheme === 'dark' ? '1px solid #303030' : '1px solid #f0f0f0',
-                            cursor: 'pointer',
-                            transition: 'background-color 0.2s',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = currentTheme === 'dark' ? '#262626' : '#f5f5f5';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = 'transparent';
-                          }}
-                        >
-                          <List.Item.Meta
-                            avatar={getNotificationIcon(item.type)}
-                            title={
-                              <Space direction="vertical" size={0} style={{ width: '100%' }}>
-                                <Text strong>{item.title}</Text>
-                                <Text type="secondary" style={{ fontSize: '12px' }}>
-                                  {dayjs(item.created_at).fromNow()}
-                                </Text>
-                              </Space>
-                            }
-                            description={
-                              <Text style={{ fontSize: '13px', color: currentTheme === 'dark' ? '#d9d9d9' : '#595959' }}>
-                                {item.message}
-                              </Text>
-                            }
-                          />
-                        </List.Item>
-                      )}
-                    />
-                  ) : (
-                    <Empty
-                      image={Empty.PRESENTED_IMAGE_SIMPLE}
-                      description="Нет уведомлений"
-                      style={{ padding: '40px 0' }}
-                    />
-                  )}
-                </div>
-              )}
-              trigger={['click']}
-              placement="bottomRight"
-            >
-              <Badge count={unreadCount}>
-                <BellOutlined style={{ fontSize: '18px', cursor: 'pointer' }} />
-              </Badge>
-            </Dropdown>
+            <NotificationsBell
+              notifications={notifications}
+              unreadCount={unreadCount}
+              currentTheme={currentTheme}
+              onClear={clearAllNotifications}
+            />
 
             <Dropdown
               menu={{

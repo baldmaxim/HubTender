@@ -13,6 +13,8 @@ interface NotesPopoverContentProps {
   userId: string | null;
   roleCode: string;
   currentTheme: string;
+  /** Ширина контейнера. На мобильных модалках передаётся '100%'. */
+  width?: number | string;
 }
 
 export const NotesPopoverContent: React.FC<NotesPopoverContentProps> = ({
@@ -20,6 +22,7 @@ export const NotesPopoverContent: React.FC<NotesPopoverContentProps> = ({
   userId,
   roleCode,
   currentTheme,
+  width = 360,
 }) => {
   const isPrivileged = canViewAllNotes(roleCode);
   const { myNote, allNotes, loading, saving, saveNote } = useTenderNotes(
@@ -42,7 +45,7 @@ export const NotesPopoverContent: React.FC<NotesPopoverContentProps> = ({
 
   if (!tenderId) {
     return (
-      <div style={{ width: 320, padding: '8px 0' }}>
+      <div style={{ width, maxWidth: '100%', padding: '8px 0' }}>
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
@@ -57,7 +60,7 @@ export const NotesPopoverContent: React.FC<NotesPopoverContentProps> = ({
 
   return (
     <Spin spinning={loading}>
-      <div style={{ width: 360 }}>
+      <div style={{ width, maxWidth: '100%' }}>
         {/* Поле ввода своей заметки */}
         <div style={{ fontSize: 11, color: mutedColor, marginBottom: 4 }}>Ваша заметка</div>
         <TextArea

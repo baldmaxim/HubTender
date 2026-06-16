@@ -1,6 +1,7 @@
 import React from 'react';
 import { Col, Row, Space } from 'antd';
 import { LinkOutlined, PhoneOutlined } from '@ant-design/icons';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import type { TenderRegistryWithRelations } from '../../../lib/supabase';
 import {
   formatArea,
@@ -73,16 +74,18 @@ function Field({
   value,
   palette,
   align = 'left',
+  isPhone = false,
 }: {
   label: string;
   value: React.ReactNode;
   palette: TenderMonitorPalette;
   align?: 'left' | 'right';
+  isPhone?: boolean;
 }) {
   return (
     <div style={{ minWidth: 0, textAlign: align }}>
       <div style={{ color: palette.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
-      <div style={{ color: palette.text, fontSize: 13, fontWeight: 600, marginTop: 2 }}>{value}</div>
+      <div style={{ color: palette.text, fontSize: isPhone ? 12 : 13, fontWeight: 600, marginTop: 2, wordBreak: 'break-word' }}>{value}</div>
     </div>
   );
 }
@@ -94,6 +97,7 @@ function TenderCard({
   onQuickCall,
   palette,
   readOnly,
+  isPhone = false,
 }: {
   tender: TenderRegistryWithRelations;
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
@@ -101,6 +105,7 @@ function TenderCard({
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
   palette: TenderMonitorPalette;
   readOnly?: boolean;
+  isPhone?: boolean;
 }) {
   const dashboardStatus = getDashboardStatus(tender);
   const badgeStyle = getStatusBadgeStyle(dashboardStatus);
@@ -118,8 +123,8 @@ function TenderCard({
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
-        padding: 12,
+        gap: isPhone ? 8 : 10,
+        padding: isPhone ? 8 : 12,
         borderRadius: 12,
         border: `1px solid ${palette.border}`,
         background: palette.cardBgAlt,
@@ -131,7 +136,7 @@ function TenderCard({
         <span style={{ color: palette.subtleText, fontSize: 11, fontWeight: 700, marginTop: 2 }}>{tender.sort_order}</span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <span style={{ color: palette.text, fontSize: 15, fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-word' }}>
+            <span style={{ color: palette.text, fontSize: isPhone ? 13 : 15, fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-word' }}>
               {tender.title}
             </span>
             <MapPopover tender={tender} palette={palette} />
@@ -156,15 +161,16 @@ function TenderCard({
 
       {/* Показатели */}
       <Row gutter={[8, 8]}>
-        <Col span={8}><Field label="Площадь" value={formatArea(tender.area)} palette={palette} /></Col>
-        <Col span={8}><Field label="Стоимость КП" value={formatMoney(tender.total_cost || tender.manual_total_cost)} palette={palette} /></Col>
-        <Col span={8}><Field label="₽/м²" value={formatRubPerSquare(tender.total_cost || tender.manual_total_cost, tender.area)} palette={palette} /></Col>
-        <Col span={8}><Field label="Дата подачи" value={formatDate(tender.submission_date)} palette={palette} /></Col>
-        <Col span={8}><Field label="Приглашение" value={formatDate(tender.invitation_date)} palette={palette} /></Col>
+        <Col span={8}><Field label="Площадь" value={formatArea(tender.area)} palette={palette} isPhone={isPhone} /></Col>
+        <Col span={8}><Field label="Стоимость КП" value={formatMoney(tender.total_cost || tender.manual_total_cost)} palette={palette} isPhone={isPhone} /></Col>
+        <Col span={8}><Field label="₽/м²" value={formatRubPerSquare(tender.total_cost || tender.manual_total_cost, tender.area)} palette={palette} isPhone={isPhone} /></Col>
+        <Col span={8}><Field label="Дата подачи" value={formatDate(tender.submission_date)} palette={palette} isPhone={isPhone} /></Col>
+        <Col span={8}><Field label="Приглашение" value={formatDate(tender.invitation_date)} palette={palette} isPhone={isPhone} /></Col>
         <Col span={8}>
           <Field
             label="Контроль"
             palette={palette}
+            isPhone={isPhone}
             value={
               dashboardStatus === 'sent' && daysSinceControl != null ? (
                 <span style={{ color: palette.danger }}>{daysSinceControl}д</span>
@@ -260,6 +266,7 @@ export const TenderMonitorCards: React.FC<TenderMonitorCardsProps> = ({
   palette,
   readOnly,
 }) => {
+  const { isPhone } = useIsMobile();
   return (
     <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
       {sections.map((section) => {
@@ -279,9 +286,9 @@ export const TenderMonitorCards: React.FC<TenderMonitorCardsProps> = ({
             </div>
 
             {section.items.length > 0 ? (
-              <Row gutter={[12, 12]}>
+              <Row gutter={isPhone ? [8, 8] : [12, 12]}>
                 {section.items.map((tender) => (
-                  <Col xs={24} sm={12} key={tender.id}>
+                  <Col xs={12} sm={12} key={tender.id}>
                     <TenderCard
                       tender={tender}
                       onOpenTender={onOpenTender}
@@ -289,6 +296,7 @@ export const TenderMonitorCards: React.FC<TenderMonitorCardsProps> = ({
                       onQuickCall={onQuickCall}
                       palette={palette}
                       readOnly={readOnly}
+                      isPhone={isPhone}
                     />
                   </Col>
                 ))}
