@@ -23,6 +23,30 @@ const getTenderRegistryDedupKey = (tender: TenderRegistryWithRelations) => {
   return `title:${normalizeTenderTitle(tender.title)}|client:${(tender.client_name || '').trim().toLocaleLowerCase('ru-RU')}`;
 };
 
+// Каждая новая версия тендера триггером плодит пустую строку tender_registry с
+// тем же tender_number. Чтобы пустой дубль не «перекрывал» данные, при дедупе
+// выбираем самую заполненную строку (тай-брейк — более ранняя created_at).
+const scoreRegistryRow = (row: TenderRegistryWithRelations): number => {
+  const filled = (v: unknown) => (v != null && v !== '' ? 1 : 0);
+  const jsonbFilled = (v: unknown) => (Array.isArray(v) && v.length > 0 ? 1 : 0);
+
+  return (
+    filled(row.submission_date) +
+    filled(row.construction_start_date) +
+    filled(row.site_visit_date) +
+    filled(row.invitation_date) +
+    filled(row.commission_date) +
+    filled(row.object_address) +
+    filled(row.object_coordinates) +
+    filled(row.chronology) +
+    filled(row.has_tender_package) +
+    filled(row.manual_total_cost) +
+    jsonbFilled(row.chronology_items) +
+    jsonbFilled(row.tender_package_items) +
+    (row.is_archived ? 1 : 0)
+  );
+};
+
 const dedupeTenderRegistry = (items: TenderRegistryWithRelations[]) => {
   const map = new Map<string, TenderRegistryWithRelations>();
 
@@ -35,11 +59,20 @@ const dedupeTenderRegistry = (items: TenderRegistryWithRelations[]) => {
       return;
     }
 
-    const nextTimestamp = new Date(item.updated_at || item.created_at).getTime();
-    const currentTimestamp = new Date(current.updated_at || current.created_at).getTime();
+    const nextScore = scoreRegistryRow(item);
+    const currentScore = scoreRegistryRow(current);
 
-    if (nextTimestamp > currentTimestamp) {
+    if (nextScore > currentScore) {
       map.set(key, item);
+      return;
+    }
+
+    if (nextScore === currentScore) {
+      const nextCreated = new Date(item.created_at).getTime();
+      const currentCreated = new Date(current.created_at).getTime();
+      if (nextCreated < currentCreated) {
+        map.set(key, item);
+      }
     }
   });
 

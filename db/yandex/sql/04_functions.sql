@@ -101,6 +101,13 @@ DECLARE
   default_status_id UUID;
   next_sort_order INTEGER;
 BEGIN
+  -- Одна запись реестра на tender_number: при создании НОВОЙ ВЕРСИИ тендера
+  -- не плодим пустой дубль, иначе он «перекрывает» данные исходной строки.
+  IF NEW.tender_number IS NOT NULL
+     AND EXISTS (SELECT 1 FROM tender_registry WHERE tender_number = NEW.tender_number) THEN
+    RETURN NEW;
+  END IF;
+
   -- Получить ID статуса "В работе" (или первый доступный статус)
   SELECT id INTO default_status_id
   FROM tender_statuses
