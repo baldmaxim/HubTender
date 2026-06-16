@@ -228,6 +228,19 @@ const ClientPositions: React.FC = () => {
     [deferredPositionSearchQuery, displayedPositions]
   );
 
+  // При активном фильтре общая сумма считается только по выбранным строкам.
+  // positionCounts хранит пер-позиционные итоги (только листовые позиции имеют
+  // BOQ-итоги, заголовки разделов — нет), поэтому суммирование по выбранным id
+  // не даёт двойного счёта. Условие зеркалит экспорт: «Показать все» → полная сумма.
+  const effectiveTotalSum = useMemo(() => {
+    if (!isFilterActive || selectedPositionIds.size === 0 || showAllPositions) {
+      return totalSum;
+    }
+    let sum = 0;
+    for (const id of selectedPositionIds) sum += positionCounts[id]?.total ?? 0;
+    return sum;
+  }, [isFilterActive, selectedPositionIds, showAllPositions, totalSum, positionCounts]);
+
   // Высота tbody: viewport - nav(64) - cardHeader(56) - cardBodyPadding(48) - thead(40) - небольшой запас(8)
   // Card sticky — тулбар уходит при скролле, Card остаётся
   useEffect(() => {
@@ -416,7 +429,7 @@ const ClientPositions: React.FC = () => {
           tenderTitles={tenderTitles}
           versions={versions}
           currentTheme={currentTheme}
-          totalSum={totalSum}
+          totalSum={effectiveTotalSum}
           onTenderTitleChange={handleTenderTitleChange}
           onVersionChange={handleVersionChange}
           onBackToSelection={handleBackToSelection}

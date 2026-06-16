@@ -51,6 +51,7 @@ type TransferResult struct {
 	SubcontractExclusionsCopied  int `json:"subcontractExclusionsCopied"`
 	AdditionalWorksCopied        int `json:"additionalWorksCopied"`
 	AdditionalWorksSkipped       int `json:"additionalWorksSkipped"`
+	UserFiltersTransferred       int `json:"userFiltersTransferred"`
 }
 
 // ErrVersionTransfer is a typed error carrying an HTTP status so the handler
@@ -419,6 +420,15 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		return nil, fmt.Errorf("transferRepo: copy subcontract growth exclusions: %w", err)
 	}
 
+	// Step 13d: Carry every user's saved position filter onto the new version.
+	// oldToNew maps matched normal positions (incl. section headers); the helper
+	// re-expands selected sections over the new structure so rows added to a
+	// selected section in this version are included and deleted rows are dropped.
+	filtersTransferred, err := transferUserPositionFilters(ctx, tx, in.SourceTenderID, newTenderID, oldToNew)
+	if err != nil {
+		return nil, err
+	}
+
 	// Step 13c: Recompute cached_grand_total once — the per-row trigger was
 	// skipped via app.skip_grand_total. Runs unconditionally so the value is
 	// correct regardless of which copy paths executed.
@@ -445,6 +455,7 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		SubcontractExclusionsCopied: int(subcontractExclusionsTag.RowsAffected()),
 		AdditionalWorksCopied:       addCopied,
 		AdditionalWorksSkipped:      addSkipped,
+		UserFiltersTransferred:      filtersTransferred,
 	}, nil
 }
 

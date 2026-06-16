@@ -29,6 +29,7 @@ type CloneResult struct {
 	DocumentsCopied             int    `json:"documentsCopied"`
 	NotesCopied                 int    `json:"notesCopied"`
 	GroupsCopied                int    `json:"groupsCopied"`
+	UserFiltersTransferred      int    `json:"userFiltersTransferred"`
 }
 
 // ErrClone is a typed error carrying an HTTP status so the handler can
@@ -101,6 +102,43 @@ func (r *CloneRepo) CloneTender(ctx context.Context, sourceTenderID string) (*Cl
 		`SELECT public.recalculate_tender_grand_total($1::uuid)`, res.TenderID,
 	); err != nil {
 		return nil, fmt.Errorf("cloneRepo.CloneTender: recompute grand total: %w", err)
+	}
+
+	// Carry every user's saved position filter onto the cloned version. A clone
+	// is a 1:1 copy, so old→new is a direct join on position_number (+ is_additional
+	// + work_name to disambiguate). This covers ДОП positions too. The helper's
+	// section re-expansion is idempotent here (no new/deleted rows).
+	oldToNew := make(map[string]string)
+	{
+		mapRows, err := tx.Query(ctx, `
+			SELECT o.id::text, n.id::text
+			FROM public.client_positions o
+			JOIN public.client_positions n
+			  ON n.tender_id = $2::uuid
+			 AND n.position_number = o.position_number
+			 AND COALESCE(n.is_additional, false) = COALESCE(o.is_additional, false)
+			 AND n.work_name = o.work_name
+			WHERE o.tender_id = $1::uuid
+		`, sourceTenderID, res.TenderID)
+		if err != nil {
+			return nil, fmt.Errorf("cloneRepo.CloneTender: build position map: %w", err)
+		}
+		for mapRows.Next() {
+			var oldID, newID string
+			if err := mapRows.Scan(&oldID, &newID); err != nil {
+				mapRows.Close()
+				return nil, fmt.Errorf("cloneRepo.CloneTender: scan position map: %w", err)
+			}
+			oldToNew[oldID] = newID
+		}
+		mapRows.Close()
+		if err := mapRows.Err(); err != nil {
+			return nil, fmt.Errorf("cloneRepo.CloneTender: iterate position map: %w", err)
+		}
+	}
+	res.UserFiltersTransferred, err = transferUserPositionFilters(ctx, tx, sourceTenderID, res.TenderID, oldToNew)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
