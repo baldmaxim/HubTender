@@ -142,14 +142,23 @@ const Tenders: React.FC = () => {
     [tenders]
   );
 
-  const totalCost = useMemo(
-    () => tenders.reduce((sum, tender) => sum + (tender.total_cost || tender.manual_total_cost || 0), 0),
+  const activeTenders = useMemo(
+    () =>
+      tenders.filter((tender) => {
+        const status = getDashboardStatus(tender);
+        return status === 'calc' || status === 'sent';
+      }),
     [tenders]
   );
 
+  const totalCost = useMemo(
+    () => activeTenders.reduce((sum, tender) => sum + (tender.total_cost || tender.manual_total_cost || 0), 0),
+    [activeTenders]
+  );
+
   const totalArea = useMemo(
-    () => tenders.reduce((sum, tender) => sum + (tender.area || 0), 0),
-    [tenders]
+    () => activeTenders.reduce((sum, tender) => sum + (tender.area || 0), 0),
+    [activeTenders]
   );
 
   const handleSortChange = (field: TenderMonitorSortField) => {
