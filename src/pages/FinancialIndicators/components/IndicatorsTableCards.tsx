@@ -115,7 +115,7 @@ export const IndicatorsTableCards: React.FC<IndicatorsTableCardsProps> = ({
       </div>
 
       {data.map((record) => {
-        const isIndented = record.row_number >= 2 && record.row_number <= 4;
+        const isIndented = record.row_number >= 2 && record.row_number <= 7;
         const bg = record.is_header ? c.header : record.is_total ? c.total : record.is_yellow ? c.yellow : c.normal;
         const emphatic = record.is_header || record.is_total;
 

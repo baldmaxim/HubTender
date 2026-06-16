@@ -438,6 +438,10 @@ export const useFinancialCalculations = () => {
       const mvpGsmCost = worksSu10Only * (mvpGsmCoeff / 100);
       const warrantyCost = worksSu10Only * (warrantyCoeff / 100);
 
+      // Прямые затраты (строка 1) включают также СМ + МБП+ГСМ + Гарантию (строки 5-7),
+      // как уже считают диаграммы. directCostsTotal не трогаем — он нужен в grandTotal.
+      const directCostsRowTotal = directCostsTotal + mechanizationCost + mvpGsmCost + warrantyCost;
+
       const worksWithMarkup = worksSu10Only + coefficient06Cost + mvpGsmCost + mechanizationCost;
       const worksCostGrowthAmount = worksWithMarkup * (worksCostGrowth / 100);
       const materialCostGrowthAmount = materials * (materialCostGrowth / 100);
@@ -544,9 +548,9 @@ export const useFinancialCalculations = () => {
           row_number: 1,
           indicator_name: 'Прямые затраты, в т.ч.',
           coefficient: '',
-          sp_cost: areaSp > 0 ? directCostsTotal / areaSp : 0,
-          customer_cost: areaClient > 0 ? directCostsTotal / areaClient : 0,
-          total_cost: directCostsTotal,
+          sp_cost: areaSp > 0 ? directCostsRowTotal / areaSp : 0,
+          customer_cost: areaClient > 0 ? directCostsRowTotal / areaClient : 0,
+          total_cost: directCostsRowTotal,
           tooltip: `Состав прямых затрат:\n` +
                    `1. Субподряд: ${subcontractTotal.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}\n` +
                    `   (работы: ${subcontractWorks.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} + материалы: ${subcontractMaterials.toLocaleString('ru-RU', { maximumFractionDigits: 2 })})\n` +
@@ -554,7 +558,10 @@ export const useFinancialCalculations = () => {
                    `   (работы: ${works.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} + материалы: ${materials.toLocaleString('ru-RU', { maximumFractionDigits: 2 })})\n` +
                    `3. Запас на сдачу объекта: ${reserveForDeliveryTotal.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}\n` +
                    `   (раб-комп.: ${worksComp.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} + мат-комп.: ${materialsComp.toLocaleString('ru-RU', { maximumFractionDigits: 2 })})\n` +
-                   `= ${directCostsTotal.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} руб.`
+                   `4. Служба механизации: ${mechanizationCost.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}\n` +
+                   `5. МБП+ГСМ: ${mvpGsmCost.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}\n` +
+                   `6. Гарантийный период: ${warrantyCost.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}\n` +
+                   `= ${directCostsRowTotal.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} руб.`
         },
         {
           key: '2',
