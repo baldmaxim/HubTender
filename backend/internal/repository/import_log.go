@@ -136,6 +136,7 @@ type TenderShort struct {
 	ID           string `json:"id"`
 	Title        string `json:"title"`
 	TenderNumber string `json:"tender_number"`
+	Version      int    `json:"version"`
 }
 
 func (r *ImportLogRepo) TendersByIDs(ctx context.Context, ids []string) ([]TenderShort, error) {
@@ -143,7 +144,7 @@ func (r *ImportLogRepo) TendersByIDs(ctx context.Context, ids []string) ([]Tende
 		return []TenderShort{}, nil
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id::text, COALESCE(title, ''), COALESCE(tender_number, '')
+		SELECT id::text, COALESCE(title, ''), COALESCE(tender_number, ''), COALESCE(version, 1)
 		FROM public.tenders
 		WHERE id = ANY($1::uuid[])
 	`, ids)
@@ -154,7 +155,7 @@ func (r *ImportLogRepo) TendersByIDs(ctx context.Context, ids []string) ([]Tende
 	out := make([]TenderShort, 0)
 	for rows.Next() {
 		var t TenderShort
-		if err := rows.Scan(&t.ID, &t.Title, &t.TenderNumber); err != nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.TenderNumber, &t.Version); err != nil {
 			return nil, fmt.Errorf("importLogRepo.TendersByIDs scan: %w", err)
 		}
 		out = append(out, t)
@@ -164,7 +165,7 @@ func (r *ImportLogRepo) TendersByIDs(ctx context.Context, ids []string) ([]Tende
 
 func (r *ImportLogRepo) ListAllTendersForFilter(ctx context.Context) ([]TenderShort, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id::text, COALESCE(title, ''), COALESCE(tender_number, '')
+		SELECT id::text, COALESCE(title, ''), COALESCE(tender_number, ''), COALESCE(version, 1)
 		FROM public.tenders
 		ORDER BY title
 	`)
@@ -175,7 +176,7 @@ func (r *ImportLogRepo) ListAllTendersForFilter(ctx context.Context) ([]TenderSh
 	out := make([]TenderShort, 0)
 	for rows.Next() {
 		var t TenderShort
-		if err := rows.Scan(&t.ID, &t.Title, &t.TenderNumber); err != nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.TenderNumber, &t.Version); err != nil {
 			return nil, fmt.Errorf("importLogRepo.ListAllTendersForFilter scan: %w", err)
 		}
 		out = append(out, t)

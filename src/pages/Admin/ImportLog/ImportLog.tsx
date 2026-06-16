@@ -19,6 +19,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getErrorMessage } from '../../../utils/errors';
+import { getVersionColorByTitle } from '../../../utils/versionColor';
 import {
   fetchImportSessions,
   fetchImportLogUsers,
@@ -49,6 +50,7 @@ interface ImportSessionRow {
   user_role_color: string | null;
   tender_title: string;
   tender_number: string;
+  tender_version: number;
   cancelled_by_name: string | null;
 }
 
@@ -59,7 +61,7 @@ const ImportLog: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [tenderFilter, setTenderFilter] = useState<string | null>(null);
-  const [tenders, setTenders] = useState<{ id: string; title: string; tender_number: string }[]>([]);
+  const [tenders, setTenders] = useState<{ id: string; title: string; tender_number: string; version: number }[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -99,6 +101,7 @@ const ImportLog: React.FC = () => {
         user_role_color: usersMap.get(s.user_id)?.roles?.color || null,
         tender_title: tendersMap.get(s.tender_id)?.title || '—',
         tender_number: tendersMap.get(s.tender_id)?.tender_number || '',
+        tender_version: tendersMap.get(s.tender_id)?.version ?? 1,
         cancelled_by_name: s.cancelled_by ? (usersMap.get(s.cancelled_by)?.full_name || null) : null,
       }));
 
@@ -212,7 +215,15 @@ const ImportLog: React.FC = () => {
       width: 240,
       render: (_, row) => (
         <Space direction="vertical" size={2}>
-          <Text style={{ fontSize: 13 }}>{row.tender_title}</Text>
+          <Space size={6}>
+            <Text style={{ fontSize: 13 }}>{row.tender_title}</Text>
+            <Tag
+              color={getVersionColorByTitle(row.tender_version, row.tender_title, tenders)}
+              style={{ margin: 0, fontSize: 11 }}
+            >
+              v{row.tender_version}
+            </Tag>
+          </Space>
           {row.tender_number && (
             <Text type="secondary" style={{ fontSize: 11 }}>№ {row.tender_number}</Text>
           )}

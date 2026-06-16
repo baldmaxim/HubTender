@@ -30,6 +30,7 @@ export interface ImportLogTender {
   id: string;
   title: string;
   tender_number: string;
+  version: number;
 }
 
 export interface CancelImportSessionResult {
