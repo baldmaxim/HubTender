@@ -236,8 +236,8 @@ const Tenders: React.FC = () => {
             title="Требуют звонка"
             value={needCallCount}
             caption="более 7 дней без контроля"
-            accent={palette.danger}
-            blinking={needCallCount >= 0}
+            accent={needCallCount > 0 ? palette.danger : palette.success}
+            blinking={needCallCount > 0}
             palette={palette}
           />
           <MetricCard

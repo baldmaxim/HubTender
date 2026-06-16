@@ -192,11 +192,17 @@ export function getChronologyItems(tender: TenderRegistryWithRelations): Chronol
 }
 
 export function getPackageItems(tender: TenderRegistryWithRelations): TenderPackageItem[] {
-  return (tender.tender_package_items || []).map((item) => ({
-    date: item.date ?? null,
-    text: item.text,
-    link: item.link?.trim() || null,
-  }));
+  return (tender.tender_package_items || [])
+    .map((item) => ({
+      date: item.date ?? null,
+      text: item.text,
+      link: item.link?.trim() || null,
+    }))
+    .sort((left, right) => {
+      if (!left.date) return 1;
+      if (!right.date) return -1;
+      return dayjs(left.date).valueOf() - dayjs(right.date).valueOf();
+    });
 }
 
 export function getPackageLinkHref(link?: string | null): string | null {

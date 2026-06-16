@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, DatePicker, Input, InputNumber, Modal, Select, Space, Tag, Typography, message } from 'antd';
-import { CloseOutlined, DeleteOutlined, EditOutlined, PhoneOutlined, PlusOutlined } from '@ant-design/icons';
+import { CloseOutlined, EditOutlined, PhoneOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { patchTenderRegistryFields } from '../../../lib/api/tenderRegistry';
 import type {
-  ChronologyItem,
   ConstructionScope,
   TenderRegistryWithRelations,
   TenderStatus,
@@ -14,20 +13,24 @@ import {
   DATE_INPUT_FORMATS,
   formatArea,
   formatDate,
-  formatDateTime,
   formatMoneyFull,
   formatRubPerSquare,
   getChronologyItems,
   getDashboardStatus,
   getDashboardStatusByStatusName,
   getLastCallFollowUpDate,
-  getPackageLinkHref,
   getPackageItems,
   getStatusBadgeStyle,
   getTenderStatusDisplayLabel,
   shouldShowCallAction,
 } from '../utils/tenderMonitor';
 import { getTenderMonitorPalette, type TenderMonitorPalette } from '../utils/tenderMonitorTheme';
+import {
+  EditableChronologySection,
+  EditablePackageSection,
+  ReadOnlyChronologySection,
+  ReadOnlyPackageSection,
+} from './TenderMonitorTabs';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -231,251 +234,6 @@ function EditableMonitorField({
   );
 }
 
-interface EditableChronologySectionProps {
-  tenderId: string;
-  items: ChronologyItem[];
-  palette: TenderMonitorPalette;
-  onUpdated: () => Promise<void> | void;
-}
-
-function EditableChronologySection({ tenderId, items, palette, onUpdated }: EditableChronologySectionProps) {
-  const [draftItems, setDraftItems] = useState<ChronologyItem[]>(items);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setDraftItems(items);
-  }, [items]);
-
-  const updateItem = (index: number, patch: Partial<ChronologyItem>) => {
-    setDraftItems((prev) => prev.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
-  };
-
-  const removeItem = (index: number) => {
-    setDraftItems((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
-  };
-
-  const addItem = () => {
-    setDraftItems((prev) => [...prev, { date: dayjs().toISOString(), text: '', type: 'default' }]);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-
-    try {
-      const chronologyItems = draftItems
-        .map((item) => ({
-          date: item.date ? dayjs(item.date).toISOString() : null,
-          text: item.text.trim(),
-          type: item.type || 'default',
-        }))
-        .filter((item) => item.text);
-
-      try {
-        await patchTenderRegistryFields(tenderId, { chronology_items: chronologyItems });
-      } catch (err) {
-        message.error((err as Error).message);
-        return;
-      }
-
-      await onUpdated();
-      message.success('Хронология обновлена');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {draftItems.length > 0 ? (
-        draftItems.map((item, index) => (
-          <div
-            key={`${item.date || 'empty'}-${index}`}
-            style={{
-              padding: '10px 12px',
-              background: palette.sectionBg,
-              borderRadius: 10,
-              border: `1px solid ${item.type === 'call_follow_up' ? palette.dangerBorder : palette.borderSoft}`,
-            }}
-          >
-            <div style={{ display: 'grid', gridTemplateColumns: '115px 128px minmax(0, 1fr) 32px', gap: 8, alignItems: 'start' }}>
-              <Select
-                size="small"
-                value={item.type || 'default'}
-                onChange={(value) => updateItem(index, { type: value })}
-                options={[
-                  { value: 'default', label: 'Событие' },
-                  { value: 'call_follow_up', label: 'Звонок' },
-                ]}
-              />
-              <DatePicker
-                size="small"
-                value={item.date ? dayjs(item.date) : null}
-                onChange={(value) => updateItem(index, { date: value ? value.toISOString() : null })}
-                format={DATE_INPUT_FORMATS}
-                style={{ width: '100%' }}
-              />
-              <TextArea
-                value={item.text}
-                onChange={(event) => updateItem(index, { text: event.target.value })}
-                autoSize={{ minRows: 1, maxRows: 3 }}
-              />
-              <Button
-                size="small"
-                type="text"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => removeItem(index)}
-              />
-            </div>
-          </div>
-        ))
-      ) : (
-        <Text style={{ color: palette.muted, fontSize: 12 }}>Хронология пока не заполнена</Text>
-      )}
-
-      <Space wrap size={8}>
-        <Button size="small" icon={<PlusOutlined />} onClick={addItem}>
-          Добавить строку
-        </Button>
-        <Button type="primary" size="small" onClick={() => void handleSave()} loading={saving}>
-          Сохранить хронологию
-        </Button>
-      </Space>
-    </div>
-  );
-}
-
-interface EditablePackageSectionProps {
-  tenderId: string;
-  items: Array<{ date: string | null; text: string; link?: string | null }>;
-  palette: TenderMonitorPalette;
-  onUpdated: () => Promise<void> | void;
-}
-
-function EditablePackageSection({ tenderId, items, palette, onUpdated }: EditablePackageSectionProps) {
-  const [draftItems, setDraftItems] = useState(items);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setDraftItems(items);
-  }, [items]);
-
-  const updateItem = (
-    index: number,
-    patch: Partial<{ date: string | null; text: string; link?: string | null }>
-  ) => {
-    setDraftItems((prev) => prev.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
-  };
-
-  const removeItem = (index: number) => {
-    setDraftItems((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
-  };
-
-  const addItem = () => {
-    setDraftItems((prev) => [...prev, { date: dayjs().toISOString(), text: '', link: '' }]);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-
-    try {
-      const tenderPackageItems = draftItems
-        .map((item) => ({
-          date: item.date ? dayjs(item.date).toISOString() : null,
-          text: item.text.trim(),
-          link: item.link?.trim() || null,
-        }))
-        .filter((item) => item.text);
-
-      try {
-        await patchTenderRegistryFields(tenderId, { tender_package_items: tenderPackageItems });
-      } catch (err) {
-        message.error((err as Error).message);
-        return;
-      }
-
-      await onUpdated();
-      message.success('Тендерный пакет обновлен');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {draftItems.length > 0 ? (
-        draftItems.map((item, index) => {
-          const href = getPackageLinkHref(item.link);
-
-          return (
-            <div
-              key={`${item.date || 'empty'}-${index}`}
-              style={{
-                padding: '10px 12px',
-                background: palette.sectionBg,
-                borderRadius: 10,
-                border: `1px solid ${palette.borderSoft}`,
-              }}
-            >
-              <div style={{ display: 'grid', gridTemplateColumns: '128px minmax(0, 1fr) minmax(0, 1fr) 32px', gap: 8, alignItems: 'start' }}>
-                <DatePicker
-                  size="small"
-                  value={item.date ? dayjs(item.date) : null}
-                  onChange={(value) => updateItem(index, { date: value ? value.toISOString() : null })}
-                  format={DATE_INPUT_FORMATS}
-                  style={{ width: '100%' }}
-                />
-                <Input
-                  size="small"
-                  value={item.text}
-                  onChange={(event) => updateItem(index, { text: event.target.value })}
-                  placeholder="Наименование"
-                />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <Input
-                    size="small"
-                    value={item.link || ''}
-                    onChange={(event) => updateItem(index, { link: event.target.value })}
-                    placeholder="Ссылка"
-                  />
-                  {href ? (
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: palette.info, fontSize: 11, lineHeight: 1.2, wordBreak: 'break-word' }}
-                    >
-                      Открыть ссылку
-                    </a>
-                  ) : null}
-                </div>
-                <Button
-                  size="small"
-                  type="text"
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => removeItem(index)}
-                />
-              </div>
-            </div>
-          );
-        })
-      ) : (
-        <Text style={{ color: palette.muted, fontSize: 12 }}>Тендерный пакет не заполнен</Text>
-      )}
-
-      <Space wrap size={8}>
-        <Button size="small" icon={<PlusOutlined />} onClick={addItem}>
-          Добавить строку
-        </Button>
-        <Button type="primary" size="small" onClick={() => void handleSave()} loading={saving}>
-          Сохранить
-        </Button>
-      </Space>
-    </div>
-  );
-}
-
 function InfoCard({ label, value, palette }: { label: string; value: React.ReactNode; palette: TenderMonitorPalette }) {
   return (
     <div
@@ -490,93 +248,6 @@ function InfoCard({ label, value, palette }: { label: string; value: React.React
         {label}
       </div>
       <div style={{ color: palette.text, fontSize: 12, lineHeight: 1.35, fontWeight: 600 }}>{value || '—'}</div>
-    </div>
-  );
-}
-
-// Хронология в режиме «только просмотр» (без редактирования) — для Генерального директора
-function ReadOnlyChronologySection({
-  items,
-  palette,
-}: {
-  items: ChronologyItem[];
-  palette: TenderMonitorPalette;
-}) {
-  if (items.length === 0) {
-    return <Text style={{ color: palette.muted, fontSize: 12 }}>Хронология пока не заполнена</Text>;
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {items.map((item, index) => (
-        <div
-          key={`${item.date || 'empty'}-${index}`}
-          style={{
-            padding: '10px 12px',
-            background: palette.sectionBg,
-            borderRadius: 10,
-            border: `1px solid ${item.type === 'call_follow_up' ? palette.dangerBorder : palette.borderSoft}`,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-            <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDateTime(item.date)}</span>
-            {item.type === 'call_follow_up' ? <Tag color="error" style={{ marginInlineEnd: 0 }}>Звонок</Tag> : null}
-          </div>
-          <div style={{ color: palette.textSecondary, fontSize: 12, lineHeight: 1.35 }}>{item.text}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Тендерный пакет в режиме «только просмотр» (без редактирования) — для Генерального директора
-function ReadOnlyPackageSection({
-  items,
-  palette,
-}: {
-  items: Array<{ date: string | null; text: string; link?: string | null }>;
-  palette: TenderMonitorPalette;
-}) {
-  const visibleItems = items.filter((item) => item.text?.trim());
-
-  if (visibleItems.length === 0) {
-    return <Text style={{ color: palette.muted, fontSize: 12 }}>Тендерный пакет не заполнен</Text>;
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {visibleItems.map((item, index) => {
-        const href = getPackageLinkHref(item.link);
-
-        return (
-          <div
-            key={`${item.date || 'empty'}-${index}`}
-            style={{
-              padding: '10px 12px',
-              background: palette.sectionBg,
-              borderRadius: 10,
-              border: `1px solid ${palette.borderSoft}`,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
-              <div style={{ color: palette.text, fontSize: 12, fontWeight: 600, wordBreak: 'break-word' }}>{item.text}</div>
-              {item.date ? (
-                <span style={{ color: palette.muted, fontSize: 11, flexShrink: 0 }}>{formatDate(item.date)}</span>
-              ) : null}
-            </div>
-            {href ? (
-              <a
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: palette.info, fontSize: 11, wordBreak: 'break-word' }}
-              >
-                Открыть ссылку
-              </a>
-            ) : null}
-          </div>
-        );
-      })}
     </div>
   );
 }
