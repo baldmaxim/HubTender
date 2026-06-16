@@ -1648,6 +1648,12 @@ CREATE OR REPLACE FUNCTION public.trg_insurance_update_grand_total()
    SET search_path = public, pg_temp
 AS $function$
 BEGIN
+  -- Bulk fast-path: skip per-row recompute when a bulk op (clone/transfer)
+  -- sets app.skip_grand_total='on'. Caller recomputes once before commit.
+  IF current_setting('app.skip_grand_total', true) = 'on' THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
   IF TG_OP = 'DELETE' THEN
     PERFORM public.recalculate_tender_grand_total(OLD.tender_id);
     RETURN OLD;
@@ -1664,6 +1670,12 @@ CREATE OR REPLACE FUNCTION public.trg_markup_pct_update_grand_total()
    SET search_path = public, pg_temp
 AS $function$
 BEGIN
+  -- Bulk fast-path: skip per-row recompute when a bulk op (clone/transfer)
+  -- sets app.skip_grand_total='on'. Caller recomputes once before commit.
+  IF current_setting('app.skip_grand_total', true) = 'on' THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
   IF TG_OP = 'DELETE' THEN
     PERFORM public.recalculate_tender_grand_total(OLD.tender_id);
     RETURN OLD;
@@ -1680,6 +1692,12 @@ CREATE OR REPLACE FUNCTION public.trg_subcontract_excl_update_grand_total()
    SET search_path = public, pg_temp
 AS $function$
 BEGIN
+  -- Bulk fast-path: skip per-row recompute when a bulk op (clone/transfer)
+  -- sets app.skip_grand_total='on'. Caller recomputes once before commit.
+  IF current_setting('app.skip_grand_total', true) = 'on' THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
   IF TG_OP = 'DELETE' THEN
     PERFORM public.recalculate_tender_grand_total(OLD.tender_id);
     RETURN OLD;

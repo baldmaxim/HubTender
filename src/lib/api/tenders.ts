@@ -99,7 +99,11 @@ export async function adminPatchTender(id: string, patch: AdminTenderPatch): Pro
 
 /** Удалить тендер. */
 export async function deleteTender(id: string): Promise<void> {
+  // Удаление крупного тендера — тяжёлая операция (FK-каскад по тысячам
+  // boq_items/client_positions); отключаем дефолтный 10s-таймаут apiFetch,
+  // как у cloneTenderAsNewVersion / executeVersionTransfer.
   await apiFetch<undefined>(`/api/v1/tenders/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+    timeoutMs: 0,
   });
 }

@@ -80,11 +80,14 @@ export const useTenderActions = (onRefresh: () => void) => {
       cancelText: 'Отмена',
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
+        const hide = message.loading('Удаление тендера…', 0);
         try {
           await deleteTender(record.id);
+          hide();
           message.success(`Тендер "${record.tender}" успешно удален`);
           await onRefresh();
         } catch (error) {
+          hide();
           console.error('Ошибка при удалении тендера:', error);
           message.error('Не удалось удалить тендер');
         }

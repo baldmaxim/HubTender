@@ -120,9 +120,26 @@ func (r *TenderRepo) AdminPatchTender(ctx context.Context, id string, p AdminTen
 }
 
 // DeleteTender removes the tender (cascade is handled by FKs).
+//
+// Wrapped in a transaction that sets app.skip_grand_total='on' so the FK
+// cascade over thousands of boq_items does not fire the per-row
+// trg_boq_items_grand_total recompute (O(N²)). No final recompute is needed —
+// the tender row is deleted, so there is nothing to recompute.
 func (r *TenderRepo) DeleteTender(ctx context.Context, id string) error {
-	if _, err := r.pool.Exec(ctx, `DELETE FROM public.tenders WHERE id = $1`, id); err != nil {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("tenderRepo.DeleteTender: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, `SET LOCAL app.skip_grand_total = 'on'`); err != nil {
+		return fmt.Errorf("tenderRepo.DeleteTender: set skip_grand_total: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM public.tenders WHERE id = $1`, id); err != nil {
 		return fmt.Errorf("tenderRepo.DeleteTender: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("tenderRepo.DeleteTender: commit: %w", err)
 	}
 	return nil
 }
