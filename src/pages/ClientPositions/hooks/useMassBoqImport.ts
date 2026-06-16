@@ -372,11 +372,46 @@ export const useMassBoqImport = () => {
 
       setUploadProgress(100);
 
+      // Сверка количеств: бэк атомарен и вставляет ровно то, что мы отправили,
+      // поэтому любое расхождение = тихая потеря данных. droppedItems — элементы,
+      // выброшенные фильтром matchedPositionId (не сопоставлены с позицией).
+      const expectedItems = itemsPayload.length;
+      const expectedPositions = positionUpdatesPayload.length;
+      const droppedItems = data.length - expectedItems;
+
       console.log('[MassBoqImport] Импорт завершён:', {
         boqItems: insertedItemsCount,
+        expectedItems,
         positionUpdates: updatedPositionsCount,
+        expectedPositions,
+        droppedItems,
         sessionId: importSessionId,
       });
+
+      const mismatch =
+        insertedItemsCount !== expectedItems ||
+        updatedPositionsCount !== expectedPositions ||
+        droppedItems > 0;
+
+      if (mismatch) {
+        const droppedRows = data
+          .filter(item => !item.matchedPositionId)
+          .map(item => item.rowIndex);
+        console.error('[MassBoqImport] Расхождение количеств при импорте:', {
+          insertedItemsCount, expectedItems,
+          updatedPositionsCount, expectedPositions,
+          droppedItems, droppedRows,
+        });
+        message.error(
+          `Импортировано ${insertedItemsCount} из ${expectedItems} элементов, ` +
+          `обновлено ${updatedPositionsCount} из ${expectedPositions} позиций` +
+          (droppedItems > 0 ? `; пропущено строк без позиции: ${droppedItems}` : '') +
+          ' — часть данных не загружена. Проверьте позиции.',
+          10,
+        );
+        // Данные, которые вставились, закоммичены — даём UI обновиться.
+        return true;
+      }
 
       const msgParts: string[] = [];
       if (insertedItemsCount > 0) {
@@ -388,8 +423,15 @@ export const useMassBoqImport = () => {
       message.success(`Импортировано: ${msgParts.join(', ')}`);
       return true;
     } catch (error) {
-      console.error('Ошибка импорта:', error);
-      message.error('Ошибка при импорте: ' + getErrorMessage(error));
+      // Расшифровываем структурно: apiFetch кладёт причину (RFC 7807 detail)
+      // в error.message, а статус и тело — в error.status / error.body.
+      const e = error as { status?: number; body?: { detail?: string; title?: string } };
+      console.error('Ошибка импорта:', {
+        status: e?.status,
+        message: getErrorMessage(error),
+        body: e?.body,
+      });
+      message.error('Ошибка импорта: ' + getErrorMessage(error), 8);
       return false;
     } finally {
       setUploading(false);

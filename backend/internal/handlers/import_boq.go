@@ -82,8 +82,12 @@ func (h *ImportBoqHandler) BulkImport(w http.ResponseWriter, r *http.Request) {
 			apierr.BadRequest(bulkErr.Message).Render(w)
 			return
 		}
+		// Подстраховка: основные ошибки данных/ограничений уже превращаются в
+		// ErrBulkImport (с номером строки) в repository.boqInsertError. Эти
+		// override'ы срабатывают, только если ошибка пришла иным путём.
 		if p := apierr.ProblemFromPgErr(err, map[string]string{
-			"boq_items_base_quantity_positive": "Количество позиции должно быть больше нуля",
+			"boq_items_quantity_positive":      "Количество должно быть больше нуля",
+			"boq_items_base_quantity_positive": "Базовое количество должно быть больше нуля",
 		}); p != nil {
 			p.Render(w)
 			return

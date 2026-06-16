@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -134,6 +135,20 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	// Подавляем построчный пересчёт grand_total (trg_boq_items_grand_total,
+	// FOR EACH ROW) на время bulk-вставки — иначе импорт N строк = N полных
+	// агрегатов по тендеру (O(N×M)) и большие файлы упираются в тайм-аут.
+	// Пересчитываем один раз перед commit. SET LOCAL транзакционно-локален и
+	// не утекает через PgBouncer. (Образец: tender_clone/tender_transfer.)
+	if _, err := tx.Exec(ctx, `SET LOCAL app.skip_grand_total = 'on'`); err != nil {
+		return nil, fmt.Errorf("importRepo.BulkImport: set skip_grand_total: %w", err)
+	}
+	// Большой импорт не должен упираться в statement_timeout пула; общий
+	// предел держит HTTP-таймаут сервера (5 мин).
+	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout = '0'`); err != nil {
+		return nil, fmt.Errorf("importRepo.BulkImport: set statement_timeout: %w", err)
+	}
+
 	result := &ImportResult{}
 
 	// ------------------------------------------------------------------
@@ -259,14 +274,16 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 	for _, ii := range indexed {
 		item := ii.item
 
+		// Метка строки Excel для сообщений об ошибках (1-based из парсера).
+		rowLabel := "?"
+		if item.RowIndex != nil {
+			rowLabel = fmt.Sprintf("%d", *item.RowIndex)
+		}
+
 		// Validate required field.
 		if item.ClientPositionID == "" {
-			rowLabel := "?"
-			if item.RowIndex != nil {
-				rowLabel = fmt.Sprintf("%d", *item.RowIndex)
-			}
 			return nil, &ErrBulkImport{
-				Message: fmt.Sprintf("Bulk BOQ import: missing client_position_id for row %s", rowLabel),
+				Message: fmt.Sprintf("Строка %s: не указана позиция заказчика (client_position_id)", rowLabel),
 			}
 		}
 
@@ -276,8 +293,8 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			positionItemIndex = 0
 
 			if err := tx.QueryRow(ctx, maxSortQ, currentPositionID).Scan(&currentMaxSort); err != nil {
-				return nil, fmt.Errorf("importRepo.BulkImport: max sort query for position %s: %w",
-					currentPositionID, err)
+				return nil, fmt.Errorf("importRepo.BulkImport: max sort query (row %s, position %s): %w",
+					rowLabel, currentPositionID, err)
 			}
 		}
 
@@ -289,13 +306,9 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 		if item.ParentWorkTempID != nil && *item.ParentWorkTempID != "" {
 			resolved, ok := workRefMap[*item.ParentWorkTempID]
 			if !ok {
-				rowLabel := "?"
-				if item.RowIndex != nil {
-					rowLabel = fmt.Sprintf("%d", *item.RowIndex)
-				}
 				return nil, &ErrBulkImport{
 					Message: fmt.Sprintf(
-						"Bulk BOQ import: parent work not resolved for row %s, temp ref %s",
+						"Строка %s: не найдена родительская работа для привязки материала (temp ref %s)",
 						rowLabel, *item.ParentWorkTempID,
 					),
 				}
@@ -328,8 +341,7 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			item.Description,      // $21 description
 			importSessionID,       // $22 import_session_id
 		).Scan(&insertedID); err != nil {
-			return nil, fmt.Errorf("importRepo.BulkImport: insert boq_item (position %s): %w",
-				currentPositionID, err)
+			return nil, boqInsertError(err, rowLabel, currentPositionID)
 		}
 
 		result.InsertedItemsCount++
@@ -437,10 +449,96 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 		}
 	}
 
+	// Пересчитываем cached_grand_total тендера один раз — построчный триггер был
+	// подавлён через app.skip_grand_total. Выполняется безусловно, чтобы значение
+	// было свежим даже при импорте, не менявшем суммы.
+	if _, err := tx.Exec(ctx,
+		`SELECT public.recalculate_tender_grand_total($1::uuid)`, in.TenderID,
+	); err != nil {
+		return nil, fmt.Errorf("importRepo.BulkImport: recompute grand total: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("importRepo.BulkImport: commit: %w", err)
 	}
 
 	result.ImportSessionID = importSessionID
 	return result, nil
+}
+
+// boqInsertError превращает ошибку INSERT boq_item в сообщение с номером строки
+// Excel. Ошибки данных/ограничений (классы SQLSTATE 22/23) → ErrBulkImport (400)
+// с человекочитаемой причиной — она доедет до пользователя в RFC 7807 `detail`.
+// Прочие ошибки (соединение, отмена контекста) → обёрнутая ошибка (500), но
+// номер строки/позиция теперь видны в логах и Sentry.
+func boqInsertError(err error, rowLabel, positionID string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && len(pgErr.Code) >= 2 {
+		switch pgErr.Code[:2] {
+		case "22", "23": // data exception / integrity constraint violation
+			return &ErrBulkImport{
+				Message: fmt.Sprintf("Строка %s: %s", rowLabel, boqConstraintReason(pgErr)),
+			}
+		}
+	}
+	return fmt.Errorf("importRepo.BulkImport: insert boq_item (row %s, position %s): %w",
+		rowLabel, positionID, err)
+}
+
+// boqConstraintReason формирует понятную причину из pg-ошибки: сначала по имени
+// constraint'а boq_items, затем по коду SQLSTATE; при наличии добавляет
+// pgErr.Detail (там Postgres указывает конкретный ключ/значение).
+func boqConstraintReason(pgErr *pgconn.PgError) string {
+	var reason string
+	switch pgErr.ConstraintName {
+	case "boq_items_quantity_positive":
+		reason = "количество должно быть больше нуля"
+	case "boq_items_base_quantity_positive":
+		reason = "базовое количество должно быть больше нуля"
+	case "boq_items_consumption_coefficient_positive":
+		reason = "коэффициент расхода должен быть больше нуля"
+	case "boq_items_conversion_coefficient_positive":
+		reason = "коэффициент перевода должен быть больше нуля"
+	case "boq_items_material_check":
+		reason = "тип элемента не соответствует заполненным полям (работа/материал)"
+	case "boq_items_parent_work_check":
+		reason = "у работы не может быть привязки к родительской работе"
+	case "boq_items_delivery_amount_check":
+		reason = "для типа доставки «суммой» нужна стоимость доставки"
+	case "boq_items_client_position_id_fkey":
+		reason = "позиция заказчика не найдена"
+	case "boq_items_material_name_id_fkey":
+		reason = "материал не найден в номенклатуре"
+	case "boq_items_work_name_id_fkey":
+		reason = "работа не найдена в номенклатуре"
+	case "boq_items_unit_code_fkey":
+		reason = "единица измерения не найдена в справочнике"
+	case "boq_items_detail_cost_category_id_fkey":
+		reason = "затрата на строительство не найдена"
+	case "boq_items_tender_id_fkey":
+		reason = "тендер не найден"
+	case "boq_items_parent_work_item_id_fkey":
+		reason = "родительская работа не найдена"
+	default:
+		switch pgErr.Code {
+		case "23502": // not_null_violation
+			reason = fmt.Sprintf("не заполнено обязательное поле «%s»", pgErr.ColumnName)
+		case "23503": // foreign_key_violation
+			reason = "ссылка на несуществующую запись (внешний ключ)"
+		case "23505": // unique_violation
+			reason = "запись с такими данными уже существует"
+		case "23514": // check_violation
+			reason = "значение не прошло проверку ограничений БД"
+		case "22P02": // invalid_text_representation (кривой enum/uuid)
+			reason = "недопустимое значение (тип элемента, валюта или идентификатор)"
+		case "22003": // numeric_value_out_of_range
+			reason = "числовое значение вне допустимого диапазона"
+		default:
+			reason = pgErr.Message
+		}
+	}
+	if pgErr.Detail != "" {
+		reason += " (" + pgErr.Detail + ")"
+	}
+	return reason
 }

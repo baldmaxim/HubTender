@@ -69,20 +69,27 @@ export const parseExcelData = (rows: unknown[]): ParseExcelResult => {
         itemsCount: 0,
       };
 
-      // Количество ГП из колонки 12 (индекс 11, соответствует экспорту col 10 + сдвиг bindToWork)
-      const manualVolume = parseNumber(cells[11]);
-      if (manualVolume !== undefined) {
-        existing.manualVolume = manualVolume;
-      }
+      // Данные ГП берём ТОЛЬКО со строки-ЗАГОЛОВКА позиции (без типа BOQ).
+      // Строки-элементы тоже несут номер позиции (для группировки), но их
+      // колонки 11/19 — это количество/описание элемента, а не данные ГП позиции.
+      // Без этого guard'а каждый элемент затирал manual_volume/manual_note
+      // позиции значениями последнего элемента (см. план: проблема 2).
+      if (!isValidBoqType) {
+        // Количество ГП из колонки 12 (индекс 11, соответствует экспорту col 10 + сдвиг bindToWork)
+        const manualVolume = parseNumber(cells[11]);
+        if (manualVolume !== undefined) {
+          existing.manualVolume = manualVolume;
+        }
 
-      // Примечание ГП из колонки 20 (индекс 19, соответствует экспорту col 18 + сдвиг bindToWork)
-      const manualNote = cells[19] ? String(cells[19]).trim() : undefined;
-      if (manualNote) {
-        existing.manualNote = manualNote;
-      }
+        // Примечание ГП из колонки 20 (индекс 19, соответствует экспорту col 18 + сдвиг bindToWork)
+        const manualNote = cells[19] ? String(cells[19]).trim() : undefined;
+        if (manualNote) {
+          existing.manualNote = manualNote;
+        }
 
-      if (manualVolume !== undefined || manualNote) {
-        console.log(`[MassBoqImport] Позиция ${currentPositionNumber}: manualVolume=${manualVolume}, manualNote="${manualNote}"`);
+        if (manualVolume !== undefined || manualNote) {
+          console.log(`[MassBoqImport] Позиция ${currentPositionNumber}: manualVolume=${manualVolume}, manualNote="${manualNote}"`);
+        }
       }
 
       posUpdates.set(currentPositionNumber, existing);

@@ -36,6 +36,30 @@ func TestProblemFromPgErr(t *testing.T) {
 			wantDetail: "Данные не прошли проверку ограничений базы данных",
 		},
 		{
+			name:       "not null violation -> 400 with column",
+			err:        &pgconn.PgError{Code: "23502", ColumnName: "unit_code"},
+			wantStatus: 400,
+			wantDetail: "Не заполнено обязательное поле «unit_code»",
+		},
+		{
+			name:       "invalid text representation -> 400",
+			err:        &pgconn.PgError{Code: "22P02"},
+			wantStatus: 400,
+			wantDetail: "Недопустимое значение поля (тип, валюта или идентификатор)",
+		},
+		{
+			name:       "numeric out of range -> 400",
+			err:        &pgconn.PgError{Code: "22003"},
+			wantStatus: 400,
+			wantDetail: "Числовое значение вне допустимого диапазона",
+		},
+		{
+			name:       "pg detail appended to message",
+			err:        &pgconn.PgError{Code: "23503", Detail: "Key (work_name_id)=(x) is not present in table \"work_names\"."},
+			wantStatus: 409,
+			wantDetail: "Операция невозможна: запись связана с другими данными (Key (work_name_id)=(x) is not present in table \"work_names\".)",
+		},
+		{
 			name:       "override by constraint name",
 			err:        &pgconn.PgError{Code: "23505", ConstraintName: "tenders_tender_number_version_key"},
 			overrides:  map[string]string{"tenders_tender_number_version_key": "Тендер уже существует"},
@@ -59,7 +83,7 @@ func TestProblemFromPgErr(t *testing.T) {
 		},
 		{
 			name:    "unhandled sqlstate -> nil",
-			err:     &pgconn.PgError{Code: "23502"}, // not_null_violation
+			err:     &pgconn.PgError{Code: "40001"}, // serialization_failure
 			wantNil: true,
 		},
 	}
