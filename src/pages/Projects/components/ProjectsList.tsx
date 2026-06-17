@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { List, Typography, Progress, Empty, Spin, Tooltip, Divider } from 'antd';
+import { List, Typography, Progress, Empty, Spin, Tooltip, Divider, Grid } from 'antd';
 import { RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -42,6 +42,8 @@ const formatMoneyDetailed = (value: number): string => {
 export const ProjectsList: React.FC<ProjectsListProps> = ({ data, loading, agreementsMap }) => {
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const screens = Grid.useBreakpoint();
+  const isTablet = !!screens.lg && !screens.xl;
 
   // Render tooltip content for contract amount
   const renderAmountTooltip = (project: ProjectFull) => {
@@ -136,7 +138,18 @@ export const ProjectsList: React.FC<ProjectsListProps> = ({ data, loading, agree
                 <Text type="secondary" style={{ fontSize: 13, display: 'block' }}>
                   {project.client_name}
                 </Text>
-                <Text strong style={{ fontSize: 15 }} ellipsis>
+                <Text
+                  strong
+                  style={{
+                    fontSize: 15,
+                    display: 'block',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    WebkitLineClamp: isTablet ? 2 : 1,
+                    WebkitBoxOrient: 'vertical',
+                    wordBreak: 'break-word',
+                  }}
+                >
                   {project.name}
                 </Text>
               </div>
@@ -154,13 +167,15 @@ export const ProjectsList: React.FC<ProjectsListProps> = ({ data, loading, agree
               </Tooltip>
 
               {/* Стоимость за м² */}
-              <div style={{ width: 130, textAlign: 'right' }}>
-                <Text strong>
-                  {project.area && project.area > 0
-                    ? `${Math.round((project.final_contract_cost ?? 0) / project.area).toLocaleString('ru-RU')} Руб/м²`
-                    : '—'}
-                </Text>
-              </div>
+              {!isTablet && (
+                <div style={{ width: 130, textAlign: 'right' }}>
+                  <Text strong>
+                    {project.area && project.area > 0
+                      ? `${Math.round((project.final_contract_cost ?? 0) / project.area).toLocaleString('ru-RU')} Руб/м²`
+                      : '—'}
+                  </Text>
+                </div>
+              )}
 
               {/* Выполнение */}
               <div style={{ width: 180 }}>
@@ -179,16 +194,18 @@ export const ProjectsList: React.FC<ProjectsListProps> = ({ data, loading, agree
               </div>
 
               {/* Дата начала */}
-              <div style={{ width: 90, textAlign: 'center' }}>
-                <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
-                  Начало
-                </Text>
-                <Text style={{ fontSize: 12 }}>
-                  {project.contract_date
-                    ? dayjs(project.contract_date).format('DD.MM.YYYY')
-                    : '—'}
-                </Text>
-              </div>
+              {!isTablet && (
+                <div style={{ width: 90, textAlign: 'center' }}>
+                  <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
+                    Начало
+                  </Text>
+                  <Text style={{ fontSize: 12 }}>
+                    {project.contract_date
+                      ? dayjs(project.contract_date).format('DD.MM.YYYY')
+                      : '—'}
+                  </Text>
+                </div>
+              )}
 
               {/* Дата окончания */}
               <div style={{ width: 90, textAlign: 'center' }}>
