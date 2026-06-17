@@ -20,7 +20,8 @@ func TestTopicsFor(t *testing.T) {
 
 		// Global / reference tables → dedicated topics, regardless of tender_id.
 		{"user_tasks", Event{Table: "user_tasks", ID: "x"}, []string{"tasks"}},
-		{"users", Event{Table: "users", ID: "x"}, []string{"users"}},
+		{"users", Event{Table: "users", ID: "x"}, []string{"users", "user:x"}},
+		{"users without id", Event{Table: "users"}, []string{"users"}},
 		{"materials_library", Event{Table: "materials_library"}, []string{"references"}},
 		{"works_library", Event{Table: "works_library"}, []string{"references"}},
 		{"material_names", Event{Table: "material_names"}, []string{"references"}},

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getTenderById } from '../lib/api/fi';
 import { apiFetch } from '../lib/api/client';
+import { useRealtimeRefetch } from '../lib/realtime/useRealtimeRefetch';
 import { checkTenderDeadline } from '../utils/deadlineCheck';
 import type { DeadlineCheckResult, TenderDeadlineExtension } from '../lib/supabase/types';
 
@@ -24,8 +25,8 @@ export const useDeadlineCheck = (tenderId: string | undefined) => {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchDeadlineInfo = async () => {
+  const fetchDeadlineInfo = useCallback(
+    async () => {
       if (!tenderId || !user) {
         setDeadlineStatus({
           isExpired: false,
@@ -82,10 +83,22 @@ export const useDeadlineCheck = (tenderId: string | undefined) => {
       } finally {
         setLoading(false);
       }
-    };
+    },
+    [tenderId, user],
+  );
 
+  useEffect(() => {
     fetchDeadlineInfo();
-  }, [tenderId, user]);
+  }, [fetchDeadlineInfo]);
+
+  // Realtime: админ открывает доступ → UPDATE users.tender_deadline_extensions
+  // → NOTIFY на топик user:<id>. Пересчитываем дедлайн без перезагрузки страницы.
+  useRealtimeRefetch(
+    user?.id && tenderId ? `user:${user.id}` : null,
+    () => {
+      void fetchDeadlineInfo();
+    },
+  );
 
   return {
     ...deadlineStatus,

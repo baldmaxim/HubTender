@@ -145,7 +145,14 @@ func (b *Broker) topicsFor(e Event) []string {
 	case "user_tasks":
 		return []string{"tasks"}
 	case "users":
-		return []string{"users"}
+		// "users" feeds the admin list; "user:<id>" lets the affected user pick
+		// up self-changes (e.g. tender_deadline_extensions → edit-access unlock)
+		// since e.ID is the user's row id (notify_row_change: id = NEW/OLD.id).
+		topics := []string{"users"}
+		if e.ID != "" {
+			topics = append(topics, "user:"+e.ID)
+		}
+		return topics
 	case "materials_library", "works_library", "material_names", "work_names", "units":
 		return []string{"references"}
 	case "templates", "template_items":

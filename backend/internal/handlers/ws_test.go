@@ -20,6 +20,8 @@ func TestAuthoriseTopic(t *testing.T) {
 	}{
 		{"own notifications", eng, "notifications:u1", true},
 		{"other notifications", eng, "notifications:u2", false},
+		{"own user topic", eng, "user:u1", true},
+		{"other user topic", eng, "user:u2", false},
 		{"tender any", eng, "tender:abc", true},
 		{"tenders global", eng, "tenders", true},
 		{"tasks", eng, "tasks", true},

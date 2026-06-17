@@ -1,11 +1,21 @@
 package realtime
 
 import (
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 
 	"github.com/rs/zerolog"
 )
+
+// eventFrame is the wire envelope every published event is wrapped in. The
+// frontend ws client (src/lib/realtime/ws.ts) matches on type=="event" and
+// routes by topic, so the raw {table,op,id,tender_id} payload alone is dropped.
+type eventFrame struct {
+	Type    string          `json:"type"`
+	Topic   string          `json:"topic"`
+	Payload json.RawMessage `json:"payload"`
+}
 
 // Client represents a single connected WebSocket client.
 // The send channel is buffered so that a slow client does not block
@@ -181,6 +191,15 @@ func (h *Hub) Unsubscribe(c *Client, topic string) {
 // The send is non-blocking: if a client's buffer is full the message is
 // dropped rather than blocking the entire Publish path.
 func (h *Hub) Publish(topic string, payload []byte) {
+	// Wrap the raw payload in the {type,topic,payload} envelope the frontend
+	// requires to route the event to the right topic listeners. Without this
+	// the client discards every frame (type != "event").
+	frame, err := json.Marshal(eventFrame{Type: "event", Topic: topic, Payload: json.RawMessage(payload)})
+	if err != nil {
+		h.logger.Error().Err(err).Str("topic", topic).Msg("failed to marshal event frame; dropping")
+		return
+	}
+
 	h.mu.RLock()
 	subs := h.topics[topic]
 	// Copy the client set so we can release the read lock before sending.
@@ -193,7 +212,7 @@ func (h *Hub) Publish(topic string, payload []byte) {
 	dropped := 0
 	for _, c := range targets {
 		select {
-		case c.send <- payload:
+		case c.send <- frame:
 		default:
 			dropped++
 		}
