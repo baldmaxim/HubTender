@@ -5,6 +5,11 @@ import { fetchTenders as apiFetchTenders, fetchTendersByIds as apiFetchTendersBy
 import { listAllBoqItemsForTender } from '../../../../lib/api/fi';
 import { listDetailCostCategoriesWithCategory } from '../../../../lib/api/costs';
 import { apiFetch } from '../../../../lib/api/client';
+import {
+  loadLiveCommercialCalculationContext,
+  calculateLiveCommercialAmounts,
+  resetLiveCommercialCalculationCache,
+} from '../../../../utils/boq/liveCommercialCalculation';
 import type { CostType, ComparisonRow, TenderCosts } from '../types';
 import { getErrorMessage } from '../../../../utils/errors';
 
@@ -69,14 +74,21 @@ async function fetchVolumes(tenderId: string): Promise<{ detailMap: Map<string, 
   return { detailMap, groupMap };
 }
 
+// ВНИМАНИЕ: вызывать ПОСЛЕДОВАТЕЛЬНО по тендерам (не через Promise.all). Кэш
+// коэффициентов в calculateBoqItemCost — module-level и ключуется только по
+// типу/исключению/НДС (без tenderId), поэтому конкурентный расчёт тендеров с
+// разными тактиками привёл бы к загрязнению. Сброс в начале каждого тендера +
+// последовательный вызов гарантируют корректность.
 async function fetchBoqItems(tenderId: string): Promise<BoqItemForComparison[]> {
   // Go BFF: boq-items-flat для тендера + справочник детальных категорий
-  // (с присоединённой родительской категорией). Соединяем по
-  // detail_cost_category_id. Сохраняем семантику прежних !inner-джойнов:
-  // берём только элементы с detail_cost_category_id, который резолвится.
-  const [items, detailCats] = await Promise.all([
+  // (с присоединённой родительской категорией) + контекст для live-расчёта
+  // коммерческих стоимостей. Соединяем по detail_cost_category_id. Сохраняем
+  // семантику прежних !inner-джойнов: берём только элементы с
+  // detail_cost_category_id, который резолвится.
+  const [items, detailCats, calcContext] = await Promise.all([
     listAllBoqItemsForTender(tenderId),
     listDetailCostCategoriesWithCategory(),
+    loadLiveCommercialCalculationContext(tenderId),
   ]);
 
   const catMap = new Map<
@@ -91,17 +103,27 @@ async function fetchBoqItems(tenderId: string): Promise<BoqItemForComparison[]> 
     });
   }
 
+  // Сбрасываем кэш коэффициентов перед расчётом этого тендера.
+  resetLiveCommercialCalculationCache();
+
   const out: BoqItemForComparison[] = [];
   for (const i of items) {
     const detailId = i.detail_cost_category_id ?? null;
     if (!detailId) continue;
     const cat = catMap.get(detailId);
     if (!cat) continue; // эквивалент detail_cost_categories!inner
+    // Коммерческие стоимости считаем на лету по тактике тендера (как на странице
+    // «Финансовые показатели»), не полагаясь на материализованные
+    // total_commercial_* — они могут отставать до серверного авто-пересчёта.
+    const live = calculateLiveCommercialAmounts(
+      i as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0],
+      calcContext,
+    );
     out.push({
       total_amount: i.total_amount ?? null,
       boq_item_type: i.boq_item_type ?? null,
-      total_commercial_material_cost: i.total_commercial_material_cost ?? null,
-      total_commercial_work_cost: i.total_commercial_work_cost ?? null,
+      total_commercial_material_cost: live.materialCost,
+      total_commercial_work_cost: live.workCost,
       detail_cost_category_id: detailId,
       detail_cost_categories: cat,
       client_positions: { tender_id: tenderId },
@@ -342,6 +364,8 @@ export function useComparisonData() {
   const [rawItemsAll, setRawItemsAll] = useState<BoqItemForComparison[][] | null>(null);
   const [volumeMapsAll, setVolumeMapsAll] = useState<{ detailMap: Map<string, number>; groupMap: Map<string, number> }[] | null>(null);
   const [notesMap, setNotesMap] = useState<NotesMap>(new Map());
+  // Тендеры, по которым реально загружено сравнение (на них вешаем realtime).
+  const [loadedTenderIds, setLoadedTenderIds] = useState<string[]>([]);
 
   useEffect(() => {
     fetchTendersData();
@@ -380,24 +404,20 @@ export function useComparisonData() {
     setSelectedTenders(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const loadComparisonData = async () => {
-    const validTenders = selectedTenders.filter(Boolean) as string[];
-    if (validTenders.length < 2) {
-      message.warning('Выберите минимум два тендера для сравнения');
-      return;
-    }
-    if (new Set(validTenders).size !== validTenders.length) {
-      message.warning('Выберите разные тендеры для сравнения');
-      return;
-    }
-
-    setLoading(true);
+  // Общий загрузчик. silent=true — для realtime-обновления (без спиннера и
+  // тостов). Пересборка comparisonData выполняется эффектом по rawItemsAll.
+  const runLoad = useCallback(async (validTenders: string[], silent: boolean) => {
+    if (!silent) setLoading(true);
     try {
-      const [tendersResult, itemsAll, volsAll] = await Promise.all([
-        apiFetchTendersByIds(validTenders),
-        Promise.all(validTenders.map(id => fetchBoqItems(id))),
-        Promise.all(validTenders.map(id => fetchVolumes(id))),
-      ]);
+      const tendersResult = await apiFetchTendersByIds(validTenders);
+
+      // Последовательно по тендерам — общий module-level кэш коэффициентов в
+      // calculateBoqItemCost не допускает конкурентного расчёта (см. fetchBoqItems).
+      const itemsAll: BoqItemForComparison[][] = [];
+      for (const id of validTenders) {
+        itemsAll.push(await fetchBoqItems(id));
+      }
+      const volsAll = await Promise.all(validTenders.map(id => fetchVolumes(id)));
 
       const tendersById = new Map(tendersResult.map(t => [t.id, t]));
       setTenderInfos(validTenders.map(id => tendersById.get(id) ?? null));
@@ -410,16 +430,39 @@ export function useComparisonData() {
       setRawItemsAll(itemsAll);
       setVolumeMapsAll(volsAll);
       setNotesMap(loadedNotes);
-
-      const data = buildHierarchy(itemsAll, costType, volsAll, loadedNotes);
-      setComparisonData(data);
-      message.success('Данные успешно загружены');
+      setLoadedTenderIds(validTenders);
+      if (!silent) message.success('Данные успешно загружены');
     } catch (error) {
-      message.error('Ошибка загрузки данных: ' + getErrorMessage(error));
+      if (silent) {
+        console.error('Ошибка авто-обновления сравнения:', error);
+      } else {
+        message.error('Ошибка загрузки данных: ' + getErrorMessage(error));
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  const loadComparisonData = useCallback(async () => {
+    const validTenders = selectedTenders.filter(Boolean) as string[];
+    if (validTenders.length < 2) {
+      message.warning('Выберите минимум два тендера для сравнения');
+      return;
+    }
+    if (new Set(validTenders).size !== validTenders.length) {
+      message.warning('Выберите разные тендеры для сравнения');
+      return;
+    }
+    await runLoad(validTenders, false);
+  }, [selectedTenders, runLoad]);
+
+  // Тихая перезагрузка уже загруженного сравнения — вызывается realtime-подпиской,
+  // когда у любого из сравниваемых тендеров поменялись BOQ/наценки.
+  const refreshComparison = useCallback(() => {
+    if (loadedTenderIds.length >= 2) {
+      void runLoad(loadedTenderIds, true);
+    }
+  }, [loadedTenderIds, runLoad]);
 
   const saveNote = useCallback(async (
     categoryName: string,
@@ -471,6 +514,8 @@ export function useComparisonData() {
     comparisonData,
     costType, setCostType,
     loadComparisonData,
+    loadedTenderIds,
+    refreshComparison,
     tenderTotals,
     saveNote,
   };

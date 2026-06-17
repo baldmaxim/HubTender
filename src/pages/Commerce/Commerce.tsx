@@ -25,7 +25,6 @@ export default function Commerce() {
     selectedVersion,
     setSelectedVersion,
     positions,
-    boqItems,
     markupTactics,
     selectedTacticId,
     tacticChanged,
@@ -39,18 +38,19 @@ export default function Commerce() {
   } = useCommerceData();
 
   const {
-    handleRecalculate,
     handleApplyTactic
   } = useCommerceActions(
     selectedTenderId,
     selectedTacticId,
-    boqItems,
     setCalculating,
     setTacticChanged,
     syncTenderMarkupTactic,
     loadTenders,
     loadPositions
   );
+  // Примечание: realtime-обновление таблицы КП после серверного авто-пересчёта
+  // живёт в useCommerceData (useRealtimeTopic('tender:<id>') → loadPositions),
+  // поэтому отдельная подписка здесь не нужна.
 
   useEffect(() => {
     const refreshIfNeeded = () => {
@@ -176,7 +176,6 @@ export default function Commerce() {
           onVersionChange={handleVersionChange}
           onTacticChange={handleTacticChange}
           onApplyTactic={handleApplyTactic}
-          onRecalculate={handleRecalculate}
           onExport={handleExportToExcel}
           shouldFilterArchived={shouldFilterArchived}
         />

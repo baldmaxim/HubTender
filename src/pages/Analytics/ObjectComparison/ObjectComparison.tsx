@@ -6,8 +6,16 @@ import dayjs from 'dayjs';
 import { useComparisonData } from './hooks/useComparisonData';
 import type { ComparisonRow, CostType, ViewMode, TenderCosts } from './types';
 import { exportComparisonToExcel } from './utils/exportComparisonToExcel';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 
 const { Text } = Typography;
+
+// Невидимый подписчик: один на сравниваемый тендер. Триггерит тихую
+// перезагрузку сравнения при изменении BOQ/наценок этого тендера (как ФП).
+const TenderRealtimeRefresh: React.FC<{ tenderId: string; onChange: () => void }> = ({ tenderId, onChange }) => {
+  useRealtimeTopic(`tender:${tenderId}`, onChange);
+  return null;
+};
 
 const formatNum = (value: number) =>
   value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -57,6 +65,8 @@ const ObjectComparison: React.FC = () => {
     comparisonData,
     costType, setCostType,
     loadComparisonData,
+    loadedTenderIds,
+    refreshComparison,
     tenderTotals,
     saveNote,
   } = useComparisonData();
@@ -223,6 +233,9 @@ const ObjectComparison: React.FC = () => {
 
   return (
     <div style={{ padding: '24px' }}>
+      {loadedTenderIds.map((id) => (
+        <TenderRealtimeRefresh key={id} tenderId={id} onChange={refreshComparison} />
+      ))}
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         {/* Выбор тендеров */}
         <Card title="Выбор объектов для сравнения">

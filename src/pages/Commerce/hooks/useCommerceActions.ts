@@ -3,45 +3,18 @@
  */
 
 import { message, Modal } from 'antd';
-import { applyTacticToTender } from '../../../services/markupTacticService';
 import { initializeTestMarkup } from '../../../utils/initializeTestMarkup';
 import { setTenderMarkupTacticId } from '../../../lib/api/markup';
 
 export function useCommerceActions(
   selectedTenderId: string | undefined,
   selectedTacticId: string | undefined,
-  boqItems: NonNullable<Parameters<typeof applyTacticToTender>[2]> | null,
   setCalculating: (val: boolean) => void,
   setTacticChanged: (val: boolean) => void,
   syncTenderMarkupTactic: (tenderId: string, tacticId: string) => void,
   loadTenders: () => Promise<void>,
   loadPositions: (tenderId: string) => Promise<void>
 ) {
-  const handleRecalculate = async () => {
-    if (!selectedTenderId) {
-      message.warning('Выберите тендер для пересчета');
-      return;
-    }
-
-    setCalculating(true);
-    try {
-      const result = await applyTacticToTender(selectedTenderId, selectedTacticId, boqItems || undefined);
-
-      if (result.success) {
-        message.success(`Пересчитано элементов: ${result.updatedCount}`);
-        // Перезагружаем позиции после пересчета
-        await loadPositions(selectedTenderId);
-      } else {
-        message.error('Ошибка при пересчете: ' + (result.errors?.join(', ') || 'Неизвестная ошибка'));
-      }
-    } catch (error) {
-      console.error('Ошибка пересчета:', error);
-      message.error('Не удалось выполнить пересчет');
-    } finally {
-      setCalculating(false);
-    }
-  };
-
   const handleInitializeTestData = async () => {
     if (!selectedTenderId) {
       message.warning('Выберите тендер для инициализации');
@@ -72,40 +45,35 @@ export function useCommerceActions(
 
     Modal.confirm({
       title: 'Применить новую тактику?',
-      content: 'Это действие изменит тактику наценок для тендера, пересчитает все коммерческие стоимости и перезапишет существующие расчеты.',
+      content:
+        'Тактика наценок тендера будет изменена. Коммерческие стоимости пересчитаются автоматически на сервере.',
       okText: 'Применить',
       cancelText: 'Отмена',
       onOk: async () => {
         setCalculating(true);
         try {
-          // Обновляем тактику в тендере (Go: PUT /tenders/:id/markup/tactic-id)
+          // Меняем тактику тендера — серверный авто-пересчёт (Go BFF) сам
+          // материализует коммерческие стоимости и grand-total; никакого
+          // клиентского bulk-обновления больше нет.
           await setTenderMarkupTacticId(selectedTenderId, selectedTacticId);
-
           syncTenderMarkupTactic(selectedTenderId, selectedTacticId);
-
-          // Пересчитываем с новой тактикой
-          const result = await applyTacticToTender(selectedTenderId, selectedTacticId, boqItems || undefined);
-
-          if (result.success) {
-            message.success('Тактика применена и выполнен пересчет');
-            setTacticChanged(false);
-            await loadPositions(selectedTenderId);
-          } else {
-            message.error('Ошибка при пересчете: ' + (result.errors?.join(', ') || 'Неизвестная ошибка'));
-          }
+          setTacticChanged(false);
+          message.success('Тактика применена, выполняется автоматический пересчёт');
+          // Локальное отображение считается на лету по выбранной тактике;
+          // материализованные значения подтянутся через realtime после пересчёта.
+          await loadPositions(selectedTenderId);
         } catch (error) {
           console.error('Ошибка применения тактики:', error);
           message.error('Не удалось применить тактику');
         } finally {
           setCalculating(false);
         }
-      }
+      },
     });
   };
 
   return {
-    handleRecalculate,
     handleInitializeTestData,
-    handleApplyTactic
+    handleApplyTactic,
   };
 }

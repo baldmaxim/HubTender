@@ -12,8 +12,9 @@ import (
 // percentage / pricing changes affect tender overview totals so we drop the
 // per-tender overview cache in those flows.
 type MarkupService struct {
-	repo  *repository.MarkupRepo
-	cache *cache.InMem
+	repo   *repository.MarkupRepo
+	cache  *cache.InMem
+	recalc Enqueuer
 }
 
 // NewMarkupService creates a MarkupService.
@@ -21,9 +22,19 @@ func NewMarkupService(repo *repository.MarkupRepo, c *cache.InMem) *MarkupServic
 	return &MarkupService{repo: repo, cache: c}
 }
 
+// WithRecalcQueue wires the commercial-recalc queue so tactic / percentage /
+// pricing / exclusion changes auto-trigger a server-side recalc.
+func (s *MarkupService) WithRecalcQueue(q Enqueuer) *MarkupService {
+	s.recalc = q
+	return s
+}
+
 func (s *MarkupService) invalidateTender(tenderID string) {
 	s.cache.Delete("tender:overview:" + tenderID)
 	s.cache.Delete("positions:with_costs:" + tenderID)
+	if s.recalc != nil {
+		s.recalc.Enqueue(tenderID)
+	}
 }
 
 // Tactics.

@@ -22,13 +22,27 @@ type boqRepoer interface {
 
 // BoqService provides access to boq_items data.
 type BoqService struct {
-	repo  boqRepoer
-	cache *cache.InMem // reserved for future caching
+	repo   boqRepoer
+	cache  *cache.InMem // reserved for future caching
+	recalc Enqueuer
 }
 
 // NewBoqService creates a BoqService.
 func NewBoqService(repo *repository.BoqRepo, c *cache.InMem) *BoqService {
 	return &BoqService{repo: repo, cache: c}
+}
+
+// WithRecalcQueue wires the commercial-recalc queue so any BOQ-item mutation
+// auto-triggers a server-side recalc for the affected tender.
+func (s *BoqService) WithRecalcQueue(q Enqueuer) *BoqService {
+	s.recalc = q
+	return s
+}
+
+func (s *BoqService) enqueueRecalc(tenderID string) {
+	if s.recalc != nil && tenderID != "" {
+		s.recalc.Enqueue(tenderID)
+	}
 }
 
 // ListBoqItems returns all BOQ items for the given position under a tender.
@@ -63,6 +77,7 @@ func (s *BoqService) CreateBoqItem(
 	}
 	s.cache.Delete("tender:overview:" + item.TenderID)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	s.enqueueRecalc(item.TenderID)
 	return item, nil
 }
 
@@ -78,6 +93,7 @@ func (s *BoqService) UpdateBoqItem(
 	}
 	s.cache.Delete("tender:overview:" + item.TenderID)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	s.enqueueRecalc(item.TenderID)
 	return item, nil
 }
 
@@ -93,6 +109,7 @@ func (s *BoqService) DeleteBoqItem(
 	}
 	s.cache.Delete("tender:overview:" + item.TenderID)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	s.enqueueRecalc(item.TenderID)
 	return item, nil
 }
 
@@ -108,6 +125,7 @@ func (s *BoqService) InsertTemplateItems(
 	}
 	s.cache.Delete("tender:overview:" + res.TenderID)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	s.enqueueRecalc(res.TenderID)
 	return res, nil
 }
 

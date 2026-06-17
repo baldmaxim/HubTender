@@ -91,6 +91,11 @@ func ApplyPricingDistribution(
 	distribution *PricingDistribution,
 ) (materialCost, workCost float64) {
 	if distribution == nil {
+		// суб-мат основн.: base → material column, markup → work column (matches
+		// the MarkupConstructor default the TS applyPricingDistribution encodes).
+		if boqItemType == BoqSubMat && materialType != materialTypeAuxiliary {
+			return baseAmount, commercialCost - baseAmount
+		}
 		isMat := boqItemType == BoqMat || boqItemType == BoqSubMat || boqItemType == BoqMatKomp
 		if isMat {
 			return commercialCost, 0

@@ -38,8 +38,9 @@ type tenderRepoer interface {
 // thundering-herd: concurrent requests for the same tender ID coalesce
 // into a single DB hit.
 type TenderService struct {
-	repo  tenderRepoer
-	cache *cache.InMem
+	repo   tenderRepoer
+	cache  *cache.InMem
+	recalc Enqueuer
 	// inflight serialises concurrent loads for the same tender ID.
 	// Key: tender ID string, Value: *sync.Mutex.
 	inflight sync.Map
@@ -48,6 +49,13 @@ type TenderService struct {
 // NewTenderService creates a TenderService.
 func NewTenderService(repo *repository.TenderRepo, c *cache.InMem) *TenderService {
 	return &TenderService{repo: repo, cache: c}
+}
+
+// WithRecalcQueue wires the commercial-recalc queue so a currency-rate change
+// auto-triggers a server-side recalc.
+func (s *TenderService) WithRecalcQueue(q Enqueuer) *TenderService {
+	s.recalc = q
+	return s
 }
 
 // ListTenders returns a paginated list of tenders, cached per-user-per-filters
@@ -181,6 +189,11 @@ func (s *TenderService) UpdateTender(
 	}
 	s.cache.Delete("tender:overview:" + id)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	// A currency-rate change re-bases every BOQ item, so re-materialize the
+	// tender's commercial costs. Other field edits don't affect pricing.
+	if s.recalc != nil && (in.USDRate != nil || in.EURRate != nil || in.CNYRate != nil) {
+		s.recalc.Enqueue(id)
+	}
 	return t, nil
 }
 

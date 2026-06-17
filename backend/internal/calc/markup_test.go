@@ -72,7 +72,8 @@ func TestCalculateMarkupResult_MarkupAddOneFormat(t *testing.T) {
 	res := CalculateMarkupResult(CalculationContext{
 		BaseAmount: 100, MarkupSequence: seq, MarkupParameters: params,
 	})
-	if res.CommercialCost != 110 {
+	// 100 * 1.1 is 110.00000000000001 in float64 (same in JS/TS) — compare with tolerance.
+	if !approx(res.CommercialCost, 110) {
 		t.Errorf("addOne: got %v, want 110", res.CommercialCost)
 	}
 }
@@ -110,7 +111,7 @@ func TestCalculateMarkupResult_StepReferencesBase(t *testing.T) {
 	})
 	// Step 1: 100 * 1.1 = 110
 	// Step 2: baseAmount (from base_index=-1) * 100 (step operand value=100) = 10000
-	if res.StepResults[0] != 110 {
+	if !approx(res.StepResults[0], 110) {
 		t.Errorf("step1: got %v, want 110", res.StepResults[0])
 	}
 	if res.StepResults[1] != 100*100 {
@@ -163,13 +164,16 @@ func TestCalculateMarkupResult_BaseCostOverride(t *testing.T) {
 	res := CalculateMarkupResult(CalculationContext{
 		BaseAmount: 100, BaseCost: &bc, MarkupSequence: seq,
 	})
-	// Should start from BaseCost (50), not BaseAmount (100)
-	if res.CommercialCost != 100 {
-		t.Errorf("override: commercial got %v, want 100", res.CommercialCost)
+	// A step with baseIndex=-1 reads baseAmount (100), not currentAmount, so the
+	// BaseCost override only seeds currentAmount before the loop (and guards the
+	// ≤0 check) and is overwritten by the first step: 100 * 2 = 200. This matches
+	// the TS calculateMarkupResult exactly.
+	if res.CommercialCost != 200 {
+		t.Errorf("override: commercial got %v, want 200", res.CommercialCost)
 	}
-	// Coefficient is commercial / baseAmount = 100 / 100 = 1
-	if res.MarkupCoefficient != 1 {
-		t.Errorf("override coef: got %v, want 1", res.MarkupCoefficient)
+	// Coefficient is commercial / baseAmount = 200 / 100 = 2.
+	if res.MarkupCoefficient != 2 {
+		t.Errorf("override coef: got %v, want 2", res.MarkupCoefficient)
 	}
 }
 

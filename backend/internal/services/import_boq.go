@@ -16,13 +16,21 @@ type importBoqRepoer interface {
 // ImportBoqService delegates bulk BOQ import to the repository and
 // invalidates the two affected cache keys on success.
 type ImportBoqService struct {
-	repo  importBoqRepoer
-	cache *cache.InMem
+	repo   importBoqRepoer
+	cache  *cache.InMem
+	recalc Enqueuer
 }
 
 // NewImportBoqService creates an ImportBoqService.
 func NewImportBoqService(repo *repository.ImportRepo, c *cache.InMem) *ImportBoqService {
 	return &ImportBoqService{repo: repo, cache: c}
+}
+
+// WithRecalcQueue wires the commercial-recalc queue so a bulk import
+// auto-triggers a single server-side recalc once the rows are committed.
+func (s *ImportBoqService) WithRecalcQueue(q Enqueuer) *ImportBoqService {
+	s.recalc = q
+	return s
 }
 
 // BulkImport delegates to the repository and, on success, evicts
@@ -40,6 +48,9 @@ func (s *ImportBoqService) BulkImport(
 	s.cache.Delete("tender:overview:" + in.TenderID)
 	s.cache.Delete("positions:with_costs:" + in.TenderID)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	if s.recalc != nil {
+		s.recalc.Enqueue(in.TenderID)
+	}
 
 	return result, nil
 }

@@ -4,7 +4,6 @@
 
 import { Button, Select, Space, Typography, Tooltip, Tag } from 'antd';
 import {
-  CalculatorOutlined,
   FileExcelOutlined,
   ArrowLeftOutlined,
   DollarOutlined
@@ -29,7 +28,6 @@ interface CommerceHeaderProps {
   onVersionChange: (version: number) => void;
   onTacticChange: (tacticId: string) => void;
   onApplyTactic: () => void;
-  onRecalculate: () => void;
   onExport: () => void;
   shouldFilterArchived?: boolean;
 }
@@ -49,7 +47,6 @@ export default function CommerceHeader({
   onVersionChange,
   onTacticChange,
   onApplyTactic,
-  onRecalculate,
   onExport,
   shouldFilterArchived = false
 }: CommerceHeaderProps) {
@@ -176,17 +173,6 @@ export default function CommerceHeader({
                 </Button>
               </Tooltip>
             )}
-            <Tooltip title="Пересчитать коммерческие стоимости">
-              <Button
-                type="primary"
-                icon={<CalculatorOutlined />}
-                onClick={onRecalculate}
-                loading={calculating}
-                disabled={!selectedTenderTitle}
-              >
-                Пересчитать
-              </Button>
-            </Tooltip>
             <Tooltip title="Экспорт в Excel">
               <Button
                 icon={<FileExcelOutlined />}

@@ -206,16 +206,24 @@ func main() {
 	fiRepo := repository.NewFIRepo(pool)
 	ccvRepo := repository.NewConstructionCostVolumesRepo(pool)
 
+	// Commercial-cost auto-recalc — replaces the manual «Пересчитать» button.
+	// Mutation services Enqueue(tenderID) after changing a pricing input (BOQ
+	// items, markup config, currency rates); the queue debounces per tender and
+	// runs an authoritative server-side recalc (calc.CalculateBoqItemCost) that
+	// materializes boq_items commercial costs + tenders.cached_grand_total.
+	recalcSvc := services.NewCommercialRecalcService(fiRepo, markupRepo, bulkBoqRepo, inMemCache)
+	recalcQueue := services.NewRecalcQueue(rootCtx, recalcSvc, 1500*time.Millisecond, 4, logger)
+
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
-	tenderSvc := services.NewTenderService(tenderRepo, inMemCache)
+	tenderSvc := services.NewTenderService(tenderRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	positionSvc := services.NewPositionService(positionRepo, inMemCache)
 	positionCostsSvc := services.NewPositionCostsService(positionCostsRepo, inMemCache)
-	boqSvc := services.NewBoqService(boqRepo, inMemCache)
+	boqSvc := services.NewBoqService(boqRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	bulkBoqSvc := services.NewBulkBoqService(bulkBoqRepo, inMemCache)
-	importBoqSvc := services.NewImportBoqService(importBoqRepo, inMemCache)
+	importBoqSvc := services.NewImportBoqService(importBoqRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	timelineSvc := services.NewTimelineService(timelineRepo)
-	subcontractSvc := services.NewSubcontractService(subcontractRepo, inMemCache)
+	subcontractSvc := services.NewSubcontractService(subcontractRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	transferSvc := services.NewTransferService(transferRepo, inMemCache)
 	cloneSvc := services.NewCloneService(cloneRepo, inMemCache)
 	tenderNotesSvc := services.NewTenderNotesService(tenderNotesRepo)
@@ -234,7 +242,7 @@ func main() {
 	importLogSvc := services.NewImportLogService(importLogRepo)
 	projectsSvc := services.NewProjectsService(projectsRepo)
 	userAdminSvc := services.NewUserAdminService(userAdminRepo, inMemCache)
-	markupSvc := services.NewMarkupService(markupRepo, inMemCache)
+	markupSvc := services.NewMarkupService(markupRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	fiSvc := services.NewFIService(fiRepo)
 	ccvSvc := services.NewConstructionCostVolumesService(ccvRepo)
 
@@ -655,6 +663,10 @@ func main() {
 
 	// Step 3. Cancel root context — listener goroutine exits its LISTEN loop.
 	rootCancel()
+
+	// Step 3a. Stop the recalc queue: drop pending debounce timers and wait for
+	// any in-flight recalc to finish before the DB pool is closed.
+	recalcQueue.Close()
 
 	// Step 4. Graceful HTTP shutdown — wait up to 15 s for in-flight requests.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
