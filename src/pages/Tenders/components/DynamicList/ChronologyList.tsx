@@ -4,6 +4,7 @@ import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { FormInstance } from 'antd';
 import type { ChronologyItem } from '../../../../lib/supabase';
+import { textareaEnterToSave } from '../../../../utils/keyboardSave';
 
 const { Text } = Typography;
 
@@ -20,8 +21,6 @@ export const ChronologyList: React.FC<ChronologyListProps> = ({
   form,
   fieldName = 'chronology_items',
 }) => {
-  void form;
-
   if (!editable) {
     if (items.length === 0) {
       return <Text type="secondary">Нет записей</Text>;
@@ -94,6 +93,10 @@ export const ChronologyList: React.FC<ChronologyListProps> = ({
                 <Input.TextArea
                   placeholder="Описание события"
                   autoSize={{ minRows: 1, maxRows: 6 }}
+                  onKeyDown={textareaEnterToSave(
+                    () => form?.submit(),
+                    (v) => form?.setFieldValue([fieldName, name, 'text'], v)
+                  )}
                 />
               </Form.Item>
 

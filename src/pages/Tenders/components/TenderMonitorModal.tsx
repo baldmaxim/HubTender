@@ -26,6 +26,7 @@ import {
   shouldShowCallAction,
 } from '../utils/tenderMonitor';
 import { getTenderMonitorPalette, type TenderMonitorPalette } from '../utils/tenderMonitorTheme';
+import { inputEnterToSave, textareaEnterToSave } from '../../../utils/keyboardSave';
 import {
   EditableChronologySection,
   EditablePackageSection,
@@ -129,6 +130,7 @@ function EditableMonitorField({
       <TextArea
         value={typeof draft === 'string' ? draft : ''}
         onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={textareaEnterToSave(() => void handleSave(), (v) => setDraft(v))}
         autoSize={{ minRows: 2, maxRows: 4 }}
       />
     );
@@ -137,6 +139,7 @@ function EditableMonitorField({
       <InputNumber
         value={typeof draft === 'number' ? draft : draft != null ? Number(draft) : null}
         onChange={(next) => setDraft(next)}
+        onPressEnter={() => void handleSave()}
         style={{ width: '100%' }}
         controls={false}
       />
@@ -168,6 +171,7 @@ function EditableMonitorField({
       <Input
         value={typeof draft === 'string' ? draft : draft == null ? '' : String(draft)}
         onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={inputEnterToSave(() => void handleSave())}
         size="small"
       />
     );

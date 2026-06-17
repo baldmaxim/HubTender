@@ -120,7 +120,7 @@ export const TenderAddForm: React.FC<TenderAddFormProps> = ({
         backgroundColor: token.colorBgContainer,
       }}
     >
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" onFinish={() => void handleSubmit()}>
         <Row gutter={8}>
           <Col span={12}>
             <Form.Item name="object_coordinates" label="Координаты объекта">

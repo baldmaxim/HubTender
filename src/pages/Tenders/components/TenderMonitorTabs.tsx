@@ -6,6 +6,7 @@ import { patchTenderRegistryFields } from '../../../lib/api/tenderRegistry';
 import type { ChronologyItem, TenderPackageItem } from '../../../lib/supabase';
 import { DATE_INPUT_FORMATS, formatDate, getPackageLinkHref } from '../utils/tenderMonitor';
 import type { TenderMonitorPalette } from '../utils/tenderMonitorTheme';
+import { inputEnterToSave, textareaEnterToSave } from '../../../utils/keyboardSave';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -113,6 +114,7 @@ function ChronologyRow({ item, palette, onSave, onDelete, onDiscardNew }: Chrono
           <TextArea
             value={text}
             onChange={(event) => setText(event.target.value)}
+            onKeyDown={textareaEnterToSave(handleSave, setText)}
             autoSize={{ minRows: 1, maxRows: 6 }}
             placeholder="Описание события"
           />
@@ -297,6 +299,7 @@ function PackageRow({ item, palette, onSave, onDelete, onDiscardNew }: PackageRo
           <TextArea
             value={text}
             onChange={(event) => setText(event.target.value)}
+            onKeyDown={textareaEnterToSave(handleSave, setText)}
             autoSize={{ minRows: 1, maxRows: 6 }}
             placeholder="Наименование"
           />
@@ -305,6 +308,7 @@ function PackageRow({ item, palette, onSave, onDelete, onDiscardNew }: PackageRo
           size="small"
           value={link}
           onChange={(event) => setLink(event.target.value)}
+          onKeyDown={inputEnterToSave(handleSave)}
           placeholder="Ссылка"
           style={{ marginTop: 8 }}
         />
