@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
-import { Typography, Empty, Tooltip, Progress, Button, Modal, message } from 'antd';
+import { Typography, Empty, Tooltip, Progress, Button, Modal, App } from 'antd';
 import { DownloadOutlined, EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -46,6 +46,10 @@ const { Text } = Typography;
 interface GanttChartProps {
   projects: ProjectFull[];
   completionData: ProjectCompletion[];
+  /** Рендер внутри псевдо-ландшафт-оверлея: широкая (не-phone) раскладка, без детальных модалок. */
+  landscape?: boolean;
+  /** Колбэк «открыть на весь экран» (портретный телефон): тап по графику → ландшафт. */
+  onRequestLandscape?: () => void;
 }
 
 interface MonthData {
@@ -85,9 +89,19 @@ const MONTH_NAMES_SHORT = [
   'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек',
 ];
 
-export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData }) => {
+export const GanttChart: React.FC<GanttChartProps> = ({
+  projects,
+  completionData,
+  landscape = false,
+  onRequestLandscape,
+}) => {
   const { theme } = useTheme();
-  const { isPhone } = useIsMobile();
+  const { message } = App.useApp();
+  const { isPhone: isPhoneRaw } = useIsMobile();
+  // В ландшафт-оверлее верстаем как «не телефон» (monthWidth 80 и т.д.) → числа влезают.
+  const isPhone = isPhoneRaw && !landscape;
+  // Тап по графику открывает ландшафт только у портретного телефонного инстанса.
+  const tapToOpen = !!onRequestLandscape && isPhoneRaw && !landscape;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
   const [chartModalProject, setChartModalProject] = useState<{ project: ProjectFull; colorIndex: number } | null>(null);
@@ -1205,11 +1219,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
                       : '#f5f5f5'
                     : 'transparent',
                 transition: 'background 0.2s',
-                cursor: chartData ? 'pointer' : 'default',
+                cursor: chartData && !landscape ? 'pointer' : 'default',
               }}
               onMouseEnter={() => setHoveredProject(project.id)}
               onMouseLeave={() => setHoveredProject(null)}
-              onClick={() => chartData && setChartModalProject({ project, colorIndex: index })}
+              onClick={landscape ? undefined : () => chartData && setChartModalProject({ project, colorIndex: index })}
             >
               {chartData ? (
                 <div style={{ width: '100%', height: rowHeight - 20, pointerEvents: 'none' }}>
@@ -1232,9 +1246,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
             padding: '8px',
             background: theme === 'dark' ? '#1f1f1f' : '#fafafa',
             borderTop: `2px solid ${theme === 'dark' ? '#434343' : '#d9d9d9'}`,
-            cursor: summaryChartData ? 'pointer' : 'default',
+            cursor: summaryChartData && !landscape ? 'pointer' : 'default',
           }}
-          onClick={() => summaryChartData && setSummaryChartOpen(true)}
+          onClick={landscape ? undefined : () => summaryChartData && setSummaryChartOpen(true)}
         >
           {summaryChartData ? (
             <div style={{ width: '100%', height: rowHeight - 20, pointerEvents: 'none' }}>
@@ -1249,10 +1263,12 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
       {/* Right panel - Timeline */}
       <div
         ref={scrollRef}
+        onClick={tapToOpen ? onRequestLandscape : undefined}
         style={{
           flex: 1,
           overflowX: 'auto',
           overflowY: 'hidden',
+          cursor: tapToOpen ? 'pointer' : undefined,
         }}
       >
         <div style={{ minWidth: gridWidth }}>
@@ -1381,6 +1397,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
                                 fontSize: 10,
                                 color: '#fff',
                                 fontWeight: 500,
+                                whiteSpace: 'nowrap',
                               }}
                             >
                               {formatMoney(completion!.actual_amount)}
@@ -1415,6 +1432,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
                                 fontSize: 10,
                                 color: '#fff',
                                 fontWeight: 500,
+                                whiteSpace: 'nowrap',
                               }}
                             >
                               {formatMoney(completion!.forecast_amount!)}
@@ -1470,7 +1488,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects, completionData
                   }}
                 >
                   {monthTotal > 0 && (
-                    <Text strong style={{ fontSize: 10, color: '#52c41a' }}>
+                    <Text strong style={{ fontSize: 10, color: '#52c41a', whiteSpace: 'nowrap' }}>
                       {formatMoney(monthTotal)}
                     </Text>
                   )}
