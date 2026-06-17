@@ -201,6 +201,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
     {
       title: 'Название',
       key: 'title',
+      width: 150,
       sorter: (a: TenderRecord, b: TenderRecord) => a.title.localeCompare(b.title),
       render: (_: unknown, record: TenderRecord) => (
         <Space>
@@ -238,7 +239,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
     {
       title: <div style={{ textAlign: 'center' }}>Пользователь</div>,
       key: 'users',
-      width: 200,
+      width: 350,
       align: 'center' as const,
       render: (_: unknown, record: TenderRecord) => {
         const usersWithAccess = getUsersForTender(record.id);
