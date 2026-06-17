@@ -125,14 +125,14 @@ export function formatMoney(value?: number | null): string {
 
   const absValue = Math.abs(value);
   if (absValue >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(1).replace('.', ',')} млрд ₽`;
+    return `${(value / 1_000_000_000).toFixed(2).replace('.', ',')} млрд`;
   }
 
   if (absValue >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1).replace('.', ',')} млн ₽`;
+    return `${(value / 1_000_000).toFixed(1).replace('.', ',')} млн`;
   }
 
-  return `${Math.round(value).toLocaleString('ru-RU')} ₽`;
+  return `${Math.round(value).toLocaleString('ru-RU')}`;
 }
 
 export function formatMoneyFull(value?: number | null): string {
