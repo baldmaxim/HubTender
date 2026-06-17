@@ -36,15 +36,6 @@ interface MetricCardProps {
   accent: string;
   blinking?: boolean;
   palette: TenderMonitorPalette;
-}
-
-interface MetricCardProps {
-  title: string;
-  value: React.ReactNode;
-  caption: string;
-  accent: string;
-  blinking?: boolean;
-  palette: TenderMonitorPalette;
   isPhone?: boolean;
 }
 
