@@ -3,7 +3,7 @@ import { Popover, Tag, Modal } from 'antd';
 import { EnvironmentFilled, FileTextOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import type { TenderRegistryWithRelations } from '../../../lib/supabase';
-import { formatDateTime, getChronologyItems } from '../utils/tenderMonitor';
+import { formatDate, getChronologyItems } from '../utils/tenderMonitor';
 import type { TenderMonitorPalette } from '../utils/tenderMonitorTheme';
 
 function parseCoordinates(value?: string | null): { lat: number; lon: number } | null {
@@ -203,7 +203,7 @@ export function ChronologyPopover({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                    <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDateTime(item.date)}</span>
+                    <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDate(item.date)}</span>
                     {item.type === 'call_follow_up' ? <Tag color="error" style={{ marginInlineEnd: 0 }}>Звонок</Tag> : null}
                   </div>
                   <div style={{ color: palette.textSecondary, fontSize: 12, lineHeight: 1.35 }}>{item.text}</div>

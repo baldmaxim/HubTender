@@ -169,6 +169,20 @@ export function formatDateTime(value?: string | null): string {
   return date.isValid() ? date.format('DD.MM.YYYY HH:mm') : '—';
 }
 
+// Время 'HH:mm'; пустая строка для полуночи (старые записи без времени) и невалидных дат.
+export function formatTime(value?: string | null): string {
+  if (!value) {
+    return '';
+  }
+
+  const date = dayjs(value);
+  if (!date.isValid() || (date.hour() === 0 && date.minute() === 0)) {
+    return '';
+  }
+
+  return date.format('HH:mm');
+}
+
 export function formatRubPerSquare(totalCost?: number | null, area?: number | null): string {
   if (!totalCost || !area) {
     return '—';

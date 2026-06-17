@@ -14,6 +14,7 @@ import {
   formatArea,
   formatDate,
   formatMoneyFull,
+  formatTime,
   formatRubPerSquare,
   getChronologyItems,
   getDashboardStatus,
@@ -50,6 +51,7 @@ interface EditableMonitorFieldProps {
   displayValue: React.ReactNode;
   palette: TenderMonitorPalette;
   type?: FieldType;
+  withTime?: boolean;
   options?: Array<{ value: string; label: string }>;
   buildUpdatePayload?: (draft: string | number | null) => Record<string, unknown>;
   onUpdated: () => Promise<void> | void;
@@ -63,6 +65,7 @@ function EditableMonitorField({
   displayValue,
   palette,
   type = 'text',
+  withTime = false,
   options,
   buildUpdatePayload,
   onUpdated,
@@ -144,7 +147,8 @@ function EditableMonitorField({
         value={typeof draft === 'string' && draft ? dayjs(draft) : null}
         onChange={(next) => setDraft(next ? next.toISOString() : null)}
         style={{ width: '100%' }}
-        format={DATE_INPUT_FORMATS}
+        format={withTime ? 'DD.MM.YYYY HH:mm' : DATE_INPUT_FORMATS}
+        showTime={withTime ? { format: 'HH:mm' } : undefined}
         size="small"
       />
     );
@@ -445,7 +449,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
               <InfoCard label="Цена ₽/м²" value={formatRubPerSquare(tender.total_cost || tender.manual_total_cost, tender.area)} palette={palette} />
               <EditableMonitorField tenderId={tender.id} field="manual_total_cost" label="Стоимость КП" value={tender.manual_total_cost} displayValue={formatMoneyFull(tender.manual_total_cost ?? tender.total_cost)} type="number" palette={palette} onUpdated={onUpdate} />
               <InfoCard label="Направлено КП" value={lastCallDate ? `${formatDate(tender.submission_date)} · контроль ${formatDate(lastCallDate)}` : formatDate(tender.submission_date)} palette={palette} />
-              <EditableMonitorField tenderId={tender.id} field="submission_date" label="Дата подачи КП" value={tender.submission_date} displayValue={formatDate(tender.submission_date)} type="date" palette={palette} onUpdated={onUpdate} />
+              <EditableMonitorField tenderId={tender.id} field="submission_date" label="Дата подачи КП" value={tender.submission_date} displayValue={`${formatDate(tender.submission_date)}${formatTime(tender.submission_date) ? ' ' + formatTime(tender.submission_date) : ''}`} type="date" withTime palette={palette} onUpdated={onUpdate} />
               <EditableMonitorField tenderId={tender.id} field="commission_date" label="Ввод в эксплуатацию" value={tender.commission_date} displayValue={formatDate(tender.commission_date)} type="date" palette={palette} onUpdated={onUpdate} />
               <EditableMonitorField tenderId={tender.id} field="construction_start_date" label="Выход на площадку" value={tender.construction_start_date} displayValue={formatDate(tender.construction_start_date)} type="date" palette={palette} onUpdated={onUpdate} />
               <EditableMonitorField tenderId={tender.id} field="invitation_date" label="Поступило приглашение" value={tender.invitation_date} displayValue={formatDate(tender.invitation_date)} type="date" palette={palette} onUpdated={onUpdate} />

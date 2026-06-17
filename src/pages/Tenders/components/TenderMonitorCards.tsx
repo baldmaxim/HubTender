@@ -8,6 +8,7 @@ import {
   formatDate,
   formatMoney,
   formatRubPerSquare,
+  formatTime,
   getControlDate,
   getDashboardStatus,
   getDaysSinceControl,
@@ -164,7 +165,7 @@ function TenderCard({
         <Col span={8}><Field label="Площадь" value={formatArea(tender.area)} palette={palette} isPhone={isPhone} /></Col>
         <Col span={8}><Field label="Стоимость КП" value={formatMoney(tender.total_cost || tender.manual_total_cost)} palette={palette} isPhone={isPhone} /></Col>
         <Col span={8}><Field label="₽/м²" value={formatRubPerSquare(tender.total_cost || tender.manual_total_cost, tender.area)} palette={palette} isPhone={isPhone} /></Col>
-        <Col span={8}><Field label="Дата подачи" value={formatDate(tender.submission_date)} palette={palette} isPhone={isPhone} /></Col>
+        <Col span={8}><Field label="Дата подачи" value={`${formatDate(tender.submission_date)}${formatTime(tender.submission_date) ? ' ' + formatTime(tender.submission_date) : ''}`} palette={palette} isPhone={isPhone} /></Col>
         <Col span={8}><Field label="Приглашение" value={formatDate(tender.invitation_date)} palette={palette} isPhone={isPhone} /></Col>
         <Col span={8}>
           <Field

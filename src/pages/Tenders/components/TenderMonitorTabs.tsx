@@ -4,7 +4,7 @@ import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { patchTenderRegistryFields } from '../../../lib/api/tenderRegistry';
 import type { ChronologyItem, TenderPackageItem } from '../../../lib/supabase';
-import { DATE_INPUT_FORMATS, formatDate, formatDateTime, getPackageLinkHref } from '../utils/tenderMonitor';
+import { DATE_INPUT_FORMATS, formatDate, getPackageLinkHref } from '../utils/tenderMonitor';
 import type { TenderMonitorPalette } from '../utils/tenderMonitorTheme';
 
 const { Text } = Typography;
@@ -127,7 +127,7 @@ function ChronologyRow({ item, palette, onSave, onDelete, onDiscardNew }: Chrono
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-            <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDateTime(item.date)}</span>
+            <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDate(item.date)}</span>
             {item.type === 'call_follow_up' ? (
               <Tag color="error" style={{ marginInlineEnd: 0 }}>
                 Звонок
@@ -233,7 +233,7 @@ export function ReadOnlyChronologySection({
       {items.map((item, index) => (
         <div key={`${item.date || 'empty'}-${index}`} style={rowSectionStyle(palette, item.type === 'call_follow_up')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-            <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDateTime(item.date)}</span>
+            <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDate(item.date)}</span>
             {item.type === 'call_follow_up' ? (
               <Tag color="error" style={{ marginInlineEnd: 0 }}>
                 Звонок

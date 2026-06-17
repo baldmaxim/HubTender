@@ -12,6 +12,7 @@ import {
   formatDate,
   formatMoney,
   formatRubPerSquare,
+  formatTime,
   getControlDate,
   getDashboardStatus,
   getDaysSinceControl,
@@ -253,8 +254,13 @@ function TenderRow({
       </div>
 
       <div style={{ padding: '12px 0', textAlign: 'center' }}>
-        <div style={{ color: dashboardStatus === 'calc' ? palette.warning : palette.textSecondary, fontSize: 12, fontWeight: 700 }}>
-          {formatDate(tender.submission_date)}
+        <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, justifyContent: 'center' }}>
+          <span style={{ color: dashboardStatus === 'calc' ? palette.warning : palette.textSecondary, fontSize: 8.4, fontWeight: 700 }}>
+            {formatDate(tender.submission_date)}
+          </span>
+          {formatTime(tender.submission_date) ? (
+            <span style={{ color: palette.muted, fontSize: 8.4, fontWeight: 600 }}>{formatTime(tender.submission_date)}</span>
+          ) : null}
         </div>
         {dashboardStatus === 'calc' && daysToSubmission != null ? (
           canSubmissionCall && !readOnly ? (

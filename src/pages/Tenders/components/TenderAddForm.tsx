@@ -215,7 +215,7 @@ export const TenderAddForm: React.FC<TenderAddFormProps> = ({
           </Col>
           <Col span={4}>
             <Form.Item name="submission_date" label="Дата подачи КП">
-              <DatePicker style={{ width: '100%' }} format="DD.MM.YYYY" placeholder="Дата" />
+              <DatePicker style={{ width: '100%' }} showTime={{ format: 'HH:mm' }} format="DD.MM.YYYY HH:mm" placeholder="Дата и время" />
             </Form.Item>
           </Col>
           <Col span={4}>
