@@ -18,6 +18,7 @@ interface CostTableProps {
   onExpandedRowsChange: (keys: string[]) => void;
   onVolumeChange: (value: number, record: CostRow) => void;
   onNotesChange: (value: string, record: CostRow) => void;
+  onCategoryClick?: (record: CostRow) => void;
   areaSp: number;
 }
 
@@ -29,6 +30,7 @@ const CostTable: React.FC<CostTableProps> = ({
   onExpandedRowsChange,
   onVolumeChange,
   onNotesChange,
+  onCategoryClick,
   areaSp,
 }) => {
   const { theme } = useTheme();
@@ -59,6 +61,16 @@ const CostTable: React.FC<CostTableProps> = ({
       render: (value: string, record: CostRow) => {
         if (record.is_category) return null;
         if (record.is_location) return null;
+        if (record.detail_cost_category_id && onCategoryClick) {
+          return (
+            <Typography.Link
+              onClick={() => onCategoryClick(record)}
+              style={{ textDecoration: 'underline' }}
+            >
+              {value}
+            </Typography.Link>
+          );
+        }
         return value;
       },
     },

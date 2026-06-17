@@ -8,6 +8,7 @@ import { Button, Space, Typography, Select, Card } from 'antd';
 import { useCostData } from './hooks/useCostData';
 import CostFilters from './components/CostFilters';
 import CostTable from './components/CostTable';
+import CategoryPositionsModal from './components/CategoryPositionsModal';
 import TenderSelection from './components/TenderSelection';
 import { exportConstructionCostToExcel } from './utils/exportConstructionCostToExcel';
 import { filterCostData } from './utils/filterCostData';
@@ -20,6 +21,9 @@ const ConstructionCostNew: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [viewMode, setViewMode] = useState<'detailed' | 'summary' | 'simplified'>('detailed');
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
+  const [modalCategory, setModalCategory] = useState<
+    { id: string; detailName: string; categoryName: string } | null
+  >(null);
 
   const {
     tenders,
@@ -178,9 +182,25 @@ const ConstructionCostNew: React.FC = () => {
           onExpandedRowsChange={setExpandedRowKeys}
           onVolumeChange={handleVolumeChange}
           onNotesChange={handleNotesChange}
+          onCategoryClick={(record) => {
+            if (record.detail_cost_category_id) {
+              setModalCategory({
+                id: record.detail_cost_category_id,
+                detailName: record.detail_category_name,
+                categoryName: record.cost_category_name,
+              });
+            }
+          }}
           areaSp={selectedTender?.area_sp || 0}
         />
       </Card>
+
+      <CategoryPositionsModal
+        open={!!modalCategory}
+        tenderId={selectedTenderId}
+        category={modalCategory}
+        onClose={() => setModalCategory(null)}
+      />
     </div>
   );
 };
