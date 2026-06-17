@@ -38,6 +38,16 @@ interface MetricCardProps {
   palette: TenderMonitorPalette;
 }
 
+interface MetricCardProps {
+  title: string;
+  value: React.ReactNode;
+  caption: string;
+  accent: string;
+  blinking?: boolean;
+  palette: TenderMonitorPalette;
+  isPhone?: boolean;
+}
+
 const MetricCard: React.FC<MetricCardProps> = ({
   title,
   value,
@@ -45,6 +55,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   accent,
   blinking = false,
   palette,
+  isPhone = false,
 }) => (
   <div
     className={blinking ? 'tender-monitor-alert-card' : undefined}
@@ -52,10 +63,10 @@ const MetricCard: React.FC<MetricCardProps> = ({
       background: palette.cardBg,
       border: `1px solid ${palette.border}`,
       borderRadius: 14,
-      padding: '14px 18px',
+      padding: isPhone ? '10px 12px' : '14px 18px',
       position: 'relative',
       overflow: 'hidden',
-      minHeight: 104,
+      minHeight: isPhone ? 76 : 104,
     }}
   >
     <div
@@ -69,7 +80,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
       }}
     />
     <div style={{ color: palette.muted, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em' }}>{title}</div>
-    <div style={{ color: palette.text, fontSize: 28, fontWeight: 700, marginTop: 8 }}>{value}</div>
+    <div style={{ color: palette.text, fontSize: isPhone ? 22 : 28, fontWeight: 700, marginTop: 8 }}>{value}</div>
     <div style={{ color: palette.muted, fontSize: 13, marginTop: 8 }}>{caption}</div>
   </div>
 );
@@ -78,7 +89,7 @@ const Tenders: React.FC = () => {
   const { message } = App.useApp();
   const { user } = useAuth();
   const { theme } = useTheme();
-  const { isMobile } = useIsMobile();
+  const { isMobile, isPhone } = useIsMobile();
   const isDirector = user?.role_code === 'director' || user?.role_code === 'general_director';
   const isGeneralDirector = user?.role_code === 'general_director';
   const palette = getTenderMonitorPalette(theme === 'dark');
@@ -234,13 +245,13 @@ const Tenders: React.FC = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gridTemplateColumns: isPhone ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(220px, 1fr))',
             gap: 14,
           }}
         >
-          <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} />
-          <MetricCard title="В расчете" value={counts.calc} caption="готовятся КП" accent={palette.info} palette={palette} />
-          <MetricCard title="Направлено" value={counts.sent} caption="ожидает ответа" accent="#ef9f27" palette={palette} />
+          <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} isPhone={isPhone} />
+          <MetricCard title="В расчете" value={counts.calc} caption="готовятся КП" accent={palette.info} palette={palette} isPhone={isPhone} />
+          <MetricCard title="Направлено" value={counts.sent} caption="ожидает ответа" accent="#ef9f27" palette={palette} isPhone={isPhone} />
           <MetricCard
             title="Требуют звонка"
             value={needCallCount}
@@ -248,6 +259,7 @@ const Tenders: React.FC = () => {
             accent={needCallCount > 0 ? palette.danger : palette.success}
             blinking={needCallCount > 0}
             palette={palette}
+            isPhone={isPhone}
           />
           <MetricCard
             title="Сумма КП"
@@ -255,6 +267,7 @@ const Tenders: React.FC = () => {
             caption={`${formatArea(totalArea)} в работе`}
             accent={palette.success}
             palette={palette}
+            isPhone={isPhone}
           />
         </div>
 

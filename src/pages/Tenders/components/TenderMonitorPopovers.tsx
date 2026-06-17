@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Popover, Tag } from 'antd';
+import { Popover, Tag, Modal } from 'antd';
 import { EnvironmentFilled, FileTextOutlined } from '@ant-design/icons';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import type { TenderRegistryWithRelations } from '../../../lib/supabase';
 import { formatDateTime, getChronologyItems } from '../utils/tenderMonitor';
 import type { TenderMonitorPalette } from '../utils/tenderMonitorTheme';
@@ -57,9 +58,97 @@ function getMapPageUrl(tender: TenderRegistryWithRelations): string | null {
 export function MapPopover({ tender, palette }: { tender: TenderRegistryWithRelations; palette: TenderMonitorPalette }) {
   const widgetUrl = getMapWidgetUrl(tender);
   const mapPageUrl = getMapPageUrl(tender);
+  const { isPhone } = useIsMobile();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   if (!widgetUrl) {
     return null;
+  }
+
+  const mapContent = (
+    <div style={{ width: 300 }}>
+      <iframe
+        title={`map-${tender.id}`}
+        src={widgetUrl}
+        style={{ width: '100%', height: 220, border: 'none', borderRadius: 10 }}
+        loading="lazy"
+      />
+      <div style={{ marginTop: 8, color: palette.textSecondary, fontSize: 12, lineHeight: 1.35 }}>
+        {tender.object_address || 'Адрес не указан'}
+      </div>
+      {tender.object_coordinates ? (
+        <div style={{ marginTop: 4, color: palette.muted, fontSize: 11 }}>{tender.object_coordinates}</div>
+      ) : null}
+      {mapPageUrl ? (
+        <a
+          href={mapPageUrl}
+          target="_blank"
+          rel="noreferrer"
+          style={{ display: 'inline-block', marginTop: 8, color: palette.info, fontSize: 11 }}
+        >
+          Открыть в Яндекс Картах
+        </a>
+      ) : null}
+    </div>
+  );
+
+  const buttonElement = (
+    <button
+      type="button"
+      onClick={(event) => event.stopPropagation()}
+      style={{
+        border: 'none',
+        background: 'transparent',
+        color: palette.marker,
+        padding: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        cursor: 'pointer',
+      }}
+      title="Показать объект на карте"
+    >
+      <EnvironmentFilled style={{ fontSize: 14 }} />
+    </button>
+  );
+
+  if (isPhone) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setMobileOpen(true);
+          }}
+          style={{
+            border: 'none',
+            background: 'transparent',
+            color: palette.marker,
+            padding: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            cursor: 'pointer',
+          }}
+          title="Показать объект на карте"
+        >
+          <EnvironmentFilled style={{ fontSize: 14 }} />
+        </button>
+        <Modal
+          open={mobileOpen}
+          onCancel={(e) => {
+            e.stopPropagation();
+            setMobileOpen(false);
+          }}
+          footer={null}
+          centered
+          width={320}
+          styles={{ body: { padding: 0 } }}
+          maskStyle={{ background: 'rgba(0, 0, 0, 0.45)' }}
+        >
+          <div style={{ padding: 16 }}>{mapContent}</div>
+        </Modal>
+      </>
+    );
   }
 
   return (
@@ -68,54 +157,14 @@ export function MapPopover({ tender, palette }: { tender: TenderRegistryWithRela
       placement="bottomLeft"
       mouseEnterDelay={0.15}
       destroyTooltipOnHide
-      content={
-        <div style={{ width: 300 }}>
-          <iframe
-            title={`map-${tender.id}`}
-            src={widgetUrl}
-            style={{ width: '100%', height: 220, border: 'none', borderRadius: 10 }}
-            loading="lazy"
-          />
-          <div style={{ marginTop: 8, color: palette.textSecondary, fontSize: 12, lineHeight: 1.35 }}>
-            {tender.object_address || 'Адрес не указан'}
-          </div>
-          {tender.object_coordinates ? (
-            <div style={{ marginTop: 4, color: palette.muted, fontSize: 11 }}>{tender.object_coordinates}</div>
-          ) : null}
-          {mapPageUrl ? (
-            <a
-              href={mapPageUrl}
-              target="_blank"
-              rel="noreferrer"
-              style={{ display: 'inline-block', marginTop: 8, color: palette.info, fontSize: 11 }}
-            >
-              Открыть в Яндекс Картах
-            </a>
-          ) : null}
-        </div>
-      }
+      content={mapContent}
       overlayInnerStyle={{
         background: palette.panelBg,
         border: `1px solid ${palette.border}`,
         borderRadius: 12,
       }}
     >
-      <button
-        type="button"
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          border: 'none',
-          background: 'transparent',
-          color: palette.marker,
-          padding: 0,
-          display: 'inline-flex',
-          alignItems: 'center',
-          cursor: 'pointer',
-        }}
-        title="Показать объект на карте"
-      >
-        <EnvironmentFilled style={{ fontSize: 14 }} />
-      </button>
+      {buttonElement}
     </Popover>
   );
 }

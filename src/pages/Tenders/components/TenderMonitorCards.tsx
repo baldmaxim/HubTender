@@ -288,7 +288,7 @@ export const TenderMonitorCards: React.FC<TenderMonitorCardsProps> = ({
             {section.items.length > 0 ? (
               <Row gutter={isPhone ? [8, 8] : [12, 12]}>
                 {section.items.map((tender) => (
-                  <Col xs={12} sm={12} key={tender.id}>
+                  <Col xs={24} sm={24} key={tender.id}>
                     <TenderCard
                       tender={tender}
                       onOpenTender={onOpenTender}

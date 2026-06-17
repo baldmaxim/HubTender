@@ -45,6 +45,12 @@
     white-space: normal;
   }
 
+  /* ИТОГО строка — Summary.Cell имеет свой класс, не ant-table-cell */
+  .financial-indicators-page .fi-summary-table .ant-table-summary td {
+    font-size: 10px;
+    padding: 4px;
+  }
+
   /* Заголовки карточек графиков компактнее */
   .financial-indicators-page .ant-card-head-title {
     font-size: 14px;

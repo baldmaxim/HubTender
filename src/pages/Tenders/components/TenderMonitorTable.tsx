@@ -572,7 +572,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
           </div>
         ) : sections.every((section) => section.items.length === 0) ? (
           <Empty description="Тендеры не найдены" style={{ padding: 48 }} />
-        ) : !screens.lg ? (
+        ) : !screens.xl ? (
           <TenderMonitorCards
             sections={sections}
             onOpenTender={onOpenTender}

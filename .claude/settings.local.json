@@ -35,7 +35,13 @@
       "Skill(push:*)",
       "PowerShell($env:GCM_CREDENTIAL_STORE = 'dpapi'; git push origin main)",
       "PowerShell(git add .claude/settings.local.json)",
-      "PowerShell(git commit -m \"�������� ������� ����ன�� Claude Code \\(allowlist ࠧ�襭��\\)\")"
+      "PowerShell(git commit -m \"�������� ������� ����ன�� Claude Code \\(allowlist ࠧ�襭��\\)\")",
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \".\\\\node_modules\\\\typescript\\\\bin\\\\tsc\" --noEmit -p tsconfig.json 2>&1)",
+      "PowerShell($env:NODE_OPTIONS = \"--max-old-space-size=8192\"; npx tsc --noEmit; if \\($?\\) { \"TSC_OK\" })",
+      "PowerShell(npm run lint 2>&1)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(git add src/pages/Tenders/Tenders.tsx)",
+      "PowerShell(git push origin main)"
     ],
     "deny": [],
     "ask": [],

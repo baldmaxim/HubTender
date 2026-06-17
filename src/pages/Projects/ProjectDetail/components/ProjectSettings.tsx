@@ -136,8 +136,8 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
   return (
     <div>
       {/* Summary cards */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
+      <Row gutter={{ xs: 8, sm: 8, md: 16 }} style={{ marginBottom: 24 }}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Стоимость договора"
@@ -148,7 +148,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Итого с доп. соглашениями"
@@ -159,7 +159,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Закрыто выполнения"
@@ -170,7 +170,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ project, onSav
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Text type="secondary" style={{ fontSize: 12 }}>
               Общий прогресс

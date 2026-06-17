@@ -53,10 +53,10 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
 
   return (
     <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-      <Space size="small" style={{ width: isPhone ? '100%' : undefined }}>
-        <Text type="secondary">Тендер:</Text>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : undefined }}>
+        <Text type="secondary" style={{ flexShrink: 0 }}>Тендер:</Text>
         <Select
-          style={{ width: isPhone ? '100%' : 300 }}
+          style={{ flex: isPhone ? 1 : undefined, width: isPhone ? undefined : 300, minWidth: 0 }}
           placeholder="Выберите тендер"
           value={selectedTenderTitle}
           onChange={onTenderTitleChange}
@@ -68,7 +68,7 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
             (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
           }
         />
-      </Space>
+      </div>
       {selectedTenderTitle && (
         <Space size="small">
           <Text type="secondary">Версия:</Text>

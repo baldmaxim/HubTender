@@ -352,8 +352,8 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
   return (
     <div>
       {/* Summary */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
+      <Row gutter={{ xs: 8, sm: 8, md: 16 }} style={{ marginBottom: 24 }}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Итого договор"
@@ -364,7 +364,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Закрыто (факт)"
@@ -375,7 +375,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Осталось"
@@ -386,7 +386,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Text type="secondary" style={{ fontSize: 12 }}>
               Общий прогресс

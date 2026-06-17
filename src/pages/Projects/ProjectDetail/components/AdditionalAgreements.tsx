@@ -291,8 +291,8 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
   return (
     <div>
       {/* Summary */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
+      <Row gutter={{ xs: 8, sm: 8, md: 16 }} style={{ marginBottom: 24 }}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Стоимость договора"
@@ -303,7 +303,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Сумма доп. соглашений"
@@ -317,7 +317,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Итого договор"
@@ -328,7 +328,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card size="small">
             <Statistic
               title="Кол-во соглашений"
