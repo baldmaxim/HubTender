@@ -17,6 +17,7 @@ import { Bar, Doughnut } from 'react-chartjs-2';
 import type { Chart, TooltipItem, LegendItem as ChartLegendItem, ChartEvent, ActiveElement, LegendElement } from 'chart.js';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { AutoFitText } from '../../../components/AutoFitText';
 import type { IndicatorRow } from '../hooks/useFinancialData';
 
 interface IndicatorsChartsProps {
@@ -1294,7 +1295,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       key: 'amount',
       width: isPhone ? 95 : 150,
       align: 'right' as const,
-      render: (val: number) => <Text strong>{formatNumber(val)}</Text>,
+      render: (val: number) => <AutoFitText strong>{formatNumber(val)}</AutoFitText>,
     },
     {
       title: 'Цена за м² (руб./м²)',
@@ -1302,7 +1303,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       key: 'price_per_m2',
       width: isPhone ? 85 : 150,
       align: 'right' as const,
-      render: (val: number) => <Text>{formatNumber(Math.round(val))}</Text>,
+      render: (val: number) => <AutoFitText>{formatNumber(Math.round(val))}</AutoFitText>,
     },
   ];
 
@@ -1977,10 +1978,10 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
                       <Text strong>ИТОГО:</Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={1} align="right">
-                      <Text strong style={{ color: '#1890ff' }}>{formatNumber(totalAmount)}</Text>
+                      <AutoFitText strong color="#1890ff">{formatNumber(totalAmount)}</AutoFitText>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={2} align="right">
-                      <Text strong>{formatNumber(Math.round(avgPricePerM2))}</Text>
+                      <AutoFitText strong>{formatNumber(Math.round(avgPricePerM2))}</AutoFitText>
                     </Table.Summary.Cell>
                   </Table.Summary.Row>
                 );

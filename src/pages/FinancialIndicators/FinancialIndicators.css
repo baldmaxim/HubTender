@@ -35,11 +35,11 @@
     padding: 6px 8px;
   }
 
-  /* «Краткая сводка» — ужимаем текст ≈вдвое, чтобы блок влезал без скролла */
+  /* «Краткая сводка» — ужимаем текст, чтобы блок влезал без скролла.
+     Числовые ячейки масштабирует AutoFitText (одна строка без переноса). */
   .financial-indicators-page .fi-summary-table .ant-table-cell {
     font-size: 10px;
     padding: 4px 4px;
-    word-break: break-word;
   }
   .financial-indicators-page .fi-summary-table .ant-table-thead .ant-table-cell {
     white-space: normal;
