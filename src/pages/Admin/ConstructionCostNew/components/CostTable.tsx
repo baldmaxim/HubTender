@@ -110,6 +110,7 @@ const CostTable: React.FC<CostTableProps> = ({
               min={0}
               step={0.01}
               precision={2}
+              decimalSeparator=","
               style={{ width: '100%' }}
               size="small"
               placeholder="Объем группы"
@@ -133,6 +134,7 @@ const CostTable: React.FC<CostTableProps> = ({
             min={0}
             step={0.01}
             precision={2}
+            decimalSeparator=","
             style={{ width: '100%' }}
             size="small"
           />

@@ -123,6 +123,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
                 style={{ width: 100 }}
                 size="small"
                 precision={2}
+                decimalSeparator=","
               />
               <CheckOutlined
                 style={{ color: '#52c41a', cursor: 'pointer' }}
@@ -169,6 +170,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
                 style={{ width: 100 }}
                 size="small"
                 precision={2}
+                decimalSeparator=","
               />
               <CheckOutlined
                 style={{ color: '#52c41a', cursor: 'pointer' }}

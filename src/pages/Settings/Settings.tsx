@@ -290,6 +290,7 @@ const Settings: React.FC = () => {
                   </Col>
                   <Col>
                     <InputNumber
+                      decimalSeparator=","
                       min={1.2}
                       max={2}
                       step={0.05}
@@ -338,7 +339,7 @@ const Settings: React.FC = () => {
                       value={fontSettings.letterSpacing}
                       onChange={(value) => value != null && updateFontSettings('letterSpacing', value)}
                       formatter={(value) => `${value}px`}
-                      parser={(value) => parseFloat(value?.replace('px', '') || '0')}
+                      parser={(value) => parseFloat((value?.replace('px', '') || '0').replace(',', '.'))}
                       style={{ width: 80 }}
                     />
                   </Col>

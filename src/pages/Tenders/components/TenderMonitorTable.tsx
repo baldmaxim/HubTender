@@ -259,7 +259,7 @@ function TenderRow({
             {formatDate(tender.submission_date)}
           </span>
           {formatTime(tender.submission_date) ? (
-            <span style={{ color: palette.muted, fontSize: 8.4, fontWeight: 600 }}>{formatTime(tender.submission_date)}</span>
+            <span style={{ color: palette.success, fontSize: 8.4, fontWeight: 600 }}>{formatTime(tender.submission_date)}</span>
           ) : null}
         </div>
         {dashboardStatus === 'calc' && daysToSubmission != null ? (

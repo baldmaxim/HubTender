@@ -105,6 +105,7 @@ export const WorksAddForm: React.FC<WorksAddFormProps> = ({
                 step={0.01}
                 precision={2}
                 style={{ width: '100%' }}
+                decimalSeparator=","
                 parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
               />
             </Form.Item>

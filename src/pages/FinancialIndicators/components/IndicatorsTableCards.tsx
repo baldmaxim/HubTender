@@ -43,6 +43,7 @@ const AreaRow: React.FC<{
             style={{ width: 120 }}
             size="small"
             precision={2}
+            decimalSeparator=","
             autoFocus
           />
           <CheckOutlined

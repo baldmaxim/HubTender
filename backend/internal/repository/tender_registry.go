@@ -74,7 +74,7 @@ const tenderRegistrySelect = `
 		tr.chronology_items,
 		tr.tender_package_items,
 		tr.has_tender_package,
-		to_char(tr.submission_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		to_char(tr.submission_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		to_char(tr.commission_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		to_char(tr.construction_start_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		to_char(tr.site_visit_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),

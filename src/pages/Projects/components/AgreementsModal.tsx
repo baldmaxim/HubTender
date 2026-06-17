@@ -223,9 +223,9 @@ export const AgreementsModal: React.FC<AgreementsModalProps> = ({
                   style={{ width: '100%' }}
                   min={0 as number}
                   formatter={(value) =>
-                    `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+                    `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace('.', ',')
                   }
-                  parser={(value) => Number(value!.replace(/\s/g, ''))}
+                  parser={(value) => Number(value!.replace(/\s/g, '').replace(',', '.'))}
                 />
               </Form.Item>
               <Form.Item

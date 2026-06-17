@@ -135,6 +135,7 @@ export const MaterialsAddForm: React.FC<MaterialsAddFormProps> = ({
                 step={0.01}
                 precision={4}
                 style={{ width: '100%' }}
+                decimalSeparator=","
                 parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
               />
             </Form.Item>
@@ -150,6 +151,7 @@ export const MaterialsAddForm: React.FC<MaterialsAddFormProps> = ({
                 step={0.01}
                 precision={2}
                 style={{ width: '100%' }}
+                decimalSeparator=","
                 parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
               />
             </Form.Item>
@@ -201,6 +203,7 @@ export const MaterialsAddForm: React.FC<MaterialsAddFormProps> = ({
                   style={{ width: '100%' }}
                   disabled
                   value={((addUnitRate || 0) * 0.03)}
+                  decimalSeparator=","
                   parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
                 />
               ) : (
@@ -210,6 +213,7 @@ export const MaterialsAddForm: React.FC<MaterialsAddFormProps> = ({
                   precision={2}
                   style={{ width: '100%' }}
                   disabled={addDeliveryType !== 'суммой'}
+                  decimalSeparator=","
                   parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
                 />
               )}

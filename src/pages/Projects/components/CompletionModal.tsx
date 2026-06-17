@@ -227,9 +227,9 @@ export const CompletionModal: React.FC<CompletionModalProps> = ({
             placeholder="0"
             min={0 as number}
             formatter={(value) =>
-              `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+              `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace('.', ',')
             }
-            parser={(value) => Number(value!.replace(/\s/g, ''))}
+            parser={(value) => Number(value!.replace(/\s/g, '').replace(',', '.'))}
           />
         </Form.Item>
 
@@ -239,9 +239,9 @@ export const CompletionModal: React.FC<CompletionModalProps> = ({
             placeholder="Для будущих периодов"
             min={0 as number}
             formatter={(value) =>
-              `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+              `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace('.', ',')
             }
-            parser={(value) => Number(value!.replace(/\s/g, ''))}
+            parser={(value) => Number(value!.replace(/\s/g, '').replace(',', '.'))}
           />
         </Form.Item>
 

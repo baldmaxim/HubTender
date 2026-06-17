@@ -245,7 +245,7 @@ export const TenderDrawer: React.FC<TenderDrawerProps> = ({
             </Form.Item>
 
             <Form.Item name="area" label="Площадь (м²)">
-              <InputNumber style={{ width: '100%' }} min={0} precision={2} />
+              <InputNumber style={{ width: '100%' }} min={0} precision={2} decimalSeparator="," />
             </Form.Item>
 
             <Form.Item name="construction_scope_id" label="Объем строительства">

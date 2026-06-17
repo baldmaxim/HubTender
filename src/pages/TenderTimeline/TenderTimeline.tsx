@@ -816,6 +816,7 @@ const TenderTimeline: React.FC = () => {
                         style={{ marginBottom: 0 }}
                       >
                         <InputNumber
+                          decimalSeparator=","
                           min={1}
                           max={3}
                           step={1}

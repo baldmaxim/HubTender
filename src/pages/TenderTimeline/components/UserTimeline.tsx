@@ -311,7 +311,7 @@ const UserTimeline: React.FC<UserTimelineProps> = ({
             <TextArea rows={5} placeholder="Что изменилось в расчёте" />
           </Form.Item>
           <Form.Item name="user_amount" label="Итоговая сумма, ₽">
-            <InputNumber min={0} style={{ width: '100%' }} placeholder="Например, 12500000" />
+            <InputNumber min={0} decimalSeparator="," style={{ width: '100%' }} placeholder="Например, 12500000" />
           </Form.Item>
         </Form>
       </Modal>

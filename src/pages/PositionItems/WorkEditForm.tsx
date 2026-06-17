@@ -218,6 +218,7 @@ const WorkEditForm: React.FC<WorkEditFormProps> = ({
             precision={5}
             style={{ width: '100%' }}
             size="small"
+            decimalSeparator=","
             parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
           />
         </div>
@@ -257,7 +258,7 @@ const WorkEditForm: React.FC<WorkEditFormProps> = ({
             precision={2}
             style={{ width: '100%' }}
             size="small"
-            formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
+            formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace('.', ',')}
             parser={(value) => parseFloat(value!.replace(/\s/g, '').replace(/,/g, '.'))}
           />
         </div>
@@ -271,7 +272,8 @@ const WorkEditForm: React.FC<WorkEditFormProps> = ({
             precision={2}
             style={{ width: '100%' }}
             size="small"
-            formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
+            decimalSeparator=","
+            formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace('.', ',')}
           />
         </div>
       </div>

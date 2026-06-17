@@ -313,6 +313,7 @@ const PositionItems: React.FC = () => {
                       precision={5}
                       style={{ width: 120 }}
                       size="small"
+                      decimalSeparator=","
                       parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
                     />
                     <Text type="secondary" style={{ marginLeft: 16 }}>Ед. изм:</Text>
@@ -355,6 +356,7 @@ const PositionItems: React.FC = () => {
                       precision={5}
                       style={{ width: 120 }}
                       size="small"
+                      decimalSeparator=","
                       parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
                     />
                     <Text type="secondary">{position.unit_code}</Text>

@@ -133,6 +133,7 @@ export const MaterialsEditableCell: React.FC<MaterialsEditableCellProps> = ({
             min={1.0}
             step={0.01}
             precision={4}
+            decimalSeparator=","
             style={{ width: '100%' }}
             parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
           />
@@ -168,6 +169,7 @@ export const MaterialsEditableCell: React.FC<MaterialsEditableCellProps> = ({
             min={0}
             step={0.01}
             precision={2}
+            decimalSeparator=","
             style={{ width: '100%' }}
             parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
           />
@@ -215,6 +217,7 @@ export const MaterialsEditableCell: React.FC<MaterialsEditableCellProps> = ({
             min={0}
             step={0.01}
             precision={2}
+            decimalSeparator=","
             style={{ width: '100%' }}
             parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
           />

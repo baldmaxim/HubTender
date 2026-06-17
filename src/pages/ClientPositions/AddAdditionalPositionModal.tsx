@@ -159,6 +159,7 @@ const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
             placeholder="Введите количество"
             precision={2}
             min={0.01}
+            decimalSeparator=","
           />
         </Form.Item>
 

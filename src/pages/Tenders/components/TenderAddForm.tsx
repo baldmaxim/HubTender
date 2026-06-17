@@ -198,7 +198,7 @@ export const TenderAddForm: React.FC<TenderAddFormProps> = ({
         <Row gutter={8}>
           <Col span={3}>
             <Form.Item name="area" label="Площадь, м2">
-              <InputNumber style={{ width: '100%' }} min={0} precision={2} placeholder="0.00" />
+              <InputNumber decimalSeparator="," style={{ width: '100%' }} min={0} precision={2} placeholder="0.00" />
             </Form.Item>
           </Col>
           <Col span={5}>

@@ -112,12 +112,12 @@ export const SequenceTab: React.FC<SequenceTabProps> = ({ tabKey }) => {
 
   const formatNumberWithSpaces = (value: number | undefined) => {
     if (!value) return '';
-    return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace('.', ',');
   };
 
   const parseNumberWithSpaces = (value: string | undefined) => {
     if (!value) return 0;
-    return parseFloat(value.replace(/\s/g, ''));
+    return parseFloat(value.replace(/\s/g, '').replace(',', '.'));
   };
 
   // Get available markups for select

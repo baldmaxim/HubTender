@@ -50,10 +50,10 @@ function calcInsurance(d: InsuranceFormData) {
 }
 
 const numFmt = (v: number | string | undefined) =>
-  String(v ?? '').replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+  String(v ?? '').replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0').replace('.', ',');
 // Parser for price fields: strip thousands separators
 const numParse = (v: string | undefined) =>
-  String(v ?? '').replace(/\u00a0/g, '').replace(/\s/g, '') as unknown as number;
+  String(v ?? '').replace(/\u00a0/g, '').replace(/\s/g, '').replace(',', '.') as unknown as number;
 // Parser for area fields: additionally accept comma as decimal separator
 const areaParse = (v: string | undefined) =>
   String(v ?? '').replace(/\u00a0/g, '').replace(/\s/g, '').replace(',', '.') as unknown as number;
@@ -192,6 +192,7 @@ export default function Insurance() {
       min={0}
       max={100}
       precision={4}
+      decimalSeparator=","
       addonAfter="%"
       style={{ width: '100%' }}
     />

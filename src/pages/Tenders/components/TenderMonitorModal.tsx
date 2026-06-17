@@ -142,6 +142,7 @@ function EditableMonitorField({
         onPressEnter={() => void handleSave()}
         style={{ width: '100%' }}
         controls={false}
+        decimalSeparator=","
       />
     );
   } else if (type === 'date') {

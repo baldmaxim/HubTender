@@ -228,6 +228,7 @@ export const UnitsTab = forwardRef<UnitsTabRef, UnitsTabProps>(({
           >
             <InputNumber
               min={0}
+              decimalSeparator=","
               style={{ width: '100%' }}
               placeholder="Число для сортировки (0-999)"
             />
