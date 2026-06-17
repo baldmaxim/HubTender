@@ -9,6 +9,7 @@ import { listMaterialNames, listWorkNames } from '../../lib/api/nomenclatures';
 import { apiFetch } from '../../lib/api/client';
 import * as XLSX from 'xlsx-js-style';
 import { getVersionColorByTitle } from '../../utils/versionColor';
+import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 
 const { Title, Text } = Typography;
 
@@ -272,6 +273,18 @@ const Bsm: React.FC = () => {
     // fetchBoqItems is stable for our usage; refetch is driven solely by selectedTenderId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId]);
+
+  // Native WS hub — список тендеров (topic `tenders`) и BOQ выбранного тендера.
+  useRealtimeTopic('tenders', () => {
+    void fetchTenders();
+  });
+  useRealtimeTopic(
+    selectedTenderId ? `tender:${selectedTenderId}` : null,
+    () => {
+      if (selectedTenderId) void fetchBoqItems(selectedTenderId);
+    },
+    !!selectedTenderId,
+  );
 
   // Handle inline quote link update
   const handleUpdateQuoteLink = async (record: BoqItemData, newQuoteLink: string) => {

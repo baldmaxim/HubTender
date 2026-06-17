@@ -20,6 +20,7 @@ import {
   deleteBoqItemWithAudit,
 } from '../../../lib/supabaseWithAudit';
 import { getErrorMessage } from '../../../utils/errors';
+import { markRealtimeMutation } from '../../../lib/realtime/useRealtimeRefetch';
 
 interface UseItemActionsProps {
   position: ClientPosition | null;
@@ -42,6 +43,13 @@ export const useItemActions = ({
   readOnly,
 }: UseItemActionsProps) => {
   const { user } = useAuth();
+
+  // Подавление self-echo: наши же мутации boq_items/client_positions шлют NOTIFY,
+  // который вернётся WS-событием в эту же вкладку (useBoqItems подписан на тот же
+  // топик). markRealtimeMutation помечает топик до записи.
+  const markTenderMutated = (): void => {
+    if (position?.tender_id) markRealtimeMutation(`tender:${position.tender_id}`);
+  };
 
   // Defensive guard — UI блокирует кнопки через disabled, но programmatic
   // вызовы (race, hotkey) идут в обход.
@@ -93,6 +101,7 @@ export const useItemActions = ({
         total_amount: totalAmount,
       };
 
+      markTenderMutated();
       await insertBoqItemWithAudit(user?.id, newItem);
 
       message.success('Работа добавлена');
@@ -154,6 +163,7 @@ export const useItemActions = ({
         total_amount: totalAmount,
       };
 
+      markTenderMutated();
       await insertBoqItemWithAudit(user?.id, newItem);
 
       message.success('Материал добавлен');
@@ -173,6 +183,7 @@ export const useItemActions = ({
 
     try {
       setLoading(true);
+      markTenderMutated();
       const result = await insertTemplateItems(templateId, position.id, user?.id);
 
       message.success(
@@ -190,6 +201,7 @@ export const useItemActions = ({
   const handleDelete = async (id: string) => {
     if (blockedByDeadline()) return;
     try {
+      markTenderMutated();
       await deleteBoqItemWithAudit(user?.id, id);
 
       message.success('Элемент удален');
@@ -224,6 +236,7 @@ export const useItemActions = ({
       const recordId = expandedRowKeys[0];
       if (!recordId) return;
 
+      markTenderMutated();
       await updateBoqItemWithAudit(user?.id, recordId, data);
 
       const updatedItem = items.find(item => item.id === recordId);
@@ -250,6 +263,7 @@ export const useItemActions = ({
   ) => {
     if (blockedByDeadline()) return;
     try {
+      markTenderMutated();
       await updatePositionFields(
         positionId,
         { manual_volume: gpVolume, manual_note: gpNote },
@@ -269,6 +283,7 @@ export const useItemActions = ({
   ) => {
     if (blockedByDeadline()) return;
     try {
+      markTenderMutated();
       await updatePositionFields(
         positionId,
         { work_name: workName, unit_code: unitCode },
@@ -373,6 +388,7 @@ export const useItemActions = ({
         { id: targetItem.id, sort_number: item.sort_number }
       ];
 
+      markTenderMutated();
       for (const update of updates) {
         await updateBoqItemWithAudit(user?.id, update.id, { sort_number: update.sort_number });
       }

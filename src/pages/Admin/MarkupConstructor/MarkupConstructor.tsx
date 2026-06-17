@@ -45,6 +45,8 @@ import {
   upsertTenderPricingDistribution,
 } from '../../../lib/api/markup';
 import { formatNumberWithSpaces, parseNumberWithSpaces, parseNumberInput, formatNumberInput } from '../../../utils/numberFormat';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
+import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 import dayjs from 'dayjs';
 import './MarkupConstructor.css';
 
@@ -554,6 +556,26 @@ const MarkupConstructor: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Native WS hub — общий список тактик (topic `markup`). Обновляет только
+  // список; открытый редактор последовательности не трогаем.
+  useRealtimeTopic('markup', () => {
+    void fetchTactics();
+  });
+
+  // Native WS hub — настройки ценообразования выбранного тендера. Фильтр по
+  // таблице, чтобы прочие события tender:{id} (boq_items и т.п.) не сбрасывали
+  // форму распределения; markPricingMutation подавляет эхо своего сохранения.
+  const { markLocalMutation: markPricingMutation } = useRealtimeRefetch(
+    selectedTenderId ? `tender:${selectedTenderId}` : null,
+    () => {
+      if (selectedTenderId) void fetchPricingDistribution(selectedTenderId);
+    },
+    {
+      enabled: !!selectedTenderId,
+      shouldRefetch: (ev) => ev.table === 'tender_pricing_distribution',
+    },
+  );
+
   // Загрузка и сохранение тактик наценок из localStorage и Supabase
   useEffect(() => {
     const loadData = async () => {
@@ -679,6 +701,7 @@ const MarkupConstructor: React.FC = () => {
     }
 
     setSavingPricing(true);
+    markPricingMutation();
     try {
       const dataToSave: PricingDistributionInsert = {
         tender_id: selectedTenderId,

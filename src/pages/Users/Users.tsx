@@ -25,6 +25,7 @@ import {
   type RoleRow,
 } from '../../lib/api/userAdmin';
 import { getErrorMessage } from '../../utils/errors';
+import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import dayjs from 'dayjs';
 import TenderAccessTab from './components/TenderAccessTab';
 
@@ -839,6 +840,14 @@ const Users: React.FC = () => {
       loadRoles();
     }
   }, [hasAccess]);
+
+  // Native WS hub — обновляем активную вкладку при изменениях users (topic `users`,
+  // на бэке доступен только админ-ролям).
+  useRealtimeTopic(hasAccess ? 'users' : null, () => {
+    if (activeTab === 'pending') loadPendingRequests();
+    else if (activeTab === 'all') loadUsers();
+    else if (activeTab === 'roles') loadRoles();
+  });
 
   // Если нет доступа
   if (!hasAccess) {

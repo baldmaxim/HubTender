@@ -3,6 +3,7 @@ import { message } from 'antd';
 import type { WorkLibraryFull, WorkName } from '../../../../lib/supabase';
 import { listWorksLibrary } from '../../../../lib/api/library';
 import { listWorkNames } from '../../../../lib/api/nomenclatures';
+import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
 
 export const useWorksData = () => {
   const [data, setData] = useState<WorkLibraryFull[]>([]);
@@ -58,6 +59,11 @@ export const useWorksData = () => {
     fetchWorks();
     fetchWorkNames();
   }, []);
+
+  // Native WS hub — обновляем библиотеку работ при изменениях справочников.
+  useRealtimeTopic('references', () => {
+    void fetchWorks();
+  });
 
   return {
     data,

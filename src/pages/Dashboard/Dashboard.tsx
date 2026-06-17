@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { Tender } from '../../lib/supabase';
 import { fetchTenders as apiFetchTenders } from '../../lib/api/tenders';
+import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { formatNumberWithSpaces } from '../../utils/numberFormat';
 import { getVersionColorByTitle } from '../../utils/versionColor';
 import dayjs from 'dayjs';
@@ -96,6 +97,11 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchTenders();
   }, []);
+
+  // Native WS hub — обновляем список при любом изменении реестра тендеров.
+  useRealtimeTopic('tenders', () => {
+    void fetchTenders();
+  });
 
   // Фильтрация тендеров по поисковому запросу
   useEffect(() => {

@@ -121,6 +121,7 @@ func (b *Broker) schedulePublish(topic string, payload []byte) {
 //
 //   - table == "notifications" → "notifications:{user_id}"
 //   - table == "tenders"       → "tenders" AND "tender:{id}"
+//   - global / reference tables → dedicated global topic (see cases below)
 //   - all other tables         → "tender:{tender_id}" (if tender_id non-empty)
 func (b *Broker) topicsFor(e Event) []string {
 	switch e.Table {
@@ -140,9 +141,31 @@ func (b *Broker) topicsFor(e Event) []string {
 		}
 		return topics
 
+	// --- Global / reference tables → dedicated topics (no tender_id) ---
+	case "user_tasks":
+		return []string{"tasks"}
+	case "users":
+		return []string{"users"}
+	case "materials_library", "works_library", "material_names", "work_names", "units":
+		return []string{"references"}
+	case "templates", "template_items":
+		return []string{"templates"}
+	case "markup_tactics", "markup_parameters":
+		return []string{"markup"}
+	case "import_sessions":
+		return []string{"imports"}
+	case "projects", "project_additional_agreements", "project_monthly_completion":
+		return []string{"projects"}
+	case "tender_registry":
+		// The registry backs the tenders list/dashboard; reuse the `tenders` topic.
+		return []string{"tenders"}
+
 	default:
 		// boq_items, client_positions, cost_redistribution_results,
-		// construction_cost_volumes — all carry a tender_id.
+		// construction_cost_volumes, and the tender-scoped config tables
+		// (tender_markup_percentage, tender_pricing_distribution,
+		// tender_insurance, tender_notes, tender_documents,
+		// subcontract_growth_exclusions) — all carry a tender_id.
 		if e.TenderID == "" {
 			b.logger.Warn().
 				Str("table", e.Table).

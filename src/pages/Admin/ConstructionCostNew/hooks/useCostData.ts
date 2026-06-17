@@ -26,7 +26,7 @@ interface BoqItemForCost {
   client_positions: { tender_id: string } | null;
 }
 import { getErrorMessage } from '../../../../utils/errors';
-import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
+import { useRealtimeRefetch } from '../../../../lib/realtime/useRealtimeRefetch';
 import {
   calculateLiveCommercialAmounts,
   loadLiveCommercialCalculationContext,
@@ -632,9 +632,20 @@ export const useCostData = () => {
     }
   };
 
+  // Native WS hub (Go BFF) — invalidate-and-refetch on tender row change.
+  // markLocalMutation() в обработчиках ниже подавляет self-echo собственных
+  // правок объёмов/заметок (upsert → NOTIFY → WS-эхо через ~200 мс).
+  const { markLocalMutation } = useRealtimeRefetch(
+    selectedTenderId ? `tender:${selectedTenderId}` : null,
+    () => {
+      void fetchConstructionCosts();
+    },
+  );
+
   const handleVolumeChange = async (value: number | null, record: CostRow) => {
     if (value === null || value === record.volume) return;
 
+    markLocalMutation();
     try {
       if (record.detail_cost_category_id) {
         await upsertConstructionCostVolume({
@@ -684,6 +695,7 @@ export const useCostData = () => {
   };
 
   const handleNotesChange = async (value: string, record: CostRow) => {
+    markLocalMutation();
     try {
       if (record.detail_cost_category_id) {
         await upsertConstructionCostVolume({
@@ -727,14 +739,6 @@ export const useCostData = () => {
     // fetchConstructionCosts is defined outside this effect; intentionally excluded to avoid refetch loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId, costType]);
-
-  // Native WS hub (Go BFF) — invalidate-and-refetch on tender row change.
-  useRealtimeTopic(
-    selectedTenderId ? `tender:${selectedTenderId}` : null,
-    () => {
-      void fetchConstructionCosts();
-    },
-  );
 
   return {
     tenders,

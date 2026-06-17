@@ -15,6 +15,7 @@ import {
   resetTypeCoefficientsCache,
 } from '../../../services/markupTacticService';
 import { fetchTenders } from '../../../lib/api/tenders';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import { listMarkupTactics, getMarkupTactic } from '../../../lib/api/markup';
 import { getTenderById, listAllBoqItemsForTender } from '../../../lib/api/fi';
 import { loadTenderInsurance } from '../../../lib/api/insurance';
@@ -277,6 +278,17 @@ export function useCommerceData() {
       setSelectedTacticId(undefined);
     }
   }, [selectedTenderId, tenders]);
+
+  // Native WS hub — подтягиваем материализованные коммерческие стоимости после
+  // серверного авто-пересчёта (смена тактики/наценок шлёт NOTIFY в tender:{id}).
+  // Эхо здесь желаемое (recalc асинхронный), поэтому self-echo guard не нужен.
+  useRealtimeTopic(
+    selectedTenderId ? `tender:${selectedTenderId}` : null,
+    () => {
+      if (selectedTenderId) void loadPositions(selectedTenderId);
+    },
+    !!selectedTenderId,
+  );
 
   const loadTenders = async () => {
     try {

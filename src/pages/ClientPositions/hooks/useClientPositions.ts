@@ -10,7 +10,7 @@ import { fetchTenders as apiFetchTenders } from '../../../lib/api/tenders';
 import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 import { listAllBoqItemsForTender, getTenderById } from '../../../lib/api/fi';
 import { invalidateApiCache } from '../../../lib/api/client';
-import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
+import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 import { getErrorMessage } from '../../../utils/errors';
 import {
   readCache as readPositionsCache,
@@ -207,13 +207,20 @@ export const useClientPositions = () => {
   const recentlyFetchedRef = useRef<Map<string, number>>(new Map());
   const RECENT_FETCH_MS = 30_000;
 
-  // Метка последней локальной (оптимистичной) мутации. WS-обработчик ниже
-  // использует её, чтобы подавить self-echo: наша же мутация шлёт NOTIFY,
-  // который через ~200 мс (дебаунс брокера) возвращается WS-событием. Внутри
-  // окна полную перезагрузку пропускаем; правки других пользователей приходят
-  // позже и перезагрузку не теряют.
-  const locallyMutatedAtRef = useRef<number>(0);
-  const LOCAL_MUTATION_ECHO_MS = 1500;
+  // Native WS hub (Go BFF) — обновляем кеш + позиции при изменении тендера.
+  // markLocalMutation() вызывается в оптимистичных мутациях ниже, чтобы подавить
+  // self-echo: наша же мутация шлёт NOTIFY, который через ~200 мс возвращается
+  // WS-событием. Правки других пользователей приходят позже и не теряются.
+  const { markLocalMutation } = useRealtimeRefetch(
+    selectedTender?.id ? `tender:${selectedTender.id}` : null,
+    () => {
+      if (!selectedTender?.id) return;
+      dropPositionsCache(selectedTender.id);
+      invalidateApiCache(`positions:${selectedTender.id}`);
+      void fetchTenders();
+      void fetchClientPositions(selectedTender.id);
+    },
+  );
 
   // Оптимистичное обнуление работ/материалов у позиций (clear-boq): строки
   // получают works=0/materials=0/total=0, итоги строки обнуляются. Избавляет
@@ -221,7 +228,7 @@ export const useClientPositions = () => {
   const applyLocalBoqClear = useCallback(
     (positionIds: string[]) => {
       const ids = new Set(positionIds);
-      locallyMutatedAtRef.current = Date.now();
+      markLocalMutation();
 
       let removed = 0;
       const nextCounts: PositionCountMap = { ...positionCounts };
@@ -251,7 +258,7 @@ export const useClientPositions = () => {
       setClientPositions(nextPositions);
       // leafPositionIndices при очистке BOQ не меняется (порядок/иерархия те же).
     },
-    [positionCounts, clientPositions],
+    [positionCounts, clientPositions, markLocalMutation],
   );
 
   // Оптимистичное удаление строк целиком (ДОП / массовое удаление строк
@@ -260,7 +267,7 @@ export const useClientPositions = () => {
   const applyLocalPositionRemove = useCallback(
     (positionIds: string[]) => {
       const ids = new Set(positionIds);
-      locallyMutatedAtRef.current = Date.now();
+      markLocalMutation();
 
       let removed = 0;
       const nextCounts: PositionCountMap = { ...positionCounts };
@@ -278,7 +285,7 @@ export const useClientPositions = () => {
 
       for (const id of ids) invalidatePositionRowCache(id);
     },
-    [positionCounts, clientPositions],
+    [positionCounts, clientPositions, markLocalMutation],
   );
 
   const fetchClientPositions = useCallback(
@@ -318,22 +325,6 @@ export const useClientPositions = () => {
       }
     },
     [applyAggregate],
-  );
-
-  // Native WS hub (Go BFF) — обновляем кеш + позиции при изменении тендера.
-  useRealtimeTopic(
-    selectedTender?.id ? `tender:${selectedTender.id}` : null,
-    () => {
-      if (!selectedTender?.id) return;
-      // Self-echo guard: своя оптимистичная мутация уже обновила UI и породила
-      // NOTIFY, который вернётся сюда WS-событием ~200 мс спустя. В окне эха
-      // тяжёлую перезагрузку пропускаем.
-      if (Date.now() - locallyMutatedAtRef.current < LOCAL_MUTATION_ECHO_MS) return;
-      dropPositionsCache(selectedTender.id);
-      invalidateApiCache(`positions:${selectedTender.id}`);
-      void fetchTenders();
-      void fetchClientPositions(selectedTender.id);
-    },
   );
 
   return {

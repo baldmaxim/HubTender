@@ -14,6 +14,7 @@ import {
 import { getErrorMessage } from '../../../utils/errors';
 import { getVersionColorByTitle } from '../../../utils/versionColor';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 
 const { Title, Text } = Typography;
 
@@ -89,13 +90,28 @@ export default function Insurance() {
     }
   }, []);
 
+  // Native WS hub — рефетч страховки тендера при внешнем изменении. Фильтр по
+  // таблице (tender:{id} получает все события тендера); markLocalMutation в
+  // persistSave подавляет эхо собственного автосохранения.
+  const { markLocalMutation } = useRealtimeRefetch(
+    selectedTenderId ? `tender:${selectedTenderId}` : null,
+    () => {
+      if (selectedTenderId) void loadInsurance(selectedTenderId);
+    },
+    {
+      enabled: !!selectedTenderId,
+      shouldRefetch: (ev) => ev.table === 'tender_insurance',
+    },
+  );
+
   const persistSave = useCallback(async (tenderId: string, data: InsuranceData) => {
+    markLocalMutation();
     try {
       await upsertTenderInsurance(tenderId, data);
     } catch (error) {
       message.error('Ошибка сохранения: ' + getErrorMessage(error));
     }
-  }, []);
+  }, [markLocalMutation]);
 
   const handleChange = (field: keyof InsuranceFormData, value: number | null) => {
     const next = { ...formData, [field]: value ?? 0 };

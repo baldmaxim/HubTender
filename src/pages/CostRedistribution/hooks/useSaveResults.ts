@@ -13,6 +13,7 @@ import {
 import type { RedistributionResult, SourceRule, TargetCost } from '../utils';
 import type { RedistributionRule } from '../../../lib/supabase';
 import type { PositionAdjustmentRule } from '../types/positionAdjustment';
+import { markRealtimeMutation } from '../../../lib/realtime/useRealtimeRefetch';
 
 interface LoadedRedistributionResults {
   results: Array<{
@@ -122,6 +123,9 @@ export function useSaveResults() {
           rules,
           createdBy: userId,
         });
+
+        // Подавляем self-echo: запись породит NOTIFY → WS-эхо в той же вкладке.
+        markRealtimeMutation(`tender:${tenderId}`);
 
         message.success('Результаты перераспределения сохранены');
         return true;

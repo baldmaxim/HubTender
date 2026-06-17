@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { listTemplates, deleteTemplate } from '../../../lib/api/library';
 import { getErrorMessage } from '../../../utils/errors';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import type { Template } from '../../../lib/supabase';
 
 export interface TemplateWithDetails extends Template {
@@ -59,6 +60,11 @@ export const useTemplates = () => {
   useEffect(() => {
     fetchTemplates();
   }, []);
+
+  // Native WS hub — обновляем список шаблонов при изменениях templates/template_items.
+  useRealtimeTopic('templates', () => {
+    void fetchTemplates();
+  });
 
   return {
     templates,

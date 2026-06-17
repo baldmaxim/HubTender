@@ -28,6 +28,7 @@ import {
   insertTenderMarkupPercentages,
 } from '../../../lib/api/markup';
 import { parseNumberInput, formatNumberInput } from '../../../utils/numberFormat';
+import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 import { SubcontractGrowthTab } from './SubcontractGrowthTab';
 import { getVersionColorByTitle } from '../../../utils/versionColor';
 
@@ -199,6 +200,21 @@ const MarkupPercentages: React.FC = () => {
   };
 
 
+  // Native WS hub — рефетч только при внешнем изменении наценок этого тендера.
+  // Фильтр по таблице: tender:{id} получает ВСЕ события тендера (boq_items и
+  // т.п.), а форму надо обновлять лишь на tender_markup_percentage. markLocalMutation
+  // в handleSave подавляет эхо собственного сохранения.
+  const { markLocalMutation } = useRealtimeRefetch(
+    selectedTenderId ? `tender:${selectedTenderId}` : null,
+    () => {
+      if (selectedTenderId) void fetchMarkupData(selectedTenderId);
+    },
+    {
+      enabled: !!selectedTenderId,
+      shouldRefetch: (ev) => ev.table === 'tender_markup_percentage',
+    },
+  );
+
   // Обработка выбора тактики
   const handleTacticChange = async (tacticId: string) => {
     setSelectedTacticId(tacticId);
@@ -215,6 +231,7 @@ const MarkupPercentages: React.FC = () => {
       await form.validateFields();
       const values = form.getFieldsValue();
       setSaving(true);
+      markLocalMutation();
 
       if (currentMarkupId) {
         await deleteTenderMarkupPercentages(selectedTenderId);

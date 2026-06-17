@@ -9,7 +9,7 @@ import type {
   WorkName,
   MaterialName,
 } from '../../../lib/supabase';
-import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
+import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 import {
   getPositionWithTender,
   listBoqItemsFullByPosition,
@@ -431,7 +431,9 @@ export const useBoqItems = (positionId: string | undefined) => {
   }, [positionId]);
 
   // Native WS hub (Go BFF) — рефетч элементов при изменении boq_items тендера.
-  useRealtimeTopic(
+  // Self-echo собственных правок подавляется через markRealtimeMutation в
+  // useItemActions (тот же топик tender:{id}).
+  useRealtimeRefetch(
     position?.tender_id ? `tender:${position.tender_id}` : null,
     () => {
       void fetchItems();

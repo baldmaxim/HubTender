@@ -3,6 +3,7 @@ import { message } from 'antd';
 import type { MaterialLibraryFull, MaterialName } from '../../../../lib/supabase';
 import { listMaterialsLibrary } from '../../../../lib/api/library';
 import { listMaterialNames } from '../../../../lib/api/nomenclatures';
+import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
 
 export const useMaterialsData = () => {
   const [data, setData] = useState<MaterialLibraryFull[]>([]);
@@ -58,6 +59,11 @@ export const useMaterialsData = () => {
     fetchMaterials();
     fetchMaterialNames();
   }, []);
+
+  // Native WS hub — обновляем библиотеку материалов при изменениях справочников.
+  useRealtimeTopic('references', () => {
+    void fetchMaterials();
+  });
 
   return {
     data,

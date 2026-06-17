@@ -204,11 +204,33 @@ func (h *WsHandler) runWriter(
 	}
 }
 
+// adminRoles are the role_codes allowed to subscribe to sensitive global topics
+// (currently only "users"). Matches the values stored in public.users.role_code.
+var adminRoles = map[string]bool{
+	"administrator": true,
+	"developer":     true,
+	"director":      true,
+}
+
+// globalTopics are reference / non-sensitive topics any authenticated user may
+// subscribe to. The per-row data is just {table, op, id}; sensitive filtering
+// happens server-side on the REST refetch the client issues in response.
+var globalTopics = map[string]bool{
+	"tasks":      true,
+	"references": true,
+	"templates":  true,
+	"markup":     true,
+	"projects":   true,
+	"imports":    true,
+}
+
 // authoriseTopic enforces per-topic access control:
 //
 //   - "notifications:<uid>"  → uid must exactly match authed.ID
 //   - "tender:<uuid>"        → any authenticated user (RLS parity deferred to 4b)
 //   - "tenders"              → any authenticated user
+//   - global reference topics → any authenticated user (see globalTopics)
+//   - "users"                → admin roles only (see adminRoles)
 //   - everything else        → denied
 func (h *WsHandler) authoriseTopic(authed *middleware.AuthUser, topic string) bool {
 	if strings.HasPrefix(topic, "notifications:") {
@@ -221,7 +243,10 @@ func (h *WsHandler) authoriseTopic(authed *middleware.AuthUser, topic string) bo
 	if topic == "tenders" {
 		return true
 	}
-	return false
+	if topic == "users" {
+		return adminRoles[authed.Role]
+	}
+	return globalTopics[topic]
 }
 
 // writeError sends a plain-text error message to the client.

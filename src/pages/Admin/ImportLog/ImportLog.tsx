@@ -20,6 +20,7 @@ import dayjs from 'dayjs';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getErrorMessage } from '../../../utils/errors';
 import { getVersionColorByTitle } from '../../../utils/versionColor';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import {
   fetchImportSessions,
   fetchImportLogUsers,
@@ -141,6 +142,11 @@ const ImportLog: React.FC = () => {
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
+
+  // Native WS hub — обновляем журнал импортов при изменениях import_sessions.
+  useRealtimeTopic('imports', () => {
+    void fetchSessions();
+  });
 
   useEffect(() => {
     setCurrentPage(1);

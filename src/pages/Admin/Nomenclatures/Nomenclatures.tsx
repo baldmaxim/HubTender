@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Tabs, Button, Space, Input, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { TabsProps } from 'antd';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import { useMaterials } from './hooks/useMaterials.tsx';
 import { useWorks } from './hooks/useWorks.tsx';
 import { useUnits } from './hooks/useUnits.tsx';
@@ -48,6 +49,16 @@ const Nomenclatures: React.FC = () => {
     units.loadUnitsList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Native WS hub — обновляем справочники при любом изменении (topic `references`
+  // покрывает materials/works library, material/work names, units; bulk-импорт
+  // шлёт одно statement-level событие).
+  useRealtimeTopic('references', () => {
+    void materials.loadMaterials();
+    void works.loadWorks();
+    void units.loadUnits();
+    void units.loadUnitsList();
+  });
 
   const filteredMaterialsData = materials.materialsData.filter(item =>
     searchText === '' || item.name.toLowerCase().includes(searchText.toLowerCase())

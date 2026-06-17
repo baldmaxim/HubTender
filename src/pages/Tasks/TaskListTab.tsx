@@ -9,6 +9,7 @@ import {
   setWorkSettings,
 } from '../../lib/api/tasks';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import AddTaskModal from './AddTaskModal';
 
 const { Text } = Typography;
@@ -31,6 +32,11 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
     // fetchTasks and fetchUserSettings are defined in this component; excluded to avoid refetch loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  // Native WS hub — обновляем список задач при изменениях user_tasks (topic `tasks`).
+  useRealtimeTopic('tasks', () => {
+    void fetchTasks();
+  });
 
   const fetchTasks = async () => {
     setLoading(true);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Table, Tabs, message } from 'antd';
 import type { UserTaskWithRelations, TaskStatus, WorkMode, WorkStatus } from '../../lib/supabase';
 import { listAllTasks } from '../../lib/api/tasks';
+import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import dayjs from 'dayjs';
 
 interface EmployeeTasksTabProps {
@@ -22,6 +23,11 @@ const EmployeeTasksTab: React.FC<EmployeeTasksTabProps> = ({ searchUserId }) => 
   useEffect(() => {
     fetchAllTasks();
   }, []);
+
+  // Native WS hub — обновляем задачи сотрудников при изменениях user_tasks.
+  useRealtimeTopic('tasks', () => {
+    void fetchAllTasks();
+  });
 
   const filteredTasks = useMemo(() => {
     let filtered = allTasks.filter(t => t.task_status === activeStatus);

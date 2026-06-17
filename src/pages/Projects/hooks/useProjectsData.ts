@@ -6,6 +6,7 @@ import {
   listProjectMonthlyCompletion,
 } from '../../../lib/api/projects';
 import type { ProjectFull, ProjectCompletion, ProjectAgreement } from '../../../lib/supabase/types';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 
 // Детали доп соглашений по project_id
 export type AgreementsMap = Record<string, ProjectAgreement[]>;
@@ -125,6 +126,13 @@ export const useProjectsData = () => {
     fetchProjects();
     fetchCompletionData();
   }, [fetchProjects, fetchCompletionData]);
+
+  // Native WS hub — обновляем объекты при изменениях projects / доп. соглашений /
+  // месячного выполнения (topic `projects`).
+  useRealtimeTopic('projects', () => {
+    void fetchProjects();
+    void fetchCompletionData();
+  });
 
   return { projects, loading, fetchProjects, completionData, fetchCompletionData, agreementsMap };
 };

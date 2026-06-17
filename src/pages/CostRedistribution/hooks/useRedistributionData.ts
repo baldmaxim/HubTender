@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { message } from 'antd';
-import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
+import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 import type { Tender } from '../../../lib/supabase';
 import type { BoqItemWithCosts } from '../utils';
 import {
@@ -79,14 +79,16 @@ export function useRedistributionData() {
   }, [selectedTenderId, selectedTacticId, tenders]);
 
   // Native WS hub — refetch boq items when the tender row changes.
-  useRealtimeTopic(
+  // Self-echo собственного сохранения результатов подавляется через
+  // markRealtimeMutation в useSaveResults.
+  useRealtimeRefetch(
     selectedTenderId ? `tender:${selectedTenderId}` : null,
     () => {
       if (selectedTenderId) {
         void loadBoqItems(selectedTenderId, selectedTacticId);
       }
     },
-    !!selectedTenderId,
+    { enabled: !!selectedTenderId },
   );
 
   const loadTenders = async () => {

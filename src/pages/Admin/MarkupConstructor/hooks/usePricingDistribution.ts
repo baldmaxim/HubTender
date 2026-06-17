@@ -5,6 +5,7 @@ import {
   getTenderPricingDistribution,
   upsertTenderPricingDistribution,
 } from '../../../../lib/api/markup';
+import { markRealtimeMutation } from '../../../../lib/realtime/useRealtimeRefetch';
 
 export const usePricingDistribution = () => {
   const [pricingDistribution, setPricingDistribution] = useState<PricingDistribution | null>(null);
@@ -42,6 +43,8 @@ export const usePricingDistribution = () => {
       });
 
       setPricingDistribution(result);
+      // Подавляем self-echo собственного сохранения (tender:{id} подписка ниже).
+      markRealtimeMutation(`tender:${tenderId}`);
       message.success('Распределение ценообразования сохранено');
       return result;
     } catch (error) {
