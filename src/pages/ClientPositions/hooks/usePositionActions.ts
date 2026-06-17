@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
+import { useUndoableSet } from './useUndoableSet';
 import type { ClientPosition, Tender } from '../../../lib/supabase';
 import {
   updatePositionsNote,
@@ -35,10 +36,13 @@ export const usePositionActions = (
   const [copiedPositionId, setCopiedPositionId] = useState<string | null>(null);
   const [copiedNoteValue, setCopiedNoteValue] = useState<string | null>(null);
   const [copiedNotePositionId, setCopiedNotePositionId] = useState<string | null>(null);
-  const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(new Set());
+  // Наборы выбора с историей шагов для отмены через Ctrl+Z (см. useUndoableSet).
+  const targetSel = useUndoableSet();
+  const selectedTargetIds = targetSel.value;
   const [isBulkPasting, setIsBulkPasting] = useState(false);
   const [isDeleteSelectionMode, setIsDeleteSelectionMode] = useState(false);
-  const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<string>>(new Set());
+  const deleteSel = useUndoableSet();
+  const selectedDeleteIds = deleteSel.value;
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isLevelChangeMode, setIsLevelChangeMode] = useState(false);
   const [selectedLevelChangeIds, setSelectedLevelChangeIds] = useState<Set<string>>(new Set());
@@ -48,9 +52,9 @@ export const usePositionActions = (
   const handleCopyPosition = (positionId: string, event: React.MouseEvent) => {
     event.stopPropagation();
     setCopiedPositionId(positionId);
-    setSelectedTargetIds(new Set());
+    targetSel.reset();
     setIsDeleteSelectionMode(false);
-    setSelectedDeleteIds(new Set());
+    deleteSel.reset();
     message.success('Позиция скопирована в буфер обмена');
   };
 
@@ -87,7 +91,7 @@ export const usePositionActions = (
       return;
     }
 
-    setSelectedTargetIds(prev => {
+    targetSel.apply(prev => {
       const newSet = new Set(prev);
       if (newSet.has(positionId)) {
         newSet.delete(positionId);
@@ -128,7 +132,7 @@ export const usePositionActions = (
         );
       }
 
-      setSelectedTargetIds(new Set());
+      targetSel.reset();
       setCopiedPositionId(null); // Сбросить буфер обмена
 
       if (selectedTenderId) {
@@ -177,9 +181,9 @@ export const usePositionActions = (
 
     setCopiedNoteValue(noteValue);
     setCopiedNotePositionId(positionId);
-    setSelectedTargetIds(new Set());
+    targetSel.reset();
     setIsDeleteSelectionMode(false);
-    setSelectedDeleteIds(new Set());
+    deleteSel.reset();
     message.success('Примечание ГП скопировано в буфер обмена');
   };
 
@@ -240,7 +244,7 @@ export const usePositionActions = (
         );
       }
 
-      setSelectedTargetIds(new Set());
+      targetSel.reset();
       setCopiedNoteValue(null);
       setCopiedNotePositionId(null);
 
@@ -263,10 +267,10 @@ export const usePositionActions = (
     setCopiedPositionId(null);
     setCopiedNoteValue(null);
     setCopiedNotePositionId(null);
-    setSelectedTargetIds(new Set());
+    targetSel.reset();
     // Включаем режим удаления: раздел + все подчинённые строки (как в фильтре)
     setIsDeleteSelectionMode(true);
-    setSelectedDeleteIds(collectSectionDescendants(clientPositions, positionId));
+    deleteSel.reset(collectSectionDescendants(clientPositions, positionId));
   };
 
   // Toggle выбора строки для массового удаления (иерархически — как фильтр)
@@ -274,7 +278,7 @@ export const usePositionActions = (
     event.stopPropagation();
     const idsToToggle = collectSectionDescendants(clientPositions, positionId);
     if (idsToToggle.size === 0) return;
-    setSelectedDeleteIds(prev => {
+    deleteSel.apply(prev => {
       const newSet = new Set(prev);
       const isSelected = newSet.has(positionId);
       for (const id of idsToToggle) {
@@ -291,7 +295,7 @@ export const usePositionActions = (
   // Отмена режима массового удаления
   const handleCancelDeleteSelection = () => {
     setIsDeleteSelectionMode(false);
-    setSelectedDeleteIds(new Set());
+    deleteSel.reset();
   };
 
   // Массовое удаление работ и материалов из выбранных позиций
@@ -316,7 +320,7 @@ export const usePositionActions = (
           await clearPositionsBoq(ids, selectedTenderId);
 
           // Сброс режима + оптимистичное локальное обновление (без рефетча тендера).
-          setSelectedDeleteIds(new Set());
+          deleteSel.reset();
           setIsDeleteSelectionMode(false);
           applyLocalBoqClear(ids);
 
@@ -374,9 +378,9 @@ export const usePositionActions = (
     setCopiedPositionId(null);
     setCopiedNoteValue(null);
     setCopiedNotePositionId(null);
-    setSelectedTargetIds(new Set());
+    targetSel.reset();
     setIsDeleteSelectionMode(false);
-    setSelectedDeleteIds(new Set());
+    deleteSel.reset();
     setIsLevelChangeMode(true);
     setSelectedLevelChangeIds(new Set());
   };
@@ -451,9 +455,9 @@ export const usePositionActions = (
     setCopiedPositionId(null);
     setCopiedNoteValue(null);
     setCopiedNotePositionId(null);
-    setSelectedTargetIds(new Set());
+    targetSel.reset();
     setIsDeleteSelectionMode(false);
-    setSelectedDeleteIds(new Set());
+    deleteSel.reset();
     setIsLevelChangeMode(false);
     setSelectedLevelChangeIds(new Set());
   };
@@ -487,5 +491,8 @@ export const usePositionActions = (
     handleCancelLevelChange,
     handleBulkLevelChange,
     clearAllModes,
+    // Отмена последнего шага выбора (Ctrl+Z); возвращают true, если шаг был отменён.
+    undoTargetSelection: targetSel.undo,
+    undoDeleteSelection: deleteSel.undo,
   };
 };

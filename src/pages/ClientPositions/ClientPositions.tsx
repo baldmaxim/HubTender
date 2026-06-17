@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useDeferredValue, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -6,6 +6,7 @@ import { useClientPositions } from './hooks/useClientPositions';
 import { usePositionActions } from './hooks/usePositionActions';
 import { usePositionDelete } from './hooks/usePositionDelete';
 import { usePositionFilters } from './hooks/usePositionFilters';
+import { useUndoableSet } from './hooks/useUndoableSet';
 import { useDeadlineCheck } from '../../hooks/useDeadlineCheck';
 import { TenderSelectionScreen } from './components/TenderSelectionScreen';
 import { PositionToolbar } from './components/PositionToolbar';
@@ -82,7 +83,9 @@ const ClientPositions: React.FC = () => {
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [additionalModalOpen, setAdditionalModalOpen] = useState(false);
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
-  const [tempSelectedPositionIds, setTempSelectedPositionIds] = useState<Set<string>>(new Set());
+  // Набор выбора строк в фильтр с историей шагов для отмены через Ctrl+Z.
+  const filterSel = useUndoableSet();
+  const tempSelectedPositionIds = filterSel.value;
   const [massImportModalOpen, setMassImportModalOpen] = useState(false);
   const [showAllPositions, setShowAllPositions] = useState(false);
   const [tableScrollY, setTableScrollY] = useState(600);
@@ -141,6 +144,8 @@ const ClientPositions: React.FC = () => {
     handleCancelLevelChange,
     handleBulkLevelChange,
     clearAllModes,
+    undoTargetSelection,
+    undoDeleteSelection,
   } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, applyLocalBoqClear, applyLocalPositionRemove, currentTheme, isReadOnlyByDeadline);
 
   const {
@@ -151,6 +156,7 @@ const ClientPositions: React.FC = () => {
     handleTogglePositionDeleteSelection,
     handleCancelPositionDeleteSelection,
     handleBulkDeletePositions,
+    undoPositionDeleteSelection,
   } = usePositionDelete(clientPositions, setLoading, fetchClientPositions, applyLocalPositionRemove, currentTheme, { clearOtherModes: clearAllModes }, isReadOnlyByDeadline);
 
   // Хук фильтрации позиций и получение информации о пользователе
@@ -362,7 +368,7 @@ const ClientPositions: React.FC = () => {
     const idsToToggle = collectSectionDescendants(clientPositions, positionId);
     if (idsToToggle.size === 0) return;
 
-    setTempSelectedPositionIds(prev => {
+    filterSel.apply(prev => {
       const newSet = new Set(prev);
       const isSelected = newSet.has(positionId);
       for (const id of idsToToggle) {
@@ -384,7 +390,7 @@ const ClientPositions: React.FC = () => {
 
   const handleClearFilter = async () => {
     await clearFilter();
-    setTempSelectedPositionIds(new Set());
+    filterSel.reset();
     setShowAllPositions(false);
   };
 
@@ -392,10 +398,41 @@ const ClientPositions: React.FC = () => {
     setShowAllPositions(prev => !prev);
   };
 
-  // Синхронизация tempSelectedPositionIds с загруженным фильтром
+  // Синхронизация tempSelectedPositionIds с загруженным фильтром.
+  // reset — это новый baseline (в историю отмены не попадает).
   useEffect(() => {
-    setTempSelectedPositionIds(selectedPositionIds);
+    filterSel.reset(selectedPositionIds);
+    // filterSel.reset стабилен (useCallback); зависимость только от данных фильтра.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPositionIds]);
+
+  // Ctrl+Z — отмена последнего шага выбора строк в активном режиме отбора.
+  // Диспетчер держим в ref, чтобы слушатель keydown был стабильным (вешается один раз).
+  const undoSelectionRef = useRef<() => boolean>(() => false);
+  useEffect(() => {
+    undoSelectionRef.current = (): boolean => {
+      if (isDeleteSelectionMode) return undoDeleteSelection();
+      if (isPositionDeleteMode) return undoPositionDeleteSelection();
+      if (isLevelChangeMode) return false; // изменение уровня — вне охвата отмены
+      if (copiedPositionId || copiedNotePositionId) return undoTargetSelection();
+      return filterSel.undo();
+    };
+  });
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // e.code (физическая клавиша) — устойчиво к раскладке (RU/EN), в отличие от e.key.
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.code !== 'KeyZ') return;
+      // Не перехватываем нативный текстовый undo в полях ввода.
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (undoSelectionRef.current()) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Если тендер не выбран, показываем экран выбора тендера
   if (!selectedTender) {

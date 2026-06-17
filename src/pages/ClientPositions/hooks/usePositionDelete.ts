@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
+import { useUndoableSet } from './useUndoableSet';
 import type { ClientPosition } from '../../../lib/supabase';
 import { bulkDeletePositions } from '../../../lib/api/positions';
 import { pluralize } from '../../../utils/pluralize';
@@ -19,7 +20,9 @@ export const usePositionDelete = (
   readOnly?: boolean,
 ) => {
   const [isPositionDeleteMode, setIsPositionDeleteMode] = useState(false);
-  const [selectedPositionDeleteIds, setSelectedPositionDeleteIds] = useState<Set<string>>(new Set());
+  // Набор выбора с историей шагов для отмены через Ctrl+Z (см. useUndoableSet).
+  const positionDeleteSel = useUndoableSet();
+  const selectedPositionDeleteIds = positionDeleteSel.value;
   const [isBulkPositionDeleting, setIsBulkPositionDeleting] = useState(false);
 
   const blockedByDeadline = (): boolean => {
@@ -37,7 +40,7 @@ export const usePositionDelete = (
     callbacks.clearOtherModes();
     setIsPositionDeleteMode(true);
     // Раздел + все подчинённые строки (как в фильтре)
-    setSelectedPositionDeleteIds(collectSectionDescendants(clientPositions, positionId));
+    positionDeleteSel.reset(collectSectionDescendants(clientPositions, positionId));
   };
 
   // Toggle выбора строки для массового удаления позиций (иерархически — как фильтр)
@@ -45,7 +48,7 @@ export const usePositionDelete = (
     event.stopPropagation();
     const idsToToggle = collectSectionDescendants(clientPositions, positionId);
     if (idsToToggle.size === 0) return;
-    setSelectedPositionDeleteIds(prev => {
+    positionDeleteSel.apply(prev => {
       const newSet = new Set(prev);
       const isSelected = newSet.has(positionId);
       for (const id of idsToToggle) {
@@ -62,7 +65,7 @@ export const usePositionDelete = (
   // Отмена режима массового удаления позиций
   const handleCancelPositionDeleteSelection = () => {
     setIsPositionDeleteMode(false);
-    setSelectedPositionDeleteIds(new Set());
+    positionDeleteSel.reset();
   };
 
   // Массовое удаление строк заказчика (с работами и материалами)
@@ -87,7 +90,7 @@ export const usePositionDelete = (
           await bulkDeletePositions(positionIds, selectedTenderId);
 
           // Сброс режима + оптимистичное локальное удаление строк (без рефетча).
-          setSelectedPositionDeleteIds(new Set());
+          positionDeleteSel.reset();
           setIsPositionDeleteMode(false);
           applyLocalPositionRemove(positionIds);
 
@@ -113,5 +116,7 @@ export const usePositionDelete = (
     handleTogglePositionDeleteSelection,
     handleCancelPositionDeleteSelection,
     handleBulkDeletePositions,
+    // Отмена последнего шага выбора (Ctrl+Z); возвращает true, если шаг был отменён.
+    undoPositionDeleteSelection: positionDeleteSel.undo,
   };
 };
