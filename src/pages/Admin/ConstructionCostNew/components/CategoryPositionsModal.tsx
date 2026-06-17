@@ -45,7 +45,7 @@ const CategoryPositionsModal: React.FC<CategoryPositionsModalProps> = ({
     dataIndex: key,
     key,
     width: 100,
-    align: 'right' as const,
+    align: 'center' as const,
     render: (value: number) => fmt(value),
   });
 
@@ -62,12 +62,12 @@ const CategoryPositionsModal: React.FC<CategoryPositionsModalProps> = ({
       title: <div style={{ textAlign: 'center' }}>Раздел</div>,
       dataIndex: 'item_no',
       key: 'item_no',
-      width: 80,
+      width: 104,
       align: 'center',
       render: (value: string | null) => value || '—',
     },
     {
-      title: 'Наименование',
+      title: <div style={{ textAlign: 'center' }}>Наименование</div>,
       dataIndex: 'work_name',
       key: 'work_name',
       width: 320,
@@ -88,7 +88,7 @@ const CategoryPositionsModal: React.FC<CategoryPositionsModalProps> = ({
       dataIndex: 'total',
       key: 'total',
       width: 120,
-      align: 'right',
+      align: 'center',
       fixed: 'right',
       render: (value: number) => (
         <Text strong style={{ color: '#10b981' }}>
@@ -116,7 +116,7 @@ const CategoryPositionsModal: React.FC<CategoryPositionsModalProps> = ({
       open={open}
       onCancel={onClose}
       footer={null}
-      width={1100}
+      width={1280}
       style={{ maxWidth: '95vw' }}
       title={category ? `${category.categoryName} — ${category.detailName}` : 'Категория затрат'}
       destroyOnClose
@@ -129,32 +129,32 @@ const CategoryPositionsModal: React.FC<CategoryPositionsModalProps> = ({
           pagination={false}
           size="small"
           bordered
-          scroll={{ x: 1080, y: 'calc(100vh - 320px)' }}
+          scroll={{ x: 1214, y: 'calc(100vh - 320px)' }}
           summary={() => (
             <Table.Summary fixed>
               <Table.Summary.Row>
                 <Table.Summary.Cell index={0} colSpan={3}>
                   <Text strong>Итого:</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={3} align="right">
+                <Table.Summary.Cell index={3} align="center">
                   <Text strong>{fmt(totals.subWorks)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={4} align="right">
+                <Table.Summary.Cell index={4} align="center">
                   <Text strong>{fmt(totals.subMaterials)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={5} align="right">
+                <Table.Summary.Cell index={5} align="center">
                   <Text strong>{fmt(totals.works)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={6} align="right">
+                <Table.Summary.Cell index={6} align="center">
                   <Text strong>{fmt(totals.materials)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={7} align="right">
+                <Table.Summary.Cell index={7} align="center">
                   <Text strong>{fmt(totals.materialsComp)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={8} align="right">
+                <Table.Summary.Cell index={8} align="center">
                   <Text strong>{fmt(totals.worksComp)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={9} align="right">
+                <Table.Summary.Cell index={9} align="center">
                   <Text strong style={{ color: '#10b981' }}>
                     {fmt(totals.total)}
                   </Text>
