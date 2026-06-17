@@ -334,7 +334,7 @@ const ImportLog: React.FC = () => {
             optionFilterProp="label"
             options={tenders.map(t => ({
               value: t.id,
-              label: t.tender_number ? `${t.tender_number} — ${t.title}` : t.title,
+              label: `${t.tender_number ? `${t.tender_number} — ` : ''}${t.title} (v${t.version})`,
             }))}
           />
           <Button icon={<ReloadOutlined />} onClick={fetchSessions} loading={loading}>
