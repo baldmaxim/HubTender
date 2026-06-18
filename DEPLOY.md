@@ -502,3 +502,12 @@ grep -E '^SENTRY_(AUTH_TOKEN|ORG|PROJECT)=' /srv/sites/tender.su10.ru/server/.en
 ```bash
 hostname    # должно быть: hub
 ```
+
+`./scripts/deploy-server.sh: Permission denied`:
+
+```bash
+# Запускай через `bash`, а не `./` — у скриптов нет бита +x:
+bash scripts/deploy-server.sh both
+# Либо разово выдай права:
+chmod +x scripts/*.sh
+```
