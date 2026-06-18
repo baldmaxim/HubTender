@@ -166,6 +166,19 @@ BUILD_CLEAN_HARD=1   bash scripts/deploy-production.sh both
 | `FRONTEND_NPM_CI=1` | поменялся `package-lock.json` или есть сомнение в `node_modules` |
 | `BUILD_CLEAN_HARD=1` | хочешь чистую сборку «с нуля», готов восстановить `.env.production.yandex` вручную |
 
+> **ПРАВИЛО: менялся `package-lock.json` → деплой фронта только с `FRONTEND_NPM_CI=1`.**
+> Скрипт делает `npm ci` лишь когда `node_modules` отсутствует. Если папка
+> уже есть, новый lock игнорируется и в сборку попадают старые версии пакетов.
+> Поэтому любой коммит, трогающий зависимости, катится так:
+>
+> ```bash
+> FRONTEND_NPM_CI=1 bash scripts/deploy-server.sh frontend
+> ```
+>
+> Пример — коммит `66e7e5a` «Безопасность зависимостей: react-router-dom 7.18,
+> xlsx 0.20.3 (SheetJS CDN)»: без `FRONTEND_NPM_CI=1` security-фиксы не доедут
+> до прода (останутся уязвимые версии в `node_modules`).
+
 ## Первичная настройка `/opt/hubtender-build`
 
 Одноразово, если build-контекст ещё не засеян.
