@@ -3,32 +3,13 @@ import { Layout, Menu, Avatar, Switch, theme, Dropdown, Typography, Tag, Button 
 import type { MenuProps } from 'antd';
 const { Text } = Typography;
 import {
-  DashboardOutlined,
-  ShoppingCartOutlined,
-  BookOutlined,
-  DollarOutlined,
-  SettingOutlined,
-  UserOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
   SunOutlined,
   MoonOutlined,
-  ProfileOutlined,
-  FileTextOutlined,
-  BankOutlined,
-  PercentageOutlined,
-  CheckSquareOutlined,
-  ClockCircleOutlined,
-  BarChartOutlined,
-  FundOutlined,
-  LineChartOutlined,
-  SwapOutlined,
-  BuildOutlined,
-  ImportOutlined,
-  SafetyCertificateOutlined,
-  SafetyOutlined,
 } from '@ant-design/icons';
+import { menuItems, MOBILE_HIDDEN_KEYS } from './menuItems';
 import { CalculatorWidget } from './CalculatorWidget';
 import { NotesWidget } from './NotesWidget';
 import { NotificationsBell } from './NotificationsBell';
@@ -126,169 +107,6 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     }
   };
 
-  const menuItems: MenuProps['items'] = [
-    // {
-    //   key: '/',
-    //   icon: <HomeOutlined />,
-    //   label: 'Главная',
-    // },
-    {
-      key: '/dashboard',
-      icon: <DashboardOutlined />,
-      label: 'Дашборд',
-    },
-    {
-      key: '/positions',
-      icon: <ShoppingCartOutlined />,
-      label: 'Позиции заказчика',
-    },
-    {
-      key: 'tender-data-group',
-      icon: <FileTextOutlined />,
-      label: 'Данные по тендерам',
-      children: [
-        {
-          key: '/tenders',
-          icon: <FileTextOutlined />,
-          label: 'Перечень тендеров',
-        },
-        {
-          key: '/tender-timeline',
-          icon: <ClockCircleOutlined />,
-          label: 'Хронология расчёта',
-        },
-      ],
-    },
-    {
-      key: '/tasks',
-      icon: <CheckSquareOutlined />,
-      label: 'Список задач',
-    },
-    {
-      key: 'commerce-group',
-      icon: <DollarOutlined />,
-      label: 'Коммерция',
-      children: [
-        {
-          key: '/commerce/proposal',
-          icon: <FileTextOutlined />,
-          label: 'Форма КП',
-        },
-        {
-          key: '/commerce/redistribution',
-          icon: <SwapOutlined />,
-          label: 'Перераспределение',
-        },
-      ],
-    },
-    {
-      key: 'library',
-      icon: <BookOutlined />,
-      label: 'Библиотеки',
-      children: [
-        {
-          key: '/library',
-          icon: <BookOutlined />,
-          label: 'Материалы и работы',
-        },
-        {
-          key: '/library/templates',
-          icon: <ProfileOutlined />,
-          label: 'Шаблоны',
-        },
-        {
-          key: '/admin/nomenclatures',
-          icon: <ProfileOutlined />,
-          label: 'Номенклатуры',
-        },
-        {
-          key: '/admin/construction_cost',
-          icon: <BankOutlined />,
-          label: 'Справочник затрат',
-        },
-      ],
-    },
-    {
-      key: '/financial-indicators',
-      icon: <BarChartOutlined />,
-      label: 'Финансовые показатели',
-    },
-    {
-      key: 'analytics',
-      icon: <FundOutlined />,
-      label: 'Аналитика',
-      children: [
-        {
-          key: '/costs',
-          icon: <DollarOutlined />,
-          label: 'Затраты на строительство',
-        },
-        {
-          key: '/analytics/comparison',
-          icon: <LineChartOutlined />,
-          label: 'Сравнение объектов',
-        },
-        {
-          key: '/bsm',
-          icon: <FileTextOutlined />,
-          label: 'Базовая стоимость',
-        },
-        {
-          key: '/projects',
-          icon: <BuildOutlined />,
-          label: 'Текущие объекты',
-        },
-      ],
-    },
-    {
-      key: 'admin',
-      icon: <SafetyOutlined />,
-      label: 'Администрирование',
-      children: [
-        {
-          key: '/admin/tenders',
-          icon: <FileTextOutlined />,
-          label: 'Тендеры',
-        },
-        {
-          key: '/admin/markup',
-          icon: <PercentageOutlined />,
-          label: 'Проценты наценок',
-        },
-        {
-          type: 'divider',
-        },
-        {
-          key: '/admin/markup_constructor',
-          icon: <PercentageOutlined />,
-          label: 'Конструктор наценок',
-        },
-      ],
-    },
-    {
-      key: '/users',
-      icon: <UserOutlined />,
-      label: 'Пользователи',
-    },
-    {
-      key: 'settings-group',
-      icon: <SettingOutlined />,
-      label: 'Настройки',
-      children: [
-        {
-          key: '/admin/import-log',
-          icon: <ImportOutlined />,
-          label: 'Журнал импортов строк',
-        },
-        {
-          key: '/admin/insurance',
-          icon: <SafetyCertificateOutlined />,
-          label: 'Страхование от судимостей',
-        },
-      ],
-    },
-  ];
-
   const handleMenuClick: MenuProps['onClick'] = (e) => {
     // Предотвращаем навигацию только если это не клик по ссылке
     // (клик колесом обрабатывается браузером нативно через Link)
@@ -385,7 +203,34 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       .filter((item): item is NonNullable<typeof item> => item != null);
   };
 
-  const filteredMenuItems = filterMenuByAccess(processedMenuItems as MenuProps['items']);
+  // На телефонах (Android/iPhone) скрываем часть разделов из меню
+  const filterMenuByDevice = (items: MenuProps['items']): MenuProps['items'] => {
+    if (!isPhoneDevice || !items) return items;
+    return items
+      .map((item) => {
+        if (!item) return null;
+        // Обычный пункт — скрываем по ключу
+        if (!('children' in item) || !item.children) {
+          const key = 'key' in item && item.key != null ? String(item.key) : undefined;
+          return key && MOBILE_HIDDEN_KEYS.has(key) ? null : item;
+        }
+        // Группа — отфильтровываем скрытые дочерние страницы
+        const children = (item.children as MenuItem[]).filter((child) => {
+          const key = child && 'key' in child ? String(child.key) : undefined;
+          return !(key && MOBILE_HIDDEN_KEYS.has(key));
+        });
+        const realPages = children.filter(
+          (c) => !(c && 'type' in c && c.type === 'divider')
+        );
+        if (realPages.length === 0) return null; // группа опустела — убираем целиком
+        return { ...item, children };
+      })
+      .filter((item): item is NonNullable<typeof item> => item != null);
+  };
+
+  const filteredMenuItems = filterMenuByAccess(
+    filterMenuByDevice(processedMenuItems as MenuProps['items'])
+  );
 
   return (
     <Layout style={{ minHeight: '100vh', height: '100vh' }}>
