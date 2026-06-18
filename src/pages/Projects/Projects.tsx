@@ -109,7 +109,7 @@ const Projects: React.FC = () => {
   );
 
   return (
-    <div style={{ padding: isPhone ? 0 : '0 8px 8px' }}>
+    <div style={{ padding: '0 8px 8px' }}>
       <Card
         bordered={false}
         bodyStyle={{ padding: '8px 0' }}
@@ -118,7 +118,7 @@ const Projects: React.FC = () => {
         }}
       >
         {isPhone && (
-          <div style={{ padding: '0 8px 8px' }}>{toolbar}</div>
+          <div style={{ padding: '0 0 8px' }}>{toolbar}</div>
         )}
         <Tabs
           activeKey={activeTab}

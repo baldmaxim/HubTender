@@ -76,7 +76,7 @@ const ProjectDetail: React.FC = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
   const { user } = useAuth();
-  const { isMobile } = useIsMobile();
+  const { isMobile, isPhoneDevice } = useIsMobile();
   // Генеральный директор и телефоны — только просмотр (без редактирования данных объекта)
   const readOnly = user?.role_code === 'general_director' || isMobile;
   const [activeTab, setActiveTab] = useState<string>('settings');
@@ -248,6 +248,11 @@ const ProjectDetail: React.FC = () => {
     },
   ];
 
+  // На телефоне (любая ориентация) вкладку «Настройки объекта» скрываем.
+  const visibleTabItems = isPhoneDevice
+    ? tabItems.filter((t) => t.key !== 'settings')
+    : tabItems;
+
   return (
     <div style={{ padding: '0 8px 8px' }}>
       <Breadcrumb
@@ -284,9 +289,9 @@ const ProjectDetail: React.FC = () => {
         }}
       >
         <Tabs
-          activeKey={activeTab}
+          activeKey={isPhoneDevice && activeTab === 'settings' ? 'agreements' : activeTab}
           onChange={setActiveTab}
-          items={tabItems}
+          items={visibleTabItems}
           size="large"
           style={{ width: '100%' }}
         />

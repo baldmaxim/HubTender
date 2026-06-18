@@ -98,7 +98,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
 }) => {
   const { theme } = useTheme();
   const { message } = App.useApp();
-  const { isPhone: isPhoneRaw } = useIsMobile();
+  const { isPhone: isPhoneRaw, isLandscapePhone } = useIsMobile();
   // В ландшафт-оверлее верстаем как «не телефон» (monthWidth 80 и т.д.) → числа влезают.
   const isPhone = isPhoneRaw && !landscape;
   // Тап по графику открывает ландшафт только у портретного телефонного инстанса.
@@ -1593,10 +1593,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         footer={null}
         width="90vw"
         style={{ maxWidth: 1800 }}
+        centered={isLandscapePhone}
         destroyOnClose
       >
         {chartModalProject && (
-          <div style={{ height: 700 }}>
+          <div style={{ height: isLandscapePhone ? 'calc(100dvh - 120px)' : 700 }}>
             {(() => {
               const fullData = getFullProjectChartData(chartModalProject.project, chartModalProject.colorIndex);
               return fullData ? (
@@ -1617,10 +1618,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         footer={null}
         width="90vw"
         style={{ maxWidth: 1800 }}
+        centered={isLandscapePhone}
         destroyOnClose
       >
         {summaryChartData && (
-          <div style={{ height: 700 }}>
+          <div style={{ height: isLandscapePhone ? 'calc(100dvh - 120px)' : 700 }}>
             <Line data={summaryChartData} options={summaryChartOptions as never} />
           </div>
         )}
