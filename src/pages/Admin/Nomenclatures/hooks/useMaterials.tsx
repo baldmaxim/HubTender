@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
 import { getErrorMessage } from '../../../../utils/errors';
+import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import {
   listMaterialNames,
   listMaterialNamesByUnit,
@@ -39,7 +40,7 @@ const normalizeName = (name: string): string => {
 
 export const useMaterials = () => {
   const [materialsData, setMaterialsData] = useState<MaterialRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
 
   const loadMaterials = async () => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listTimelineTenders } from '../../../lib/api/timeline';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import type { ApprovalStatus } from '../../../lib/supabase/types';
 
 const EXCLUDED_TENDER_NUMBERS = new Set([
@@ -216,7 +217,7 @@ function sortTendersByNumber(tenders: TimelineTenderListItem[]): TimelineTenderL
 
 export function useTenders(): UseTendersResult {
   const [tenders, setTenders] = useState<TimelineTenderListItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
@@ -287,7 +288,7 @@ export function useTenders(): UseTendersResult {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLoading]);
 
   useEffect(() => {
     refetch();

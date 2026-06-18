@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { message } from 'antd';
 import type { MaterialLibraryFull, MaterialName } from '../../../../lib/supabase';
+import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import { listMaterialsLibrary } from '../../../../lib/api/library';
 import { listMaterialNames } from '../../../../lib/api/nomenclatures';
 import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
 
 export const useMaterialsData = () => {
   const [data, setData] = useState<MaterialLibraryFull[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [materialNames, setMaterialNames] = useState<MaterialName[]>([]);
   const hasFetchedNames = useRef(false);
 
@@ -58,6 +59,7 @@ export const useMaterialsData = () => {
   useEffect(() => {
     fetchMaterials();
     fetchMaterialNames();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Native WS hub — обновляем библиотеку материалов при изменениях справочников.

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Typography, theme, Input, Tag, Button, Space, message, Card, Progress, Tooltip } from 'antd';
+import { useRealtimeAwareLoading } from '../../lib/realtime/useRealtimeAwareLoading';
 import {
   SearchOutlined,
   SyncOutlined,
@@ -45,7 +46,7 @@ const Dashboard: React.FC = () => {
   const { token } = theme.useToken();
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [tenders, setTenders] = useState<TenderTableData[]>([]);
   const [searchText, setSearchText] = useState('');
   const [filteredTenders, setFilteredTenders] = useState<TenderTableData[]>([]);
@@ -96,6 +97,7 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     fetchTenders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Native WS hub — обновляем список при любом изменении реестра тендеров.

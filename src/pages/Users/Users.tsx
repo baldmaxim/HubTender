@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Tabs, Table, Button, Space, Tag, Modal, Form, Checkbox, Select, message, Popconfirm, Typography, Alert, Input, Radio, Tooltip, AutoComplete } from 'antd';
+import { useRealtimeAwareLoading } from '../../lib/realtime/useRealtimeAwareLoading';
 import { CheckOutlined, CloseOutlined, EditOutlined, UserOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useAuth } from '../../contexts/AuthContext';
@@ -75,7 +76,7 @@ const Users: React.FC = () => {
   const [activeTab, setActiveTab] = useState('pending');
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
   const [form] = Form.useForm();
@@ -832,6 +833,7 @@ const Users: React.FC = () => {
         loadTendersList();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, hasAccess]);
 
   // Загружаем роли при монтировании для использования в модальном окне редактирования пользователя
@@ -839,6 +841,7 @@ const Users: React.FC = () => {
     if (hasAccess) {
       loadRoles();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasAccess]);
 
   // Native WS hub — обновляем активную вкладку при изменениях users (topic `users`,

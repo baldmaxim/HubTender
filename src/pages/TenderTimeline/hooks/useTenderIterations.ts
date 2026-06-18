@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listTimelineGroupIterations } from '../../../lib/api/timeline';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import type { TenderIterationWithRelations } from '../../../lib/supabase/types';
 
 interface UseTenderIterationsResult {
@@ -14,7 +15,7 @@ export function useTenderIterations(
   userId: string | null
 ): UseTenderIterationsResult {
   const [iterations, setIterations] = useState<TenderIterationWithRelations[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
@@ -37,7 +38,7 @@ export function useTenderIterations(
     } finally {
       setLoading(false);
     }
-  }, [groupId, userId]);
+  }, [groupId, userId, setLoading]);
 
   useEffect(() => {
     refetch();

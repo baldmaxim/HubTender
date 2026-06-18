@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, Table, Select, Tabs, Tag, Input, message, Button, Typography, Space, Row, Col } from 'antd';
+import { useRealtimeAwareLoading } from '../../lib/realtime/useRealtimeAwareLoading';
 import { SearchOutlined, FileExcelOutlined, ArrowLeftOutlined, LinkOutlined } from '@ant-design/icons';
 import type { UnitType, BoqItemType } from '../../lib/supabase';
 import { fetchTenders as apiFetchTenders } from '../../lib/api/tenders';
@@ -51,7 +52,7 @@ const Bsm: React.FC = () => {
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
   const [selectedTenderTitle, setSelectedTenderTitle] = useState<string | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [allItems, setAllItems] = useState<BoqItemData[]>([]);
   const [activeTab, setActiveTab] = useState<'all' | 'materials' | 'works'>('all');
   const [selectedExpense, setSelectedExpense] = useState<string | null>(null);

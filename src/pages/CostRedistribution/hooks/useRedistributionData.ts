@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { message } from 'antd';
 import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import type { Tender } from '../../../lib/supabase';
 import type { BoqItemWithCosts } from '../utils';
 import {
@@ -49,7 +50,7 @@ type RedistributionBoqItem = BoqItemWithCosts & {
 };
 
 export function useRedistributionData() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [selectedTenderId, setSelectedTenderId] = useState<string | undefined>();
   const [markupTactics, setMarkupTactics] = useState<MarkupTactic[]>([]);
@@ -76,6 +77,7 @@ export function useRedistributionData() {
     if (tender?.markup_tactic_id && !selectedTacticId) {
       setSelectedTacticId(tender.markup_tactic_id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId, selectedTacticId, tenders]);
 
   // Native WS hub — refetch boq items when the tender row changes.

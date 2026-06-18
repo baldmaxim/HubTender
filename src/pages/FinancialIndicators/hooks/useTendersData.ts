@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Tender } from '../../../lib/supabase';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import { fetchTenders } from '../../../lib/api/tenders';
 import { createSystemNotification } from '../../../lib/api/notifications';
 import { getErrorMessage } from '../../../utils/errors';
@@ -18,7 +19,7 @@ const addNotification = async (
 
 export const useTendersData = () => {
   const [tenders, setTenders] = useState<Tender[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
 
   const loadTenders = useCallback(async () => {
     setLoading(true);
@@ -35,7 +36,7 @@ export const useTendersData = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLoading]);
 
   return {
     tenders,

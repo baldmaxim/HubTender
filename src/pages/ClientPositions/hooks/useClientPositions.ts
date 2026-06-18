@@ -11,6 +11,7 @@ import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 import { listAllBoqItemsForTender, getTenderById } from '../../../lib/api/fi';
 import { invalidateApiCache } from '../../../lib/api/client';
 import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import { getErrorMessage } from '../../../utils/errors';
 import {
   readCache as readPositionsCache,
@@ -136,7 +137,7 @@ export const useClientPositions = () => {
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
   const [clientPositions, setClientPositions] = useState<ClientPosition[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [positionCounts, setPositionCounts] = useState<PositionCountMap>({});
   const [totalSum, setTotalSum] = useState<number>(0);
   const [leafPositionIndices, setLeafPositionIndices] = useState<Set<string>>(new Set());
@@ -324,7 +325,7 @@ export const useClientPositions = () => {
         setLoading(false);
       }
     },
-    [applyAggregate],
+    [applyAggregate, setLoading],
   );
 
   return {

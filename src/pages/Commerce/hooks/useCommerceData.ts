@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { message } from 'antd';
 import type { Tender, BoqItem } from '../../../lib/supabase';
 import type { PositionWithCommercialCost, MarkupTactic } from '../types';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 import {
   calculateBoqItemCost,
@@ -231,7 +232,7 @@ async function loadInsuranceTotal(tenderId: string): Promise<number> {
 }
 
 export function useCommerceData() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [calculating, setCalculating] = useState(false);
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [selectedTenderId, setSelectedTenderId] = useState<string | undefined>();
@@ -261,6 +262,7 @@ export function useCommerceData() {
       setReferenceTotal(0);
       setInsuranceTotal(0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId]);
 
   useEffect(() => {

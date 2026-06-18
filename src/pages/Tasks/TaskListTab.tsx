@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Space, Button, Table, Typography, Switch, Modal, message } from 'antd';
+import { useRealtimeAwareLoading } from '../../lib/realtime/useRealtimeAwareLoading';
 import { PlusOutlined } from '@ant-design/icons';
 import type { UserTaskWithRelations, TaskStatus, WorkMode, WorkStatus } from '../../lib/supabase';
 import {
@@ -22,7 +23,7 @@ const TaskListTab: React.FC<TaskListTabProps> = ({ userId }) => {
   const { theme: currentTheme } = useTheme();
   const [tasks, setTasks] = useState<UserTaskWithRelations[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [workMode, setWorkMode] = useState<WorkMode>('office');
   const [workStatus, setWorkStatus] = useState<WorkStatus>('working');
 

@@ -10,6 +10,7 @@ import type {
   MaterialName,
 } from '../../../lib/supabase';
 import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {
   getPositionWithTender,
   listBoqItemsFullByPosition,
@@ -49,7 +50,7 @@ export const useBoqItems = (positionId: string | undefined) => {
   const [works, setWorks] = useState<WorkLibraryFull[]>([]);
   const [materials, setMaterials] = useState<MaterialLibraryFull[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [currencyRates, setCurrencyRates] = useState<{ usd: number; eur: number; cny: number }>({ usd: 0, eur: 0, cny: 0 });
   const [costCategories, setCostCategories] = useState<CostCategoryOption[]>([]);
   const [workNames, setWorkNames] = useState<WorkName[]>([]);

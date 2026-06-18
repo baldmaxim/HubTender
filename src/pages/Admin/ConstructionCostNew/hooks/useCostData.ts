@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { type Tender } from '../../../../lib/supabase';
+import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import { fetchTenders as apiFetchTenders } from '../../../../lib/api/tenders';
 import { listDetailCostCategoriesWithCategory } from '../../../../lib/api/costs';
 import { listBoqItemsFullByTender } from '../../../../lib/api/positions';
@@ -67,7 +68,7 @@ export const useCostData = () => {
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
   const [selectedTenderTitle, setSelectedTenderTitle] = useState<string | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [data, setData] = useState<CostRow[]>([]);
   const [costType, setCostType] = useState<'base' | 'commercial'>('base');
   const [, setGroupVolumes] = useState<Map<string, number>>(new Map());

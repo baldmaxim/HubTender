@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { message } from 'antd';
 import type { WorkLibraryFull, WorkName } from '../../../../lib/supabase';
+import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import { listWorksLibrary } from '../../../../lib/api/library';
 import { listWorkNames } from '../../../../lib/api/nomenclatures';
 import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
 
 export const useWorksData = () => {
   const [data, setData] = useState<WorkLibraryFull[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [workNames, setWorkNames] = useState<WorkName[]>([]);
   const hasFetchedNames = useRef(false);
 
@@ -58,6 +59,7 @@ export const useWorksData = () => {
   useEffect(() => {
     fetchWorks();
     fetchWorkNames();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Native WS hub — обновляем библиотеку работ при изменениях справочников.

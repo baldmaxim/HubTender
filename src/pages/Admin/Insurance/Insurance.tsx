@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {
   Card, Select, InputNumber, Typography, Space,
   Row, Col, message, Button, Tag,
@@ -71,7 +72,7 @@ export default function Insurance() {
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
   const [formData, setFormData] = useState<InsuranceFormData>({ ...DEFAULT_DATA });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -88,7 +89,7 @@ export default function Insurance() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLoading]);
 
   // Native WS hub — рефетч страховки тендера при внешнем изменении. Фильтр по
   // таблице (tender:{id} получает все события тендера); markLocalMutation в

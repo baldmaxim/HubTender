@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {
   Card,
   Typography,
@@ -42,7 +43,7 @@ interface TenderOption {
 
 const MarkupPercentages: React.FC = () => {
   const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [saving, setSaving] = useState(false);
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [tactics, setTactics] = useState<MarkupTactic[]>([]);

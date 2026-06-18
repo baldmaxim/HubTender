@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
 import { type Tender, type HousingClassType, type ConstructionScopeType } from '../../../../lib/supabase';
 import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
+import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import { fetchTenders as apiFetchTenders } from '../../../../lib/api/tenders';
 import dayjs from 'dayjs';
 
@@ -80,7 +81,7 @@ const formatTender = (tender: Tender): TenderRecord => ({
 
 export const useTendersData = () => {
   const [tendersData, setTendersData] = useState<TenderRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
 
   const fetchTenders = useCallback(async () => {
     setLoading(true);
@@ -96,7 +97,7 @@ export const useTendersData = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLoading]);
 
   // Native WS hub (Go BFF) path. Unlike Supabase Realtime we don't get the full
   // row payload — we just refetch the list on any tenders event. The broker's

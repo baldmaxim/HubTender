@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import type { MarkupStep } from '../../../lib/supabase';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
 import {
@@ -46,7 +47,7 @@ const addNotification = async (
 };
 
 export const useFinancialCalculations = () => {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [data, setData] = useState<IndicatorRow[]>([]);
   const [spTotal, setSpTotal] = useState<number>(0);
   const [customerTotal, setCustomerTotal] = useState<number>(0);
@@ -831,7 +832,7 @@ export const useFinancialCalculations = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLoading]);
 
   return {
     data,

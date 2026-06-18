@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listTimelineTenderGroups } from '../../../lib/api/timeline';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import type {
   ApprovalStatus,
   TenderGroup,
@@ -71,7 +72,7 @@ function getGroupStatus(iterations: GroupIterationRow[]): ApprovalStatus {
 
 export function useTenderGroups(tenderId: string | null): UseTenderGroupsResult {
   const [groups, setGroups] = useState<TimelineGroupItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
@@ -120,7 +121,7 @@ export function useTenderGroups(tenderId: string | null): UseTenderGroupsResult 
     } finally {
       setLoading(false);
     }
-  }, [tenderId]);
+  }, [tenderId, setLoading]);
 
   useEffect(() => {
     refetch();

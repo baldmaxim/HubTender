@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
 import { getErrorMessage } from '../../../../utils/errors';
+import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import {
   listUnits,
   listActiveUnits,
@@ -26,7 +27,7 @@ export interface UnitRecord {
 export const useUnits = () => {
   const [unitsData, setUnitsData] = useState<UnitRecord[]>([]);
   const [unitsList, setUnitsList] = useState<{code: string, name: string}[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
 
   const loadUnits = async () => {
     setLoading(true);

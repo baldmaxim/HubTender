@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { message } from 'antd';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {
   listProjects,
   listAllProjectAgreements,
@@ -36,7 +37,7 @@ export const useProjectsData = () => {
   const [projects, setProjects] = useState<ProjectFull[]>([]);
   const [completionData, setCompletionData] = useState<ProjectCompletion[]>([]);
   const [agreementsMap, setAgreementsMap] = useState<AgreementsMap>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -104,7 +105,7 @@ export const useProjectsData = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLoading]);
 
   const fetchCompletionData = useCallback(async () => {
     try {

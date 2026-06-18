@@ -3,6 +3,7 @@ import { Table, Tabs, message } from 'antd';
 import type { UserTaskWithRelations, TaskStatus, WorkMode, WorkStatus } from '../../lib/supabase';
 import { listAllTasks } from '../../lib/api/tasks';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
+import { useRealtimeAwareLoading } from '../../lib/realtime/useRealtimeAwareLoading';
 import dayjs from 'dayjs';
 
 interface EmployeeTasksTabProps {
@@ -17,11 +18,12 @@ const STATUS_TABS: { key: TaskStatus; label: string }[] = [
 
 const EmployeeTasksTab: React.FC<EmployeeTasksTabProps> = ({ searchUserId }) => {
   const [allTasks, setAllTasks] = useState<UserTaskWithRelations[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [activeStatus, setActiveStatus] = useState<TaskStatus>('running');
 
   useEffect(() => {
     fetchAllTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Native WS hub — обновляем задачи сотрудников при изменениях user_tasks.

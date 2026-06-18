@@ -7,6 +7,20 @@ import { subscribeRealtime, type RealtimeEvent } from './ws';
 
 export type RealtimeTopicHandler = (event: RealtimeEvent) => void;
 
+// Tracks whether we are currently inside a realtime-triggered handler. Data
+// hooks read this in their fetch functions to skip the visible loading spinner
+// on realtime refetches (silent background update), while keeping it for the
+// initial load and user-initiated actions. It is only truthy during the
+// synchronous portion of a handler — i.e. while a fetch's pre-await prefix
+// (where setLoading(true) lives) runs — so it never leaks to user fetches.
+let realtimeRefetchDepth = 0;
+
+/** True while a realtime WS event handler (and the sync prefix of the fetch it
+ *  kicks off) is executing. Guard `setLoading(true)` with `!isRealtimeRefetchActive()`. */
+export function isRealtimeRefetchActive(): boolean {
+  return realtimeRefetchDepth > 0;
+}
+
 /**
  * Subscribes to `topic` via the Go BFF WebSocket hub when
  * VITE_API_REALTIME_ENABLED=true and `enabled` is truthy.
@@ -33,7 +47,12 @@ export function useRealtimeTopic(
     let unsub: (() => void) | null = null;
 
     subscribeRealtime(topic, (ev) => {
-      handlerRef.current(ev);
+      realtimeRefetchDepth++;
+      try {
+        handlerRef.current(ev);
+      } finally {
+        realtimeRefetchDepth--;
+      }
     })
       .then((fn) => {
         if (cancelled) {

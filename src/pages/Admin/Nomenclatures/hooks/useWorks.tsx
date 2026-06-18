@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
 import { getErrorMessage } from '../../../../utils/errors';
+import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import {
   listWorkNames,
   listWorkNamesByUnit,
@@ -39,7 +40,7 @@ export interface WorkRecord {
 
 export const useWorks = () => {
   const [worksData, setWorksData] = useState<WorkRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
 
   const loadWorks = async () => {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {
   App,
   Card,
@@ -63,7 +64,7 @@ const ImportLog: React.FC = () => {
   const { modal, message } = App.useApp();
   const { user } = useAuth();
   const [sessions, setSessions] = useState<ImportSessionRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [tenderFilter, setTenderFilter] = useState<string | null>(null);
   const [tenders, setTenders] = useState<{ id: string; title: string; tender_number: string; version: number }[]>([]);

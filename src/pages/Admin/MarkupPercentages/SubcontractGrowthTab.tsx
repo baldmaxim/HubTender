@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {
   Card,
   Typography,
@@ -52,7 +53,7 @@ type LeafRow = { key: string } & CostCategoryWithDetails;
 type TableRow = GroupRow | LeafRow;
 
 export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tenderId }) => {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState<CostCategoryWithDetails[]>([]);
   const [exclusions, setExclusions] = useState<ExclusionState>({
@@ -128,6 +129,7 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
 
   useEffect(() => {
     fetchCategories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

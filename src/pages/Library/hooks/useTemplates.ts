@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { listTemplates, deleteTemplate } from '../../../lib/api/library';
+import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import { getErrorMessage } from '../../../utils/errors';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import type { Template } from '../../../lib/supabase';
@@ -15,7 +16,7 @@ export interface TemplateWithDetails extends Template {
 
 export const useTemplates = () => {
   const [templates, setTemplates] = useState<TemplateWithDetails[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useRealtimeAwareLoading(false);
 
   const fetchTemplates = async () => {
     try {
