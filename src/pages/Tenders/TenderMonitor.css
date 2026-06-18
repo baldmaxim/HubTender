@@ -14,6 +14,16 @@
   }
 }
 
+/* Телефон: фиксированный фон — одинаковое свечение на всех вкладках (не зависит от высоты страницы) */
+@media (max-width: 575px) {
+  .tender-monitor-page {
+    background:
+      radial-gradient(circle 500px at top left, var(--tm-page-glow-primary), transparent),
+      radial-gradient(circle 460px at top right, var(--tm-page-glow-secondary), transparent),
+      var(--tm-page-bg);
+  }
+}
+
 .tender-monitor-call-button {
   animation: tender-monitor-call-pulse 1.2s ease-in-out infinite;
 }
