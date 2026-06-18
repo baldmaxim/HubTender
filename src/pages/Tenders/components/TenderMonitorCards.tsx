@@ -13,14 +13,11 @@ import {
   getDashboardStatus,
   getDaysSinceControl,
   getDaysToSubmission,
-  getPackageItems,
-  getPackageLinkHref,
   getStatusBadgeStyle,
-  getTenderPackageBadgeStyle,
   getTenderStatusDisplayLabel,
 } from '../utils/tenderMonitor';
 import type { TenderMonitorPalette } from '../utils/tenderMonitorTheme';
-import { MapPopover, ChronologyPopover } from './TenderMonitorPopovers';
+import { MapPopover, ChronologyPopover, PackagePopover } from './TenderMonitorPopovers';
 
 interface TenderSection {
   key: string;
@@ -32,6 +29,7 @@ interface TenderMonitorCardsProps {
   sections: TenderSection[];
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
   onOpenTimeline: (tender: TenderRegistryWithRelations) => void;
+  onOpenPackage: (tender: TenderRegistryWithRelations) => void;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
   palette: TenderMonitorPalette;
   readOnly?: boolean;
@@ -95,6 +93,7 @@ function TenderCard({
   tender,
   onOpenTender,
   onOpenTimeline,
+  onOpenPackage,
   onQuickCall,
   palette,
   readOnly,
@@ -103,6 +102,7 @@ function TenderCard({
   tender: TenderRegistryWithRelations;
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
   onOpenTimeline: (tender: TenderRegistryWithRelations) => void;
+  onOpenPackage: (tender: TenderRegistryWithRelations) => void;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
   palette: TenderMonitorPalette;
   readOnly?: boolean;
@@ -110,7 +110,6 @@ function TenderCard({
 }) {
   const dashboardStatus = getDashboardStatus(tender);
   const badgeStyle = getStatusBadgeStyle(dashboardStatus);
-  const packageItems = getPackageItems(tender).filter((item) => item.text?.trim());
   const daysToSubmission = getDaysToSubmission(tender);
   const daysSinceControl = getDaysSinceControl(tender);
   const controlDate = getControlDate(tender);
@@ -127,23 +126,28 @@ function TenderCard({
         gap: isPhone ? 8 : 10,
         padding: isPhone ? 8 : 12,
         borderRadius: 12,
-        border: `1px solid ${palette.border}`,
+        border: '1px solid #ef9f27',
         background: palette.cardBgAlt,
         cursor: 'pointer',
       }}
     >
       {/* Заголовок */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minWidth: 0 }}>
-        <span style={{ color: palette.subtleText, fontSize: 11, fontWeight: 700, marginTop: 2 }}>{tender.sort_order}</span>
+        {!isPhone && (
+          <span style={{ color: palette.subtleText, fontSize: 11, fontWeight: 700, marginTop: 2 }}>{tender.sort_order}</span>
+        )}
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
             <span style={{ color: palette.text, fontSize: isPhone ? 13 : 15, fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-word' }}>
               {tender.title}
             </span>
+            {isPhone && (
+              <span style={{ color: palette.muted, fontSize: 12, wordBreak: 'break-word' }}>{tender.client_name || '—'}</span>
+            )}
             <MapPopover tender={tender} palette={palette} />
           </div>
-          {tender.tender_number ? <div style={{ color: palette.muted, fontSize: 11, marginTop: 2 }}>{tender.tender_number}</div> : null}
-          <div style={{ color: palette.muted, fontSize: 12, marginTop: 2 }}>{tender.client_name || '—'}</div>
+          {!isPhone && tender.tender_number ? <div style={{ color: palette.muted, fontSize: 11, marginTop: 2 }}>{tender.tender_number}</div> : null}
+          {!isPhone && <div style={{ color: palette.muted, fontSize: 12, marginTop: 2 }}>{tender.client_name || '—'}</div>}
         </div>
         <div
           style={{
@@ -165,61 +169,31 @@ function TenderCard({
         <Col span={8}><Field label="Площадь" value={formatArea(tender.area)} palette={palette} isPhone={isPhone} /></Col>
         <Col span={8}><Field label="Стоимость КП" value={formatMoney(tender.total_cost || tender.manual_total_cost)} palette={palette} isPhone={isPhone} /></Col>
         <Col span={8}><Field label="₽/м²" value={formatRubPerSquare(tender.total_cost || tender.manual_total_cost, tender.area)} palette={palette} isPhone={isPhone} /></Col>
-        <Col span={8}><Field label="Дата подачи" value={`${formatDate(tender.submission_date)}${formatTime(tender.submission_date) ? ' ' + formatTime(tender.submission_date) : ''}`} palette={palette} isPhone={isPhone} /></Col>
-        <Col span={8}><Field label="Приглашение" value={formatDate(tender.invitation_date)} palette={palette} isPhone={isPhone} /></Col>
-        <Col span={8}>
-          <Field
-            label="Контроль"
-            palette={palette}
-            isPhone={isPhone}
-            value={
-              dashboardStatus === 'sent' && daysSinceControl != null ? (
-                <span style={{ color: palette.danger }}>{daysSinceControl}д</span>
-              ) : dashboardStatus === 'calc' && daysToSubmission != null ? (
-                <span style={{ color: daysToSubmission < 0 && controlDate ? palette.success : '#ff9f43' }}>
-                  {daysToSubmission < 0 && controlDate ? `${daysSinceControl ?? 0}/7 дн` : `${daysToSubmission} дн`}
-                </span>
-              ) : (
-                '—'
-              )
-            }
-          />
-        </Col>
+        {!isPhone && (
+          <>
+            <Col span={8}><Field label="Дата подачи" value={`${formatDate(tender.submission_date)}${formatTime(tender.submission_date) ? ' ' + formatTime(tender.submission_date) : ''}`} palette={palette} isPhone={isPhone} /></Col>
+            <Col span={8}><Field label="Приглашение" value={formatDate(tender.invitation_date)} palette={palette} isPhone={isPhone} /></Col>
+            <Col span={8}>
+              <Field
+                label="Контроль"
+                palette={palette}
+                isPhone={isPhone}
+                value={
+                  dashboardStatus === 'sent' && daysSinceControl != null ? (
+                    <span style={{ color: palette.danger }}>{daysSinceControl}д</span>
+                  ) : dashboardStatus === 'calc' && daysToSubmission != null ? (
+                    <span style={{ color: daysToSubmission < 0 && controlDate ? palette.success : '#ff9f43' }}>
+                      {daysToSubmission < 0 && controlDate ? `${daysSinceControl ?? 0}/7 дн` : `${daysToSubmission} дн`}
+                    </span>
+                  ) : (
+                    '—'
+                  )
+                }
+              />
+            </Col>
+          </>
+        )}
       </Row>
-
-      {/* Тендерный пакет */}
-      {packageItems.length > 0 ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {packageItems.map((item, index) => {
-            const href = getPackageLinkHref(item.link);
-            const style: React.CSSProperties = {
-              display: 'inline-flex',
-              padding: '3px 8px',
-              borderRadius: 6,
-              fontSize: 11,
-              fontWeight: 600,
-              wordBreak: 'break-word',
-              ...getTenderPackageBadgeStyle(item.text),
-            };
-            return href ? (
-              <a
-                key={`${item.text}-${item.date || 'empty'}-${index}`}
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => event.stopPropagation()}
-                style={{ ...style, textDecoration: 'none' }}
-              >
-                {item.text}
-              </a>
-            ) : (
-              <span key={`${item.text}-${item.date || 'empty'}-${index}`} style={style}>
-                {item.text}
-              </span>
-            );
-          })}
-        </div>
-      ) : null}
 
       {/* Действия */}
       <div
@@ -250,6 +224,7 @@ function TenderCard({
             <LinkOutlined />
           </button>
           <ChronologyPopover tender={tender} palette={palette} onOpenTimeline={onOpenTimeline} />
+          <PackagePopover tender={tender} palette={palette} onOpenPackage={onOpenPackage} />
         </Space>
         {!readOnly && (canQuickCall || canSubmissionCall) ? (
           <CallButton tender={tender} palette={palette} onQuickCall={onQuickCall} />
@@ -263,13 +238,14 @@ export const TenderMonitorCards: React.FC<TenderMonitorCardsProps> = ({
   sections,
   onOpenTender,
   onOpenTimeline,
+  onOpenPackage,
   onQuickCall,
   palette,
   readOnly,
 }) => {
   const { isPhone } = useIsMobile();
   return (
-    <div style={{ padding: isPhone ? '8px 6px' : 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ padding: isPhone ? '4px 0' : 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
       {sections.map((section) => {
         const totalArea = section.items.reduce((sum, tender) => sum + (tender.area || 0), 0);
         const totalCost = section.items.reduce(
@@ -294,6 +270,7 @@ export const TenderMonitorCards: React.FC<TenderMonitorCardsProps> = ({
                       tender={tender}
                       onOpenTender={onOpenTender}
                       onOpenTimeline={onOpenTimeline}
+                      onOpenPackage={onOpenPackage}
                       onQuickCall={onQuickCall}
                       palette={palette}
                       readOnly={readOnly}

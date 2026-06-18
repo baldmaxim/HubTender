@@ -43,6 +43,7 @@ interface TenderMonitorTableProps {
   onSortChange: (field: TenderMonitorSortField) => void;
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
   onOpenTimeline: (tender: TenderRegistryWithRelations) => void;
+  onOpenPackage: (tender: TenderRegistryWithRelations) => void;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
   onUpdate: () => Promise<void> | void;
   /** Режим «только просмотр» — скрывает кнопки звонка (Генеральный директор) */
@@ -438,6 +439,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   onSortChange,
   onOpenTender,
   onOpenTimeline,
+  onOpenPackage,
   onQuickCall,
   onUpdate,
   readOnly,
@@ -445,7 +447,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   void onUpdate;
 
   const { theme } = useTheme();
-  const { screens } = useIsMobile();
+  const { screens, isPhone } = useIsMobile();
   const palette = getTenderMonitorPalette(theme === 'dark');
 
   const sections =
@@ -522,10 +524,10 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
 
       <div
         style={{
-          border: `1px solid ${palette.border}`,
-          borderRadius: 14,
+          border: isPhone ? 'none' : `1px solid ${palette.border}`,
+          borderRadius: isPhone ? 0 : 14,
           overflow: 'hidden',
-          background: palette.cardBgAlt,
+          background: isPhone ? 'transparent' : palette.cardBgAlt,
         }}
       >
         <div
@@ -533,8 +535,8 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
             display: 'flex',
             justifyContent: 'space-between',
             gap: 12,
-            padding: '10px 12px',
-            borderBottom: `1px solid ${palette.border}`,
+            padding: isPhone ? '4px 0 10px' : '10px 12px',
+            borderBottom: isPhone ? 'none' : `1px solid ${palette.border}`,
             flexWrap: 'wrap',
           }}
         >
@@ -583,6 +585,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
             sections={sections}
             onOpenTender={onOpenTender}
             onOpenTimeline={onOpenTimeline}
+            onOpenPackage={onOpenPackage}
             onQuickCall={onQuickCall}
             palette={palette}
             readOnly={readOnly}

@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Popover, Tag, Modal } from 'antd';
-import { EnvironmentFilled, FileTextOutlined } from '@ant-design/icons';
+import { EnvironmentFilled, FileTextOutlined, FolderOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import type { TenderRegistryWithRelations } from '../../../lib/supabase';
-import { formatDate, getChronologyItems } from '../utils/tenderMonitor';
+import {
+  formatDate,
+  getChronologyItems,
+  getPackageItems,
+  getPackageLinkHref,
+  getTenderPackageBadgeStyle,
+} from '../utils/tenderMonitor';
 import type { TenderMonitorPalette } from '../utils/tenderMonitorTheme';
 
 function parseCoordinates(value?: string | null): { lat: number; lon: number } | null {
@@ -243,6 +249,97 @@ export function ChronologyPopover({
       >
         <FileTextOutlined />
         <span>{chronologyItems.length}</span>
+      </div>
+    </Popover>
+  );
+}
+
+export function PackagePopover({
+  tender,
+  palette,
+  onOpenPackage,
+}: {
+  tender: TenderRegistryWithRelations;
+  palette: TenderMonitorPalette;
+  onOpenPackage: (tender: TenderRegistryWithRelations) => void;
+}) {
+  const packageItems = getPackageItems(tender).filter((item) => item.text?.trim());
+  const [open, setOpen] = useState(false);
+  const hasItems = packageItems.length > 0;
+
+  return (
+    <Popover
+      trigger="hover"
+      placement="leftTop"
+      mouseEnterDelay={0.15}
+      open={open}
+      onOpenChange={(next) => setOpen(next)}
+      content={
+        <div style={{ width: 300, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {hasItems ? (
+            <div style={{ maxHeight: 260, overflow: 'auto', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {packageItems.map((item, index) => {
+                const href = getPackageLinkHref(item.link);
+                const style: React.CSSProperties = {
+                  display: 'inline-flex',
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  wordBreak: 'break-word',
+                  ...getTenderPackageBadgeStyle(item.text),
+                };
+                return href ? (
+                  <a
+                    key={`${item.text}-${item.date || 'empty'}-${index}`}
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => event.stopPropagation()}
+                    style={{ ...style, textDecoration: 'none' }}
+                  >
+                    {item.text}
+                  </a>
+                ) : (
+                  <span key={`${item.text}-${item.date || 'empty'}-${index}`} style={style}>
+                    {item.text}
+                  </span>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ color: palette.muted, fontSize: 13 }}>Тендерный пакет пуст</div>
+          )}
+        </div>
+      }
+      overlayInnerStyle={{
+        background: palette.panelBg,
+        border: `1px solid ${palette.border}`,
+        borderRadius: 12,
+      }}
+    >
+      <div
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen(false);
+          onOpenPackage(tender);
+        }}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '3px 7px',
+          borderRadius: 8,
+          background: hasItems ? `${palette.info}1f` : palette.disabledBg,
+          border: `1px solid ${hasItems ? `${palette.info}55` : palette.border}`,
+          color: hasItems ? palette.info : palette.muted,
+          fontSize: 11,
+          cursor: 'pointer',
+        }}
+        title="Клик — открыть тендерный пакет"
+      >
+        <FolderOutlined />
+        <span>{packageItems.length}</span>
       </div>
     </Popover>
   );

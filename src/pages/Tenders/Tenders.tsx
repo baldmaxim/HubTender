@@ -54,10 +54,10 @@ const MetricCard: React.FC<MetricCardProps> = ({
       background: palette.cardBg,
       border: `1px solid ${palette.border}`,
       borderRadius: 14,
-      padding: isPhone ? '10px 12px' : '14px 18px',
+      padding: isPhone ? '6px 8px' : '14px 18px',
       position: 'relative',
       overflow: 'hidden',
-      minHeight: isPhone ? 76 : 104,
+      minHeight: isPhone ? 40 : 104,
     }}
   >
     <div
@@ -70,9 +70,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
         background: accent,
       }}
     />
-    <div style={{ color: palette.muted, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em' }}>{title}</div>
-    <div style={{ color: palette.text, fontSize: isPhone ? 22 : 28, fontWeight: 700, marginTop: 8 }}>{value}</div>
-    <div style={{ color: palette.muted, fontSize: 13, marginTop: 8 }}>{caption}</div>
+    <div style={{ color: palette.muted, fontSize: isPhone ? 9 : 12, textTransform: 'uppercase', letterSpacing: isPhone ? '0.04em' : '0.12em', lineHeight: 1.15 }}>{title}</div>
+    <div style={{ color: palette.text, fontSize: isPhone ? 'clamp(13px, 4.4vw, 19px)' : 28, fontWeight: 700, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{value}</div>
+    <div style={{ color: palette.muted, fontSize: isPhone ? 9 : 13, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{caption}</div>
   </div>
 );
 
@@ -80,7 +80,7 @@ const Tenders: React.FC = () => {
   const { message } = App.useApp();
   const { user } = useAuth();
   const { theme } = useTheme();
-  const { isMobile, isPhone } = useIsMobile();
+  const { isMobile, isPhone, isPhoneDevice } = useIsMobile();
   const isDirector = user?.role_code === 'director' || user?.role_code === 'general_director';
   const isGeneralDirector = user?.role_code === 'general_director';
   const palette = getTenderMonitorPalette(theme === 'dark');
@@ -239,8 +239,8 @@ const Tenders: React.FC = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: isPhone ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: 14,
+            gridTemplateColumns: isPhone ? 'repeat(3, 1fr)' : 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: isPhone ? 8 : 14,
           }}
         >
           <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} isPhone={isPhone} />
@@ -291,6 +291,7 @@ const Tenders: React.FC = () => {
           onSortChange={handleSortChange}
           onOpenTender={(tender) => handleOpenTender(tender, 'info')}
           onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
+          onOpenPackage={(tender) => handleOpenTender(tender, 'package')}
           onQuickCall={handleQuickCall}
           onUpdate={refetch}
           readOnly={isGeneralDirector || isMobile}
@@ -306,7 +307,7 @@ const Tenders: React.FC = () => {
         onClose={() => setDetailOpen(false)}
         onQuickCall={handleQuickCall}
         onUpdate={refetch}
-        readOnly={isGeneralDirector}
+        readOnly={isGeneralDirector || isPhoneDevice}
       />
 
       <ImportTendersModal

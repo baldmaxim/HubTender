@@ -65,6 +65,13 @@
   }
 }
 
+/* Колокольчик уведомлений скрыт на телефонах (любая ориентация) */
+@media (max-width: 575px), (max-height: 575px) and (pointer: coarse) {
+  .app-header-bell {
+    display: none !important;
+  }
+}
+
 /* Logo expanded state (icon + text) */
 .logo-expanded {
   display: flex;

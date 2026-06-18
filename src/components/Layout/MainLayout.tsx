@@ -536,15 +536,15 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               </div>
             )}
 
-            {/* Уведомления — скрыты на телефонах (обе ориентации) */}
-            {!isPhoneDevice && (
+            {/* Уведомления — скрыты на телефонах через CSS (.app-header-bell), любая ориентация */}
+            <span className="app-header-bell">
               <NotificationsBell
                 notifications={notifications}
                 unreadCount={unreadCount}
                 currentTheme={currentTheme}
                 onClear={clearAllNotifications}
               />
-            )}
+            </span>
 
             <Dropdown
               menu={{
