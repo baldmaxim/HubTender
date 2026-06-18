@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Avatar, Switch, theme, Dropdown, Typography, Tag } from 'antd';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Layout, Menu, Avatar, Switch, theme, Dropdown, Typography, Tag, Button } from 'antd';
 import type { MenuProps } from 'antd';
 const { Text } = Typography;
 import {
@@ -40,7 +40,7 @@ import { IconSwap } from '../transitions';
 import { type Notification } from '../../lib/supabase';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { listNotifications, deleteAllNotifications } from '../../lib/api/notifications';
-import { hasPageAccess } from '../../lib/supabase/types';
+import { hasPageAccess, PAGE_LABELS } from '../../lib/supabase/types';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -63,9 +63,20 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
-  const { isPhone, screens } = useIsMobile();
+  const { isPhone, isMobile, screens } = useIsMobile();
   // «Мобильный» layout = <992px (телефон + планшет), как и переключение на карточный вид.
   const isMobileLayout = !screens.lg;
+
+  // Название текущей страницы для шапки (на телефонах). /path → PAGE_LABELS,
+  // c учётом параметрических роутов (паттерн как в hasPageAccess).
+  const pageTitle = useMemo(() => {
+    const path = location.pathname;
+    if (PAGE_LABELS[path]) return PAGE_LABELS[path];
+    const match = Object.keys(PAGE_LABELS).find(
+      (p) => p.includes(':') && new RegExp('^' + p.replace(/:[^/]+/g, '[^/]+') + '$').test(path)
+    );
+    return match ? PAGE_LABELS[match] : '';
+  }, [location.pathname]);
 
   // На телефоне (<576px) автоматически сворачивать боковое меню в icon-режим,
   // освобождая место под контент. Планшет/десктоп не затрагиваем.
@@ -390,6 +401,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           display: 'flex',
           flexDirection: 'column',
           height: '100vh',
+          // На телефоне меню всплывает поверх страницы (не сдвигает контент).
+          ...(isMobile ? { position: 'fixed' as const, left: 0, top: 0, zIndex: 1000 } : {}),
         }}
         width={250}
       >
@@ -442,6 +455,13 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           />
         </div>
       </Sider>
+      {/* Затемнение под раскрытым оверлей-меню на телефоне */}
+      {isMobile && !collapsed && (
+        <div
+          onClick={() => setCollapsed(true)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 999 }}
+        />
+      )}
       <Layout>
         <Header
           style={{
@@ -453,7 +473,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             borderBottom: currentTheme === 'light' ? '1px solid #e8e8e8' : 'none',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <span
               className="trigger"
               onClick={() => setCollapsed(!collapsed)}
@@ -465,11 +485,20 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
                 iconB={<MenuUnfoldOutlined />}
               />
             </span>
+            {/* Название страницы вверху (телефоны) */}
+            {isMobile && pageTitle && (
+              <Text
+                strong
+                style={{ fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              >
+                {pageTitle}
+              </Text>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: isPhone ? '12px' : '24px' }}>
-            {/* Заметки к тендеру — скрыты для Генерального директора */}
-            {!isGeneralDirector && (
+            {/* Заметки к тендеру — скрыты для Генерального директора и на телефонах */}
+            {!isMobile && !isGeneralDirector && (
               <NotesWidget
                 tenderId={currentTenderId}
                 userId={user?.id ?? null}
@@ -480,18 +509,32 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               />
             )}
 
-            {/* Калькулятор */}
-            <CalculatorWidget isMobileLayout={isMobileLayout} isPhone={isPhone} />
+            {/* Калькулятор — скрыт на телефонах */}
+            {!isMobile && <CalculatorWidget isMobileLayout={isMobileLayout} isPhone={isPhone} />}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <SunOutlined style={{ fontSize: '16px', color: currentTheme === 'light' ? '#faad14' : '#888' }} />
-              <Switch
-                checked={currentTheme === 'dark'}
-                onChange={toggleTheme}
-                style={{ backgroundColor: currentTheme === 'dark' ? '#10b981' : '#ccc' }}
+            {isMobile ? (
+              // На телефоне — компактная кнопка-переключатель темы, без ярлыков.
+              <Button
+                type="text"
+                onClick={toggleTheme}
+                aria-label="Сменить тему"
+                icon={
+                  currentTheme === 'dark'
+                    ? <MoonOutlined style={{ fontSize: 18, color: '#10b981' }} />
+                    : <SunOutlined style={{ fontSize: 18, color: '#faad14' }} />
+                }
               />
-              <MoonOutlined style={{ fontSize: '16px', color: currentTheme === 'dark' ? '#10b981' : '#888' }} />
-            </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <SunOutlined style={{ fontSize: '16px', color: currentTheme === 'light' ? '#faad14' : '#888' }} />
+                <Switch
+                  checked={currentTheme === 'dark'}
+                  onChange={toggleTheme}
+                  style={{ backgroundColor: currentTheme === 'dark' ? '#10b981' : '#ccc' }}
+                />
+                <MoonOutlined style={{ fontSize: '16px', color: currentTheme === 'dark' ? '#10b981' : '#888' }} />
+              </div>
+            )}
 
             <NotificationsBell
               notifications={notifications}
@@ -553,7 +596,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         </Header>
         <Content
           style={{
-            padding: 16,
+            // На телефоне убираем боковые отступы (контент до краёв экрана).
+            padding: isMobile ? '8px 0' : 16,
             minHeight: 280,
             background: colorBgContainer,
             overflow: 'auto',

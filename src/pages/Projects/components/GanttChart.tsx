@@ -24,6 +24,7 @@ import { useIsMobile } from '../../../hooks/useIsMobile';
 import type { ProjectFull, ProjectCompletion } from '../../../lib/supabase/types';
 import { getErrorMessage } from '../../../utils/errors';
 import { buildGanttChartData, exportGanttCompletionWithCharts } from '../../../utils/excel';
+import { AutoFitText } from '../../../components/AutoFitText/AutoFitText';
 
 // Register Chart.js components
 ChartJS.register(
@@ -102,6 +103,23 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   const isPhone = isPhoneRaw && !landscape;
   // Тап по графику открывает ландшафт только у портретного телефонного инстанса.
   const tapToOpen = !!onRequestLandscape && isPhoneRaw && !landscape;
+
+  // Ориентация: в портрете на телефоне прячем правую таймлайн-панель с цифрами,
+  // оставляя имя объекта + мини-график; при повороте (ландшафт) показываем всё.
+  const [isLandscapeOrient, setIsLandscapeOrient] = useState(
+    typeof window !== 'undefined' && !!window.matchMedia
+      ? window.matchMedia('(orientation: landscape)').matches
+      : true,
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(orientation: landscape)');
+    const handler = (e: MediaQueryListEvent) => setIsLandscapeOrient(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  // Портрет на телефоне (вне ландшафт-оверлея) → компактный режим без таймлайна.
+  const portrait = isPhone && !isLandscapeOrient;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
   const [chartModalProject, setChartModalProject] = useState<{ project: ProjectFull; colorIndex: number } | null>(null);
@@ -1058,13 +1076,15 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             Показать скрытые объекты ({hiddenProjects.size})
           </Button>
         )}
-        <Button
-          type="primary"
-          icon={<DownloadOutlined />}
-          onClick={handleExport}
-        >
-          Экспорт в Excel
-        </Button>
+        {!isPhone && (
+          <Button
+            type="primary"
+            icon={<DownloadOutlined />}
+            onClick={handleExport}
+          >
+            Экспорт в Excel
+          </Button>
+        )}
       </div>
 
       <div
@@ -1079,7 +1099,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         {/* Left panel - Project names */}
         <div
         style={{
-          width: projectNameWidth,
+          width: portrait ? 150 : projectNameWidth,
           flexShrink: 0,
           borderRight: `1px solid ${theme === 'dark' ? '#303030' : '#f0f0f0'}`,
         }}
@@ -1177,12 +1197,14 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         </div>
       </div>
 
-      {/* Chart column - Mini charts */}
+      {/* Chart column - Mini charts (в портрете растягивается на освободившееся место) */}
       <div
         style={{
-          width: chartWidth,
+          width: portrait ? undefined : chartWidth,
+          flex: portrait ? 1 : undefined,
+          minWidth: 0,
           flexShrink: 0,
-          borderRight: `1px solid ${theme === 'dark' ? '#303030' : '#f0f0f0'}`,
+          borderRight: portrait ? 'none' : `1px solid ${theme === 'dark' ? '#303030' : '#f0f0f0'}`,
         }}
       >
         {/* Header */}
@@ -1265,6 +1287,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         ref={scrollRef}
         onClick={tapToOpen ? onRequestLandscape : undefined}
         style={{
+          // В портрете на телефоне таймлайн с цифрами скрыт (показывается при повороте).
+          display: portrait ? 'none' : undefined,
           flex: 1,
           overflowX: 'auto',
           overflowY: 'hidden',
@@ -1500,35 +1524,66 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       </div>
       </div>
 
-      {/* Totals row */}
-      <div
-        style={{
-          display: 'flex',
-          padding: '16px 24px',
-          background: theme === 'dark' ? '#1f1f1f' : '#fafafa',
-          border: `1px solid ${theme === 'dark' ? '#303030' : '#f0f0f0'}`,
-          borderTop: 'none',
-          borderRadius: '0 0 8px 8px',
-          gap: 48,
-        }}
-      >
-        <div>
-          <Text type="secondary" style={{ fontSize: 12 }}>Всего договоров:</Text>{' '}
-          <Text strong style={{ color: '#1890ff' }}>{formatMoney(totals.totalContract)} ₽</Text>
+      {/* Totals row — итоговая статистика */}
+      {isPhone ? (
+        // Телефон: 2×2, суммы авто-подгоняются в одну строку (AutoFitText),
+        // «Всего договоров» может занять 2 строки, прочий текст — 1 строку.
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 8,
+            padding: '10px 12px',
+            background: theme === 'dark' ? '#1f1f1f' : '#fafafa',
+            border: `1px solid ${theme === 'dark' ? '#303030' : '#f0f0f0'}`,
+            borderTop: 'none',
+            borderRadius: '0 0 8px 8px',
+          }}
+        >
+          {[
+            { label: 'Всего договоров', value: `${formatMoney(totals.totalContract)} ₽`, color: '#1890ff' },
+            { label: 'Закрыто', value: `${formatMoney(totals.totalCompletion)} ₽`, color: '#52c41a' },
+            { label: 'Осталось', value: `${formatMoney(totals.totalRemaining)} ₽`, color: '#faad14' },
+            { label: 'Прогресс', value: `${Math.round(totals.completionPercent)}%`, color: '#52c41a' },
+          ].map((m) => (
+            <div key={m.label} style={{ minWidth: 0 }}>
+              <Text type="secondary" style={{ fontSize: 11, display: 'block', lineHeight: 1.15 }}>{m.label}</Text>
+              <AutoFitText maxFontSize={16} minFontSize={9} align="left" strong color={m.color}>
+                {m.value}
+              </AutoFitText>
+            </div>
+          ))}
         </div>
-        <div>
-          <Text type="secondary" style={{ fontSize: 12 }}>Закрыто:</Text>{' '}
-          <Text strong style={{ color: '#52c41a' }}>{formatMoney(totals.totalCompletion)} ₽</Text>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            padding: '16px 24px',
+            background: theme === 'dark' ? '#1f1f1f' : '#fafafa',
+            border: `1px solid ${theme === 'dark' ? '#303030' : '#f0f0f0'}`,
+            borderTop: 'none',
+            borderRadius: '0 0 8px 8px',
+            gap: 48,
+          }}
+        >
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>Всего договоров:</Text>{' '}
+            <Text strong style={{ color: '#1890ff' }}>{formatMoney(totals.totalContract)} ₽</Text>
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>Закрыто:</Text>{' '}
+            <Text strong style={{ color: '#52c41a' }}>{formatMoney(totals.totalCompletion)} ₽</Text>
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>Осталось:</Text>{' '}
+            <Text strong style={{ color: '#faad14' }}>{formatMoney(totals.totalRemaining)} ₽</Text>
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>Прогресс:</Text>{' '}
+            <Text strong>{Math.round(totals.completionPercent)}%</Text>
+          </div>
         </div>
-        <div>
-          <Text type="secondary" style={{ fontSize: 12 }}>Осталось:</Text>{' '}
-          <Text strong style={{ color: '#faad14' }}>{formatMoney(totals.totalRemaining)} ₽</Text>
-        </div>
-        <div>
-          <Text type="secondary" style={{ fontSize: 12 }}>Прогресс:</Text>{' '}
-          <Text strong>{Math.round(totals.completionPercent)}%</Text>
-        </div>
-      </div>
+      )}
 
       {/* Chart modal */}
       <Modal

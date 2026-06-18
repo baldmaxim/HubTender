@@ -1604,6 +1604,14 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   // Extract current drill-down level for use in barOptions
   const currentLevel = drillDownPath[drillDownPath.length - 1];
 
+  // (п.8, моб.) На ур.1-2 (root/прямые затраты/наценки) круговая занимала много
+  // места — ужимаем контейнер до размера ур.3. Десктоп не трогаем.
+  const pieIsTopLevel =
+    currentLevel.type === 'root' ||
+    currentLevel.type === 'direct_costs' ||
+    currentLevel.type === 'markups';
+  const pieHeight = isPhone ? (pieIsTopLevel ? 280 : 380) : 320;
+
   const barOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -1785,7 +1793,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
             </div>
             <Spin spinning={loadingBreakdown}>
               {getCategoriesData() ? (
-                <div style={{ height: isPhone ? 380 : 320, maxHeight: isPhone ? 380 : 320, overflow: 'hidden', touchAction: 'pan-x pan-y pinch-zoom' }}>
+                <div style={{ height: pieHeight, maxHeight: pieHeight, overflow: 'hidden', touchAction: 'pan-x pan-y pinch-zoom' }}>
                   <Doughnut data={getCategoriesData()!} options={pieOptions} />
                 </div>
               ) : drillDownPath.length > 1 ? (

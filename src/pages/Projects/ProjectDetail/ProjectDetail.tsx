@@ -18,6 +18,7 @@ import {
 } from '../../../lib/api/projects';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import { ProjectSettings } from './components/ProjectSettings';
 import { MonthlyCompletion, type OptimisticCompletion } from './components/MonthlyCompletion';
 import { AdditionalAgreements } from './components/AdditionalAgreements';
@@ -75,8 +76,9 @@ const ProjectDetail: React.FC = () => {
   const navigate = useNavigate();
   const { theme } = useTheme();
   const { user } = useAuth();
-  // Генеральный директор — только просмотр (без редактирования данных объекта)
-  const readOnly = user?.role_code === 'general_director';
+  const { isMobile } = useIsMobile();
+  // Генеральный директор и телефоны — только просмотр (без редактирования данных объекта)
+  const readOnly = user?.role_code === 'general_director' || isMobile;
   const [activeTab, setActiveTab] = useState<string>('settings');
   const [project, setProject] = useState<ProjectFull | null>(null);
   const [completionData, setCompletionData] = useState<ProjectCompletion[]>([]);

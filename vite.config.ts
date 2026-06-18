@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { sentryVitePlugin } from '@sentry/vite-plugin'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -18,6 +19,41 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['logo.svg'],
+        manifest: {
+          name: 'TenderHUB — Портал управления тендерами',
+          short_name: 'TenderHUB',
+          description: 'Система управления строительными тендерами, сметами и номенклатурами СУ-10.',
+          lang: 'ru',
+          theme_color: '#10b981',
+          background_color: '#0a0a0a',
+          display: 'standalone',
+          start_url: '/',
+          scope: '/',
+          icons: [
+            { src: '/logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+            { src: '/logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+          ],
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,svg,woff,woff2}'],
+          // SPA-фолбэк офлайн, но НЕ для API/WS.
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api\//],
+          // API/аутентификация/realtime — всегда сеть, ничего не кешируем.
+          runtimeCaching: [
+            {
+              urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+              handler: 'NetworkOnly',
+            },
+          ],
+          cleanupOutdatedCaches: true,
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        },
+        devOptions: { enabled: false },
+      }),
       ...(enableSentryUpload
         ? [
             sentryVitePlugin({

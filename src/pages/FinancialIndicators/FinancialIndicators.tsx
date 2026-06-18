@@ -44,9 +44,9 @@ const { Title, Text } = Typography;
 const FinancialIndicators: React.FC = () => {
   const { theme: currentTheme } = useTheme();
   const { user } = useAuth();
-  // Генеральный директор — только просмотр (без обновления и редактирования)
-  const readOnly = user?.role_code === 'general_director';
-  const { isPhone, screens } = useIsMobile();
+  const { isPhone, isMobile, screens } = useIsMobile();
+  // Генеральный директор и телефоны — только просмотр (без обновления и редактирования)
+  const readOnly = user?.role_code === 'general_director' || isMobile;
   // Кнопка/зум на весь экран нужны там, где широкая таблица может не помещаться,
   // но это не телефон (на телефоне — карточный вид): планшеты, landscape-телефоны, узкие ноуты.
   const showFullscreenTable = !isPhone && !screens.lg;

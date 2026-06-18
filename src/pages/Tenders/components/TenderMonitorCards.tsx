@@ -269,7 +269,7 @@ export const TenderMonitorCards: React.FC<TenderMonitorCardsProps> = ({
 }) => {
   const { isPhone } = useIsMobile();
   return (
-    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ padding: isPhone ? '8px 6px' : 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
       {sections.map((section) => {
         const totalArea = section.items.reduce((sum, tender) => sum + (tender.area || 0), 0);
         const totalCost = section.items.reduce(

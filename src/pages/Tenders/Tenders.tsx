@@ -213,25 +213,28 @@ const Tenders: React.FC = () => {
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ color: palette.text, fontSize: isMobile ? 22 : 30, fontWeight: 700, marginBottom: 6 }}>Перечень тендеров</div>
-            <div style={{ color: palette.muted, fontSize: 14 }}>
-              Реестр с контролем подачи КП, звонков и общей хронологии тендера.
+        {/* Заголовок и кнопки управления — скрыты на телефонах (название в шапке, режим просмотра) */}
+        {!isMobile && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ color: palette.text, fontSize: 30, fontWeight: 700, marginBottom: 6 }}>Перечень тендеров</div>
+              <div style={{ color: palette.muted, fontSize: 14 }}>
+                Реестр с контролем подачи КП, звонков и общей хронологии тендера.
+              </div>
             </div>
-          </div>
 
-          {!isDirector ? (
-            <Space wrap>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowAddForm((prev) => !prev)}>
-                {showAddForm ? 'Скрыть форму' : 'Добавить тендер'}
-              </Button>
-              <Button icon={<UploadOutlined />} onClick={() => setImportModalOpen(true)}>
-                Импорт из Excel
-              </Button>
-            </Space>
-          ) : null}
-        </div>
+            {!isDirector ? (
+              <Space wrap>
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowAddForm((prev) => !prev)}>
+                  {showAddForm ? 'Скрыть форму' : 'Добавить тендер'}
+                </Button>
+                <Button icon={<UploadOutlined />} onClick={() => setImportModalOpen(true)}>
+                  Импорт из Excel
+                </Button>
+              </Space>
+            ) : null}
+          </div>
+        )}
 
         <div
           style={{
@@ -290,7 +293,7 @@ const Tenders: React.FC = () => {
           onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
           onQuickCall={handleQuickCall}
           onUpdate={refetch}
-          readOnly={isGeneralDirector}
+          readOnly={isGeneralDirector || isMobile}
         />
       </div>
 
