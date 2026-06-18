@@ -44,12 +44,12 @@ const { Title, Text } = Typography;
 const FinancialIndicators: React.FC = () => {
   const { theme: currentTheme } = useTheme();
   const { user } = useAuth();
-  const { isPhone, isMobile, screens } = useIsMobile();
-  // Генеральный директор и телефоны — только просмотр (без обновления и редактирования)
-  const readOnly = user?.role_code === 'general_director' || isMobile;
+  const { isPhone, isLandscapePhone, isPhoneDevice, isMobile, screens } = useIsMobile();
+  // Генеральный директор и телефоны (в любой ориентации) — только просмотр (без обновления и редактирования)
+  const readOnly = user?.role_code === 'general_director' || isMobile || isLandscapePhone;
   // Кнопка/зум на весь экран нужны там, где широкая таблица может не помещаться,
-  // но это не телефон (на телефоне — карточный вид): планшеты, landscape-телефоны, узкие ноуты.
-  const showFullscreenTable = !isPhone && !screens.lg;
+  // но это не телефон (на телефоне — карточный вид или зум inline): настоящие планшеты, узкие ноуты.
+  const showFullscreenTable = !isPhoneDevice && !screens.lg;
   const {
     tenders,
     loading,
@@ -194,9 +194,12 @@ const FinancialIndicators: React.FC = () => {
       <div className="financial-indicators-page">
         <Card bordered={false} style={{ height: '100%' }}>
           <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-            <Title level={4} style={{ marginBottom: 24 }}>
-              Финансовые показатели
-            </Title>
+            {/* На телефоне заголовок уже есть в шапке (pageTitle) — здесь не дублируем. */}
+            {!isPhoneDevice && (
+              <Title level={4} style={{ marginBottom: 24 }}>
+                Финансовые показатели
+              </Title>
+            )}
             <Text type="secondary" style={{ fontSize: 16, marginBottom: 24, display: 'block' }}>
               Выберите тендер для просмотра показателей
             </Text>
@@ -233,13 +236,14 @@ const FinancialIndicators: React.FC = () => {
                 </Text>
                 <Row gutter={isPhone ? [8, 8] : [16, 16]} justify="center">
                   {tenders.filter(t => !t.is_archived).slice(0, 6).map(tender => (
-                    <Col key={tender.id} {...(isPhone ? { xs: 12 } : {})}>
+                    <Col key={tender.id} flex="none">
                       <Card
                         hoverable
                         size={isPhone ? 'small' : 'default'}
-                        styles={{ body: { padding: isPhone ? 8 : undefined } }}
+                        styles={{ body: { padding: isPhone ? '6px 10px' : '12px 16px' } }}
                         style={{
-                          width: isPhone ? '100%' : 200,
+                          width: 'auto',
+                          maxWidth: '100%',
                           textAlign: 'center',
                           cursor: 'pointer',
                           borderColor: '#10b981',
@@ -257,38 +261,37 @@ const FinancialIndicators: React.FC = () => {
                           }
                         }}
                       >
-                        <div style={{ marginBottom: isPhone ? 4 : 8 }}>
-                          <Tag color="#10b981" style={isPhone ? { margin: 0, fontSize: 11, lineHeight: '18px' } : undefined}>{tender.tender_number}</Tag>
-                        </div>
+                        {/* Номер, наименование и версия — в одну строку; рамка по тексту. */}
                         <div style={{
-                          marginBottom: isPhone ? 4 : 8,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          flexDirection: isPhone ? 'column' : 'row',
-                          flexWrap: isPhone ? 'wrap' : 'nowrap',
-                          gap: isPhone ? 2 : 4
+                          flexWrap: 'nowrap',
+                          gap: isPhone ? 6 : 8,
                         }}>
-                          <Text strong style={isPhone ? {
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                            wordBreak: 'break-word',
-                            fontSize: 12,
-                            lineHeight: 1.2,
-                            maxWidth: '100%'
-                          } : {
+                          <Tag color="#10b981" style={{ margin: 0, flexShrink: 0, ...(isPhone ? { fontSize: 11, lineHeight: '18px' } : {}) }}>
+                            {tender.tender_number}
+                          </Tag>
+                          <Text strong style={{
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
-                            maxWidth: 140
+                            maxWidth: isPhone ? 150 : 200,
+                            fontSize: isPhone ? 12 : undefined,
                           }}>
                             {tender.title}
                           </Text>
                           <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
                         </div>
-                        <Text type="secondary" style={{ fontSize: isPhone ? 11 : 12 }}>
+                        <Text type="secondary" style={{
+                          display: 'block',
+                          marginTop: isPhone ? 2 : 4,
+                          fontSize: isPhone ? 11 : 12,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: isPhone ? 180 : 220,
+                        }}>
                           {tender.client_name}
                         </Text>
                       </Card>
@@ -314,6 +317,7 @@ const FinancialIndicators: React.FC = () => {
       tenderVersion={selectedVersion || 1}
       tenderId={selectedTenderId}
       isPhone={isPhone}
+      isPhoneDevice={isPhoneDevice}
       onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
       readOnly={readOnly}
     />
@@ -335,11 +339,14 @@ const FinancialIndicators: React.FC = () => {
         </Button>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>
-          Финансовые показатели
-        </Title>
-      </div>
+      {/* На телефоне заголовок уже есть в шапке (pageTitle) — в теле его не дублируем. */}
+      {!isPhoneDevice && (
+        <div style={{ marginBottom: 16 }}>
+          <Title level={4} style={{ margin: 0 }}>
+            Финансовые показатели
+          </Title>
+        </div>
+      )}
 
       <IndicatorsFilters
         tenders={tenders}
@@ -479,7 +486,14 @@ const FinancialIndicators: React.FC = () => {
                         </Button>
                       </div>
                     )}
-                    {indicatorsTableNode}
+                    {/* Телефон в landscape: уменьшаем таблицу (~72%), чтобы все колонки
+                        помещались без горизонтального ползунка — действие бывшей кнопки
+                        «На весь экран» прямо в основном виде. */}
+                    {isLandscapePhone ? (
+                      <div style={{ zoom: 0.72 }}>{indicatorsTableNode}</div>
+                    ) : (
+                      indicatorsTableNode
+                    )}
                   </>
                 ),
               },

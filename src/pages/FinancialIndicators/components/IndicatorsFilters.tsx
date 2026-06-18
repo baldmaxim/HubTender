@@ -52,7 +52,7 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
   };
 
   return (
-    <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+    <div style={{ marginBottom: 16, paddingInline: isPhone ? 12 : 0, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : undefined }}>
         <Text type="secondary" style={{ flexShrink: 0 }}>Тендер:</Text>
         <Select

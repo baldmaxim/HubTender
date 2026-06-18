@@ -63,7 +63,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
-  const { isPhone, isMobile, screens } = useIsMobile();
+  const { isPhone, isLandscapePhone, isPhoneDevice, isMobile, screens } = useIsMobile();
   // «Мобильный» layout = <992px (телефон + планшет), как и переключение на карточный вид.
   const isMobileLayout = !screens.lg;
 
@@ -485,8 +485,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
                 iconB={<MenuUnfoldOutlined />}
               />
             </span>
-            {/* Название страницы вверху (телефоны) */}
-            {isMobile && pageTitle && (
+            {/* Название страницы вверху (телефоны, в т.ч. landscape) */}
+            {(isMobile || isLandscapePhone) && pageTitle && (
               <Text
                 strong
                 style={{ fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
@@ -497,8 +497,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: isPhone ? '12px' : '24px' }}>
-            {/* Заметки к тендеру — скрыты для Генерального директора и на телефонах */}
-            {!isMobile && !isGeneralDirector && (
+            {/* Заметки к тендеру — скрыты для Генерального директора и на телефонах (вкл. landscape) */}
+            {!isMobile && !isLandscapePhone && !isGeneralDirector && (
               <NotesWidget
                 tenderId={currentTenderId}
                 userId={user?.id ?? null}
@@ -509,11 +509,11 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               />
             )}
 
-            {/* Калькулятор — скрыт на телефонах */}
-            {!isMobile && <CalculatorWidget isMobileLayout={isMobileLayout} isPhone={isPhone} />}
+            {/* Калькулятор — скрыт на телефонах (вкл. landscape) */}
+            {!isMobile && !isLandscapePhone && <CalculatorWidget isMobileLayout={isMobileLayout} isPhone={isPhone} />}
 
-            {isMobile ? (
-              // На телефоне — компактная кнопка-переключатель темы, без ярлыков.
+            {isMobile || isLandscapePhone ? (
+              // На телефоне (любая ориентация) — компактная кнопка-переключатель темы, без ярлыков.
               <Button
                 type="text"
                 onClick={toggleTheme}
@@ -536,12 +536,15 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               </div>
             )}
 
-            <NotificationsBell
-              notifications={notifications}
-              unreadCount={unreadCount}
-              currentTheme={currentTheme}
-              onClear={clearAllNotifications}
-            />
+            {/* Уведомления — скрыты на телефонах (обе ориентации) */}
+            {!isPhoneDevice && (
+              <NotificationsBell
+                notifications={notifications}
+                unreadCount={unreadCount}
+                currentTheme={currentTheme}
+                onClear={clearAllNotifications}
+              />
+            )}
 
             <Dropdown
               menu={{
@@ -584,7 +587,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               trigger={['click']}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                {!isPhone && <span>{user?.full_name || 'Пользователь'}</span>}
+                {!isPhoneDevice && <span>{user?.full_name || 'Пользователь'}</span>}
                 <Avatar style={{
                   backgroundColor: user?.role_color ? `var(--ant-${user.role_color}-6, #10b981)` : '#10b981'
                 }}>

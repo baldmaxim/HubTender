@@ -20,6 +20,8 @@ interface IndicatorsTableProps {
   tenderVersion: number;
   tenderId: string;
   isPhone?: boolean;
+  /** Телефон в любой ориентации — скрывает кнопку «Экспорт в Excel» */
+  isPhoneDevice?: boolean;
   onAreaUpdated: () => void;
   /** Только просмотр — скрывает карандаши редактирования площади (Генеральный директор) */
   readOnly?: boolean;
@@ -35,6 +37,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
   tenderVersion,
   tenderId,
   isPhone,
+  isPhoneDevice,
   onAreaUpdated,
   readOnly,
 }) => {
@@ -220,16 +223,19 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
 
   return (
     <>
-      <div style={{ marginBottom: 16, textAlign: 'right' }}>
-        <Button
-          type="primary"
-          icon={<DownloadOutlined />}
-          onClick={handleExport}
-          style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
-        >
-          Экспорт в Excel
-        </Button>
-      </div>
+      {/* Экспорт в Excel — скрыт на телефоне (обе ориентации) */}
+      {!isPhoneDevice && (
+        <div style={{ marginBottom: 16, textAlign: 'right' }}>
+          <Button
+            type="primary"
+            icon={<DownloadOutlined />}
+            onClick={handleExport}
+            style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
+          >
+            Экспорт в Excel
+          </Button>
+        </div>
+      )}
       {isPhone ? (
         <IndicatorsTableCards
           data={data}
