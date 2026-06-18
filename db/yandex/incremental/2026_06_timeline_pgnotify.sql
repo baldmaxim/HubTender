@@ -29,10 +29,21 @@ DECLARE
     v_id        uuid;
     v_tender    uuid;
     v_user      uuid;
+    v_row       jsonb;
     v_payload   jsonb;
 BEGIN
-    -- Row id (for DELETE, NEW is NULL).
-    v_id := COALESCE(NEW.id, OLD.id);
+    -- Snapshot the affected row as jsonb, choosing NEW/OLD by op. We must NOT
+    -- use `NEW IS NOT NULL` to pick the record: a composite `ROW IS NOT NULL`
+    -- is true only when EVERY column is non-null, so any row with a null column
+    -- (e.g. client_positions.parent_position_id) made tender_id resolve to NULL
+    -- and the broker dropped the event. Selecting by TG_OP avoids that.
+    IF TG_OP = 'DELETE' THEN
+        v_row := to_jsonb(OLD);
+    ELSE
+        v_row := to_jsonb(NEW);
+    END IF;
+
+    v_id := (v_row->>'id')::uuid;
 
     -- tender_id selection by table.
     IF TG_TABLE_NAME = 'tenders' THEN
@@ -43,25 +54,16 @@ BEGIN
         -- No tender_id column: resolve it through the parent group.
         SELECT tg.tender_id INTO v_tender
         FROM public.tender_groups tg
-        WHERE tg.id = COALESCE(
-            (CASE WHEN NEW IS NOT NULL THEN (to_jsonb(NEW)->>'group_id')::uuid END),
-            (CASE WHEN OLD IS NOT NULL THEN (to_jsonb(OLD)->>'group_id')::uuid END)
-        );
+        WHERE tg.id = (v_row->>'group_id')::uuid;
     ELSE
         -- boq_items, client_positions, cost_redistribution_results,
         -- construction_cost_volumes, tender_groups — all carry tender_id.
-        v_tender := COALESCE(
-            (CASE WHEN NEW IS NOT NULL THEN (to_jsonb(NEW)->>'tender_id')::uuid END),
-            (CASE WHEN OLD IS NOT NULL THEN (to_jsonb(OLD)->>'tender_id')::uuid END)
-        );
+        v_tender := (v_row->>'tender_id')::uuid;
     END IF;
 
     -- user_id only on notifications.
     IF TG_TABLE_NAME = 'notifications' THEN
-        v_user := COALESCE(
-            (CASE WHEN NEW IS NOT NULL THEN (to_jsonb(NEW)->>'user_id')::uuid END),
-            (CASE WHEN OLD IS NOT NULL THEN (to_jsonb(OLD)->>'user_id')::uuid END)
-        );
+        v_user := (v_row->>'user_id')::uuid;
     END IF;
 
     v_payload := jsonb_build_object(
