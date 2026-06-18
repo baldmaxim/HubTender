@@ -53,11 +53,11 @@ const MetricCard: React.FC<MetricCardProps> = ({
     style={{
       background: palette.cardBg,
       border: `1px solid ${palette.border}`,
-      borderRadius: 10,
-      padding: isPhone ? '4px 8px' : '6px 12px',
+      borderRadius: 14,
+      padding: isPhone ? '10px 12px' : '14px 18px',
       position: 'relative',
       overflow: 'hidden',
-      minHeight: isPhone ? 26 : 34,
+      minHeight: isPhone ? 76 : 104,
     }}
   >
     <div
@@ -66,13 +66,13 @@ const MetricCard: React.FC<MetricCardProps> = ({
         left: 0,
         top: 0,
         bottom: 0,
-        width: 3,
+        width: 4,
         background: accent,
       }}
     />
-    <div style={{ color: palette.muted, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', lineHeight: 1.1 }}>{title}</div>
-    <div style={{ color: palette.text, fontSize: isPhone ? 14 : 18, fontWeight: 700, marginTop: 2, lineHeight: 1.1 }}>{value}</div>
-    <div style={{ color: palette.muted, fontSize: 9, marginTop: 1, lineHeight: 1.15 }}>{caption}</div>
+    <div style={{ color: palette.muted, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.12em' }}>{title}</div>
+    <div style={{ color: palette.text, fontSize: isPhone ? 22 : 28, fontWeight: 700, marginTop: 8 }}>{value}</div>
+    <div style={{ color: palette.muted, fontSize: 13, marginTop: 8 }}>{caption}</div>
   </div>
 );
 
@@ -236,8 +236,8 @@ const Tenders: React.FC = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: isPhone ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
-            gap: 8,
+            gridTemplateColumns: isPhone ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 14,
           }}
         >
           <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} isPhone={isPhone} />
