@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Серверный деплой HUBTender.
 # Запускается на проде (root@45.80.128.254, hostname=hub) из /opt/hubtender-build.
-# Сам синкает git, собирает, перезапускает backend, выкатывает frontend.
+# Сам синкает git, собирает, перезапускает backend, чистит docker, выкатывает frontend.
 #
 # Использование:
 #   bash scripts/deploy-server.sh --check
@@ -147,6 +147,13 @@ deploy_backend() {
   ok "backend release=hubtender-api@$sha"
 }
 
+docker_cleanup() {
+  log "docker cleanup: docker image prune -f && docker builder prune -f"
+  docker image prune -f && docker builder prune -f \
+    || warn "docker cleanup завершился с ошибкой — не критично, продолжаю"
+  ok "docker очищен: dangling-образы и build-кэш"
+}
+
 deploy_frontend() {
   log "frontend deploy"
 
@@ -204,6 +211,7 @@ main() {
       preflight
       git_sync
       deploy_backend
+      docker_cleanup
       summary
       ;;
     frontend)
@@ -216,6 +224,7 @@ main() {
       preflight
       git_sync
       deploy_backend
+      docker_cleanup
       deploy_frontend
       summary
       ;;

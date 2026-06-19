@@ -75,6 +75,8 @@ bash scripts/deploy-server.sh both
   `docker build -t hubtender-api:prod ./backend`,
   `systemctl restart hubtender-bff.service`, печатает `journalctl -n 50`,
   проверяет `/health` и `/health/db`;
+- после backend: `docker image prune -f && docker builder prune -f` — удаляет
+  dangling-образы (старый `hubtender-api:prod`) и build-кэш перед выкаткой фронта;
 - для frontend: `npm ci` (если нет `node_modules`), экспортирует
   `SENTRY_AUTH_TOKEN`/`ORG`/`PROJECT` из `server/.env.prod`,
   `npm run build:prod` (внутри подставляется `VITE_SENTRY_RELEASE=hubtender-web@<sha>`),
@@ -179,6 +181,14 @@ BUILD_CLEAN_HARD=1   bash scripts/deploy-production.sh both
 > xlsx 0.20.3 (SheetJS CDN)»: без `FRONTEND_NPM_CI=1` security-фиксы не доедут
 > до прода (останутся уязвимые версии в `node_modules`).
 
+> **ПРАВИЛО: каждый деплой backend завершается чисткой docker.** После
+> `docker build` и рестарта сервиса скрипт делает
+> `docker image prune -f && docker builder prune -f` (шаг между backend и
+> frontend — «предпредпоследний»). Удаляются только повисшие (`<none>`) образы —
+> прежде всего старый `hubtender-api:prod` — и build-кэш; тегнутые образы
+> (`hubtender-api:prod`, `hubtender-api:prod-prev` для отката) сохраняются. Так
+> диск не забивается от деплоя к деплою.
+
 ## Первичная настройка `/opt/hubtender-build`
 
 Одноразово, если build-контекст ещё не засеян.
@@ -243,6 +253,9 @@ sleep 2
 journalctl -u hubtender-bff.service -n 50 --no-pager -o cat
 curl -fsS http://127.0.0.1:3006/health
 curl -fsS http://127.0.0.1:3006/health/db
+
+# Чистка docker: убрать старый dangling-образ и build-кэш
+docker image prune -f && docker builder prune -f
 ```
 
 ## Ручной деплой frontend
