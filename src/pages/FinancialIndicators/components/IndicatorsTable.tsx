@@ -88,6 +88,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
       dataIndex: 'indicator_name',
       key: 'indicator_name',
       width: 400,
+      onHeaderCell: () => ({ style: { textAlign: 'center' } }),
       render: (text, record) => {
         const isIndented = record.row_number >= 2 && record.row_number <= 7;
         const content = (
@@ -216,7 +217,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
       dataIndex: 'total_cost',
       key: 'total_cost',
       width: 200,
-      align: 'right',
+      align: 'center',
       render: (value, record) => {
         if (record.is_header) return 'итоговая стоимость';
         return <Text strong={record.is_total}>{formatNumber(value)}</Text>;
