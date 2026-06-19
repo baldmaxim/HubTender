@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import type { Tender } from '../../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Text } = Typography;
 
@@ -45,24 +46,27 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
   onBackToSelection,
 }) => {
   const navigate = useNavigate();
+  const { isPhoneDevice } = useIsMobile();
 
   return (
     <>
       {/* Верхняя шапка с названием тендера и кнопками */}
       {selectedTender && (
         <div style={{
-          padding: '12px 32px',
+          padding: isPhoneDevice ? '12px 16px' : '12px 32px',
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: isPhoneDevice ? 'flex-start' : 'center',
+          flexDirection: isPhoneDevice ? 'column' : 'row',
+          gap: isPhoneDevice ? 8 : 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <FileTextOutlined style={{ fontSize: 32, color: 'white' }} />
+            <FileTextOutlined style={{ fontSize: isPhoneDevice ? 24 : 32, color: 'white' }} />
             <div>
-              <Text style={{ fontSize: 22, fontWeight: 600, margin: 0, color: 'white', display: 'block' }}>
+              <Text style={{ fontSize: isPhoneDevice ? 16 : 22, fontWeight: 600, margin: 0, color: 'white', display: 'block' }}>
                 {selectedTender.title}
               </Text>
-              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: isPhoneDevice ? 12 : 14 }}>
                 Заказчик: {selectedTender.client_name}
               </Text>
             </div>
@@ -76,18 +80,20 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
             >
               Назад к выбору
             </Button>
-            <Button
-              icon={<DashboardOutlined />}
-              onClick={() => navigate('/dashboard')}
-            >
-              К дашборду
-            </Button>
+            {!isPhoneDevice && (
+              <Button
+                icon={<DashboardOutlined />}
+                onClick={() => navigate('/dashboard')}
+              >
+                К дашборду
+              </Button>
+            )}
           </Space>
         </div>
       )}
 
       {/* Блок с фильтрами и информацией о тендере */}
-      <div style={{ padding: '16px', display: 'flex', gap: '8px' }}>
+      <div style={{ padding: '16px', display: 'flex', gap: '8px', flexDirection: isPhoneDevice ? 'column' : 'row' }}>
         {/* Левый и средний блоки объединены */}
         <Card
           bordered={false}
@@ -96,7 +102,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
         >
           <Row gutter={8}>
             {/* Левый блок: Фильтры */}
-            <Col span={9}>
+            <Col xs={24} lg={9}>
               <Row gutter={8}>
                 <Col span={16}>
                   <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000', fontSize: 14 }}>Тендер:</Text>
@@ -127,7 +133,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
             </Col>
 
             {/* Средний блок: Информация о тендере */}
-            <Col span={15}>
+            <Col xs={24} lg={15}>
               {selectedTender ? (
                 <div style={{ textAlign: 'right' }}>
                   {/* Строка 1: Название и заказчик */}
@@ -236,8 +242,8 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
         {/* Правый блок: Общая стоимость */}
         <Card
           bordered={false}
-          bodyStyle={{ padding: '16px', display: 'flex', minHeight: '120px' }}
-          style={{ borderRadius: '8px', width: '180px', flexShrink: 0 }}
+          bodyStyle={{ padding: '16px', display: 'flex', minHeight: isPhoneDevice ? '72px' : '120px' }}
+          style={{ borderRadius: '8px', width: isPhoneDevice ? '100%' : '180px', flexShrink: 0 }}
         >
           {selectedTender ? (
             <div

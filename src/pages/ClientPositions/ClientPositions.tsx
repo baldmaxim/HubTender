@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useDeferredValue, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,8 +14,12 @@ import { DeadlineBar } from './components/DeadlineBar';
 import { PositionTable } from './components/PositionTable';
 import AddAdditionalPositionModal from './AddAdditionalPositionModal';
 import { MassBoqImportModal } from './components/MassBoqImportModal';
-import type { ClientPosition, Tender } from '../../lib/supabase';
+import type { Tender } from '../../lib/supabase';
 import { collectSectionDescendants } from '../../utils/positions/collectSectionDescendants';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { filterPositionsBySearch } from './utils/positionSearch';
+import { useUndoHotkey } from './hooks/useUndoHotkey';
+import { PositionCardList } from './components/PositionCardList';
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration';
 
@@ -27,55 +31,10 @@ interface TenderOption {
   clientName: string;
 }
 
-function normalizePositionSearchValue(value: string | number | null | undefined): string {
-  return String(value ?? '')
-    .trim()
-    .toLocaleLowerCase('ru-RU')
-    .replace(/[.,/\\()[\]_-]+/g, ' ')
-    .replace(/\s+/g, ' ');
-}
-
-function normalizePositionNumberSearchValue(value: string | number | null | undefined): string {
-  return String(value ?? '')
-    .trim()
-    .toLocaleLowerCase('ru-RU')
-    .replace(/\s+/g, '');
-}
-
-function filterPositionsBySearch(
-  positions: ClientPosition[],
-  query: string
-): ClientPosition[] {
-  const hasTrailingSpace = /\s$/.test(query);
-  const normalizedQuery = normalizePositionSearchValue(query);
-  const normalizedItemQuery = normalizePositionNumberSearchValue(query);
-  const queryTokens = normalizedQuery.split(' ').filter(Boolean);
-  const exactItemNoMode = hasTrailingSpace && normalizedItemQuery.length > 0 && /\d/.test(normalizedItemQuery);
-
-  if (!normalizedQuery) {
-    return positions;
-  }
-
-  return positions.filter((position) => {
-    const workName = normalizePositionSearchValue(position.work_name);
-    const itemNo = normalizePositionNumberSearchValue(position.item_no);
-    const workNameMatches =
-      workName.includes(normalizedQuery) ||
-      queryTokens.every((token) => workName.includes(token));
-    const itemNoMatches = exactItemNoMode
-      ? itemNo === normalizedItemQuery
-      : normalizedItemQuery.length > 0 && itemNo.includes(normalizedItemQuery);
-
-    return (
-      workNameMatches ||
-      itemNoMatches
-    );
-  });
-}
-
 const ClientPositions: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { theme: currentTheme } = useTheme();
+  const { isPhoneDevice } = useIsMobile();
 
   // State management
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
@@ -407,32 +366,13 @@ const ClientPositions: React.FC = () => {
   }, [selectedPositionIds]);
 
   // Ctrl+Z — отмена последнего шага выбора строк в активном режиме отбора.
-  // Диспетчер держим в ref, чтобы слушатель keydown был стабильным (вешается один раз).
-  const undoSelectionRef = useRef<() => boolean>(() => false);
-  useEffect(() => {
-    undoSelectionRef.current = (): boolean => {
-      if (isDeleteSelectionMode) return undoDeleteSelection();
-      if (isPositionDeleteMode) return undoPositionDeleteSelection();
-      if (isLevelChangeMode) return false; // изменение уровня — вне охвата отмены
-      if (copiedPositionId || copiedNotePositionId) return undoTargetSelection();
-      return filterSel.undo();
-    };
+  useUndoHotkey((): boolean => {
+    if (isDeleteSelectionMode) return undoDeleteSelection();
+    if (isPositionDeleteMode) return undoPositionDeleteSelection();
+    if (isLevelChangeMode) return false; // изменение уровня — вне охвата отмены
+    if (copiedPositionId || copiedNotePositionId) return undoTargetSelection();
+    return filterSel.undo();
   });
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      // e.code (физическая клавиша) — устойчиво к раскладке (RU/EN), в отличие от e.key.
-      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.code !== 'KeyZ') return;
-      // Не перехватываем нативный текстовый undo в полях ввода.
-      const el = document.activeElement as HTMLElement | null;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
-      if (undoSelectionRef.current()) {
-        e.preventDefault();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
 
   // Если тендер не выбран, показываем экран выбора тендера
   if (!selectedTender) {
@@ -475,8 +415,21 @@ const ClientPositions: React.FC = () => {
         <DeadlineBar selectedTender={selectedTender} currentTheme={currentTheme} />
       </div>
 
-      {/* Таблица позиций заказчика */}
-      {selectedTender && (
+      {/* Таблица позиций заказчика (на телефоне — карточный read-only список) */}
+      {selectedTender && isPhoneDevice && (
+        <PositionCardList
+          clientPositions={searchedPositions}
+          selectedTender={selectedTender}
+          loading={loading || filterLoading}
+          positionCounts={positionCounts}
+          leafPositionIndices={leafPositionIndices}
+          searchQuery={positionSearchQuery}
+          onSearchQueryChange={setPositionSearchQuery}
+          onRowClick={handleRowClick}
+        />
+      )}
+
+      {selectedTender && !isPhoneDevice && (
         <PositionTable
           clientPositions={searchedPositions}
           selectedTender={selectedTender}
