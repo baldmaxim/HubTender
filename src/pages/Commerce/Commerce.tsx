@@ -5,10 +5,15 @@
 import { Card, Spin, Empty } from 'antd';
 import { useEffect, useRef } from 'react';
 import { useCommerceData, useCommerceActions } from './hooks';
-import { TenderSelector, CommerceTable, CommerceHeader } from './components';
+import { TenderSelector, CommerceTable, CommerceCards, CommerceHeader } from './components';
 import { exportCommerceToExcel } from './utils/exportToExcel';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { useTheme } from '../../contexts/ThemeContext';
+import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 
 export default function Commerce() {
+  const { isPhone, isLandscapePhone } = useIsMobile();
+  const { theme: currentTheme } = useTheme();
   // Архивные тендеры отображаются в фильтре для всех пользователей
   const shouldFilterArchived = false;
   const lastAutoRefreshAtRef = useRef(0);
@@ -183,13 +188,33 @@ export default function Commerce() {
     >
       {selectedTenderId ? (
         <Spin spinning={loading || calculating}>
-          <CommerceTable
-            positions={positions}
-            selectedTenderId={selectedTenderId}
-            onNavigateToPosition={handleNavigateToPosition}
-            referenceTotal={referenceTotal}
-            insuranceTotal={insuranceTotal}
-          />
+          {isPhone ? (
+            <CommerceCards
+              positions={positions}
+              selectedTenderId={selectedTenderId}
+              onNavigateToPosition={handleNavigateToPosition}
+              insuranceTotal={insuranceTotal}
+            />
+          ) : isLandscapePhone ? (
+            <LandscapeTableOverlay theme={currentTheme} width={1840}>
+              <CommerceTable
+                positions={positions}
+                selectedTenderId={selectedTenderId}
+                onNavigateToPosition={handleNavigateToPosition}
+                referenceTotal={referenceTotal}
+                insuranceTotal={insuranceTotal}
+                fitToScreen
+              />
+            </LandscapeTableOverlay>
+          ) : (
+            <CommerceTable
+              positions={positions}
+              selectedTenderId={selectedTenderId}
+              onNavigateToPosition={handleNavigateToPosition}
+              referenceTotal={referenceTotal}
+              insuranceTotal={insuranceTotal}
+            />
+          )}
         </Spin>
       ) : (
         <Empty description="Выберите тендер для просмотра коммерческих стоимостей" />

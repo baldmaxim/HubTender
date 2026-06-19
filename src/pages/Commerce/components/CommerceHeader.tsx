@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import type { Tender } from '../../../lib/supabase';
 import type { MarkupTactic, TenderOption } from '../types';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Title, Text } = Typography;
 
@@ -50,6 +51,7 @@ export default function CommerceHeader({
   onExport,
   shouldFilterArchived = false
 }: CommerceHeaderProps) {
+  const { isPhone, isPhoneDevice } = useIsMobile();
   // Получение уникальных наименований тендеров
   const getTenderTitles = (): TenderOption[] => {
     const uniqueTitles = new Map<string, TenderOption>();
@@ -102,17 +104,33 @@ export default function CommerceHeader({
       >
         Назад к выбору
       </Button>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4} style={{ margin: 0 }}>
-          <DollarOutlined /> Коммерция
-        </Title>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <Space size="middle" wrap>
-          <Space size="small">
-            <Text type="secondary" style={{ fontSize: 16 }}>Тендер:</Text>
+      {!isPhoneDevice && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Title level={4} style={{ margin: 0 }}>
+            <DollarOutlined /> Коммерция
+          </Title>
+        </div>
+      )}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: isPhone ? 'stretch' : 'center',
+          flexWrap: 'wrap',
+          gap: '16px',
+          flexDirection: isPhone ? 'column' : 'row',
+        }}
+      >
+        <Space
+          size="middle"
+          wrap
+          direction={isPhone ? 'vertical' : 'horizontal'}
+          style={isPhone ? { width: '100%' } : undefined}
+        >
+          <div style={isPhone ? { width: '100%' } : undefined}>
+            {!isPhone && <Text type="secondary" style={{ fontSize: 16, marginRight: 8 }}>Тендер:</Text>}
             <Select
-              style={{ width: 350, fontSize: 16 }}
+              style={{ width: isPhone ? '100%' : 350, fontSize: 16 }}
               placeholder="Выберите тендер"
               value={selectedTenderTitle}
               onChange={onTenderTitleChange}
@@ -125,11 +143,11 @@ export default function CommerceHeader({
               }
               allowClear
             />
-          </Space>
-          <Space size="small">
-            <Text type="secondary" style={{ fontSize: 16 }}>Версия:</Text>
+          </div>
+          <div style={isPhone ? { width: '100%' } : undefined}>
+            {!isPhone && <Text type="secondary" style={{ fontSize: 16, marginRight: 8 }}>Версия:</Text>}
             <Select
-              style={{ width: 140 }}
+              style={{ width: isPhone ? '100%' : 140 }}
               placeholder="Версия"
               value={selectedVersion}
               onChange={onVersionChange}
@@ -137,31 +155,34 @@ export default function CommerceHeader({
               disabled={!selectedTenderTitle}
               options={selectedTenderTitle ? getVersionsForTitle(selectedTenderTitle) : []}
             />
-          </Space>
-          <Space size="small">
-            <Text type="secondary" style={{ fontSize: 16 }}>Схема:</Text>
-            <Select
-              style={{ width: 250 }}
-              placeholder="Выберите тактику наценок"
-              value={selectedTacticId}
-              onChange={onTacticChange}
-              loading={loading}
-              disabled={!selectedTenderTitle}
-              options={markupTactics.map(t => ({
-                label: (
-                  <span>
-                    {t.name || 'Без названия'}
-                    {t.is_global && <Tag color="blue" style={{ marginLeft: 8 }}>Глобальная</Tag>}
-                  </span>
-                ),
-                value: t.id
-              }))}
-            />
-          </Space>
+          </div>
+          {/* Схема наценок и применение тактики — действия пересчёта, скрыты на телефоне (read-only) */}
+          {!isPhoneDevice && (
+            <div>
+              <Text type="secondary" style={{ fontSize: 16, marginRight: 8 }}>Схема:</Text>
+              <Select
+                style={{ width: 250 }}
+                placeholder="Выберите тактику наценок"
+                value={selectedTacticId}
+                onChange={onTacticChange}
+                loading={loading}
+                disabled={!selectedTenderTitle}
+                options={markupTactics.map(t => ({
+                  label: (
+                    <span>
+                      {t.name || 'Без названия'}
+                      {t.is_global && <Tag color="blue" style={{ marginLeft: 8 }}>Глобальная</Tag>}
+                    </span>
+                  ),
+                  value: t.id
+                }))}
+              />
+            </div>
+          )}
         </Space>
-        <div>
-          <Space>
-            {tacticChanged && (
+        <div style={isPhone ? { width: '100%' } : undefined}>
+          <Space style={isPhone ? { width: '100%' } : undefined}>
+            {!isPhoneDevice && tacticChanged && (
               <Tooltip title="Применить новую тактику к тендеру">
                 <Button
                   type="primary"
@@ -175,6 +196,7 @@ export default function CommerceHeader({
             )}
             <Tooltip title="Экспорт в Excel">
               <Button
+                block={isPhone}
                 icon={<FileExcelOutlined />}
                 onClick={onExport}
                 disabled={positionsCount === 0}
