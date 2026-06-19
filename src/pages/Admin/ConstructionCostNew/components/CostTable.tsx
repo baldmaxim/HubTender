@@ -178,7 +178,7 @@ const CostTable: React.FC<CostTableProps> = ({
       align: 'right',
       render: (_: unknown, record: CostRow) => {
         const total = record.materials_cost + record.materials_comp_cost;
-        return total.toLocaleString('ru-RU', { minimumFractionDigits: 0 });
+        return total.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
       },
     },
     {
@@ -188,7 +188,7 @@ const CostTable: React.FC<CostTableProps> = ({
       align: 'right',
       render: (_: unknown, record: CostRow) => {
         const total = record.works_cost + record.works_comp_cost;
-        return total.toLocaleString('ru-RU', { minimumFractionDigits: 0 });
+        return total.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
       },
     },
     {
@@ -197,7 +197,7 @@ const CostTable: React.FC<CostTableProps> = ({
       key: 'sub_materials_cost',
       width: 95,
       align: 'right',
-      render: (value: number) => value.toLocaleString('ru-RU', { minimumFractionDigits: 0 }),
+      render: (value: number) => value.toLocaleString('ru-RU', { maximumFractionDigits: 0 }),
     },
     {
       title: <div style={{ textAlign: 'center' }}>Суб-раб.</div>,
@@ -205,7 +205,7 @@ const CostTable: React.FC<CostTableProps> = ({
       key: 'sub_works_cost',
       width: 95,
       align: 'right',
-      render: (value: number) => value.toLocaleString('ru-RU', { minimumFractionDigits: 0 }),
+      render: (value: number) => value.toLocaleString('ru-RU', { maximumFractionDigits: 0 }),
     },
   ];
 
@@ -234,7 +234,7 @@ const CostTable: React.FC<CostTableProps> = ({
         const totalMaterials = record.materials_cost + record.sub_materials_cost + record.materials_comp_cost;
         return (
           <Text style={{ color: '#059669' }}>
-            {totalMaterials.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}
+            {totalMaterials.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
           </Text>
         );
       },
@@ -274,7 +274,7 @@ const CostTable: React.FC<CostTableProps> = ({
       fixed: 'right',
       render: (value: number) => (
         <Text strong style={{ color: '#10b981' }}>
-          {value.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}
+          {value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
         </Text>
       ),
     },
@@ -290,7 +290,7 @@ const CostTable: React.FC<CostTableProps> = ({
       align: 'right',
       render: (value: number) => (
         <Text strong style={{ color: '#10b981' }}>
-          {value.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}
+          {value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
         </Text>
       ),
     },
@@ -379,7 +379,7 @@ const CostTable: React.FC<CostTableProps> = ({
                   <>
                     <Table.Summary.Cell index={3} align="right">
                       <Text strong style={{ color: '#10b981', fontSize: 16 }}>
-                        {totals.total.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}
+                        {totals.total.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
                       </Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={4} align="right">
@@ -392,20 +392,20 @@ const CostTable: React.FC<CostTableProps> = ({
                 ) : viewMode === 'detailed' ? (
                   <>
                     <Table.Summary.Cell index={6} align="right">
-                      <Text strong>{(totals.materials + totals.materialsComp).toLocaleString('ru-RU', { minimumFractionDigits: 0 })}</Text>
+                      <Text strong>{(totals.materials + totals.materialsComp).toLocaleString('ru-RU', { maximumFractionDigits: 0 })}</Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={7} align="right">
-                      <Text strong>{(totals.works + totals.worksComp).toLocaleString('ru-RU', { minimumFractionDigits: 0 })}</Text>
+                      <Text strong>{(totals.works + totals.worksComp).toLocaleString('ru-RU', { maximumFractionDigits: 0 })}</Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={8} align="right">
-                      <Text strong>{totals.subMaterials.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}</Text>
+                      <Text strong>{totals.subMaterials.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}</Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={9} align="right">
-                      <Text strong>{totals.subWorks.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}</Text>
+                      <Text strong>{totals.subWorks.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}</Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={10} align="right">
                       <Text strong style={{ color: '#10b981', fontSize: 16 }}>
-                        {totals.total.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}
+                        {totals.total.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
                       </Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={11} />
@@ -419,12 +419,12 @@ const CostTable: React.FC<CostTableProps> = ({
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={7} align="right">
                       <Text strong style={{ color: '#059669' }}>
-                        {totals.totalMaterials.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}
+                        {totals.totalMaterials.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
                       </Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={8} align="right">
                       <Text strong style={{ color: '#10b981', fontSize: 16 }}>
-                        {totals.total.toLocaleString('ru-RU', { minimumFractionDigits: 0 })}
+                        {totals.total.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
                       </Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={9} />
