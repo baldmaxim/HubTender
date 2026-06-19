@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Card, Typography, Select, Table, Space, Statistic, Row, Col, Button, Spin, Segmented, Input } from 'antd';
 import { BarChartOutlined, ReloadOutlined, DownloadOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -42,6 +42,42 @@ const DiffPerUnitCell: React.FC<{ value: number }> = ({ value }) => {
     <Text style={{ color: value >= 0 ? '#52c41a' : '#ff4d4f' }}>
       {value >= 0 ? '+' : ''}{formatNum(value)}
     </Text>
+  );
+};
+
+// Ячейка примечания. Контролируемый компонент с локальным состоянием и
+// стабильным key (=record.key) на уровне рендера: благодаря этому ввод не
+// сбрасывается и не теряет фокус при перерисовках таблицы (серверный
+// авто-пересчёт + realtime-обновления пересобирают comparisonData). Сохраняем
+// на blur, только если значение изменилось.
+const NoteCell: React.FC<{
+  record: ComparisonRow;
+  onSave: (record: ComparisonRow, value: string) => void;
+}> = ({ record, onSave }) => {
+  const initial = record.note || '';
+  const [value, setValue] = useState(initial);
+
+  // Подтягиваем внешнее значение, только когда оно реально поменялось
+  // (своё сохранение, чужая правка). Незавершённый ввод не затирается, т.к.
+  // record.note в этот момент остаётся прежним.
+  useEffect(() => {
+    setValue(record.note || '');
+  }, [record.note, record.key]);
+
+  return (
+    <Input.TextArea
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        if ((record.note || '') !== value) {
+          onSave(record, value);
+        }
+      }}
+      autoSize={{ minRows: 1, maxRows: 3 }}
+      placeholder="—"
+      variant="borderless"
+      style={{ padding: '2px 4px', fontSize: '13px' }}
+    />
   );
 };
 
@@ -165,16 +201,7 @@ const ObjectComparison: React.FC = () => {
           if (record.is_location) {
             return <Text type="secondary">—</Text>;
           }
-          return (
-            <Input.TextArea
-              defaultValue={record.note || ''}
-              autoSize={{ minRows: 1, maxRows: 3 }}
-              onBlur={(e) => handleNoteBlur(record, e.target.value)}
-              placeholder="—"
-              variant="borderless"
-              style={{ padding: '2px 4px', fontSize: '13px' }}
-            />
-          );
+          return <NoteCell key={record.key} record={record} onSave={handleNoteBlur} />;
         },
       });
     }
