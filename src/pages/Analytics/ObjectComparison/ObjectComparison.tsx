@@ -195,14 +195,9 @@ const ObjectComparison: React.FC = () => {
         title: <div style={{ textAlign: 'center' }}>Примечание</div>,
         key: 'note',
         width: 200,
-        render: (_: unknown, record: ComparisonRow) => {
-          // У промежуточного уровня «локализация» нет собственной заметки —
-          // заметки живут только на категории и на детализации.
-          if (record.is_location) {
-            return <Text type="secondary">—</Text>;
-          }
-          return <NoteCell key={record.key} record={record} onSave={handleNoteBlur} />;
-        },
+        render: (_: unknown, record: ComparisonRow) => (
+          <NoteCell key={record.key} record={record} onSave={handleNoteBlur} />
+        ),
       });
     }
 

@@ -316,6 +316,7 @@ function buildHierarchy(
         );
         locRow.is_location = true;
         locRow.mainCategoryName = mainCat;
+        if (notes) locRow.note = notes.get(locRow.key) || null;
         for (const g of group) {
           for (let idx = 0; idx < numTenders; idx++) {
             locRow.tenders[idx].materials += g.tenders[idx].materials;
