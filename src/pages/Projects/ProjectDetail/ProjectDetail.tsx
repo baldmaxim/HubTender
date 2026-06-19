@@ -255,13 +255,15 @@ const ProjectDetail: React.FC = () => {
 
   return (
     <div style={{ padding: '0 8px 8px' }}>
-      <Breadcrumb
-        style={{ marginBottom: 12 }}
-        items={[
-          { title: 'Текущие объекты', href: '#', onClick: handleBack },
-          { title: project.name },
-        ]}
-      />
+      {!isPhoneDevice && (
+        <Breadcrumb
+          style={{ marginBottom: 12 }}
+          items={[
+            { title: 'Текущие объекты', href: '#', onClick: handleBack },
+            { title: project.name },
+          ]}
+        />
+      )}
 
       <div
         style={{

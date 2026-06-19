@@ -252,7 +252,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         width={250}
       >
         <div
-          className={`logo logo-${currentTheme}`}
+          className={`logo logo-${currentTheme} ${isPhoneDevice && !collapsed ? 'logo-phone' : ''}`}
           onClick={() => navigate('/dashboard')}
           style={{ cursor: 'pointer', flexShrink: 0 }}
         >

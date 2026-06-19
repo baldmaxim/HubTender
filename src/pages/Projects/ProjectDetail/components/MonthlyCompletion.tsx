@@ -21,6 +21,7 @@ import {
   updateProjectMonthlyCompletion,
 } from '../../../../lib/api/projects';
 import type { ProjectFull, ProjectCompletion } from '../../../../lib/supabase/types';
+import { useIsMobile } from '../../../../hooks/useIsMobile';
 
 const { Text } = Typography;
 
@@ -92,6 +93,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
   onOptimistic,
   readOnly,
 }) => {
+  const { isLandscapePhone } = useIsMobile();
   const [loading, setLoading] = useState(false);
   const [modifiedRows, setModifiedRows] = useState<Record<string, Partial<MonthRow>>>({});
 
@@ -401,7 +403,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
       </Row>
 
       {/* Actions */}
-      {!readOnly && (
+      {!readOnly && !isLandscapePhone && (
         <Space style={{ marginBottom: 16 }}>
           <Button
             type="primary"
@@ -421,7 +423,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
         dataSource={displayRows}
         rowKey="key"
         pagination={false}
-        scroll={{ x: 750, y: 'calc(100vh - 490px)' }}
+        scroll={{ x: 750, y: isLandscapePhone ? 'calc(100vh - 150px)' : 'calc(100vh - 490px)' }}
         size="small"
         rowClassName={(record) => (record.isCurrent ? 'current-month-row' : '')}
         summary={() => (

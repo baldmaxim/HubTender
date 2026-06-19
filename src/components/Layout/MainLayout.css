@@ -34,6 +34,14 @@
   transform: translateY(-2px);
 }
 
+/* Телефон, раскрытое меню: высота кнопки-логотипа = высоте шапки (64px) */
+.logo.logo-phone {
+  height: 64px;
+  box-sizing: border-box;
+  padding: 6px 16px;
+  margin: 0 12px;
+}
+
 /* Logo collapsed state (only icon) */
 .logo-collapsed {
   display: flex;

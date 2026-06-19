@@ -19,6 +19,7 @@ import { PlusOutlined, DeleteOutlined, EditOutlined, SaveOutlined, CloseOutlined
 import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
 import { useTheme } from '../../../../contexts/ThemeContext';
+import { useIsMobile } from '../../../../hooks/useIsMobile';
 import type { ProjectFull, ProjectAgreement } from '../../../../lib/supabase/types';
 import {
   listProjectAgreements,
@@ -75,6 +76,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
   readOnly,
 }) => {
   const { theme } = useTheme();
+  const { isLandscapePhone } = useIsMobile();
   const [form] = Form.useForm();
   const [agreements, setAgreements] = useState<ProjectAgreement[]>([]);
   const [loading, setLoading] = useState(false);
@@ -341,7 +343,7 @@ export const AdditionalAgreements: React.FC<AdditionalAgreementsProps> = ({
       </Row>
 
       {/* Add button */}
-      {!addingNew && !readOnly && (
+      {!addingNew && !readOnly && !isLandscapePhone && (
         <Button
           type="primary"
           icon={<PlusOutlined />}
