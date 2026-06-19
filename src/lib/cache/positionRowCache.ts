@@ -35,13 +35,43 @@ export function getRow(positionId: string): ClientPosition | null {
   }
 }
 
+// Sweep expired/corrupt entries from this cache's namespace. Keeps the cache
+// bounded to roughly the rows touched within the TTL window, instead of letting
+// per-id keys accumulate forever (which eventually exhausts the localStorage
+// quota and breaks unrelated writers like the auth session).
+function pruneExpired(now: number): void {
+  try {
+    const stale: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(PREFIX)) continue;
+      try {
+        const raw = localStorage.getItem(k);
+        const parsed = raw ? (JSON.parse(raw) as Entry) : null;
+        if (!parsed || typeof parsed.ts !== 'number' || now - parsed.ts > TTL_MS) {
+          stale.push(k);
+        }
+      } catch {
+        stale.push(k);
+      }
+    }
+    stale.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // ignore
+  }
+}
+
 export function setRows(rows: ClientPosition[]): void {
   const now = Date.now();
+  // Evict stale entries first so the cache can't grow without bound.
+  pruneExpired(now);
   for (const row of rows) {
     try {
       localStorage.setItem(key(row.id), JSON.stringify({ row, ts: now }));
     } catch {
-      // Quota exceeded — stop trying for this batch; partial cache is fine.
+      // Quota exceeded — reclaim our whole namespace so we don't leave the
+      // store full for other writers, then stop for this batch.
+      invalidateAll();
       return;
     }
   }

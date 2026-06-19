@@ -1,4 +1,5 @@
 import type { AppSession } from './types';
+import { invalidateAll as clearPositionRowCache } from '../cache/positionRowCache';
 
 // localStorage key prefix for every app-auth value. Distinct from any
 // Supabase key so the two systems can coexist during the cutover.
@@ -37,9 +38,26 @@ export function loadSession(): AppSession | null {
 
 // saveSession persists the session. The plaintext refresh_token MUST stay
 // here only — it never leaves the client outside of /refresh /logout POSTs.
+//
+// The auth session is critical and tiny, but localStorage is shared with
+// best-effort caches (e.g. positionRowCache) that can fill the per-origin
+// quota. So if setItem throws QuotaExceededError we drop those disposable
+// caches and retry once — the session must never lose to a throwaway cache.
+// If it still fails, we keep the in-memory session (persistence is best-effort)
+// rather than crash the login flow.
 export function saveSession(session: AppSession): void {
   if (!hasLocalStorage()) return;
-  window.localStorage.setItem(KEY_SESSION, JSON.stringify(session));
+  const payload = JSON.stringify(session);
+  try {
+    window.localStorage.setItem(KEY_SESSION, payload);
+  } catch {
+    clearPositionRowCache();
+    try {
+      window.localStorage.setItem(KEY_SESSION, payload);
+    } catch {
+      // Storage still full after sweeping caches — give up persisting.
+    }
+  }
 }
 
 // clearSession removes every app-auth key. Called on signOut(), 401-after-
