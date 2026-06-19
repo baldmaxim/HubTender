@@ -26,7 +26,7 @@ import { useFinancialData } from './hooks/useFinancialData';
 import { IndicatorsCharts } from './components/IndicatorsCharts';
 import { IndicatorsTable } from './components/IndicatorsTable';
 import { IndicatorsFilters } from './components/IndicatorsFilters';
-import { LandscapeTableOverlay } from './components/LandscapeTableOverlay';
+import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 import './FinancialIndicators.css';
 
 
