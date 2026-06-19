@@ -18,6 +18,11 @@ import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/ru';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
+import { DashboardCards } from './components/DashboardCards';
+import { computeDeadlineProgress } from './utils/deadlineProgress';
+import type { TenderTableData } from './types';
 import './Dashboard.css';
 
 dayjs.extend(duration);
@@ -26,25 +31,11 @@ dayjs.locale('ru');
 
 const { Title, Text } = Typography;
 
-interface TenderTableData {
-  key: string;
-  id: string;
-  number: string;
-  name: string;
-  version: number;
-  status_deadline: boolean;
-  construction_area: number;
-  boq_cost: number;
-  cost_per_sqm: number;
-  deadline: string;
-  client: string;
-  created_at: string;
-}
-
 const Dashboard: React.FC = () => {
   const { theme: currentTheme } = useTheme();
   const { token } = theme.useToken();
   const navigate = useNavigate();
+  const { isPhone, isLandscapePhone, isPhoneDevice } = useIsMobile();
 
   const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [tenders, setTenders] = useState<TenderTableData[]>([]);
@@ -169,16 +160,11 @@ const Dashboard: React.FC = () => {
       width: '30%',
       align: 'center' as const,
       render: (deadline: string, record: TenderTableData) => {
-        if (!deadline) {
+        const dl = computeDeadlineProgress(deadline, record.created_at);
+        if (dl.state === 'none') {
           return <Tag color="default">Дедлайн не указан</Tag>;
         }
-
-        const now = dayjs();
-        const deadlineDate = dayjs(deadline);
-        const createdDate = dayjs(record.created_at);
-
-        // Если дедлайн прошел
-        if (deadlineDate.isBefore(now)) {
+        if (dl.state === 'completed') {
           return (
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               <Progress
@@ -191,48 +177,14 @@ const Dashboard: React.FC = () => {
             </Space>
           );
         }
-
-        // Рассчитываем общее время от создания до дедлайна
-        const totalDuration = deadlineDate.diff(createdDate, 'millisecond');
-        // Рассчитываем прошедшее время от создания до сейчас
-        const elapsedDuration = now.diff(createdDate, 'millisecond');
-        // Процент прогресса
-        const progressPercent = Math.min(Math.round((elapsedDuration / totalDuration) * 100), 99);
-
-        // Оставшееся время
-        const remainingDuration = deadlineDate.diff(now);
-        const remainingDays = Math.floor(remainingDuration / (1000 * 60 * 60 * 24));
-        const remainingHours = Math.floor((remainingDuration % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-
-        // Форматирование оставшегося времени
-        let remainingText = '';
-        if (remainingDays > 0) {
-          remainingText = `${remainingDays} дн. ${remainingHours} ч.`;
-        } else if (remainingHours > 0) {
-          remainingText = `${remainingHours} ч.`;
-        } else {
-          const remainingMinutes = Math.floor(remainingDuration / (1000 * 60));
-          remainingText = `${remainingMinutes} мин.`;
-        }
-
-        // Определяем цвет в зависимости от оставшегося времени
-        let progressColor = '#10b981'; // Зеленый по умолчанию
-        if (progressPercent > 90) {
-          progressColor = '#ef4444'; // Красный
-        } else if (progressPercent > 75) {
-          progressColor = '#f97316'; // Оранжевый
-        } else if (progressPercent > 50) {
-          progressColor = '#eab308'; // Желтый
-        }
-
         return (
           <div style={{ width: '100%' }}>
-            <Text style={{ fontSize: 11, color: progressColor, fontWeight: 500, display: 'block', marginBottom: 2 }}>
-              <ClockCircleOutlined /> Осталось: {remainingText}
+            <Text style={{ fontSize: 11, color: dl.color, fontWeight: 500, display: 'block', marginBottom: 2 }}>
+              <ClockCircleOutlined /> Осталось: {dl.remainingText}
             </Text>
             <Progress
-              percent={progressPercent}
-              strokeColor={progressColor}
+              percent={dl.percent}
+              strokeColor={dl.color}
               showInfo={false}
               size="small"
             />
@@ -302,48 +254,7 @@ const Dashboard: React.FC = () => {
     },
   ];
 
-  return (
-    <div className={`dashboard-container ${currentTheme}`} style={{ padding: '24px' }}>
-      {/* Компактная шапка страницы */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-        gap: 16,
-        flexWrap: 'wrap'
-      }}>
-        {/* Левая часть: заголовок с описанием */}
-        <div style={{ flex: '1 1 auto', minWidth: 300 }}>
-          <Space align="center" size={12}>
-            <DashboardOutlined style={{ fontSize: 22, color: token.colorPrimary }} />
-            <div>
-              <Title level={3} style={{ margin: 0, lineHeight: 1.2 }}>
-                Дашборд тендеров
-              </Title>
-              <Text type="secondary" style={{ fontSize: 13 }}>
-                Обзор активных тендеров и основные показатели
-              </Text>
-            </div>
-          </Space>
-        </div>
-
-        {/* Правая часть: поиск */}
-        <div style={{ flex: '0 0 auto' }}>
-          <Input
-            placeholder="Поиск по названию, номеру, заказчику..."
-            prefix={<SearchOutlined />}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            style={{
-              width: 400,
-              backgroundColor: currentTheme === 'dark' ? '#141414' : '#fff',
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Таблица тендеров */}
+  const renderTable = (fitToScreen: boolean) => (
       <Card
         variant="borderless"
         className="dashboard-table-card"
@@ -366,39 +277,72 @@ const Dashboard: React.FC = () => {
             },
             style: { cursor: 'pointer' },
           })}
-          rowClassName={(record) => {
-            if (!record.deadline) return '';
-
-            const now = dayjs();
-            const deadlineDate = dayjs(record.deadline);
-            const createdDate = dayjs(record.created_at);
-
-            // Если дедлайн прошел
-            if (deadlineDate.isBefore(now)) {
-              return 'deadline-completed';
-            }
-
-            // Рассчитываем процент прогресса
-            const totalDuration = deadlineDate.diff(createdDate, 'millisecond');
-            const elapsedDuration = now.diff(createdDate, 'millisecond');
-            const progressPercent = Math.min(Math.round((elapsedDuration / totalDuration) * 100), 99);
-
-            // Определяем класс в зависимости от прогресса
-            if (progressPercent > 90) {
-              return 'deadline-critical'; // Красный
-            } else if (progressPercent > 75) {
-              return 'deadline-warning'; // Оранжевый
-            } else if (progressPercent > 50) {
-              return 'deadline-caution'; // Желтый
-            }
-
-            return '';
-          }}
-          scroll={{ x: 1200 }}
+          rowClassName={(record) => computeDeadlineProgress(record.deadline, record.created_at).className}
+          scroll={fitToScreen ? undefined : { x: 1200 }}
         />
       </Card>
-    </div>
-  );
+    );
+
+    return (
+      <div className={`dashboard-container ${currentTheme}`} style={{ padding: '24px' }}>
+        {/* Компактная шапка страницы */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 16,
+          gap: 16,
+          flexWrap: 'wrap'
+        }}>
+          {/* Левая часть: заголовок (на телефоне его показывает шапка MainLayout) */}
+          {!isPhoneDevice && (
+            <div style={{ flex: '1 1 auto', minWidth: 300 }}>
+              <Space align="center" size={12}>
+                <DashboardOutlined style={{ fontSize: 22, color: token.colorPrimary }} />
+                <div>
+                  <Title level={3} style={{ margin: 0, lineHeight: 1.2 }}>
+                    Дашборд тендеров
+                  </Title>
+                  <Text type="secondary" style={{ fontSize: 13 }}>
+                    Обзор активных тендеров и основные показатели
+                  </Text>
+                </div>
+              </Space>
+            </div>
+          )}
+
+          {/* Правая часть: поиск */}
+          <div style={{ flex: isPhoneDevice ? '1 1 100%' : '0 0 auto' }}>
+            <Input
+              placeholder="Поиск по названию, номеру, заказчику..."
+              prefix={<SearchOutlined />}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              style={{
+                width: isPhone ? '100%' : 400,
+                backgroundColor: currentTheme === 'dark' ? '#141414' : '#fff',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Портрет телефона — карточки; ландшафт — авто-масштаб оверлея; иначе — таблица */}
+        {isPhone ? (
+          <DashboardCards
+            data={filteredTenders}
+            loading={loading}
+            versionTitles={tenders.map((t) => ({ title: t.name, version: t.version }))}
+            onOpen={(id) => navigate(`/positions?tenderId=${id}`)}
+          />
+        ) : isLandscapePhone ? (
+          <LandscapeTableOverlay theme={currentTheme} width={1200}>
+            {renderTable(true)}
+          </LandscapeTableOverlay>
+        ) : (
+          renderTable(false)
+        )}
+      </div>
+    );
 };
 
 export default Dashboard;
