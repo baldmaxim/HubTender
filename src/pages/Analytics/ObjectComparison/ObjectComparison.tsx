@@ -18,7 +18,7 @@ const TenderRealtimeRefresh: React.FC<{ tenderId: string; onChange: () => void }
 };
 
 const formatNum = (value: number) =>
-  value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  value.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
 
 const formatPerUnit = (value: number) =>
   value > 0
@@ -40,7 +40,7 @@ const DiffPerUnitCell: React.FC<{ value: number }> = ({ value }) => {
   if (value === 0) return <Text>—</Text>;
   return (
     <Text style={{ color: value >= 0 ? '#52c41a' : '#ff4d4f' }}>
-      {value >= 0 ? '+' : ''}{formatNum(value)}
+      {value >= 0 ? '+' : ''}{value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </Text>
   );
 };
@@ -326,7 +326,7 @@ const ObjectComparison: React.FC = () => {
                   <Statistic
                     title={`Итого: ${tenderLabel(info, `Тендер ${i + 1}`)}`}
                     value={tenderTotals[i] || 0}
-                    precision={2}
+                    precision={0}
                     suffix="₽"
                   />
                 </Col>
@@ -336,7 +336,7 @@ const ObjectComparison: React.FC = () => {
                   <Statistic
                     title="Разница"
                     value={diffValue}
-                    precision={2}
+                    precision={0}
                     suffix="₽"
                     valueStyle={{ color: diffValue >= 0 ? '#52c41a' : '#ff4d4f' }}
                     prefix={diffValue >= 0 ? '+' : ''}
