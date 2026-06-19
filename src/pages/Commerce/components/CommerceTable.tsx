@@ -25,6 +25,8 @@ interface CommerceTableProps {
   onNavigateToPosition: (positionId: string) => void;
   referenceTotal: number;
   insuranceTotal?: number;
+  /** Для ландшафтного оверлея: без внутреннего скролла и виртуализации (вписывается масштабом). */
+  fitToScreen?: boolean;
 }
 
 export default function CommerceTable({
@@ -33,6 +35,7 @@ export default function CommerceTable({
   onNavigateToPosition,
   referenceTotal,
   insuranceTotal = 0,
+  fitToScreen = false,
 }: CommerceTableProps) {
   const [tableScrollY, setTableScrollY] = useState(getTableScrollY);
 
@@ -302,8 +305,8 @@ export default function CommerceTable({
         emptyText: <Empty description="Нет позиций заказчика" />
       }}
       pagination={false}
-      scroll={{ x: TABLE_SCROLL_X, y: tableScrollY }}
-      virtual
+      scroll={fitToScreen ? undefined : { x: TABLE_SCROLL_X, y: tableScrollY }}
+      virtual={!fitToScreen}
       summary={() => {
         const markupColor = summary.totalMarkupCoefficient > 1 ? 'green' : summary.totalMarkupCoefficient < 1 ? 'red' : 'default';
         const baseColor = summary.baseTotalMatches ? '#52c41a' : '#ff4d4f';

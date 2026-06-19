@@ -18,15 +18,18 @@ interface ResultsTableProps {
   rows: ResultRow[];
   hasResults: boolean;
   loading?: boolean;
+  /** Для ландшафтного оверлея: без внутреннего скролла/виртуализации и без fixed-колонок. */
+  fitToScreen?: boolean;
 }
 
 export const ResultsTable: React.FC<ResultsTableProps> = ({
   rows,
   hasResults,
   loading = false,
+  fitToScreen = false,
 }) => {
   const [tableScrollY, setTableScrollY] = useState(getTableScrollY);
-  const columns = useMemo(() => getResultsTableColumns(), []);
+  const columns = useMemo(() => getResultsTableColumns(fitToScreen), [fitToScreen]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -61,9 +64,9 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({
         loading={loading}
         bordered
         size="small"
-        scroll={{ x: 1800, y: tableScrollY }}
+        scroll={fitToScreen ? undefined : { x: 1800, y: tableScrollY }}
         pagination={false}
-        virtual
+        virtual={!fitToScreen}
       />
     </div>
   );

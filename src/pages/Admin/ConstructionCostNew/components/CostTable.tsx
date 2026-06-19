@@ -20,7 +20,14 @@ interface CostTableProps {
   onNotesChange: (value: string, record: CostRow) => void;
   onCategoryClick?: (record: CostRow) => void;
   areaSp: number;
+  /** На телефоне страница read-only: объёмы и примечания показываем текстом, без инпутов. */
+  readOnly?: boolean;
+  /** Для ландшафтного оверлея: без внутреннего скролла и без fixed-колонок (вписывается масштабом). */
+  fitToScreen?: boolean;
 }
+
+const fmtVolume = (value: number) =>
+  Number(value).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const CostTable: React.FC<CostTableProps> = ({
   data,
@@ -32,6 +39,8 @@ const CostTable: React.FC<CostTableProps> = ({
   onNotesChange,
   onCategoryClick,
   areaSp,
+  readOnly = false,
+  fitToScreen = false,
 }) => {
   const { theme } = useTheme();
 
@@ -42,7 +51,7 @@ const CostTable: React.FC<CostTableProps> = ({
       dataIndex: 'cost_category_name',
       key: 'cost_category_name',
       width: 140,
-      fixed: 'left',
+      fixed: fitToScreen ? undefined : 'left',
       render: (value: string, record: CostRow) => {
         if (record.is_category) {
           return <Text strong style={{ fontSize: '14px' }}>{value}</Text>;
@@ -92,6 +101,10 @@ const CostTable: React.FC<CostTableProps> = ({
       width: 90,
       align: 'right',
       render: (value: number, record: CostRow) => {
+        // На телефоне (read-only) объём показываем текстом, без InputNumber.
+        if (readOnly) {
+          return value != null && value !== 0 ? fmtVolume(value) : '—';
+        }
         // Для категорий и локализаций - показываем InputNumber для ввода объема группы
         if (record.is_category || record.is_location) {
           return (
@@ -248,18 +261,21 @@ const CostTable: React.FC<CostTableProps> = ({
       dataIndex: 'notes',
       key: 'notes',
       width: 150,
-      fixed: 'right',
-      render: (value: string | undefined, record: CostRow) => (
-        <Input
-          defaultValue={value || ''}
-          onBlur={(e) => {
-            const v = e.target.value.trim();
-            if (v !== (value || '')) onNotesChange(v, record);
-          }}
-          size="small"
-          placeholder="—"
-        />
-      ),
+      fixed: fitToScreen ? undefined : 'right',
+      render: (value: string | undefined, record: CostRow) =>
+        readOnly ? (
+          <Text>{value || '—'}</Text>
+        ) : (
+          <Input
+            defaultValue={value || ''}
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              if (v !== (value || '')) onNotesChange(v, record);
+            }}
+            size="small"
+            placeholder="—"
+          />
+        ),
     },
   ];
 
@@ -271,7 +287,7 @@ const CostTable: React.FC<CostTableProps> = ({
       key: 'total_cost',
       width: 120,
       align: 'right',
-      fixed: 'right',
+      fixed: fitToScreen ? undefined : 'right',
       render: (value: number) => (
         <Text strong style={{ color: '#10b981' }}>
           {value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
@@ -360,7 +376,11 @@ const CostTable: React.FC<CostTableProps> = ({
           dataSource={data}
           pagination={false}
           size="small"
-          scroll={{ y: 'calc(100vh - 340px)' }}
+          scroll={
+            fitToScreen
+              ? undefined
+              : { x: readOnly ? 'max-content' : undefined, y: 'calc(100dvh - 340px)' }
+          }
           bordered
           rowClassName={(record) => record.is_category ? 'category-row' : ''}
           expandable={{

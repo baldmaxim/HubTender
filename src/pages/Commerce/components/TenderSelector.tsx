@@ -7,6 +7,7 @@ import { DollarOutlined } from '@ant-design/icons';
 import type { Tender } from '../../../lib/supabase';
 import type { TenderOption } from '../types';
 import { getVersionColorByTitle } from '../../../utils/versionColor';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Title, Text } = Typography;
 
@@ -29,6 +30,7 @@ export default function TenderSelector({
   onTenderSelect,
   shouldFilterArchived = false
 }: TenderSelectorProps) {
+  const { isPhone, isPhoneDevice } = useIsMobile();
   // Получение уникальных наименований тендеров
   const getTenderTitles = (): TenderOption[] => {
     const uniqueTitles = new Map<string, TenderOption>();
@@ -75,7 +77,7 @@ export default function TenderSelector({
         </Text>
         <Select
           className="tender-select"
-          style={{ width: 400, marginBottom: 32 }}
+          style={{ width: isPhone ? '100%' : 400, marginBottom: isPhone ? 16 : 32 }}
           placeholder="Выберите тендер"
           value={selectedTenderTitle}
           onChange={onTenderTitleChange}
@@ -90,7 +92,11 @@ export default function TenderSelector({
 
         {selectedTenderTitle && (
           <Select
-            style={{ width: 200, marginBottom: 32, marginLeft: 16 }}
+            style={{
+              width: isPhone ? '100%' : 200,
+              marginBottom: 32,
+              marginLeft: isPhone ? 0 : 16,
+            }}
             placeholder="Выберите версию"
             value={selectedVersion}
             onChange={onVersionChange}
@@ -104,13 +110,13 @@ export default function TenderSelector({
             <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
               Или выберите из списка:
             </Text>
-            <Row gutter={[16, 16]} justify="center">
+            <Row gutter={isPhoneDevice ? [8, 8] : [16, 16]} justify="center">
               {tenders.filter(t => !t.is_archived).slice(0, 6).map(tender => (
                 <Col key={tender.id}>
                   <Card
                     hoverable
                     style={{
-                      width: 200,
+                      width: isPhoneDevice ? 160 : 200,
                       textAlign: 'center',
                       cursor: 'pointer',
                       borderColor: '#10b981',

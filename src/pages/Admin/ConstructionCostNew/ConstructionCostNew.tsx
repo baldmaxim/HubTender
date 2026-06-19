@@ -13,11 +13,18 @@ import TenderSelection from './components/TenderSelection';
 import { exportConstructionCostToExcel } from './utils/exportConstructionCostToExcel';
 import { filterCostData } from './utils/filterCostData';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useTheme } from '../../../contexts/ThemeContext';
+import { LandscapeTableOverlay } from '../../../components/responsive/LandscapeTableOverlay';
 
 const { Title, Text } = Typography;
 
 const ConstructionCostNew: React.FC = () => {
   const { user } = useAuth();
+  const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
+  const { theme: currentTheme } = useTheme();
+  // На телефоне страница только для просмотра; редактирование — на планшете/десктопе.
+  const readOnly = isMobile || isLandscapePhone;
   const [searchText, setSearchText] = useState('');
   const [viewMode, setViewMode] = useState<'detailed' | 'summary' | 'simplified'>('detailed');
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
@@ -49,6 +56,9 @@ const ConstructionCostNew: React.FC = () => {
 
   // Проверка роли для фильтрации архивных тендеров в карточках
   const shouldFilterArchived = user?.role_code === 'engineer' || user?.role_code === 'moderator';
+
+  // На телефоне в портрете принудительно «упрощённое» представление (узкий экран).
+  const effectiveViewMode = isPhone ? 'simplified' : viewMode;
 
   // Обработчик экспорта
   const handleExport = () => {
@@ -102,8 +112,32 @@ const ConstructionCostNew: React.FC = () => {
     );
   }
 
+  const costTable = (fitToScreen: boolean) => (
+    <CostTable
+      data={filteredData}
+      viewMode={effectiveViewMode}
+      loading={loading}
+      expandedRowKeys={expandedRowKeys}
+      onExpandedRowsChange={setExpandedRowKeys}
+      onVolumeChange={handleVolumeChange}
+      onNotesChange={handleNotesChange}
+      onCategoryClick={(record) => {
+        if (record.detail_cost_category_id) {
+          setModalCategory({
+            id: record.detail_cost_category_id,
+            detailName: record.detail_category_name,
+            categoryName: record.cost_category_name,
+          });
+        }
+      }}
+      areaSp={selectedTender?.area_sp || 0}
+      readOnly={readOnly}
+      fitToScreen={fitToScreen}
+    />
+  );
+
   return (
-    <div style={{ margin: '-16px', padding: '24px', height: 'calc(100vh - 64px)' }}>
+    <div style={{ margin: '-16px', padding: '24px', height: isPhoneDevice ? 'auto' : 'calc(100vh - 64px)' }}>
       <div style={{ marginBottom: 16 }}>
         <Button
           type="primary"
@@ -114,22 +148,24 @@ const ConstructionCostNew: React.FC = () => {
         </Button>
       </div>
 
-      <div style={{ marginBottom: 16, display: 'flex', alignItems: 'baseline', gap: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>
-          Затраты на строительство
-        </Title>
-        {selectedTender?.area_sp && (
-          <Text type="secondary">
-            Площадь объекта по СП: <Text strong>{selectedTender.area_sp.toLocaleString('ru-RU')} м²</Text>
-          </Text>
-        )}
-      </div>
+      {!isPhoneDevice && (
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'baseline', gap: 16 }}>
+          <Title level={4} style={{ margin: 0 }}>
+            Затраты на строительство
+          </Title>
+          {selectedTender?.area_sp && (
+            <Text type="secondary">
+              Площадь объекта по СП: <Text strong>{selectedTender.area_sp.toLocaleString('ru-RU')} м²</Text>
+            </Text>
+          )}
+        </div>
+      )}
 
-      <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <Space size="small">
+      <div style={{ marginBottom: 8, display: 'flex', alignItems: isPhone ? 'stretch' : 'center', gap: isPhone ? 8 : 16, flexWrap: 'wrap', flexDirection: isPhone ? 'column' : 'row' }}>
+        <Space size="small" style={isPhone ? { width: '100%' } : undefined}>
           <Text type="secondary">Тендер:</Text>
           <Select
-            style={{ width: 300 }}
+            style={{ width: isPhone ? '100%' : 300 }}
             placeholder="Выберите тендер"
             value={selectedTenderTitle}
             onChange={handleTenderTitleChange}
@@ -143,10 +179,10 @@ const ConstructionCostNew: React.FC = () => {
           />
         </Space>
         {selectedTenderTitle && (
-          <Space size="small">
+          <Space size="small" style={isPhone ? { width: '100%' } : undefined}>
             <Text type="secondary">Версия:</Text>
             <Select
-              style={{ width: 150 }}
+              style={{ width: isPhone ? '100%' : 150 }}
               placeholder="Выберите версию"
               value={selectedVersion}
               onChange={handleVersionChange}
@@ -156,10 +192,10 @@ const ConstructionCostNew: React.FC = () => {
         )}
       </div>
 
-      <Card bordered={false} style={{ height: 'calc(100% - 140px)' }}>
+      <Card bordered={false} style={{ height: isPhoneDevice ? 'auto' : 'calc(100% - 140px)' }}>
         <CostFilters
           costType={costType}
-          viewMode={viewMode}
+          viewMode={effectiveViewMode}
           searchText={searchText}
           onCostTypeChange={setCostType}
           onViewModeChange={setViewMode}
@@ -174,25 +210,13 @@ const ConstructionCostNew: React.FC = () => {
           disableExport={!selectedTenderId || filteredData.length === 0}
         />
 
-        <CostTable
-          data={filteredData}
-          viewMode={viewMode}
-          loading={loading}
-          expandedRowKeys={expandedRowKeys}
-          onExpandedRowsChange={setExpandedRowKeys}
-          onVolumeChange={handleVolumeChange}
-          onNotesChange={handleNotesChange}
-          onCategoryClick={(record) => {
-            if (record.detail_cost_category_id) {
-              setModalCategory({
-                id: record.detail_cost_category_id,
-                detailName: record.detail_category_name,
-                categoryName: record.cost_category_name,
-              });
-            }
-          }}
-          areaSp={selectedTender?.area_sp || 0}
-        />
+        {isLandscapePhone ? (
+          <LandscapeTableOverlay theme={currentTheme} width={1100}>
+            {costTable(true)}
+          </LandscapeTableOverlay>
+        ) : (
+          costTable(false)
+        )}
       </Card>
 
       <CategoryPositionsModal

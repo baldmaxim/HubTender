@@ -5,6 +5,9 @@
 import React, { memo } from 'react';
 import { ResultsTable } from './Results/ResultsTable';
 import type { ResultRow } from './Results/ResultsTableColumns';
+import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useTheme } from '../../../contexts/ThemeContext';
+import { LandscapeTableOverlay } from '../../../components/responsive/LandscapeTableOverlay';
 
 interface TabResultsProps {
   rows: ResultRow[];
@@ -17,6 +20,20 @@ const TabResultsImpl: React.FC<TabResultsProps> = ({
   hasResults,
   loading,
 }) => {
+  const { isLandscapePhone } = useIsMobile();
+  const { theme: currentTheme } = useTheme();
+
+  // В ландшафте телефона — таблица (read-only) во весь экран с авто-масштабом.
+  // Неактивная вкладка скрыта через display:none у Ant Tabs, поэтому fixed-оверлей
+  // не «вылезает» когда вкладка результатов не выбрана.
+  if (isLandscapePhone && hasResults) {
+    return (
+      <LandscapeTableOverlay theme={currentTheme} width={1800}>
+        <ResultsTable rows={rows} hasResults={hasResults} loading={loading} fitToScreen />
+      </LandscapeTableOverlay>
+    );
+  }
+
   return (
     <div style={{ width: '100%' }}>
       <ResultsTable

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Space, Typography, Segmented, Button, Input } from 'antd';
 import { SearchOutlined, ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
+import { useIsMobile } from '../../../../hooks/useIsMobile';
 
 const { Text } = Typography;
 
@@ -31,14 +32,24 @@ const CostFilters: React.FC<CostFiltersProps> = ({
   onExport,
   disableExport,
 }) => {
+  const { isPhone } = useIsMobile();
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: isPhone ? 'stretch' : 'flex-start',
+          flexDirection: isPhone ? 'column' : 'row',
+          gap: isPhone ? 12 : 0,
+        }}
+      >
         {/* Левая часть */}
-        <Space direction="vertical" size="middle">
-          <Space>
+        <Space direction="vertical" size="middle" style={isPhone ? { width: '100%' } : undefined}>
+          <Space wrap>
             <Text>Тип затрат:</Text>
             <Segmented
+              block={isPhone}
               options={[
                 { label: 'Прямые затраты', value: 'base' },
                 { label: 'Коммерческие затраты', value: 'commercial' },
@@ -47,19 +58,22 @@ const CostFilters: React.FC<CostFiltersProps> = ({
               onChange={(value) => onCostTypeChange(value as 'base' | 'commercial')}
             />
           </Space>
-          <Space size="large">
-            <Space>
-              <Text>Представление:</Text>
-              <Segmented
-                options={[
-                  { label: 'Детальное', value: 'detailed' },
-                  { label: 'Итоговое', value: 'summary' },
-                  { label: 'Упрощенное', value: 'simplified' },
-                ]}
-                value={viewMode}
-                onChange={(value) => onViewModeChange(value as 'detailed' | 'summary' | 'simplified')}
-              />
-            </Space>
+          <Space size="large" wrap>
+            {/* Представление скрыто на телефоне — там принудительно «Упрощённое» */}
+            {!isPhone && (
+              <Space>
+                <Text>Представление:</Text>
+                <Segmented
+                  options={[
+                    { label: 'Детальное', value: 'detailed' },
+                    { label: 'Итоговое', value: 'summary' },
+                    { label: 'Упрощенное', value: 'simplified' },
+                  ]}
+                  value={viewMode}
+                  onChange={(value) => onViewModeChange(value as 'detailed' | 'summary' | 'simplified')}
+                />
+              </Space>
+            )}
             <Space>
               <Button size="small" onClick={onExpandAll}>
                 Развернуть все
@@ -72,7 +86,12 @@ const CostFilters: React.FC<CostFiltersProps> = ({
         </Space>
 
         {/* Правая часть */}
-        <Space direction="vertical" size="middle" align="end">
+        <Space
+          direction="vertical"
+          size="middle"
+          align={isPhone ? 'start' : 'end'}
+          style={isPhone ? { width: '100%' } : undefined}
+        >
           <Space>
             <Button
               type="primary"
@@ -89,7 +108,7 @@ const CostFilters: React.FC<CostFiltersProps> = ({
           <Input
             placeholder="Поиск..."
             prefix={<SearchOutlined />}
-            style={{ width: 300 }}
+            style={{ width: isPhone ? '100%' : 300 }}
             value={searchText}
             onChange={(e) => onSearchChange(e.target.value)}
             allowClear

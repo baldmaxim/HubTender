@@ -1,122 +1,33 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  App,
-  Alert,
-  Avatar,
-  Button,
-  Card,
-  Empty,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Progress,
-  Skeleton,
-  Space,
-  Table,
-  Tooltip,
-  Typography,
-  theme,
-} from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import { CloseOutlined } from '@ant-design/icons';
+import { Alert, App, Drawer, Form, Skeleton, Typography, theme, Input } from 'antd';
 import { reconcileTenderGroups, setTenderGroupQuality } from '../../lib/api/timeline';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { useAuth } from '../../contexts/AuthContext';
-import UserTimeline from './components/UserTimeline';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { useTenderAssignableUsers } from './hooks/useTenderAssignableUsers';
 import { useTenders, type TimelineTenderListItem } from './hooks/useTenders';
 import { useTenderGroups } from './hooks/useTenderGroups';
-import type { TimelineGroupItem } from './hooks/useTenderGroups';
 import {
   DEFAULT_TENDER_TEAMS,
   TIMELINE_EXCLUDED_FULL_NAMES,
   TIMELINE_PRIVILEGED_ROLE_CODES,
-  formatDate,
-  getInitials,
-  getRoleAvatarColor,
-  getScoreColor,
   normalizeFullName,
 } from './utils/timeline.utils';
+import {
+  getExpectedAutoGroups,
+  getExpectedSignature,
+  getGroupsSignature,
+} from './utils/timelineSignatures';
+import { TenderTeamsView } from './components/TenderTeamsView';
+import { TimelinePanel } from './components/TimelinePanel';
+import { TimelineTenderTable } from './components/TimelineTenderTable';
+import { TimelineTenderCards } from './components/TimelineTenderCards';
+import { GroupQualityModal, type GroupQualityFormValues } from './components/GroupQualityModal';
 
 const { Title, Text } = Typography;
-const { TextArea, Search } = Input;
+const { Search } = Input;
 const TIMELINE_PANEL_WIDTH = 520;
 const QUALITY_READONLY_ROLE_CODES = ['engineer', 'senior_group'] as const;
-
-type ExpectedAutoGroup = {
-  name: string;
-  color: string;
-  sortOrder: number;
-  userIds: string[];
-};
-
-type GroupQualityFormValues = {
-  groups?: Record<string, { quality_level?: number | null; quality_comment?: string | null }>;
-};
-
-const QUALITY_LEVEL_DESCRIPTIONS: Record<number, string> = {
-  1: 'Расценивали ВОР.',
-  2: 'Считали ориентировочно.',
-  3: 'Считали качественно, имеются все данные от Заказчика.',
-};
-
-function getQualityLabel(level: number | null): string {
-  return level == null ? 'Нет оценки' : `${level}/3`;
-}
-
-function getQualityTooltipContent(level: number | null, comment?: string | null): React.ReactNode {
-  if (level == null) {
-    return 'Нет оценки';
-  }
-
-  return (
-    <div>
-      <div>{QUALITY_LEVEL_DESCRIPTIONS[level] || `Уровень ${level}`}</div>
-      {comment ? <div style={{ marginTop: 4 }}>{comment}</div> : null}
-    </div>
-  );
-}
-
-function getExpectedAutoGroups(
-  users: Array<{ id: string; full_name: string }>
-): ExpectedAutoGroup[] {
-  const usersByName = new Map(users.map((user) => [normalizeFullName(user.full_name), user]));
-
-  return DEFAULT_TENDER_TEAMS.map((team) => {
-    const matchedUserIds = team.members
-      .map((fullName) => usersByName.get(normalizeFullName(fullName))?.id || null)
-      .filter((userId): userId is string => Boolean(userId));
-
-    return {
-      name: team.name,
-      color: team.color,
-      sortOrder: team.sortOrder,
-      userIds: matchedUserIds,
-    };
-  });
-}
-
-function getGroupsSignature(groups: TimelineGroupItem[]): string {
-  return groups
-    .map((group) => ({
-      name: group.name,
-      color: group.color,
-      sortOrder: group.sort_order,
-      userIds: group.members.map((member) => member.user_id).sort(),
-    }))
-    .sort((left, right) => left.name.localeCompare(right.name, 'ru-RU'))
-    .map((group) => `${group.name}|${group.color}|${group.sortOrder}|${group.userIds.join(',')}`)
-    .join(';');
-}
-
-function getExpectedSignature(expectedGroups: ExpectedAutoGroup[]): string {
-  return expectedGroups
-    .slice()
-    .sort((left, right) => left.name.localeCompare(right.name, 'ru-RU'))
-    .map((group) => `${group.name}|${group.color}|${group.sortOrder}|${group.userIds.slice().sort().join(',')}`)
-    .join(';');
-}
 
 const TenderTimeline: React.FC = () => {
   const {
@@ -132,6 +43,7 @@ const TenderTimeline: React.FC = () => {
   } = theme.useToken();
   const { message } = App.useApp();
   const { user } = useAuth();
+  const { isPhoneDevice } = useIsMobile();
   const { tenders, loading: tendersLoading, error: tendersError, refetch: refetchTenders } = useTenders();
   const [qualityForm] = Form.useForm<GroupQualityFormValues>();
   const [searchValue, setSearchValue] = useState('');
@@ -382,6 +294,14 @@ const TenderTimeline: React.FC = () => {
     setExpandedTenderIds([]);
   };
 
+  const handleToggleTenderCard = (tenderId: string) => {
+    if (selectedTenderId === tenderId && expandedTenderIds.includes(tenderId)) {
+      handleCollapseTender(tenderId);
+    } else {
+      handleSelectTender(tenderId);
+    }
+  };
+
   const handleSelectGroup = (groupId: string) => {
     setSelectedGroupId(groupId);
     setSelectedUserId(null);
@@ -436,75 +356,6 @@ const TenderTimeline: React.FC = () => {
     }
   };
 
-  const columns: ColumnsType<TimelineTenderListItem> = [
-    {
-      title: '№',
-      width: 56,
-      render: (_, __, index) => index + 1,
-    },
-    {
-      title: 'Тендер',
-      dataIndex: 'title',
-      render: (_, tender) => (
-        <Space direction="vertical" size={2}>
-          <Text strong>{tender.title}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {tender.tender_number}
-          </Text>
-        </Space>
-      ),
-    },
-    {
-      title: 'Уровень расчета',
-      width: 260,
-      render: (_, tender) => (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
-            <Text strong>{getQualityLabel(tender.qualityLevel)}</Text>
-            <Text type="secondary">{tender.overallScore}%</Text>
-          </div>
-          <Progress
-            percent={tender.overallScore}
-            showInfo={false}
-            size="small"
-            strokeColor={getScoreColor(tender.overallScore)}
-            trailColor={colorFillSecondary}
-          />
-        </div>
-      ),
-    },
-    {
-      title: 'Команд',
-      dataIndex: 'groupsCount',
-      width: 100,
-      align: 'center',
-    },
-    {
-      title: 'Последняя активность',
-      width: 210,
-      render: (_, tender) => (
-        <Text type="secondary">
-          {tender.lastActivityAt ? formatDate(tender.lastActivityAt) : 'Пока нет'}
-        </Text>
-      ),
-    },
-    {
-      title: 'Действия',
-      width: 160,
-      render: (_, tender) => (
-        <Button
-          size="small"
-          onClick={(event) => {
-            event.stopPropagation();
-            handleOpenQualityModal(tender.id);
-          }}
-        >
-          {canEditQuality ? 'Оценить уровень' : 'Просмотр уровня'}
-        </Button>
-      ),
-    },
-  ];
-
   const renderExpandedGroups = (tender: TimelineTenderListItem) => {
     if (selectedTenderId !== tender.id || groupsLoading || assignableUsersLoading) {
       return (
@@ -519,116 +370,22 @@ const TenderTimeline: React.FC = () => {
     }
 
     return (
-      <Space direction="vertical" size={12} style={{ width: '100%' }}>
-        <div>
-          <Text strong>Команды тендера</Text>
-          <Text type="secondary" style={{ display: 'block' }}>
-            Команды и состав участников фиксированы для каждого тендера и не зависят от данных на других страницах.
-          </Text>
-          {assignableUsersError ? (
-            <Text type="secondary" style={{ display: 'block' }}>
-              Не удалось загрузить часть пользователей из фиксированного состава: {assignableUsersError}
-            </Text>
-          ) : null}
-        </div>
-
-        {displayedGroups.length === 0 ? (
-          <Empty description="Для тендера пока не удалось собрать фиксированный состав команд" />
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-            {displayedGroups.map((group) => {
-              const isSelected = selectedGroupId === group.id;
-
-              return (
-                <Card
-                  key={group.id}
-                  size="small"
-                  hoverable
-                  onClick={() => handleSelectGroup(group.id)}
-                  style={{
-                    borderColor: isSelected ? colorPrimary : colorBorderSecondary,
-                    background: isSelected ? colorPrimaryBg : colorBgContainer,
-                  }}
-                >
-                  <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
-                      <div style={{ display: 'flex', gap: 8, minWidth: 0 }}>
-                        <span
-                          style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: '50%',
-                            background: group.color,
-                            flexShrink: 0,
-                            marginTop: 5,
-                          }}
-                        />
-                        <div style={{ minWidth: 0 }}>
-                          <Text strong style={{ display: 'block' }}>
-                            {group.name}
-                          </Text>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            {group.members.length} участн. · {group.iterationsCount} данных
-                          </Text>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <Text type="secondary">Уровень расчета</Text>
-                        <Tooltip title={getQualityTooltipContent(group.qualityLevel, group.quality_comment)}>
-                          <Text strong style={{ cursor: 'help' }}>
-                            {group.qualityLevel != null ? `${group.qualityLevel}/3` : 'Нет оценки'}
-                          </Text>
-                        </Tooltip>
-                      </div>
-                      <Progress
-                        percent={group.qualityScore}
-                        showInfo={false}
-                        size="small"
-                        strokeColor={getScoreColor(group.qualityScore)}
-                        trailColor={colorFillSecondary}
-                      />
-                      {group.quality_comment ? (
-                        <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-                          {group.quality_comment}
-                        </Text>
-                      ) : null}
-                    </div>
-
-                    <div>
-                      <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                        Участники команды
-                      </Text>
-                      <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                        {group.members.map((member) => (
-                          <div
-                            key={member.id}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}
-                          >
-                            <Avatar
-                              size="small"
-                              style={{ backgroundColor: getRoleAvatarColor(member.user?.role_code || '') }}
-                            >
-                              {getInitials(member.user?.full_name || '')}
-                            </Avatar>
-                            <Text ellipsis style={{ minWidth: 0 }}>
-                              {member.user?.full_name || 'Пользователь'}
-                            </Text>
-                          </div>
-                        ))}
-                      </Space>
-                    </div>
-                  </Space>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </Space>
+      <TenderTeamsView
+        displayedGroups={displayedGroups}
+        selectedGroupId={selectedGroupId}
+        assignableUsersError={assignableUsersError}
+        onSelectGroup={handleSelectGroup}
+        colorPrimary={colorPrimary}
+        colorBorderSecondary={colorBorderSecondary}
+        colorPrimaryBg={colorPrimaryBg}
+        colorBgContainer={colorBgContainer}
+        colorFillSecondary={colorFillSecondary}
+      />
     );
   };
+
+  const expandedCardId =
+    selectedTenderId && expandedTenderIds.includes(selectedTenderId) ? selectedTenderId : null;
 
   return (
     <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
@@ -639,18 +396,20 @@ const TenderTimeline: React.FC = () => {
           height: '100%',
           overflow: 'hidden',
           transition: 'margin-right 0.3s ease',
-          marginRight: timelineOpen ? TIMELINE_PANEL_WIDTH : 0,
+          marginRight: !isPhoneDevice && timelineOpen ? TIMELINE_PANEL_WIDTH : 0,
         }}
       >
         <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <Title level={3} style={{ marginBottom: 4 }}>
-              Хронология расчёта тендеров
-            </Title>
-            <Text type="secondary" style={{ display: 'none' }}>
-              Реестр тендеров с уровнем качества, автоматически собранными командами и хронологией согласования по каждому участнику.
-            </Text>
-          </div>
+          {!isPhoneDevice && (
+            <div>
+              <Title level={3} style={{ marginBottom: 4 }}>
+                Хронология расчёта тендеров
+              </Title>
+              <Text type="secondary" style={{ display: 'none' }}>
+                Реестр тендеров с уровнем качества, автоматически собранными командами и хронологией согласования по каждому участнику.
+              </Text>
+            </div>
+          )}
 
           {tendersError ? (
             <Alert type="error" showIcon message="Ошибка загрузки тендеров" description={tendersError} />
@@ -661,190 +420,122 @@ const TenderTimeline: React.FC = () => {
             placeholder="Поиск по наименованию или номеру тендера"
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
-            style={{ maxWidth: 420 }}
+            style={{ maxWidth: isPhoneDevice ? '100%' : 420 }}
           />
 
-          <Card
-            size="small"
-            title="Реестр тендеров"
-            style={{ flex: 1, minHeight: 0, background: colorBgContainer, borderColor: colorBorderSecondary }}
-            styles={{ body: { height: 'calc(100% - 57px)', padding: 0, minHeight: 0, overflow: 'auto' } }}
-          >
-            <Table
-              rowKey="id"
-              size="middle"
-              pagination={false}
+          {isPhoneDevice ? (
+            <TimelineTenderCards
+              tenders={filteredTenders}
               loading={tendersLoading}
-              columns={columns}
-              dataSource={filteredTenders}
-              expandable={{
-                expandedRowKeys: expandedTenderIds,
-                expandRowByClick: true,
-                expandedRowRender: renderExpandedGroups,
-                onExpand: (expanded, record) => {
-                  if (expanded) {
-                    handleSelectTender(record.id);
-                  } else {
-                    handleCollapseTender(record.id);
-                  }
-                },
-              }}
-              onRow={(record) => ({
-                style:
-                  expandedTenderIds.includes(record.id)
-                    ? { background: colorFillAlter }
-                    : undefined,
-              })}
-              scroll={{ x: 860 }}
+              expandedTenderId={expandedCardId}
+              canEditQuality={canEditQuality}
+              colorFillSecondary={colorFillSecondary}
+              colorBorderSecondary={colorBorderSecondary}
+              colorBgContainer={colorBgContainer}
+              onToggle={handleToggleTenderCard}
+              onOpenQuality={handleOpenQualityModal}
+              renderExpanded={renderExpandedGroups}
             />
-          </Card>
+          ) : (
+            <TimelineTenderTable
+              tenders={filteredTenders}
+              loading={tendersLoading}
+              expandedTenderIds={expandedTenderIds}
+              canEditQuality={canEditQuality}
+              colorFillSecondary={colorFillSecondary}
+              colorBgContainer={colorBgContainer}
+              colorBorderSecondary={colorBorderSecondary}
+              colorFillAlter={colorFillAlter}
+              onOpenQuality={handleOpenQualityModal}
+              onExpand={handleSelectTender}
+              onCollapse={handleCollapseTender}
+              renderExpanded={renderExpandedGroups}
+            />
+          )}
         </div>
       </div>
 
-      <div
-        style={{
-          width: timelineOpen ? TIMELINE_PANEL_WIDTH : 0,
-          height: '100%',
-          overflow: timelineOpen ? 'auto' : 'hidden',
-          background: colorBgContainer,
-          borderLeft: timelineOpen ? `1px solid ${colorBorderSecondary}` : 'none',
-          transition: 'width 0.3s ease',
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'absolute',
-          right: 0,
-          top: 0,
-          bottom: 0,
-        }}
-      >
-        {timelineOpen && selectedTender && selectedGroup ? (
-          <>
-            <div
-              style={{
-                padding: '20px 22px 14px',
-                borderBottom: `1px solid ${colorBorderSecondary}`,
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: 18,
-                      fontWeight: 700,
-                      color: colorText,
-                      lineHeight: 1.35,
-                    }}
-                  >
-                    {selectedGroup.name}
-                  </div>
-                  <Text type="secondary" style={{ display: 'block', marginTop: 6 }}>
-                    {selectedTender.title}
-                  </Text>
-                  <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
-                    {selectedTender.tender_number}
-                  </Text>
-                </div>
-                <Button type="text" icon={<CloseOutlined />} onClick={handleCloseTimeline} />
-              </div>
-            </div>
+      {/* Десктоп: боковая панель; телефон: полноэкранный Drawer */}
+      {!isPhoneDevice && (
+        <div
+          style={{
+            width: timelineOpen ? TIMELINE_PANEL_WIDTH : 0,
+            height: '100%',
+            overflow: timelineOpen ? 'auto' : 'hidden',
+            background: colorBgContainer,
+            borderLeft: timelineOpen ? `1px solid ${colorBorderSecondary}` : 'none',
+            transition: 'width 0.3s ease',
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'absolute',
+            right: 0,
+            top: 0,
+            bottom: 0,
+          }}
+        >
+          {timelineOpen && selectedTender && selectedGroup ? (
+            <TimelinePanel
+              selectedTender={selectedTender}
+              selectedGroup={selectedGroup}
+              selectedUserId={selectedUserId}
+              onUserSelect={setSelectedUserId}
+              currentUserId={user?.id || null}
+              currentUserRoleCode={user?.role_code || null}
+              canRespond={canRespondToIterations}
+              onDataChanged={refreshAll}
+              refreshSignal={realtimeSignal}
+              onClose={handleCloseTimeline}
+              colorText={colorText}
+              colorBorderSecondary={colorBorderSecondary}
+            />
+          ) : null}
+        </div>
+      )}
 
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <UserTimeline
-                group={selectedGroup}
-                selectedUserId={selectedUserId}
-                onUserSelect={setSelectedUserId}
-                currentUserId={user?.id || null}
-                currentUserRoleCode={user?.role_code || null}
-                canRespond={canRespondToIterations}
-                onDataChanged={refreshAll}
-                refreshSignal={realtimeSignal}
-              />
-            </div>
-          </>
-        ) : null}
-      </div>
+      {isPhoneDevice && (
+        <Drawer
+          open={timelineOpen}
+          placement="right"
+          width="100%"
+          onClose={handleCloseTimeline}
+          styles={{ body: { padding: 0 } }}
+        >
+          {selectedTender && selectedGroup ? (
+            <TimelinePanel
+              selectedTender={selectedTender}
+              selectedGroup={selectedGroup}
+              selectedUserId={selectedUserId}
+              onUserSelect={setSelectedUserId}
+              currentUserId={user?.id || null}
+              currentUserRoleCode={user?.role_code || null}
+              canRespond={canRespondToIterations}
+              onDataChanged={refreshAll}
+              refreshSignal={realtimeSignal}
+              onClose={handleCloseTimeline}
+              colorText={colorText}
+              colorBorderSecondary={colorBorderSecondary}
+              hideClose
+            />
+          ) : null}
+        </Drawer>
+      )}
 
-      <Modal
-        title={qualityTender ? `Уровень расчета · ${qualityTender.title}` : 'Уровень расчета'}
+      <GroupQualityModal
         open={qualityModalOpen}
+        qualityTender={qualityTender}
+        qualityTenderId={qualityTenderId}
+        selectedTenderId={selectedTenderId}
+        groupsLoading={groupsLoading}
+        displayedGroups={displayedGroups}
+        form={qualityForm}
+        canEditQuality={canEditQuality}
+        qualitySaving={qualitySaving}
+        isPhone={isPhoneDevice}
+        colorBgContainer={colorBgContainer}
+        colorBorderSecondary={colorBorderSecondary}
         onCancel={handleCloseQualityModal}
-        onOk={canEditQuality ? handleSaveGroupQuality : handleCloseQualityModal}
-        confirmLoading={qualitySaving}
-        okText={canEditQuality ? 'Сохранить' : 'Закрыть'}
-        cancelText="Отмена"
-        width={760}
-        footer={
-          canEditQuality
-            ? undefined
-            : [
-                <Button key="close" onClick={handleCloseQualityModal}>
-                  Закрыть
-                </Button>,
-              ]
-        }
-      >
-        <Space direction="vertical" size={16} style={{ width: '100%' }}>
-          <Alert
-            type="info"
-            showIcon
-            message="Шкала уровня расчета"
-            description={
-              <div>
-                <div>1 — расценивали ВОР.</div>
-                <div>2 — считали ориентировочно.</div>
-                <div>3 — считали качественно, имеются все данные от Заказчика.</div>
-              </div>
-            }
-          />
-
-          {qualityTenderId && qualityTenderId === selectedTenderId && groupsLoading ? (
-            <Skeleton active paragraph={{ rows: 5 }} />
-          ) : (
-            <Form form={qualityForm} layout="vertical">
-              <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                {displayedGroups.map((group) => (
-                  <Card
-                    key={group.id}
-                    size="small"
-                    title={group.name}
-                    style={{ background: colorBgContainer, borderColor: colorBorderSecondary }}
-                  >
-                    <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 16 }}>
-                      <Form.Item
-                        name={['groups', group.id, 'quality_level']}
-                        label="Уровень 1–3"
-                        style={{ marginBottom: 0 }}
-                      >
-                        <InputNumber
-                          decimalSeparator=","
-                          min={1}
-                          max={3}
-                          step={1}
-                          precision={0}
-                          disabled={!canEditQuality}
-                          style={{ width: '100%' }}
-                          placeholder="Например, 2"
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        name={['groups', group.id, 'quality_comment']}
-                        label="Комментарий"
-                        style={{ marginBottom: 0 }}
-                      >
-                        <TextArea
-                          rows={2}
-                          disabled={!canEditQuality}
-                          placeholder="Краткое пояснение по уровню расчета этой команды"
-                        />
-                      </Form.Item>
-                    </div>
-                  </Card>
-                ))}
-              </Space>
-            </Form>
-          )}
-        </Space>
-      </Modal>
+        onOk={handleSaveGroupQuality}
+      />
     </div>
   );
 };
