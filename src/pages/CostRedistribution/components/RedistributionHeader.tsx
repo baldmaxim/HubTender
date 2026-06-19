@@ -8,6 +8,7 @@ import { DownloadOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { Tender } from '../../../lib/supabase';
 import type { MarkupTactic } from '../hooks';
 import { AnimatedNumber, SuccessCheck } from '../../../components/transitions';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Title } = Typography;
 
@@ -54,13 +55,16 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
   saving = false,
   savedRecently = false,
 }) => {
+  const { isPhone, isPhoneDevice } = useIsMobile();
   return (
     <Card style={{ marginBottom: 16 }}>
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
         <Space align="center" size="middle">
-          <Title level={2} style={{ margin: 0 }}>
-            Перераспределение стоимости работ
-          </Title>
+          {!isPhoneDevice && (
+            <Title level={2} style={{ margin: 0 }}>
+              Перераспределение стоимости работ
+            </Title>
+          )}
           {saving && (
             <Tag icon={<LoadingOutlined />} color="processing">
               Сохраняется…
@@ -120,7 +124,17 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
           </Col>
 
           {totals && (
-            <Col xs={24} lg={16} style={{ display: 'flex', justifyContent: 'flex-end', gap: 24, alignItems: 'center' }}>
+            <Col
+              xs={24}
+              lg={16}
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: isPhone ? 'center' : 'flex-end',
+                gap: isPhone ? 12 : 24,
+                alignItems: 'center',
+              }}
+            >
               <div style={{ padding: '0 12px', textAlign: 'center' }}>
                 <Statistic
                   title="Итого материалы"
@@ -168,7 +182,8 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                   icon={<DownloadOutlined />}
                   onClick={onExport}
                   size="large"
-                  style={{ marginLeft: 12 }}
+                  block={isPhone}
+                  style={{ marginLeft: isPhone ? 0 : 12 }}
                 >
                   Экспорт в Excel
                 </Button>

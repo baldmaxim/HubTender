@@ -36,12 +36,13 @@ export interface ResultRow {
   rounded_total_works?: number;
 }
 
-export const getResultsTableColumns = (): ColumnsType<ResultRow> => {
+export const getResultsTableColumns = (fitToScreen = false): ColumnsType<ResultRow> => {
   return [
     {
       title: <div style={{ textAlign: 'center' }}>Наименование</div>,
       key: 'name',
-      fixed: 'left',
+      // fixed-колонки ломаются под transform:scale в ландшафтном оверлее — отключаем там.
+      ...(fitToScreen ? {} : { fixed: 'left' as const }),
       width: 300,
       render: (_, record) => {
         const itemNoColor = record.isLeaf ? '#52c41a' : '#ff7875';
