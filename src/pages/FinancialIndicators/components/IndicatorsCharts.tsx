@@ -66,7 +66,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   vatCoefficient,
 }) => {
   const { theme: currentTheme } = useTheme();
-  const { isPhone } = useIsMobile();
+  const { isPhone, isPhoneDevice } = useIsMobile();
   const [selectedIndicator, setSelectedIndicator] = useState<number | null>(null);
   const [breakdownData, setBreakdownData] = useState<CategoryBreakdown[]>([]);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
@@ -671,6 +671,11 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
     const index = elements[0].index;
     const currentLevel = drillDownPath[drillDownPath.length - 1];
 
+    // На телефоне 3-й уровень отключён: с 2-го уровня вглубь не уходим.
+    if (isPhoneDevice && (currentLevel.type === 'direct_costs' || currentLevel.type === 'markups')) {
+      return;
+    }
+
     // Уровень 1 (корень): Клик по "Прямые затраты" или "Наценки"
     if (currentLevel.type === 'root') {
       if (index === 0) {
@@ -874,6 +879,16 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
     setBreakdownData([]);
     setDrillDownPath([{ type: 'root' }]);
   }, [selectedTenderId]);
+
+  // На телефоне 3-й уровень диаграмм отключён — терминал 2-й уровень. Если пользователь
+  // повернул экран, находясь на 3-м уровне, схлопываем путь до 2-го уровня.
+  useEffect(() => {
+    if (isPhoneDevice && drillDownPath.length > 2) {
+      setDrillDownPath(prev => prev.slice(0, 2));
+      setSelectedIndicator(null);
+      setBreakdownData([]);
+    }
+  }, [isPhoneDevice, drillDownPath.length]);
 
   useEffect(() => {
     if (!selectedTenderId) {
@@ -1280,20 +1295,20 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       title: '№',
       dataIndex: 'key',
       key: 'key',
-      width: isPhone ? 28 : 50,
+      width: isPhoneDevice ? 28 : 50,
       render: (_: unknown, __: unknown, index: number) => index + 1,
     },
     {
       title: 'Показатель',
       dataIndex: 'indicator_name',
       key: 'indicator_name',
-      width: isPhone ? 100 : 300,
+      width: isPhoneDevice ? 100 : 300,
     },
     {
       title: 'Сумма (руб.)',
       dataIndex: 'amount',
       key: 'amount',
-      width: isPhone ? 95 : 150,
+      width: isPhoneDevice ? 95 : 150,
       align: 'right' as const,
       render: (val: number) => <AutoFitText strong>{formatNumber(val)}</AutoFitText>,
     },
@@ -1301,7 +1316,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       title: 'Цена за м² (руб./м²)',
       dataIndex: 'price_per_m2',
       key: 'price_per_m2',
-      width: isPhone ? 85 : 150,
+      width: isPhoneDevice ? 85 : 150,
       align: 'right' as const,
       render: (val: number) => <AutoFitText>{formatNumber(Math.round(val))}</AutoFitText>,
     },
@@ -1325,7 +1340,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         labels: {
           color: currentTheme === 'dark' ? '#ffffff' : '#000000',
           padding: isPhone ? 4 : 6,
-          font: { size: isPhone ? 9 : 10 },
+          font: { size: isPhoneDevice ? 9 : 10 },
           boxWidth: isPhone ? 10 : 12,
           boxHeight: isPhone ? 10 : 12,
           generateLabels: function(chart: Chart) {
@@ -1365,7 +1380,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
                 const value = dataArr1[i] ?? 0;
                 const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
                 labels.push({
-                  text: `${truncate(label, isPhone ? 20 : 40)} (${percentage}%)`,
+                  text: `${truncate(label, isPhoneDevice ? 20 : 40)} (${percentage}%)`,
                   fillStyle: (chart.data.datasets[0]!.backgroundColor as string[])[i],
                   hidden: false,
                   index: i,
@@ -1398,7 +1413,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
                 const value = dataArr2[i] ?? 0;
                 const percentage = totalMarkups > 0 ? ((value / totalMarkups) * 100).toFixed(1) : '0.0';
                 labels.push({
-                  text: `${truncate(label, isPhone ? 20 : 40)} (${percentage}%)`,
+                  text: `${truncate(label, isPhoneDevice ? 20 : 40)} (${percentage}%)`,
                   fillStyle: (chart.data.datasets[0]!.backgroundColor as string[])[i],
                   hidden: false,
                   index: i,
@@ -1416,7 +1431,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               const value = dataArr3[i] ?? 0;
               const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
               return {
-                text: `${truncate(label, isPhone ? 20 : 40)} (${percentage}%)`,
+                text: `${truncate(label, isPhoneDevice ? 20 : 40)} (${percentage}%)`,
                 fillStyle: (chart.data.datasets[0]!.backgroundColor as string[])[i],
                 hidden: false,
                 index: i,
@@ -1463,6 +1478,11 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
 
     const clickedIndex = elements[0].index;
     const currentLevel = drillDownPath[drillDownPath.length - 1];
+
+    // На телефоне 3-й уровень отключён: с 2-го уровня вглубь не уходим.
+    if (isPhoneDevice && (currentLevel.type === 'direct_costs' || currentLevel.type === 'markups')) {
+      return;
+    }
 
     // На корневом уровне
     if (currentLevel.type === 'root') {
@@ -1604,13 +1624,12 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   // Extract current drill-down level for use in barOptions
   const currentLevel = drillDownPath[drillDownPath.length - 1];
 
-  // (п.8, моб.) На ур.1-2 (root/прямые затраты/наценки) круговая занимала много
-  // места — ужимаем контейнер до размера ур.3. Десктоп не трогаем.
-  const pieIsTopLevel =
-    currentLevel.type === 'root' ||
-    currentLevel.type === 'direct_costs' ||
-    currentLevel.type === 'markups';
-  const pieHeight = isPhone ? (pieIsTopLevel ? 280 : 380) : 320;
+  // Высота круговой на телефоне (порт.+ландш.): ур.1 уменьшен на 30% (280→196),
+  // ур.2 чуть выше — длиннее легенда. 3-й уровень на телефоне недостижим (отключён).
+  // Десктоп не трогаем.
+  const pieIsRoot = currentLevel.type === 'root';
+  const pieIsLevel2 = currentLevel.type === 'direct_costs' || currentLevel.type === 'markups';
+  const pieHeight = isPhoneDevice ? (pieIsRoot ? 196 : pieIsLevel2 ? 230 : 196) : 320;
 
   const barOptions = {
     responsive: true,
@@ -1648,18 +1667,18 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         ticks: {
           color: currentTheme === 'dark' ? '#ffffff' : '#000000',
           font: {
-            size: isPhone ? 9 : (currentLevel.type === 'indicator' && breakdownData.length > 0 ? 10 : 12)
+            size: isPhoneDevice ? 9 : (currentLevel.type === 'indicator' && breakdownData.length > 0 ? 10 : 12)
           },
-          maxRotation: isPhone ? 90 : 0,
-          minRotation: isPhone ? 90 : 0,
-          autoSkip: isPhone ? true : false,
+          maxRotation: isPhoneDevice ? 90 : 0,
+          minRotation: isPhoneDevice ? 90 : 0,
+          autoSkip: isPhoneDevice ? true : false,
           autoSkipPadding: 4,
           callback: function(this: { getLabelForValue: (v: number) => string }, value: number): string | string[] {
             const label = this.getLabelForValue(value);
-            const maxLen = isPhone ? 16 : (currentLevel.type === 'markups' ? 14 : 20);
+            const maxLen = isPhoneDevice ? 16 : (currentLevel.type === 'markups' ? 14 : 20);
             // Разбиваем длинные метки на несколько строк
             const shouldWrap =
-              isPhone ||
+              isPhoneDevice ||
               (currentLevel.type === 'indicator' && breakdownData.length > 0) ||
               currentLevel.type === 'markups';
             if (shouldWrap) {
@@ -1702,7 +1721,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           <Card
             bordered
             style={{
-              minHeight: isPhone ? 480 : 450,
+              minHeight: isPhoneDevice ? undefined : 450,
               background: currentTheme === 'dark' ? '#1f1f1f' : '#ffffff',
             }}
           >
@@ -1787,6 +1806,8 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
                     ? 'Кликните для детализации'
                     : drillDownPath[drillDownPath.length - 1].type === 'indicator'
                     ? 'Детализация по категориям затрат'
+                    : isPhoneDevice
+                    ? 'Структура по типам работ и материалов'
                     : 'Детализация по показателям'}
                 </Text>
               </div>
@@ -1820,7 +1841,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
           <Card
             bordered
             style={{
-              minHeight: isPhone ? 480 : 450,
+              minHeight: isPhoneDevice ? undefined : 450,
               background: currentTheme === 'dark' ? '#1f1f1f' : '#ffffff',
             }}
           >
@@ -1870,7 +1891,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               </div>
             </div>
             {getAreaBarData() && (
-              <div style={{ height: isPhone ? 340 : 350, touchAction: 'pan-x pan-y pinch-zoom' }}>
+              <div style={{ height: isPhoneDevice ? 340 : 350, touchAction: 'pan-x pan-y pinch-zoom' }}>
                 <Bar data={getAreaBarData()!} options={barOptions as never} />
               </div>
             )}
@@ -1878,8 +1899,9 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
         </Col>
       </Row>
 
-      {/* Детализация по категориям затрат (показывается только для Субподряда и Работы+Материалы СУ-10) */}
-      {selectedIndicator && (selectedIndicator === 2 || selectedIndicator === 3 || selectedIndicator === 4) && (
+      {/* Детализация по категориям затрат (показывается только для Субподряда и Работы+Материалы СУ-10).
+          На телефоне 3-й уровень отключён — блок не показываем. */}
+      {!isPhoneDevice && selectedIndicator && (selectedIndicator === 2 || selectedIndicator === 3 || selectedIndicator === 4) && (
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col xs={24}>
             <Card
@@ -1935,7 +1957,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
       )}
 
       {/* Нижний ряд: Таблица сводки по выбранному уровню (скрыт когда открыт блок детализации затрат) */}
-      {!(selectedIndicator && (selectedIndicator === 2 || selectedIndicator === 3 || selectedIndicator === 4)) && (
+      {!(!isPhoneDevice && selectedIndicator && (selectedIndicator === 2 || selectedIndicator === 3 || selectedIndicator === 4)) && (
         <Row gutter={[16, 16]}>
           <Col xs={24}>
             <Card
@@ -1974,7 +1996,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
               pagination={false}
               size="small"
               bordered
-              scroll={{ x: isPhone ? 315 : 650 }}
+              scroll={{ x: isPhoneDevice ? 315 : 650 }}
               summary={(pageData) => {
                 const totalAmount = pageData.reduce((sum, item) => sum + item.amount, 0);
                 const totalAreaM2 = spTotal;

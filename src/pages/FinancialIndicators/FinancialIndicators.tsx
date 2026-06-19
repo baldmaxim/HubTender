@@ -21,10 +21,12 @@ import {
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { AutoFitText } from '../../components/AutoFitText';
 import { useFinancialData } from './hooks/useFinancialData';
 import { IndicatorsCharts } from './components/IndicatorsCharts';
 import { IndicatorsTable } from './components/IndicatorsTable';
 import { IndicatorsFilters } from './components/IndicatorsFilters';
+import { LandscapeTableOverlay } from './components/LandscapeTableOverlay';
 import './FinancialIndicators.css';
 
 
@@ -234,16 +236,15 @@ const FinancialIndicators: React.FC = () => {
                 <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
                   Или выберите из списка:
                 </Text>
-                <Row gutter={isPhone ? [8, 8] : [16, 16]} justify="center">
+                <Row gutter={isPhoneDevice ? [8, 8] : [16, 16]} justify="center">
                   {tenders.filter(t => !t.is_archived).slice(0, 6).map(tender => (
-                    <Col key={tender.id} flex="none">
+                    <Col key={tender.id}>
                       <Card
                         hoverable
-                        size={isPhone ? 'small' : 'default'}
-                        styles={{ body: { padding: isPhone ? '6px 10px' : '12px 16px' } }}
+                        size={isPhoneDevice ? 'small' : 'default'}
+                        styles={{ body: { padding: isPhoneDevice ? '8px 10px' : '12px 16px' } }}
                         style={{
-                          width: 'auto',
-                          maxWidth: '100%',
+                          width: isPhoneDevice ? 160 : 200,
                           textAlign: 'center',
                           cursor: 'pointer',
                           borderColor: '#10b981',
@@ -261,39 +262,50 @@ const FinancialIndicators: React.FC = () => {
                           }
                         }}
                       >
-                        {/* Номер, наименование и версия — в одну строку; рамка по тексту. */}
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexWrap: 'nowrap',
-                          gap: isPhone ? 6 : 8,
-                        }}>
-                          <Tag color="#10b981" style={{ margin: 0, flexShrink: 0, ...(isPhone ? { fontSize: 11, lineHeight: '18px' } : {}) }}>
-                            {tender.tender_number}
-                          </Tag>
-                          <Text strong style={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            maxWidth: isPhone ? 150 : 200,
-                            fontSize: isPhone ? 12 : undefined,
-                          }}>
-                            {tender.title}
-                          </Text>
-                          <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
-                        </div>
-                        <Text type="secondary" style={{
-                          display: 'block',
-                          marginTop: isPhone ? 2 : 4,
-                          fontSize: isPhone ? 11 : 12,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          maxWidth: isPhone ? 180 : 220,
-                        }}>
-                          {tender.client_name}
-                        </Text>
+                        {isPhoneDevice ? (
+                          <>
+                            {/* Телефон: номер тендера убран; наименование авто-подгоняется в одну строку рядом с версией. */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', gap: 6, marginBottom: 4 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <AutoFitText maxFontSize={13} minFontSize={8} align="center" strong>
+                                  {tender.title}
+                                </AutoFitText>
+                              </div>
+                              <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
+                            </div>
+                            <AutoFitText maxFontSize={11} minFontSize={7} align="center">
+                              {tender.client_name}
+                            </AutoFitText>
+                          </>
+                        ) : (
+                          <>
+                            {/* Десктоп/планшет: фиксированная ширина 200, как на «Позициях заказчика». */}
+                            <div style={{ marginBottom: 8 }}>
+                              <Tag color="#10b981" style={{ margin: 0 }}>{tender.tender_number}</Tag>
+                            </div>
+                            <div style={{
+                              marginBottom: 8,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexWrap: 'nowrap',
+                              gap: 4,
+                            }}>
+                              <Text strong style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                maxWidth: 140,
+                              }}>
+                                {tender.title}
+                              </Text>
+                              <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
+                            </div>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              {tender.client_name}
+                            </Text>
+                          </>
+                        )}
                       </Card>
                     </Col>
                   ))}
@@ -320,6 +332,26 @@ const FinancialIndicators: React.FC = () => {
       isPhoneDevice={isPhoneDevice}
       onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
       readOnly={readOnly}
+    />
+  );
+
+  // Тот же узел, но без внутреннего горизонтального скролла — для авто-фуллскрин-оверлея
+  // в ландшафте (масштаб подбирает LandscapeTableOverlay, чтобы всё влезло без прокрутки).
+  const indicatorsTableFitNode = (
+    <IndicatorsTable
+      data={data}
+      spTotal={spTotal}
+      customerTotal={customerTotal}
+      formatNumber={formatNumber}
+      currentTheme={currentTheme}
+      tenderTitle={selectedTenderTitle}
+      tenderVersion={selectedVersion || 1}
+      tenderId={selectedTenderId}
+      isPhone={isPhone}
+      isPhoneDevice={isPhoneDevice}
+      onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
+      readOnly={readOnly}
+      fitToScreen
     />
   );
 
@@ -486,11 +518,13 @@ const FinancialIndicators: React.FC = () => {
                         </Button>
                       </div>
                     )}
-                    {/* Телефон в landscape: уменьшаем таблицу (~72%), чтобы все колонки
-                        помещались без горизонтального ползунка — действие бывшей кнопки
-                        «На весь экран» прямо в основном виде. */}
+                    {/* Телефон в landscape: таблица сама раскрывается на весь экран
+                        (fixed-оверлей), масштаб подбирается так, чтобы все колонки и
+                        строки влезли без прокрутки. Поворот в портрет → карточный вид. */}
                     {isLandscapePhone ? (
-                      <div style={{ zoom: 0.72 }}>{indicatorsTableNode}</div>
+                      <LandscapeTableOverlay theme={currentTheme}>
+                        {indicatorsTableFitNode}
+                      </LandscapeTableOverlay>
                     ) : (
                       indicatorsTableNode
                     )}

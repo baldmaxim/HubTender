@@ -25,6 +25,8 @@ interface IndicatorsTableProps {
   onAreaUpdated: () => void;
   /** Только просмотр — скрывает карандаши редактирования площади (Генеральный директор) */
   readOnly?: boolean;
+  /** Вписать таблицу целиком (для ландшафт-оверлея): убирает внутренний горизонтальный скролл */
+  fitToScreen?: boolean;
 }
 
 export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
@@ -40,6 +42,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
   isPhoneDevice,
   onAreaUpdated,
   readOnly,
+  fitToScreen,
 }) => {
   const [editingSp, setEditingSp] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
@@ -253,7 +256,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
           pagination={false}
           bordered
           size="small"
-          scroll={{ x: 1080 }}
+          scroll={fitToScreen ? undefined : { x: 1080 }}
           rowClassName={(record) => {
             if (record.is_header) return `header-row-${currentTheme}`;
             if (record.is_total) return `total-row-${currentTheme}`;
