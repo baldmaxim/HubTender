@@ -58,6 +58,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
       position: 'relative',
       overflow: 'hidden',
       minHeight: isPhone ? 40 : 104,
+      textAlign: isPhone ? 'center' : undefined,
+      flex: isPhone ? '0 0 calc((100% - 16px) / 3)' : undefined,
+      minWidth: isPhone ? 0 : undefined,
     }}
   >
     <div
@@ -71,7 +74,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
       }}
     />
     <div style={{ color: palette.muted, fontSize: isPhone ? 9 : 12, textTransform: 'uppercase', letterSpacing: isPhone ? '0.04em' : '0.12em', lineHeight: 1.15 }}>{title}</div>
-    <div style={{ color: palette.text, fontSize: isPhone ? 'clamp(13px, 4.4vw, 19px)' : 28, fontWeight: 700, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{value}</div>
+    <div style={{ color: isPhone ? palette.muted : palette.text, fontSize: isPhone ? 'clamp(13px, 4.4vw, 19px)' : 28, fontWeight: isPhone ? 600 : 700, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{value}</div>
     <div style={{ color: palette.muted, fontSize: isPhone ? 9 : 13, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{caption}</div>
   </div>
 );
@@ -80,7 +83,7 @@ const Tenders: React.FC = () => {
   const { message } = App.useApp();
   const { user } = useAuth();
   const { theme } = useTheme();
-  const { isMobile, isPhone, isPhoneDevice } = useIsMobile();
+  const { isMobile, isPhoneDevice } = useIsMobile();
   const isDirector = user?.role_code === 'director' || user?.role_code === 'general_director';
   const isGeneralDirector = user?.role_code === 'general_director';
   const palette = getTenderMonitorPalette(theme === 'dark');
@@ -237,15 +240,15 @@ const Tenders: React.FC = () => {
         )}
 
         <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: isPhone ? 'repeat(3, 1fr)' : 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: isPhone ? 8 : 14,
-          }}
+          style={
+            isPhoneDevice
+              ? { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }
+              : { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }
+          }
         >
-          <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} isPhone={isPhone} />
-          <MetricCard title="В расчете" value={counts.calc} caption="готовятся КП" accent={palette.info} palette={palette} isPhone={isPhone} />
-          <MetricCard title="Направлено" value={counts.sent} caption="ожидает ответа" accent="#ef9f27" palette={palette} isPhone={isPhone} />
+          <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} isPhone={isPhoneDevice} />
+          <MetricCard title="В расчете" value={counts.calc} caption="готовятся КП" accent={palette.info} palette={palette} isPhone={isPhoneDevice} />
+          <MetricCard title="Направлено" value={counts.sent} caption="ожидает ответа" accent="#ef9f27" palette={palette} isPhone={isPhoneDevice} />
           <MetricCard
             title="Требуют звонка"
             value={needCallCount}
@@ -253,7 +256,7 @@ const Tenders: React.FC = () => {
             accent={needCallCount > 0 ? palette.danger : palette.success}
             blinking={needCallCount > 0}
             palette={palette}
-            isPhone={isPhone}
+            isPhone={isPhoneDevice}
           />
           <MetricCard
             title="Сумма КП"
@@ -261,7 +264,7 @@ const Tenders: React.FC = () => {
             caption={`${formatArea(totalArea)} в работе`}
             accent={palette.success}
             palette={palette}
-            isPhone={isPhone}
+            isPhone={isPhoneDevice}
           />
         </div>
 

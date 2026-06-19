@@ -25,6 +25,12 @@ interface TenderSection {
   items: TenderRegistryWithRelations[];
 }
 
+// Палитра рамок карточек — циклично по позиции, как на «Текущие объекты» (ProjectCards).
+const CARD_BORDER_COLORS = [
+  '#1890ff', '#52c41a', '#faad14', '#722ed1',
+  '#eb2f96', '#13c2c2', '#fa541c', '#2f54eb',
+];
+
 interface TenderMonitorCardsProps {
   sections: TenderSection[];
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
@@ -98,6 +104,7 @@ function TenderCard({
   palette,
   readOnly,
   isPhone = false,
+  borderColor,
 }: {
   tender: TenderRegistryWithRelations;
   onOpenTender: (tender: TenderRegistryWithRelations) => void;
@@ -107,6 +114,7 @@ function TenderCard({
   palette: TenderMonitorPalette;
   readOnly?: boolean;
   isPhone?: boolean;
+  borderColor: string;
 }) {
   const dashboardStatus = getDashboardStatus(tender);
   const badgeStyle = getStatusBadgeStyle(dashboardStatus);
@@ -126,7 +134,8 @@ function TenderCard({
         gap: isPhone ? 8 : 10,
         padding: isPhone ? 8 : 12,
         borderRadius: 12,
-        border: '1px solid #ef9f27',
+        border: `1px solid ${palette.border}`,
+        borderTop: `4px solid ${borderColor}`,
         background: palette.cardBgAlt,
         cursor: 'pointer',
       }}
@@ -244,6 +253,7 @@ export const TenderMonitorCards: React.FC<TenderMonitorCardsProps> = ({
   readOnly,
 }) => {
   const { isPhone } = useIsMobile();
+  let runningIndex = 0;
   return (
     <div style={{ padding: isPhone ? '4px 0' : 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
       {sections.map((section) => {
@@ -252,19 +262,21 @@ export const TenderMonitorCards: React.FC<TenderMonitorCardsProps> = ({
           (sum, tender) => sum + (tender.total_cost || tender.manual_total_cost || 0),
           0
         );
+        const baseIndex = runningIndex;
+        runningIndex += section.items.length;
 
         return (
           <div key={section.key} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ color: palette.text, fontSize: 13, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{section.title}</div>
-              <div style={{ color: palette.muted, fontSize: 11 }}>
+              <div style={{ color: palette.textSecondary, fontSize: 14, fontWeight: 600 }}>
                 {section.items.length} · {formatArea(totalArea)} · {formatMoney(totalCost)}
               </div>
             </div>
 
             {section.items.length > 0 ? (
               <Row gutter={isPhone ? [8, 8] : [12, 12]}>
-                {section.items.map((tender) => (
+                {section.items.map((tender, index) => (
                   <Col xs={24} sm={24} key={tender.id}>
                     <TenderCard
                       tender={tender}
@@ -275,6 +287,7 @@ export const TenderMonitorCards: React.FC<TenderMonitorCardsProps> = ({
                       palette={palette}
                       readOnly={readOnly}
                       isPhone={isPhone}
+                      borderColor={CARD_BORDER_COLORS[(baseIndex + index) % CARD_BORDER_COLORS.length]}
                     />
                   </Col>
                 ))}

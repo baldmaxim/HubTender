@@ -9,6 +9,8 @@ import type {
   TenderStatus,
 } from '../../../lib/supabase';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useHorizontalSwipe } from '../../../hooks/useHorizontalSwipe';
 import {
   DATE_INPUT_FORMATS,
   formatArea,
@@ -286,8 +288,22 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
   readOnly,
 }) => {
   const { theme } = useTheme();
+  const { isPhoneDevice } = useIsMobile();
   const palette = getTenderMonitorPalette(theme === 'dark');
   const [activeTab, setActiveTab] = useState<ModalTab>(initialTab);
+
+  const modalTabKeys: ModalTab[] = ['info', 'timeline', 'package'];
+  const goToTabOffset = (delta: number) => {
+    const index = modalTabKeys.indexOf(activeTab);
+    const next = Math.min(Math.max(index + delta, 0), modalTabKeys.length - 1);
+    if (next !== index) {
+      setActiveTab(modalTabKeys[next]);
+    }
+  };
+  const contentSwipe = useHorizontalSwipe({
+    onSwipeLeft: () => goToTabOffset(1),
+    onSwipeRight: () => goToTabOffset(-1),
+  });
 
   useEffect(() => {
     if (open) {
@@ -407,7 +423,10 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
           ))}
         </div>
 
-        <div style={{ paddingTop: 14 }}>
+        <div
+          {...(isPhoneDevice ? contentSwipe : {})}
+          style={{ paddingTop: 14, ...(isPhoneDevice ? { touchAction: 'pan-y' as const } : {}) }}
+        >
           {activeTab === 'info' ? (
             <FieldReadOnlyContext.Provider value={!!readOnly}>
             <div
@@ -417,43 +436,55 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 gap: '10px 12px',
               }}
             >
-              <EditableMonitorField tenderId={tender.id} field="title" label="Наименование" value={tender.title} displayValue={tender.title} palette={palette} onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="client_name" label="Заказчик" value={tender.client_name} displayValue={tender.client_name || '—'} palette={palette} onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="construction_scope_id" label="Объем строительства" value={tender.construction_scope_id} displayValue={tender.construction_scope?.name || '—'} type="select" options={constructionScopeOptions} palette={palette} onUpdated={onUpdate} />
-              <EditableMonitorField
-                tenderId={tender.id}
-                field="status_id"
-                label="Статус"
-                value={dashboardStatus === 'sent' ? '__sent__' : tender.status_id}
-                displayValue={tender.status?.name || (dashboardStatus === 'sent' ? 'Направлено' : '—')}
-                type="select"
-                options={statusOptionsWithSent}
-                palette={palette}
-                buildUpdatePayload={(draft) => {
-                  if (draft === '__sent__') {
+              {!isPhoneDevice && (
+                <EditableMonitorField tenderId={tender.id} field="title" label="Наименование" value={tender.title} displayValue={tender.title} palette={palette} onUpdated={onUpdate} />
+              )}
+              {!isPhoneDevice && (
+                <EditableMonitorField tenderId={tender.id} field="client_name" label="Заказчик" value={tender.client_name} displayValue={tender.client_name || '—'} palette={palette} onUpdated={onUpdate} />
+              )}
+              {!isPhoneDevice && (
+                <EditableMonitorField tenderId={tender.id} field="construction_scope_id" label="Объем строительства" value={tender.construction_scope_id} displayValue={tender.construction_scope?.name || '—'} type="select" options={constructionScopeOptions} palette={palette} onUpdated={onUpdate} />
+              )}
+              {!isPhoneDevice && (
+                <EditableMonitorField
+                  tenderId={tender.id}
+                  field="status_id"
+                  label="Статус"
+                  value={dashboardStatus === 'sent' ? '__sent__' : tender.status_id}
+                  displayValue={tender.status?.name || (dashboardStatus === 'sent' ? 'Направлено' : '—')}
+                  type="select"
+                  options={statusOptionsWithSent}
+                  palette={palette}
+                  buildUpdatePayload={(draft) => {
+                    if (draft === '__sent__') {
+                      return {
+                        status_id: null,
+                        dashboard_status: 'sent',
+                        is_archived: false,
+                      };
+                    }
+
+                    const selectedStatus = statuses.find((status) => status.id === draft);
+                    const mappedDashboardStatus = getDashboardStatusByStatusName(selectedStatus?.name);
+
                     return {
-                      status_id: null,
-                      dashboard_status: 'sent',
-                      is_archived: false,
+                      status_id: draft,
+                      dashboard_status: mappedDashboardStatus || tender.dashboard_status || 'calc',
+                      is_archived: mappedDashboardStatus === 'archive',
                     };
-                  }
-
-                  const selectedStatus = statuses.find((status) => status.id === draft);
-                  const mappedDashboardStatus = getDashboardStatusByStatusName(selectedStatus?.name);
-
-                  return {
-                    status_id: draft,
-                    dashboard_status: mappedDashboardStatus || tender.dashboard_status || 'calc',
-                    is_archived: mappedDashboardStatus === 'archive',
-                  };
-                }}
-                onUpdated={onUpdate}
-              />
-              <EditableMonitorField tenderId={tender.id} field="tender_number" label="Номер тендера" value={tender.tender_number} displayValue={tender.tender_number || '—'} palette={palette} onUpdated={onUpdate} />
+                  }}
+                  onUpdated={onUpdate}
+                />
+              )}
+              {!isPhoneDevice && (
+                <EditableMonitorField tenderId={tender.id} field="tender_number" label="Номер тендера" value={tender.tender_number} displayValue={tender.tender_number || '—'} palette={palette} onUpdated={onUpdate} />
+              )}
               <EditableMonitorField tenderId={tender.id} field="area" label="Площадь по СП" value={tender.area} displayValue={formatArea(tender.area)} type="number" palette={palette} onUpdated={onUpdate} />
               <InfoCard label="Цена ₽/м²" value={formatRubPerSquare(tender.total_cost || tender.manual_total_cost, tender.area)} palette={palette} />
               <EditableMonitorField tenderId={tender.id} field="manual_total_cost" label="Стоимость КП" value={tender.manual_total_cost} displayValue={formatMoneyFull(tender.manual_total_cost ?? tender.total_cost)} type="number" palette={palette} onUpdated={onUpdate} />
-              <InfoCard label="Направлено КП" value={lastCallDate ? `${formatDate(tender.submission_date)} · контроль ${formatDate(lastCallDate)}` : formatDate(tender.submission_date)} palette={palette} />
+              {!isPhoneDevice && (
+                <InfoCard label="Направлено КП" value={lastCallDate ? `${formatDate(tender.submission_date)} · контроль ${formatDate(lastCallDate)}` : formatDate(tender.submission_date)} palette={palette} />
+              )}
               <EditableMonitorField tenderId={tender.id} field="submission_date" label="Дата подачи КП" value={tender.submission_date} displayValue={`${formatDate(tender.submission_date)}${formatTime(tender.submission_date) ? ' ' + formatTime(tender.submission_date) : ''}`} type="date" withTime palette={palette} onUpdated={onUpdate} />
               <EditableMonitorField tenderId={tender.id} field="commission_date" label="Ввод в эксплуатацию" value={tender.commission_date} displayValue={formatDate(tender.commission_date)} type="date" palette={palette} onUpdated={onUpdate} />
               <EditableMonitorField tenderId={tender.id} field="construction_start_date" label="Выход на площадку" value={tender.construction_start_date} displayValue={formatDate(tender.construction_start_date)} type="date" palette={palette} onUpdated={onUpdate} />
