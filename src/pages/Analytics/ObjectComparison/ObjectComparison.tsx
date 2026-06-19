@@ -1,12 +1,17 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Card, Typography, Select, Table, Space, Statistic, Row, Col, Button, Spin, Segmented, Input } from 'antd';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Card, Typography, Select, Table, Space, Statistic, Row, Col, Button, Spin, Segmented } from 'antd';
 import { BarChartOutlined, ReloadOutlined, DownloadOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useComparisonData } from './hooks/useComparisonData';
-import type { ComparisonRow, CostType, ViewMode, TenderCosts } from './types';
+import type { ComparisonRow, CostType, ViewMode } from './types';
 import { exportComparisonToExcel } from './utils/exportComparisonToExcel';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
+import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useTheme } from '../../../contexts/ThemeContext';
+import { LandscapeTableOverlay } from '../../../components/responsive/LandscapeTableOverlay';
+import { DiffCell, DiffPerUnitCell, NoteCell } from './components/comparisonCells';
+import { formatNum, formatPerUnit, tenderLabel, getDiff } from './utils/comparisonFormat';
 
 const { Text } = Typography;
 
@@ -16,81 +21,6 @@ const TenderRealtimeRefresh: React.FC<{ tenderId: string; onChange: () => void }
   useRealtimeTopic(`tender:${tenderId}`, onChange);
   return null;
 };
-
-const formatNum = (value: number) =>
-  value.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
-
-const formatPerUnit = (value: number) =>
-  value > 0
-    ? value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : '—';
-
-const DiffCell: React.FC<{ value: number; percent: number; bold?: boolean }> = ({ value, percent, bold }) => (
-  <Space direction="vertical" size={0}>
-    <Text strong={bold} style={{ color: value >= 0 ? '#52c41a' : '#ff4d4f' }}>
-      {formatNum(value)}
-    </Text>
-    <Text type="secondary" style={{ fontSize: '12px' }}>
-      ({percent >= 0 ? '+' : ''}{percent.toFixed(1)}%)
-    </Text>
-  </Space>
-);
-
-const DiffPerUnitCell: React.FC<{ value: number }> = ({ value }) => {
-  if (value === 0) return <Text>—</Text>;
-  return (
-    <Text style={{ color: value >= 0 ? '#52c41a' : '#ff4d4f' }}>
-      {value >= 0 ? '+' : ''}{value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-    </Text>
-  );
-};
-
-// Ячейка примечания. Контролируемый компонент с локальным состоянием и
-// стабильным key (=record.key) на уровне рендера: благодаря этому ввод не
-// сбрасывается и не теряет фокус при перерисовках таблицы (серверный
-// авто-пересчёт + realtime-обновления пересобирают comparisonData). Сохраняем
-// на blur, только если значение изменилось.
-const NoteCell: React.FC<{
-  record: ComparisonRow;
-  onSave: (record: ComparisonRow, value: string) => void;
-}> = ({ record, onSave }) => {
-  const initial = record.note || '';
-  const [value, setValue] = useState(initial);
-
-  // Подтягиваем внешнее значение, только когда оно реально поменялось
-  // (своё сохранение, чужая правка). Незавершённый ввод не затирается, т.к.
-  // record.note в этот момент остаётся прежним.
-  useEffect(() => {
-    setValue(record.note || '');
-  }, [record.note, record.key]);
-
-  return (
-    <Input.TextArea
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => {
-        if ((record.note || '') !== value) {
-          onSave(record, value);
-        }
-      }}
-      autoSize={{ minRows: 1, maxRows: 3 }}
-      placeholder="—"
-      variant="borderless"
-      style={{ padding: '2px 4px', fontSize: '13px' }}
-    />
-  );
-};
-
-const tenderLabel = (info: { title: string; version?: number } | null, fallback: string) => {
-  if (!info) return fallback;
-  return `${info.title} (v${info.version || 1})`;
-};
-
-function getDiff(r: ComparisonRow, field: keyof TenderCosts) {
-  const v0 = (r.tenders[0]?.[field] as number) ?? 0;
-  const v1 = (r.tenders[1]?.[field] as number) ?? 0;
-  return { value: v1 - v0, percent: v0 > 0 ? ((v1 - v0) / v0) * 100 : 0 };
-}
 
 const ObjectComparison: React.FC = () => {
   const {
@@ -108,11 +38,19 @@ const ObjectComparison: React.FC = () => {
   } = useComparisonData();
 
   const [viewMode, setViewMode] = useState<ViewMode>('detailed');
+  const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
+  const { theme: currentTheme } = useTheme();
+  // На телефоне страница read-only (примечания правятся на десктопе) и в портрете
+  // принудительно упрощённый вид (узкий экран).
+  const readOnly = isMobile || isLandscapePhone;
 
   const loadedInfos = tenderInfos.filter(Boolean);
   const loadedCount = loadedInfos.length;
   const isMultiTender = loadedCount > 2;
-  const isDetailed = !isMultiTender && viewMode === 'detailed';
+  const effectiveViewMode: ViewMode = isPhone ? 'simplified' : viewMode;
+  const isDetailed = !isMultiTender && effectiveViewMode === 'detailed';
+  // В ландшафте телефона мульти-тендер (без редактируемых примечаний) показываем оверлеем.
+  const useOverlay = isLandscapePhone && isMultiTender;
   const costLabel = costType === 'commercial' ? 'Коммерческие' : 'Прямые';
   const validCount = selectedTenders.filter(Boolean).length;
 
@@ -128,14 +66,15 @@ const ObjectComparison: React.FC = () => {
     }
 
     const isMulti = loadedCount > 2;
-    const isDetail = !isMulti && viewMode === 'detailed';
+    const isDetail = !isMulti && effectiveViewMode === 'detailed';
     const labels = loadedInfos.map((info, i: number) => tenderLabel(info, `Тендер ${i + 1}`));
 
     const categoryCol = {
       title: <div style={{ textAlign: 'center' }}>Категория затрат</div>,
       dataIndex: 'category',
       key: 'category',
-      fixed: 'left' as const,
+      // fixed-колонка ломается под transform:scale в ландшафтном оверлее
+      ...(useOverlay ? {} : { fixed: 'left' as const }),
       width: 280,
       render: (text: string, record: ComparisonRow) => (
         <Text
@@ -195,16 +134,19 @@ const ObjectComparison: React.FC = () => {
         title: <div style={{ textAlign: 'center' }}>Примечание</div>,
         key: 'note',
         width: 200,
-        render: (_: unknown, record: ComparisonRow) => (
-          <NoteCell key={record.key} record={record} onSave={handleNoteBlur} />
-        ),
+        render: (_: unknown, record: ComparisonRow) =>
+          readOnly ? (
+            <Text>{record.note || '—'}</Text>
+          ) : (
+            <NoteCell key={record.key} record={record} onSave={handleNoteBlur} />
+          ),
       });
     }
 
     return result;
     // loadedInfos is intentionally excluded; adding it would cause excessive recomputation
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenderInfos, viewMode, handleNoteBlur, loadedCount]);
+  }, [tenderInfos, effectiveViewMode, handleNoteBlur, loadedCount, readOnly, useOverlay]);
 
   const scrollX = isMultiTender
     ? 280 + loadedCount * 250
@@ -219,11 +161,12 @@ const ObjectComparison: React.FC = () => {
   const tenderLabelsForExport = loadedInfos.map((info, i: number) => tenderLabel(info, `Тендер ${i + 1}`));
 
   const comparisonCardTitle = (
-    <Row justify="space-between" align="middle">
+    <Row justify="space-between" align="middle" gutter={[8, 8]}>
       <Col>{`Сравнение по категориям (${costLabel.toLowerCase()} затраты)`}</Col>
       <Col>
-        <Space>
-          {!isMultiTender && (
+        <Space wrap>
+          {/* Переключатель вида скрыт на телефоне — там принудительно «упрощённое» */}
+          {!isMultiTender && !isPhone && (
             <Segmented
               options={[
                 { label: 'Упрощённое', value: 'simplified' },
@@ -254,7 +197,7 @@ const ObjectComparison: React.FC = () => {
   );
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: isPhoneDevice ? 12 : 24 }}>
       {loadedTenderIds.map((id) => (
         <TenderRealtimeRefresh key={id} tenderId={id} onChange={refreshComparison} />
       ))}
@@ -265,7 +208,7 @@ const ObjectComparison: React.FC = () => {
             {selectedTenders.map((val, idx) => {
               const info = val ? tenders.find(t => t.id === val) || null : null;
               return (
-                <div key={idx} style={{ flex: '0 0 300px', minWidth: 240 }}>
+                <div key={idx} style={{ flex: isPhone ? '1 1 100%' : '0 0 300px', minWidth: isPhone ? 0 : 240 }}>
                   <Space direction="vertical" style={{ width: '100%' }}>
                     <Space align="center">
                       <Text strong>Тендер {idx + 1}</Text>
@@ -362,18 +305,33 @@ const ObjectComparison: React.FC = () => {
           </Card>
         ) : comparisonData.length > 0 ? (
           <Card title={comparisonCardTitle}>
-            <Table
-              columns={columns}
-              dataSource={comparisonData}
-              rowKey="key"
-              pagination={false}
-              scroll={{ x: scrollX }}
-              sticky
-              bordered
-              size="small"
-              expandable={{ defaultExpandAllRows: false }}
-              rowClassName={(record) => record.is_main_category ? 'comparison-category-row' : ''}
-            />
+            {useOverlay ? (
+              <LandscapeTableOverlay theme={currentTheme} width={scrollX}>
+                <Table
+                  columns={columns}
+                  dataSource={comparisonData}
+                  rowKey="key"
+                  pagination={false}
+                  bordered
+                  size="small"
+                  expandable={{ defaultExpandAllRows: false }}
+                  rowClassName={(record) => record.is_main_category ? 'comparison-category-row' : ''}
+                />
+              </LandscapeTableOverlay>
+            ) : (
+              <Table
+                columns={columns}
+                dataSource={comparisonData}
+                rowKey="key"
+                pagination={false}
+                scroll={{ x: scrollX }}
+                sticky
+                bordered
+                size="small"
+                expandable={{ defaultExpandAllRows: false }}
+                rowClassName={(record) => record.is_main_category ? 'comparison-category-row' : ''}
+              />
+            )}
           </Card>
         ) : (
           <Card>
