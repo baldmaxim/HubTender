@@ -24,7 +24,7 @@ import {
   type TenderMonitorSortField,
   type TenderMonitorTab,
 } from './utils/tenderMonitor';
-import { getTenderMonitorPalette, type TenderMonitorPalette } from './utils/tenderMonitorTheme';
+import { getTenderMonitorPalette, mixHex, type TenderMonitorPalette } from './utils/tenderMonitorTheme';
 import './Tenders.css';
 import './TendersModern.css';
 import './TenderMonitor.css';
@@ -47,7 +47,10 @@ const MetricCard: React.FC<MetricCardProps> = ({
   blinking = false,
   palette,
   isPhone = false,
-}) => (
+}) => {
+  // Текст блоков статистики ярче на 20% (приглушённый muted сдвигаем к яркому text) — на всех экранах.
+  const brightMuted = mixHex(palette.muted, palette.text, 0.2);
+  return (
   <div
     className={blinking ? 'tender-monitor-alert-card' : undefined}
     style={{
@@ -73,17 +76,18 @@ const MetricCard: React.FC<MetricCardProps> = ({
         background: accent,
       }}
     />
-    <div style={{ color: palette.muted, fontSize: isPhone ? 9 : 12, textTransform: 'uppercase', letterSpacing: isPhone ? '0.04em' : '0.12em', lineHeight: 1.15 }}>{title}</div>
-    <div style={{ color: isPhone ? palette.muted : palette.text, fontSize: isPhone ? 'clamp(13px, 4.4vw, 19px)' : 28, fontWeight: isPhone ? 600 : 700, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{value}</div>
-    <div style={{ color: palette.muted, fontSize: isPhone ? 9 : 13, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{caption}</div>
+    <div style={{ color: brightMuted, fontSize: isPhone ? 9 : 12, textTransform: 'uppercase', letterSpacing: isPhone ? '0.04em' : '0.12em', lineHeight: 1.15 }}>{title}</div>
+    <div style={{ color: isPhone ? brightMuted : palette.text, fontSize: isPhone ? 'clamp(13px, 4.4vw, 19px)' : 28, fontWeight: isPhone ? 600 : 700, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{value}</div>
+    <div style={{ color: brightMuted, fontSize: isPhone ? 9 : 13, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{caption}</div>
   </div>
-);
+  );
+};
 
 const Tenders: React.FC = () => {
   const { message } = App.useApp();
   const { user } = useAuth();
   const { theme } = useTheme();
-  const { isMobile, isPhoneDevice } = useIsMobile();
+  const { isMobile, isPhoneDevice, isLandscapePhone } = useIsMobile();
   const isDirector = user?.role_code === 'director' || user?.role_code === 'general_director';
   const isGeneralDirector = user?.role_code === 'general_director';
   const palette = getTenderMonitorPalette(theme === 'dark');
@@ -216,8 +220,9 @@ const Tenders: React.FC = () => {
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%' }}>
-        {/* Заголовок и кнопки управления — скрыты на телефонах (название в шапке, режим просмотра) */}
-        {!isMobile && (
+        {/* Заголовок и кнопки управления — скрыты на телефонах (название в шапке, режим просмотра).
+            В ландшафте телефона isMobile=false, поэтому добавляем !isLandscapePhone, чтобы не дублировать шапку. */}
+        {!isMobile && !isLandscapePhone && (
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div>
               <div style={{ color: palette.text, fontSize: 30, fontWeight: 700, marginBottom: 6 }}>Перечень тендеров</div>

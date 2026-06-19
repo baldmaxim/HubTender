@@ -160,7 +160,7 @@ export function MapPopover({ tender, palette }: { tender: TenderRegistryWithRela
   return (
     <Popover
       trigger="hover"
-      placement="bottomLeft"
+      placement="bottom"
       mouseEnterDelay={0.15}
       destroyTooltipOnHide
       content={mapContent}

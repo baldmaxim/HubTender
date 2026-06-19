@@ -22,7 +22,7 @@ import type { ProjectFull } from '../../lib/supabase/types';
 const Projects: React.FC = () => {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const { isPhone, isMobile, screens } = useIsMobile();
+  const { isPhone, isMobile, isLandscapePhone, screens } = useIsMobile();
   // Генеральный директор и телефоны — только просмотр (без добавления/редактирования объектов)
   const readOnly = user?.role_code === 'general_director' || isMobile;
   const [activeTab, setActiveTab] = useState<string>('list');
@@ -100,7 +100,7 @@ const Projects: React.FC = () => {
         style={{ width: isPhone ? '100%' : 280 }}
         allowClear
       />
-      {!readOnly && (
+      {!readOnly && !isLandscapePhone && (
         <Button type="primary" icon={<PlusOutlined />} onClick={handleAddProject}>
           Добавить объект
         </Button>

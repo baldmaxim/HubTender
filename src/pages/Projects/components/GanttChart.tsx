@@ -101,6 +101,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   const { isPhone: isPhoneRaw, isLandscapePhone } = useIsMobile();
   // В ландшафт-оверлее верстаем как «не телефон» (monthWidth 80 и т.д.) → числа влезают.
   const isPhone = isPhoneRaw && !landscape;
+  // В ландшафте телефона знак ₽ в итогах убираем (экономия места).
+  const rubleSuffix = isLandscapePhone ? '' : ' ₽';
   // Тап по графику открывает ландшафт только у портретного телефонного инстанса.
   const tapToOpen = !!onRequestLandscape && isPhoneRaw && !landscape;
 
@@ -1076,7 +1078,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
             Показать скрытые объекты ({hiddenProjects.size})
           </Button>
         )}
-        {!isPhone && (
+        {!isPhone && !isLandscapePhone && (
           <Button
             type="primary"
             icon={<DownloadOutlined />}
@@ -1541,9 +1543,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({
           }}
         >
           {[
-            { label: 'Всего договоров', value: `${formatMoney(totals.totalContract)} ₽`, color: '#1890ff' },
-            { label: 'Закрыто', value: `${formatMoney(totals.totalCompletion)} ₽`, color: '#52c41a' },
-            { label: 'Осталось', value: `${formatMoney(totals.totalRemaining)} ₽`, color: '#faad14' },
+            { label: 'Всего договоров', value: `${formatMoney(totals.totalContract)}${rubleSuffix}`, color: '#1890ff' },
+            { label: 'Закрыто', value: `${formatMoney(totals.totalCompletion)}${rubleSuffix}`, color: '#52c41a' },
+            { label: 'Осталось', value: `${formatMoney(totals.totalRemaining)}${rubleSuffix}`, color: '#faad14' },
             { label: 'Прогресс', value: `${Math.round(totals.completionPercent)}%`, color: '#52c41a' },
           ].map((m) => (
             <div key={m.label} style={{ minWidth: 0 }}>
@@ -1568,15 +1570,15 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         >
           <div>
             <Text type="secondary" style={{ fontSize: 12 }}>Всего договоров:</Text>{' '}
-            <Text strong style={{ color: '#1890ff' }}>{formatMoney(totals.totalContract)} ₽</Text>
+            <Text strong style={{ color: '#1890ff' }}>{formatMoney(totals.totalContract)}{rubleSuffix}</Text>
           </div>
           <div>
             <Text type="secondary" style={{ fontSize: 12 }}>Закрыто:</Text>{' '}
-            <Text strong style={{ color: '#52c41a' }}>{formatMoney(totals.totalCompletion)} ₽</Text>
+            <Text strong style={{ color: '#52c41a' }}>{formatMoney(totals.totalCompletion)}{rubleSuffix}</Text>
           </div>
           <div>
             <Text type="secondary" style={{ fontSize: 12 }}>Осталось:</Text>{' '}
-            <Text strong style={{ color: '#faad14' }}>{formatMoney(totals.totalRemaining)} ₽</Text>
+            <Text strong style={{ color: '#faad14' }}>{formatMoney(totals.totalRemaining)}{rubleSuffix}</Text>
           </div>
           <div>
             <Text type="secondary" style={{ fontSize: 12 }}>Прогресс:</Text>{' '}

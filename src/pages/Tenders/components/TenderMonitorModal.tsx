@@ -295,7 +295,8 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
   const modalTabKeys: ModalTab[] = ['info', 'timeline', 'package'];
   const goToTabOffset = (delta: number) => {
     const index = modalTabKeys.indexOf(activeTab);
-    const next = Math.min(Math.max(index + delta, 0), modalTabKeys.length - 1);
+    // Циклический переход по вкладкам модалки (последняя↔первая в обе стороны).
+    const next = ((index + delta) % modalTabKeys.length + modalTabKeys.length) % modalTabKeys.length;
     if (next !== index) {
       setActiveTab(modalTabKeys[next]);
     }
@@ -427,7 +428,10 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
           {...(isPhoneDevice ? contentSwipe : {})}
           style={{ paddingTop: 14, ...(isPhoneDevice ? { touchAction: 'pan-y' as const } : {}) }}
         >
-          {activeTab === 'info' ? (
+          {/* Все три панели рендерятся всегда и накладываются в одну grid-ячейку:
+              высота окна = самой высокой (Информация), активная видна и прижата к верху — окно не «прыгает». */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', alignItems: 'start' }}>
+          <div style={{ gridArea: '1 / 1', minWidth: 0, visibility: activeTab === 'info' ? 'visible' : 'hidden', pointerEvents: activeTab === 'info' ? undefined : 'none' }}>
             <FieldReadOnlyContext.Provider value={!!readOnly}>
             <div
               style={{
@@ -510,23 +514,24 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
               />
             </div>
             </FieldReadOnlyContext.Provider>
-          ) : null}
+          </div>
 
-          {activeTab === 'timeline' ? (
-            readOnly ? (
+          <div style={{ gridArea: '1 / 1', minWidth: 0, visibility: activeTab === 'timeline' ? 'visible' : 'hidden', pointerEvents: activeTab === 'timeline' ? undefined : 'none' }}>
+            {readOnly ? (
               <ReadOnlyChronologySection items={chronologyItems} palette={palette} />
             ) : (
               <EditableChronologySection tenderId={tender.id} items={chronologyItems} palette={palette} onUpdated={onUpdate} />
-            )
-          ) : null}
+            )}
+          </div>
 
-          {activeTab === 'package' ? (
-            readOnly ? (
+          <div style={{ gridArea: '1 / 1', minWidth: 0, visibility: activeTab === 'package' ? 'visible' : 'hidden', pointerEvents: activeTab === 'package' ? undefined : 'none' }}>
+            {readOnly ? (
               <ReadOnlyPackageSection items={packageItems} palette={palette} />
             ) : (
               <EditablePackageSection tenderId={tender.id} items={packageItems} palette={palette} onUpdated={onUpdate} />
-            )
-          ) : null}
+            )}
+          </div>
+          </div>
         </div>
       </div>
     </Modal>

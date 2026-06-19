@@ -264,13 +264,11 @@ const FinancialIndicators: React.FC = () => {
                       >
                         {isPhoneDevice ? (
                           <>
-                            {/* Телефон: номер тендера убран; наименование авто-подгоняется в одну строку рядом с версией. */}
+                            {/* Телефон: номер тендера убран; версия стоит вплотную справа от наименования (по центру). */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', gap: 6, marginBottom: 4 }}>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <AutoFitText maxFontSize={13} minFontSize={8} align="center" strong>
-                                  {tender.title}
-                                </AutoFitText>
-                              </div>
+                              <Text strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100, fontSize: 12 }}>
+                                {tender.title}
+                              </Text>
                               <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
                             </div>
                             <AutoFitText maxFontSize={11} minFontSize={7} align="center">
@@ -357,7 +355,7 @@ const FinancialIndicators: React.FC = () => {
 
   return (
     <div className="financial-indicators-page">
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, marginLeft: isPhoneDevice ? 12 : 0 }}>
         <Button
           type="primary"
           style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}

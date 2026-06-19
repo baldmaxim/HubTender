@@ -127,7 +127,8 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
 
   const goToTabOffset = (delta: number) => {
     const index = tabs.findIndex((tab) => tab.key === activeTab);
-    const next = Math.min(Math.max(index + delta, 0), tabs.length - 1);
+    // Циклический переход: с последней вкладки вправо → первая, с первой влево → последняя.
+    const next = ((index + delta) % tabs.length + tabs.length) % tabs.length;
     if (next !== index) {
       onTabChange(tabs[next].key);
     }
