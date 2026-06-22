@@ -6,6 +6,8 @@
 import React from 'react';
 import { Modal, Table, Typography, Spin } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { useNavigate } from 'react-router-dom';
+import { usePositionTabs } from '../../../../contexts/PositionTabsContext';
 import {
   useCategoryPositions,
   type CategoryPositionRow,
@@ -30,11 +32,17 @@ const CategoryPositionsModal: React.FC<CategoryPositionsModalProps> = ({
   onClose,
 }) => {
   const { rows, loading } = useCategoryPositions(tenderId, open ? category?.id ?? null : null);
+  const navigate = useNavigate();
+  const { openTab } = usePositionTabs();
 
-  const openPosition = (positionId: string) => {
+  const openPosition = (record: CategoryPositionRow) => {
     if (!tenderId) return;
-    const url = `/positions/${positionId}/items?tenderId=${tenderId}&positionId=${positionId}`;
-    window.open(url, '_blank');
+    openTab({
+      positionId: record.id,
+      tenderId,
+      title: record.position_number != null ? `№ ${record.position_number}` : 'Позиция',
+    });
+    navigate(`/positions/${record.id}/items?tenderId=${tenderId}&positionId=${record.id}`);
   };
 
   const numCol = (
@@ -72,7 +80,7 @@ const CategoryPositionsModal: React.FC<CategoryPositionsModalProps> = ({
       key: 'work_name',
       width: 320,
       render: (value: string, record: CategoryPositionRow) => (
-        <Link onClick={() => openPosition(record.id)} style={{ textDecoration: 'underline' }}>
+        <Link onClick={() => openPosition(record)} style={{ textDecoration: 'underline' }}>
           {value}
         </Link>
       ),

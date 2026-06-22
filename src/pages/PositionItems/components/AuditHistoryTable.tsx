@@ -17,12 +17,16 @@ import {
 interface AuditHistoryTableProps {
   positionId: string | undefined;
   filters: AuditFilters;
+  /** Телефон: скрыть колонку отката (read-only). */
+  readOnly?: boolean;
+  /** «Плоский» режим для оверлея: без горизонтального scroll. */
+  plain?: boolean;
 }
 
 /**
  * Таблица истории изменений BOQ items
  */
-const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ positionId, filters }) => {
+const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ positionId, filters, readOnly = false, plain = false }) => {
   const { auditRecords, loading } = useAuditHistory(positionId, filters);
   const { rollback, rolling } = useAuditRollback();
 
@@ -40,61 +44,66 @@ const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ positionId, filte
   };
 
   const columns: ColumnsType<BoqItemAudit> = useMemo(
-    () => [
-      {
-        title: 'Дата и время',
-        dataIndex: 'changed_at',
-        width: 180,
-        render: (val) => formatDateTime(val),
-      },
-      {
-        title: 'Наименование',
-        dataIndex: 'item_name',
-        width: 300,
-        render: (val) => (
-          <div style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
-            {val || '-'}
-          </div>
-        ),
-      },
-      {
-        title: 'Пользователь',
-        dataIndex: 'changed_by',
-        width: 200,
-        render: (_, record) => getUserDisplayName(record),
-      },
-      {
-        title: 'Операция',
-        dataIndex: 'operation_type',
-        width: 120,
-        align: 'center',
-        render: (op) => <Tag color={getOperationColor(op)}>{getOperationText(op)}</Tag>,
-      },
-      {
-        title: 'Изменённые поля',
-        dataIndex: 'changed_fields',
-        render: (_, record) => <AuditDiffCell record={record} />,
-      },
-      {
-        title: 'Действия',
-        width: 140,
-        align: 'center',
-        render: (_, record) =>
-          canRollback(record) ? (
-            <Button
-              size="small"
-              icon={<HistoryOutlined />}
-              onClick={() => handleRollback(record)}
-              loading={rolling}
-            >
-              Восстановить
-            </Button>
-          ) : null,
-      },
-    ],
+    () => {
+      const cols: ColumnsType<BoqItemAudit> = [
+        {
+          title: 'Дата и время',
+          dataIndex: 'changed_at',
+          width: 180,
+          render: (val) => formatDateTime(val),
+        },
+        {
+          title: 'Наименование',
+          dataIndex: 'item_name',
+          width: 300,
+          render: (val) => (
+            <div style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
+              {val || '-'}
+            </div>
+          ),
+        },
+        {
+          title: 'Пользователь',
+          dataIndex: 'changed_by',
+          width: 200,
+          render: (_, record) => getUserDisplayName(record),
+        },
+        {
+          title: 'Операция',
+          dataIndex: 'operation_type',
+          width: 120,
+          align: 'center',
+          render: (op) => <Tag color={getOperationColor(op)}>{getOperationText(op)}</Tag>,
+        },
+        {
+          title: 'Изменённые поля',
+          dataIndex: 'changed_fields',
+          render: (_, record) => <AuditDiffCell record={record} />,
+        },
+      ];
+      if (!readOnly) {
+        cols.push({
+          title: 'Действия',
+          width: 140,
+          align: 'center',
+          render: (_, record) =>
+            canRollback(record) ? (
+              <Button
+                size="small"
+                icon={<HistoryOutlined />}
+                onClick={() => handleRollback(record)}
+                loading={rolling}
+              >
+                Восстановить
+              </Button>
+            ) : null,
+        });
+      }
+      return cols;
+    },
     // handleRollback is a stable prop function; intentionally excluded to avoid column re-creation
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rolling]
+    [rolling, readOnly]
   );
 
   return (
@@ -107,7 +116,7 @@ const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ positionId, filte
         pageSize: 20,
         showTotal: (total) => `Всего: ${total}`,
       }}
-      scroll={{ x: 1200 }}
+      scroll={plain ? undefined : { x: 1200 }}
     />
   );
 };

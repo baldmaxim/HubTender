@@ -2,34 +2,31 @@ import { Table, Button, Space, Tag, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EditOutlined, DeleteOutlined, LinkOutlined, UpOutlined, DownOutlined } from '@ant-design/icons';
 import type { BoqItemFull, CurrencyType } from '../../../lib/supabase';
-
-const currencySymbols: Record<CurrencyType, string> = {
-  RUB: '₽',
-  USD: '$',
-  EUR: '€',
-  CNY: '¥',
-};
+import { currencySymbols, getBoqTypeTagStyle } from './boqColors';
 
 interface ItemsTableProps {
   items: BoqItemFull[];
   loading: boolean;
-  expandedRowKeys: string[];
-  onExpandedRowsChange: (keys: string[]) => void;
-  onEditClick: (record: BoqItemFull) => void;
-  onStartDelete: (id: string) => void;
-  onToggleDeleteSelection: (id: string) => void;
-  onMoveItem: (itemId: string, direction: 'up' | 'down') => void;
+  expandedRowKeys?: string[];
+  onExpandedRowsChange?: (keys: string[]) => void;
+  onEditClick?: (record: BoqItemFull) => void;
+  onStartDelete?: (id: string) => void;
+  onToggleDeleteSelection?: (id: string) => void;
+  onMoveItem?: (itemId: string, direction: 'up' | 'down') => void;
   getCurrencyRate: (currency: CurrencyType) => number;
-  expandedRowRender: (record: BoqItemFull) => React.ReactNode;
+  expandedRowRender?: (record: BoqItemFull) => React.ReactNode;
   readOnly?: boolean;
   isDeleteMode?: boolean;
   selectedDeleteIds?: Set<string>;
+  /** «Плоский» read-only режим для оверлея: без scroll, без fixed-колонок,
+   *  без колонок сортировки/действий и без раскрытия строк. */
+  plain?: boolean;
 }
 
 const ItemsTable: React.FC<ItemsTableProps> = ({
   items,
   loading,
-  expandedRowKeys,
+  expandedRowKeys = [],
   onExpandedRowsChange,
   onEditClick,
   onStartDelete,
@@ -40,6 +37,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
   readOnly,
   isDeleteMode = false,
   selectedDeleteIds = new Set(),
+  plain = false,
 }) => {
   const getRowClassName = (record: BoqItemFull): string => {
     const itemType = record.boq_item_type;
@@ -110,7 +108,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
     return record.total_amount || 0;
   };
 
-  const columns: ColumnsType<BoqItemFull> = [
+  const baseColumns: ColumnsType<BoqItemFull> = [
     {
       title: '',
       key: 'sort',
@@ -127,7 +125,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
               disabled={readOnly || isDeleteMode || !canMoveItemUp(record, index)}
               onClick={(e) => {
                 e.stopPropagation();
-                onMoveItem(record.id, 'up');
+                onMoveItem?.(record.id, 'up');
               }}
               style={{ padding: '2px 4px', height: 20 }}
             />
@@ -140,7 +138,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
               disabled={readOnly || isDeleteMode || !canMoveItemDown(record, index)}
               onClick={(e) => {
                 e.stopPropagation();
-                onMoveItem(record.id, 'down');
+                onMoveItem?.(record.id, 'down');
               }}
               style={{ padding: '2px 4px', height: 20 }}
             />
@@ -156,41 +154,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       render: (_: unknown, record: BoqItemFull) => {
         const isMaterial = ['мат', 'суб-мат', 'мат-комп.'].includes(record.boq_item_type);
         const itemType = record.boq_item_type;
-
-        let bgColor = '';
-        let textColor = '';
-
-        if (['раб', 'суб-раб', 'раб-комп.'].includes(itemType)) {
-          switch (itemType) {
-            case 'раб':
-              bgColor = 'rgba(239, 108, 0, 0.12)';
-              textColor = '#f57c00';
-              break;
-            case 'суб-раб':
-              bgColor = 'rgba(106, 27, 154, 0.12)';
-              textColor = '#7b1fa2';
-              break;
-            case 'раб-комп.':
-              bgColor = 'rgba(198, 40, 40, 0.12)';
-              textColor = '#d32f2f';
-              break;
-          }
-        } else {
-          switch (itemType) {
-            case 'мат':
-              bgColor = 'rgba(21, 101, 192, 0.12)';
-              textColor = '#1976d2';
-              break;
-            case 'суб-мат':
-              bgColor = 'rgba(104, 159, 56, 0.12)';
-              textColor = '#7cb342';
-              break;
-            case 'мат-комп.':
-              bgColor = 'rgba(0, 105, 92, 0.12)';
-              textColor = '#00897b';
-              break;
-          }
-        }
+        const { bgColor, textColor } = getBoqTypeTagStyle(itemType);
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -457,7 +421,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
                   borderColor: isSelected ? '#ff4d4f' : undefined,
                   color: isSelected ? '#fff' : undefined,
                 }}
-                onClick={(e) => { e.stopPropagation(); onToggleDeleteSelection(record.id); }}
+                onClick={(e) => { e.stopPropagation(); onToggleDeleteSelection?.(record.id); }}
               >
                 <DeleteOutlined />
               </Tag>
@@ -471,7 +435,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
               type="link"
               size="small"
               icon={<EditOutlined />}
-              onClick={() => onEditClick(record)}
+              onClick={() => onEditClick?.(record)}
               disabled={readOnly || (expandedRowKeys.length > 0 && !expandedRowKeys.includes(record.id))}
             />
             <Tooltip title="Удалить">
@@ -481,7 +445,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
                 size="small"
                 icon={<DeleteOutlined />}
                 disabled={readOnly}
-                onClick={(e) => { e.stopPropagation(); onStartDelete(record.id); }}
+                onClick={(e) => { e.stopPropagation(); onStartDelete?.(record.id); }}
               />
             </Tooltip>
           </Space>
@@ -489,6 +453,12 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       },
     },
   ];
+
+  // В plain-режиме (оверлей) убираем колонки сортировки и действий, а также
+  // единственную fixed-колонку — иначе ломается transform:scale у оверлея.
+  const columns = plain
+    ? baseColumns.filter((c) => c.key !== 'sort' && c.key !== 'actions')
+    : baseColumns;
 
   return (
     <Table
@@ -498,16 +468,20 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       rowClassName={getRowClassName}
       loading={loading}
       pagination={false}
-      scroll={{ y: 'calc(100vh - 500px)' }}
+      scroll={plain ? undefined : { y: 'calc(100vh - 500px)' }}
       size="small"
-      expandable={{
-        showExpandColumn: false,
-        expandedRowKeys: expandedRowKeys,
-        onExpand: (expanded, record) => {
-          onExpandedRowsChange(expanded ? [record.id] : []);
-        },
-        expandedRowRender,
-      }}
+      expandable={
+        plain
+          ? undefined
+          : {
+              showExpandColumn: false,
+              expandedRowKeys,
+              onExpand: (expanded, record) => {
+                onExpandedRowsChange?.(expanded ? [record.id] : []);
+              },
+              expandedRowRender,
+            }
+      }
     />
   );
 };

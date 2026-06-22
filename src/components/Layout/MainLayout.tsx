@@ -13,6 +13,7 @@ import { menuItems, MOBILE_HIDDEN_KEYS } from './menuItems';
 import { CalculatorWidget } from './CalculatorWidget';
 import { NotesWidget } from './NotesWidget';
 import { NotificationsBell } from './NotificationsBell';
+import PositionTabsBar from './PositionTabsBar';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -451,6 +452,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             overflow: 'auto',
           }}
         >
+          {location.pathname.startsWith('/positions') && <PositionTabsBar />}
           <Outlet />
         </Content>
       </Layout>

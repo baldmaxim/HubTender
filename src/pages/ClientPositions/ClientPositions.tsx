@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
+import { usePositionTabs } from '../../contexts/PositionTabsContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClientPositions } from './hooks/useClientPositions';
 import { usePositionActions } from './hooks/usePositionActions';
@@ -33,6 +34,8 @@ interface TenderOption {
 
 const ClientPositions: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { openTab } = usePositionTabs();
   const { theme: currentTheme } = useTheme();
   const { isPhoneDevice } = useIsMobile();
 
@@ -291,15 +294,18 @@ const ClientPositions: React.FC = () => {
     }
   };
 
-  // Обработчик клика по строке
-  const handleRowClick = useCallback((record: { id: string }) => {
+  // Обработчик клика по строке — открываем позицию внутренней вкладкой приложения
+  const handleRowClick = useCallback((record: { id: string; position_number?: number }) => {
     const isLeaf = leafPositionIndices.has(record.id);
     if (isLeaf && selectedTender) {
-      // Открываем в новой вкладке
-      const url = `/positions/${record.id}/items?tenderId=${selectedTender.id}&positionId=${record.id}`;
-      window.open(url, '_blank');
+      openTab({
+        positionId: record.id,
+        tenderId: selectedTender.id,
+        title: record.position_number != null ? `№ ${record.position_number}` : 'Позиция',
+      });
+      navigate(`/positions/${record.id}/items?tenderId=${selectedTender.id}&positionId=${record.id}`);
     }
-  }, [leafPositionIndices, selectedTender]);
+  }, [leafPositionIndices, selectedTender, openTab, navigate]);
 
 
   // Обработчик возврата к выбору

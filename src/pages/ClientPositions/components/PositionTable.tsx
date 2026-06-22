@@ -18,6 +18,7 @@ import type { ColumnsType } from 'antd/es/table';
 import type { ClientPosition, Tender } from '../../../lib/supabase';
 import { PositionRowActions } from './PositionRowActions';
 import { IconSwap } from '../../../components/transitions';
+import { usePositionTabs } from '../../../contexts/PositionTabsContext';
 
 const { Text } = Typography;
 
@@ -142,6 +143,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
   onToggleShowAll,
   tableScrollY = 600,
 }) => {
+  const { openTab } = usePositionTabs();
   // Состояние для отслеживания открытой позиции
   const [expandedPositionId, setExpandedPositionId] = useState<string | null>(null);
 
@@ -542,13 +544,15 @@ export const PositionTable: React.FC<PositionTableProps> = ({
               if (e.button === 1 && isLeaf && selectedTender) {
                 e.preventDefault();
                 e.stopPropagation();
-                const url = `/positions/${record.id}/items?tenderId=${selectedTender.id}&positionId=${record.id}`;
-                // Открываем в фоновой вкладке
-                const newWindow = window.open(url, '_blank');
-                // Возвращаем фокус на текущее окно
-                if (newWindow) {
-                  window.focus();
-                }
+                // Средний клик — открываем фоновой внутренней вкладкой (без навигации)
+                openTab(
+                  {
+                    positionId: record.id,
+                    tenderId: selectedTender.id,
+                    title: record.position_number != null ? `№ ${record.position_number}` : 'Позиция',
+                  },
+                  { background: true },
+                );
               }
             },
             style: {

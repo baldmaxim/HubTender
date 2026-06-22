@@ -1,27 +1,31 @@
 import { useState, useMemo } from 'react';
-import { Card, Button, Typography, Tag, Input, InputNumber, Select, Modal, message, AutoComplete, Tabs } from 'antd';
-import { DeleteOutlined, ThunderboltOutlined, UploadOutlined } from '@ant-design/icons';
+import { Card, Tabs } from 'antd';
 import { useParams } from 'react-router-dom';
 import WorkEditForm from './WorkEditForm';
 import MaterialEditForm from './MaterialEditForm';
 import { useBoqItems } from './hooks/useBoqItems';
 import { useItemActions } from './hooks/useItemActions';
+import { useItemBulkActions } from './hooks/useItemBulkActions';
+import { usePositionTabRegistration } from './hooks/usePositionTabRegistration';
 import ItemsTable from './components/ItemsTable';
+import ItemsMobileCards from './components/ItemsMobileCards';
+import ItemsToolbar from './components/ItemsToolbar';
+import PositionHeader from './components/PositionHeader';
 import AddItemForm from './components/AddItemForm';
 import TemplateSelectModal from './components/TemplateSelectModal';
 import AuditHistoryTab from './components/AuditHistoryTab';
 import { BoqItemsImportModal } from './components/BoqItemsImportModal';
-import { clearPositionsBoq } from '../../lib/api/positions';
 import { useDeadlineCheck } from '../../hooks/useDeadlineCheck';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { useAuth } from '../../contexts/AuthContext';
-import { deleteBoqItemWithAudit, updateBoqItemWithAudit } from '../../lib/supabaseWithAudit';
-import { getErrorMessage } from '../../utils/errors';
-
-const { Text, Title } = Typography;
+import { useTheme } from '../../contexts/ThemeContext';
+import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 
 const PositionItems: React.FC = () => {
   const { positionId } = useParams<{ positionId: string }>();
   const { user } = useAuth();
+  const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
+  const { theme } = useTheme();
 
   const [workSearchText, setWorkSearchText] = useState<string>('');
   const [materialSearchText, setMaterialSearchText] = useState<string>('');
@@ -60,10 +64,16 @@ const PositionItems: React.FC = () => {
     fetchItems,
   } = useBoqItems(positionId);
 
+  // Регистрация/обновление внутренней вкладки приложения для этой позиции
+  usePositionTabRegistration(positionId, position);
+
   // Проверка дедлайна для блокировки редактирования
   const { canEdit: canEditByDeadline, loading: deadlineLoading } =
     useDeadlineCheck(position?.tender_id);
   const isReadOnlyByDeadline = !canEditByDeadline || deadlineLoading;
+
+  // На телефоне (любая ориентация) страница — только для просмотра
+  const readOnly = isReadOnlyByDeadline || isMobile || isLandscapePhone;
 
   const {
     handleAddWork,
@@ -83,29 +93,38 @@ const PositionItems: React.FC = () => {
     readOnly: isReadOnlyByDeadline,
   });
 
-  // Вычисление общей суммы
-  const totalSum = useMemo(() => {
-    return items.reduce((sum, item) => sum + (item.total_amount || 0), 0);
-  }, [items]);
+  const { handleBulkDelete, handleClearAllItems, handleApplyCostToAll, getCostCategoryOptions } =
+    useItemBulkActions({
+      positionId,
+      items,
+      userId: user?.id,
+      fetchItems,
+      costCategories,
+      costSearchText,
+      selectedCostCategoryId,
+      setSelectedCostCategoryId,
+      setCostSearchText,
+      selectedDeleteIds,
+      setIsDeleteMode,
+      setSelectedDeleteIds,
+      setIsBulkDeleting,
+    });
 
-  const handleEditClick = (record: { id: string }) => {
-    setExpandedRowKeys([record.id]);
-  };
+  const totalSum = useMemo(
+    () => items.reduce((sum, item) => sum + (item.total_amount || 0), 0),
+    [items],
+  );
+
+  const handleEditClick = (record: { id: string }) => setExpandedRowKeys([record.id]);
 
   const onFormSave = async (data: Record<string, unknown>) => {
     await handleFormSave(data, expandedRowKeys, items, () => setExpandedRowKeys([]));
   };
-
-  const onFormCancel = () => {
-    setExpandedRowKeys([]);
-  };
+  const onFormCancel = () => setExpandedRowKeys([]);
 
   const onSaveGPData = async () => {
-    if (positionId) {
-      await handleSaveGPData(positionId, gpVolume, gpNote, fetchPositionData);
-    }
+    if (positionId) await handleSaveGPData(positionId, gpVolume, gpNote, fetchPositionData);
   };
-
   const onSaveAdditionalWorkData = async () => {
     if (positionId && position?.is_additional) {
       await handleSaveAdditionalWorkData(positionId, workName, unitCode, fetchPositionData);
@@ -117,269 +136,102 @@ const PositionItems: React.FC = () => {
     setIsDeleteMode(true);
     setSelectedDeleteIds(new Set([id]));
   };
-
   const handleToggleDeleteSelection = (id: string) => {
-    setSelectedDeleteIds(prev => {
+    setSelectedDeleteIds((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   };
-
   const handleCancelDeleteMode = () => {
     setIsDeleteMode(false);
     setSelectedDeleteIds(new Set());
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedDeleteIds.size === 0) return;
-    const count = selectedDeleteIds.size;
-    const theme = localStorage.getItem('tenderHub_theme') || 'light';
-
-    Modal.confirm({
-      title: 'Удалить элементы?',
-      content: `Вы уверены, что хотите удалить ${count} выбранных элемент${count === 1 ? '' : count < 5 ? 'а' : 'ов'}? Это действие необратимо.`,
-      okText: 'Удалить',
-      cancelText: 'Отмена',
-      okButtonProps: { danger: true },
-      rootClassName: theme === 'dark' ? 'dark-modal' : '',
-      onOk: async () => {
-        setIsBulkDeleting(true);
-        try {
-          for (const id of selectedDeleteIds) {
-            await deleteBoqItemWithAudit(user?.id, id);
-          }
-          setIsDeleteMode(false);
-          setSelectedDeleteIds(new Set());
-          await fetchItems();
-          message.success(`Удалено ${count} элемент${count === 1 ? '' : count < 5 ? 'а' : 'ов'}`);
-        } catch (error) {
-          message.error('Ошибка удаления: ' + getErrorMessage(error));
-        } finally {
-          setIsBulkDeleting(false);
-        }
-      },
-    });
-  };
-
-  const handleClearAllItems = async () => {
-    const theme = localStorage.getItem('tenderHub_theme') || 'light';
-
-    Modal.confirm({
-      title: 'Очистить все элементы?',
-      content: 'Вы действительно хотите удалить все работы и материалы из этой позиции? Это действие необратимо.',
-      okText: 'Да, очистить',
-      cancelText: 'Отмена',
-      okButtonProps: { danger: true },
-      rootClassName: theme === 'dark' ? 'dark-modal' : '',
-      onOk: async () => {
-        try {
-          // Удаляем все элементы позиции из БД
-          for (const item of items) {
-            await deleteBoqItemWithAudit(user?.id, item.id);
-          }
-
-          if (positionId) {
-            // delete уже выполнен через deleteBoqItemWithAudit (с аудитом),
-            // здесь только обнуляем итоги позиции. clearPositionsBoq делает
-            // delete (no-op — рядов уже нет) + zero totals одной tx.
-            await clearPositionsBoq([positionId]);
-          }
-
-          // Обновляем состояние
-          await fetchItems();
-          message.success('Все элементы успешно удалены');
-        } catch (error) {
-          message.error('Ошибка при удалении элементов: ' + getErrorMessage(error));
-        }
-      },
-    });
-  };
-
-  const handleApplyCostToAll = async () => {
-    if (!selectedCostCategoryId) {
-      message.error('Выберите затрату на строительство');
-      return;
-    }
-
-    if (items.length === 0) {
-      message.warning('Нет элементов для применения затраты');
-      return;
-    }
-
-    const theme = localStorage.getItem('tenderHub_theme') || 'light';
-
-    Modal.confirm({
-      title: 'Распространить затрату на все строки?',
-      content: `Выбранная затрата будет применена ко всем ${items.length} элементам (работы и материалы). Продолжить?`,
-      okText: 'Да, применить',
-      cancelText: 'Отмена',
-      rootClassName: theme === 'dark' ? 'dark-modal' : '',
-      onOk: async () => {
-        try {
-          for (const item of items) {
-            await updateBoqItemWithAudit(user?.id, item.id, {
-              detail_cost_category_id: selectedCostCategoryId,
-            });
-          }
-
-          // Обновляем состояние
-          await fetchItems();
-          message.success(`Затрата успешно применена к ${items.length} элементам`);
-
-          // Очищаем выбор
-          setSelectedCostCategoryId(null);
-          setCostSearchText('');
-        } catch (error) {
-          message.error('Ошибка при применении затраты: ' + getErrorMessage(error));
-        }
-      },
-    });
-  };
-
-  // Получить опции для AutoComplete затрат
-  const getCostCategoryOptions = () => {
-    return costCategories
-      .filter((c) => c.label.toLowerCase().includes(costSearchText.toLowerCase()))
-      .map((c) => ({
-        value: c.label,
-        id: c.value,
-        label: c.label,
-      }));
   };
 
   if (!position) {
     return <div>Загрузка...</div>;
   }
 
+  // Тело карточки «Элементы позиции» в зависимости от устройства/ориентации
+  const itemsBody = (() => {
+    if (isPhone && !isLandscapePhone) {
+      return <ItemsMobileCards items={items} totalSum={totalSum} />;
+    }
+    if (isLandscapePhone) {
+      return (
+        <LandscapeTableOverlay theme={theme} width={1280}>
+          <ItemsTable plain readOnly items={items} loading={loading} getCurrencyRate={getCurrencyRate} />
+        </LandscapeTableOverlay>
+      );
+    }
+    return (
+      <ItemsTable
+        items={items}
+        loading={loading}
+        expandedRowKeys={expandedRowKeys}
+        onExpandedRowsChange={setExpandedRowKeys}
+        onEditClick={handleEditClick}
+        onStartDelete={handleStartDelete}
+        onToggleDeleteSelection={handleToggleDeleteSelection}
+        onMoveItem={handleMoveItem}
+        getCurrencyRate={getCurrencyRate}
+        isDeleteMode={isDeleteMode}
+        selectedDeleteIds={selectedDeleteIds}
+        readOnly={readOnly}
+        expandedRowRender={(record) => {
+          const isWork = ['раб', 'суб-раб', 'раб-комп.'].includes(record.boq_item_type);
+          if (isWork) {
+            return (
+              <WorkEditForm
+                record={record}
+                workNames={workNames}
+                costCategories={costCategories}
+                currencyRates={currencyRates}
+                onSave={onFormSave}
+                onCancel={onFormCancel}
+                readOnly={readOnly}
+              />
+            );
+          }
+          const workItems = items.filter((item) =>
+            ['раб', 'суб-раб', 'раб-комп.'].includes(item.boq_item_type),
+          );
+          return (
+            <MaterialEditForm
+              record={record}
+              materialNames={materialNames}
+              workItems={workItems}
+              costCategories={costCategories}
+              currencyRates={currencyRates}
+              gpVolume={gpVolume}
+              onSave={onFormSave}
+              onCancel={onFormCancel}
+              readOnly={readOnly}
+            />
+          );
+        }}
+      />
+    );
+  })();
+
   return (
     <div style={{ padding: '0 8px' }}>
-      <Card style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', width: '100%' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {position.is_additional && <Tag color="orange">ДОП</Tag>}
-              <Title level={4} style={{ margin: 0 }}>
-                {position.position_number}. {position.item_no ? `${position.item_no} ` : ''}{position.work_name}
-              </Title>
-            </div>
-
-              {!position.is_additional && (
-                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <Text type="secondary">
-                    Кол-во заказчика: <Text strong>{position.volume?.toFixed(2) || '-'}</Text>
-                    {position.unit_code && <> &nbsp;Ед. изм.: <Text strong>{position.unit_code}</Text></>}
-                  </Text>
-                  {position.client_note && (
-                    <Text type="secondary">
-                      Примечание заказчика: <Text strong>{position.client_note}</Text>
-                    </Text>
-                  )}
-                </div>
-              )}
-
-              {position.is_additional && (
-                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Text type="secondary">Наименование:</Text>
-                    <Input
-                      value={workName}
-                      onChange={(e) => setWorkName(e.target.value)}
-                      onBlur={onSaveAdditionalWorkData}
-                      disabled={!canEditByDeadline || deadlineLoading}
-                      style={{ width: 300 }}
-                      size="small"
-                      placeholder="Наименование работы"
-                    />
-                    <Text type="secondary" style={{ marginLeft: 16, paddingTop: 4 }}>Примечание ГП:</Text>
-                    <Input.TextArea
-                      value={gpNote}
-                      onChange={(e) => setGpNote(e.target.value)}
-                      onBlur={onSaveGPData}
-                      disabled={!canEditByDeadline || deadlineLoading}
-                      style={{ width: 300 }}
-                      size="small"
-                      placeholder="Примечание"
-                      autoSize={{ minRows: 1, maxRows: 2 }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Text type="secondary">Кол-во ГП:</Text>
-                    <InputNumber
-                      value={gpVolume}
-                      onChange={(value) => setGpVolume(value || 0)}
-                      onBlur={onSaveGPData}
-                      disabled={!canEditByDeadline || deadlineLoading}
-                      precision={5}
-                      style={{ width: 120 }}
-                      size="small"
-                      decimalSeparator=","
-                      parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
-                    />
-                    <Text type="secondary" style={{ marginLeft: 16 }}>Ед. изм:</Text>
-                    <Select
-                      value={unitCode}
-                      onChange={(value) => {
-                        setUnitCode(value);
-                        setTimeout(() => onSaveAdditionalWorkData(), 100);
-                      }}
-                      disabled={!canEditByDeadline || deadlineLoading}
-                      style={{ width: 100 }}
-                      size="small"
-                      showSearch
-                      placeholder="Выберите"
-                      optionFilterProp="children"
-                      filterOption={(input, option) =>
-                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                      }
-                      options={units.map(unit => ({
-                        value: unit.code,
-                        label: unit.code,
-                      }))}
-                    />
-                  </div>
-                </div>
-              )}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-            {!position.is_additional && (
-              <>
-                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-                    <Text type="secondary">Кол-во ГП:</Text>
-                    <InputNumber
-                      value={gpVolume}
-                      onChange={(value) => setGpVolume(value || 0)}
-                      onBlur={onSaveGPData}
-                      disabled={!canEditByDeadline || deadlineLoading}
-                      precision={5}
-                      style={{ width: 120 }}
-                      size="small"
-                      decimalSeparator=","
-                      parser={(value) => parseFloat(value!.replace(/,/g, '.'))}
-                    />
-                    <Text type="secondary">{position.unit_code}</Text>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, whiteSpace: 'nowrap' }}>
-                  <Text type="secondary" style={{ paddingTop: 4 }}>Примечание ГП:</Text>
-                  <Input.TextArea
-                    value={gpNote}
-                    onChange={(e) => setGpNote(e.target.value)}
-                    onBlur={onSaveGPData}
-                    disabled={!canEditByDeadline || deadlineLoading}
-                    style={{ width: 400 }}
-                    size="small"
-                    placeholder="Примечание"
-                    autoSize={{ minRows: 1, maxRows: 2 }}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </Card>
+      <PositionHeader
+        position={position}
+        gpVolume={gpVolume}
+        setGpVolume={setGpVolume}
+        gpNote={gpNote}
+        setGpNote={setGpNote}
+        workName={workName}
+        setWorkName={setWorkName}
+        unitCode={unitCode}
+        setUnitCode={setUnitCode}
+        units={units}
+        disabled={isReadOnlyByDeadline}
+        onSaveGPData={onSaveGPData}
+        onSaveAdditionalWorkData={onSaveAdditionalWorkData}
+        isPhone={isPhoneDevice}
+      />
 
       <Tabs
         activeKey={activeTab}
@@ -390,152 +242,57 @@ const PositionItems: React.FC = () => {
             label: 'Текущие',
             children: (
               <>
-                <Card title="Добавление работ и материалов" style={{ marginBottom: 16 }}>
-                  <AddItemForm
-                    works={works}
-                    materials={materials}
-                    workSearchText={workSearchText}
-                    materialSearchText={materialSearchText}
-                    onWorkSearchChange={setWorkSearchText}
-                    onMaterialSearchChange={setMaterialSearchText}
-                    onAddWork={(workNameId) => {
-                      handleAddWork(workNameId);
-                      setWorkSearchText('');
-                    }}
-                    onAddMaterial={(materialNameId) => {
-                      handleAddMaterial(materialNameId);
-                      setMaterialSearchText('');
-                    }}
-                    onOpenTemplateModal={() => setTemplateModalVisible(true)}
-                    disabled={!canEditByDeadline || deadlineLoading}
-                  />
-                </Card>
+                {!isPhoneDevice && (
+                  <Card title="Добавление работ и материалов" style={{ marginBottom: 16 }}>
+                    <AddItemForm
+                      works={works}
+                      materials={materials}
+                      workSearchText={workSearchText}
+                      materialSearchText={materialSearchText}
+                      onWorkSearchChange={setWorkSearchText}
+                      onMaterialSearchChange={setMaterialSearchText}
+                      onAddWork={(workNameId) => {
+                        handleAddWork(workNameId);
+                        setWorkSearchText('');
+                      }}
+                      onAddMaterial={(materialNameId) => {
+                        handleAddMaterial(materialNameId);
+                        setMaterialSearchText('');
+                      }}
+                      onOpenTemplateModal={() => setTemplateModalVisible(true)}
+                      disabled={isReadOnlyByDeadline}
+                    />
+                  </Card>
+                )}
 
                 <Card
                   title={
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    isPhoneDevice ? (
                       <span>Элементы позиции</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {isDeleteMode ? (
-                          <>
-                            {selectedDeleteIds.size > 0 && (
-                              <Button
-                                type="primary"
-                                danger
-                                icon={<DeleteOutlined />}
-                                loading={isBulkDeleting}
-                                onClick={handleBulkDelete}
-                              >
-                                Удалить ({selectedDeleteIds.size})
-                              </Button>
-                            )}
-                            <Button onClick={handleCancelDeleteMode}>Отменить выбор</Button>
-                          </>
-                        ) : (
-                          <>
-                            <AutoComplete
-                              value={costSearchText}
-                              onChange={(value) => setCostSearchText(value)}
-                              onSelect={(_value, option: { id?: string; label?: string }) => {
-                                setSelectedCostCategoryId(option.id ?? null);
-                                setCostSearchText(option.label ?? '');
-                              }}
-                              options={getCostCategoryOptions()}
-                              placeholder="Выберите затрату на строительство"
-                              style={{ width: 525 }}
-                              allowClear
-                              onClear={() => {
-                                setCostSearchText('');
-                                setSelectedCostCategoryId(null);
-                              }}
-                              filterOption={false}
-                              disabled={!canEditByDeadline || deadlineLoading}
-                            />
-                            <Button
-                              type="primary"
-                              icon={<ThunderboltOutlined />}
-                              onClick={handleApplyCostToAll}
-                              disabled={!selectedCostCategoryId || items.length === 0 || !canEditByDeadline || deadlineLoading}
-                            >
-                              Распространить затрату на все строки
-                            </Button>
-                            <Button
-                              type="default"
-                              icon={<UploadOutlined />}
-                              onClick={() => setImportModalVisible(true)}
-                              disabled={!canEditByDeadline || deadlineLoading}
-                              style={{ backgroundColor: '#10b981', borderColor: '#10b981', color: 'white' }}
-                            >
-                              Импорт из Excel
-                            </Button>
-                            <Button
-                              danger
-                              icon={<DeleteOutlined />}
-                              onClick={handleClearAllItems}
-                              disabled={items.length === 0 || !canEditByDeadline || deadlineLoading}
-                            >
-                              Очистить все
-                            </Button>
-                          </>
-                        )}
-                        <div style={{ fontSize: 16, fontWeight: 'bold' }}>
-                          Итого: <span style={{ color: '#10b981' }}>{Math.round(totalSum).toLocaleString('ru-RU')}</span>
-                        </div>
-                      </div>
-                    </div>
+                    ) : (
+                      <ItemsToolbar
+                        isDeleteMode={isDeleteMode}
+                        selectedDeleteCount={selectedDeleteIds.size}
+                        isBulkDeleting={isBulkDeleting}
+                        onBulkDelete={handleBulkDelete}
+                        onCancelDeleteMode={handleCancelDeleteMode}
+                        costSearchText={costSearchText}
+                        setCostSearchText={setCostSearchText}
+                        setSelectedCostCategoryId={setSelectedCostCategoryId}
+                        selectedCostCategoryId={selectedCostCategoryId}
+                        getCostCategoryOptions={getCostCategoryOptions}
+                        onApplyCostToAll={handleApplyCostToAll}
+                        onOpenImport={() => setImportModalVisible(true)}
+                        onClearAll={handleClearAllItems}
+                        itemsCount={items.length}
+                        disabled={isReadOnlyByDeadline}
+                        totalSum={totalSum}
+                      />
+                    )
                   }
+                  styles={isPhoneDevice ? { body: { padding: 8 } } : undefined}
                 >
-                  <ItemsTable
-                    items={items}
-                    loading={loading}
-                    expandedRowKeys={expandedRowKeys}
-                    onExpandedRowsChange={setExpandedRowKeys}
-                    onEditClick={handleEditClick}
-                    onStartDelete={handleStartDelete}
-                    onToggleDeleteSelection={handleToggleDeleteSelection}
-                    onMoveItem={handleMoveItem}
-                    getCurrencyRate={getCurrencyRate}
-                    isDeleteMode={isDeleteMode}
-                    selectedDeleteIds={selectedDeleteIds}
-                    readOnly={!canEditByDeadline || deadlineLoading}
-                    expandedRowRender={(record) => {
-                      const isWork = ['раб', 'суб-раб', 'раб-комп.'].includes(record.boq_item_type);
-
-                      if (isWork) {
-                        return (
-                          <WorkEditForm
-                            record={record}
-                            workNames={workNames}
-                            costCategories={costCategories}
-                            currencyRates={currencyRates}
-                            onSave={onFormSave}
-                            onCancel={onFormCancel}
-                            readOnly={!canEditByDeadline || deadlineLoading}
-                          />
-                        );
-                      } else {
-                        const workItems = items.filter(
-                          item => item.boq_item_type === 'раб' ||
-                            item.boq_item_type === 'суб-раб' ||
-                            item.boq_item_type === 'раб-комп.'
-                        );
-
-                        return (
-                          <MaterialEditForm
-                            record={record}
-                            materialNames={materialNames}
-                            workItems={workItems}
-                            costCategories={costCategories}
-                            currencyRates={currencyRates}
-                            gpVolume={gpVolume}
-                            onSave={onFormSave}
-                            onCancel={onFormCancel}
-                            readOnly={!canEditByDeadline || deadlineLoading}
-                          />
-                        );
-                      }
-                    }}
-                  />
+                  {itemsBody}
                 </Card>
               </>
             ),
@@ -567,9 +324,7 @@ const PositionItems: React.FC = () => {
           tenderId={position.tender_id}
           onClose={(success) => {
             setImportModalVisible(false);
-            if (success) {
-              fetchItems();
-            }
+            if (success) fetchItems();
           }}
         />
       )}
