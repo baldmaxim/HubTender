@@ -130,9 +130,11 @@ const Bsm: React.FC = () => {
           Проставить ссылки
         </Button>
       )}
-      <Button icon={<FileExcelOutlined />} onClick={handleExportToExcel} disabled={!selectedTenderId} block={phone}>
-        Экспорт в Excel
-      </Button>
+      {!isPhoneDevice && (
+        <Button icon={<FileExcelOutlined />} onClick={handleExportToExcel} disabled={!selectedTenderId} block={phone}>
+          Экспорт в Excel
+        </Button>
+      )}
       <Select
         placeholder="Фильтр по затрате..."
         style={{ width: phone ? '100%' : 280 }}

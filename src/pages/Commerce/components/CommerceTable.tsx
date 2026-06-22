@@ -94,6 +94,10 @@ export default function CommerceTable({
       : 0;
   };
 
+  // В ландшафтном fit-режиме (под transform:scale) колонку-примечание и парную
+  // ячейку итога убираем, иначе число ячеек итога расходится с видимыми колонками.
+  const showNote = !fitToScreen;
+
   const columns: ColumnsType<PositionWithCommercialCost> = [
     {
       title: 'Наименование',
@@ -297,7 +301,7 @@ export default function CommerceTable({
 
   return (
     <Table
-      columns={columns}
+      columns={showNote ? columns : columns.slice(0, -1)}
       dataSource={positions}
       rowKey="id"
       size="small"
@@ -312,7 +316,7 @@ export default function CommerceTable({
         const baseColor = summary.baseTotalMatches ? '#52c41a' : '#ff4d4f';
 
         return (
-          <Table.Summary fixed>
+          <Table.Summary {...(fitToScreen ? {} : { fixed: true })}>
             <Table.Summary.Row>
               <Table.Summary.Cell index={0} colSpan={5}>
                 <Text strong>Итого:</Text>
@@ -346,7 +350,7 @@ export default function CommerceTable({
                   {summary.totalMarkupCoefficient.toFixed(4)}
                 </Tag>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={10} />
+              {showNote && <Table.Summary.Cell index={10} />}
             </Table.Summary.Row>
             {insuranceTotal > 0 && (
               <Table.Summary.Row style={{ background: 'rgba(16,185,129,0.08)' }}>
@@ -362,7 +366,7 @@ export default function CommerceTable({
                   </Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={9} />
-                <Table.Summary.Cell index={10} />
+                {showNote && <Table.Summary.Cell index={10} />}
               </Table.Summary.Row>
             )}
           </Table.Summary>

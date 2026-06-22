@@ -32,7 +32,7 @@ const CostFilters: React.FC<CostFiltersProps> = ({
   onExport,
   disableExport,
 }) => {
-  const { isPhone } = useIsMobile();
+  const { isPhone, isPhoneDevice } = useIsMobile();
   return (
     <div style={{ marginBottom: 16 }}>
       <div
@@ -93,14 +93,16 @@ const CostFilters: React.FC<CostFiltersProps> = ({
           style={isPhone ? { width: '100%' } : undefined}
         >
           <Space>
-            <Button
-              type="primary"
-              icon={<DownloadOutlined />}
-              onClick={onExport}
-              disabled={disableExport}
-            >
-              Экспорт
-            </Button>
+            {!isPhoneDevice && (
+              <Button
+                type="primary"
+                icon={<DownloadOutlined />}
+                onClick={onExport}
+                disabled={disableExport}
+              >
+                Экспорт
+              </Button>
+            )}
             <Button icon={<ReloadOutlined />} onClick={onRefresh}>
               Обновить
             </Button>

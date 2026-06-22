@@ -176,7 +176,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                   </div>
                 </div>
               )}
-              {hasResults && onExport && (
+              {hasResults && onExport && !isPhoneDevice && (
                 <Button
                   type="primary"
                   icon={<DownloadOutlined />}

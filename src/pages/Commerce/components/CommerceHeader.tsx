@@ -194,16 +194,18 @@ export default function CommerceHeader({
                 </Button>
               </Tooltip>
             )}
-            <Tooltip title="Экспорт в Excel">
-              <Button
-                block={isPhone}
-                icon={<FileExcelOutlined />}
-                onClick={onExport}
-                disabled={positionsCount === 0}
-              >
-                Экспорт
-              </Button>
-            </Tooltip>
+            {!isPhoneDevice && (
+              <Tooltip title="Экспорт в Excel">
+                <Button
+                  block={isPhone}
+                  icon={<FileExcelOutlined />}
+                  onClick={onExport}
+                  disabled={positionsCount === 0}
+                >
+                  Экспорт
+                </Button>
+              </Tooltip>
+            )}
           </Space>
         </div>
       </div>

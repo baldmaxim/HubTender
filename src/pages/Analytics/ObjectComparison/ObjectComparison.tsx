@@ -184,13 +184,15 @@ const ObjectComparison: React.FC = () => {
             value={costType}
             onChange={(value) => setCostType(value as CostType)}
           />
-          <Button
-            icon={<DownloadOutlined />}
-            onClick={() => exportComparisonToExcel({ comparisonData, costType, tenderLabels: tenderLabelsForExport })}
-            disabled={comparisonData.length === 0}
-          >
-            Excel
-          </Button>
+          {!isPhoneDevice && (
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={() => exportComparisonToExcel({ comparisonData, costType, tenderLabels: tenderLabelsForExport })}
+              disabled={comparisonData.length === 0}
+            >
+              Excel
+            </Button>
+          )}
         </Space>
       </Col>
     </Row>

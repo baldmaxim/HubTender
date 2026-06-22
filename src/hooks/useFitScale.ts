@@ -31,7 +31,15 @@ export function useFitScale() {
     const ro = new ResizeObserver(fit);
     ro.observe(outer);
     ro.observe(inner);
-    return () => ro.disconnect();
+    // Поворот экрана иногда «доносит» финальную раскладку на кадр позже, чем
+    // срабатывает ResizeObserver, — пересчитываем масштаб ещё и по событиям окна.
+    window.addEventListener('resize', fit);
+    window.addEventListener('orientationchange', fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', fit);
+      window.removeEventListener('orientationchange', fit);
+    };
   }, []);
 
   return { outerRef, innerRef, scale };

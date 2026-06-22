@@ -19,6 +19,7 @@ import type { ClientPosition, Tender } from '../../../lib/supabase';
 import { PositionRowActions } from './PositionRowActions';
 import { IconSwap } from '../../../components/transitions';
 import { usePositionTabs } from '../../../contexts/PositionTabsContext';
+import { HideOnPhone } from '../../../components/responsive/HideOnPhone';
 
 const { Text } = Typography;
 
@@ -511,16 +512,20 @@ export const PositionTable: React.FC<PositionTableProps> = ({
               <Button onClick={onCancelPositionDeleteSelection}>Отменить выбор</Button>
             </>
           )}
-          <Button
-            icon={<UploadOutlined />}
-            onClick={onMassImport}
-            disabled={!selectedTender || loading || readOnly}
-          >
-            Импорт из Excel
-          </Button>
-          <Button icon={<DownloadOutlined />} onClick={onExportToExcel} disabled={!selectedTender || loading}>
-            Экспорт в Excel
-          </Button>
+          <HideOnPhone>
+            <Button
+              icon={<UploadOutlined />}
+              onClick={onMassImport}
+              disabled={!selectedTender || loading || readOnly}
+            >
+              Импорт из Excel
+            </Button>
+          </HideOnPhone>
+          <HideOnPhone>
+            <Button icon={<DownloadOutlined />} onClick={onExportToExcel} disabled={!selectedTender || loading}>
+              Экспорт в Excel
+            </Button>
+          </HideOnPhone>
         </Space>
       }
       style={{ marginTop: 24, position: 'sticky', top: 0, zIndex: 10 }}

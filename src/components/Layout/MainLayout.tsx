@@ -48,6 +48,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   const { isPhone, isLandscapePhone, isPhoneDevice, isMobile, screens } = useIsMobile();
   // «Мобильный» layout = <992px (телефон + планшет), как и переключение на карточный вид.
   const isMobileLayout = !screens.lg;
+  // Меню всплывает поверх контента на телефоне (портрет <768 и ландшафт), не сдвигая страницу.
+  const isMenuOverlay = isMobile || isLandscapePhone;
 
   // Название текущей страницы для шапки (на телефонах). /path → PAGE_LABELS,
   // c учётом параметрических роутов (паттерн как в hasPageAccess).
@@ -60,11 +62,12 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     return match ? PAGE_LABELS[match] : '';
   }, [location.pathname]);
 
-  // На телефоне (<576px) автоматически сворачивать боковое меню в icon-режим,
-  // освобождая место под контент. Планшет/десктоп не затрагиваем.
+  // На телефоне (портрет <576px и ландшафт) автоматически сворачивать боковое меню,
+  // освобождая место под контент. isLandscapePhone в зависимостях — чтобы свернуть
+  // при повороте в ландшафт. Планшет/десктоп не затрагиваем.
   useEffect(() => {
-    if (isPhone) setCollapsed(true);
-  }, [isPhone]);
+    if (isPhone || isLandscapePhone) setCollapsed(true);
+  }, [isPhone, isLandscapePhone]);
 
   // tenderId доступен, когда пользователь находится на странице позиций заказчика
   const currentTenderId = location.pathname === '/positions'
@@ -247,8 +250,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           display: 'flex',
           flexDirection: 'column',
           height: '100vh',
-          // На телефоне меню всплывает поверх страницы (не сдвигает контент).
-          ...(isMobile ? { position: 'fixed' as const, left: 0, top: 0, zIndex: 1000 } : {}),
+          // На телефоне (портрет и ландшафт) меню всплывает поверх страницы (не сдвигает контент).
+          ...(isMenuOverlay ? { position: 'fixed' as const, left: 0, top: 0, zIndex: 1000 } : {}),
         }}
         width={250}
       >
@@ -301,8 +304,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           />
         </div>
       </Sider>
-      {/* Затемнение под раскрытым оверлей-меню на телефоне */}
-      {isMobile && !collapsed && (
+      {/* Затемнение под раскрытым оверлей-меню на телефоне (портрет и ландшафт) */}
+      {isMenuOverlay && !collapsed && (
         <div
           onClick={() => setCollapsed(true)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 999 }}
