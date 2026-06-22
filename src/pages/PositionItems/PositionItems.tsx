@@ -6,7 +6,7 @@ import MaterialEditForm from './MaterialEditForm';
 import { useBoqItems } from './hooks/useBoqItems';
 import { useItemActions } from './hooks/useItemActions';
 import { useItemBulkActions } from './hooks/useItemBulkActions';
-import { usePositionTabRegistration } from './hooks/usePositionTabRegistration';
+import { usePositionTabTitle } from './hooks/usePositionTabRegistration';
 import ItemsTable from './components/ItemsTable';
 import ItemsMobileCards from './components/ItemsMobileCards';
 import ItemsToolbar from './components/ItemsToolbar';
@@ -21,8 +21,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 
-const PositionItems: React.FC = () => {
-  const { positionId } = useParams<{ positionId: string }>();
+interface PositionItemsProps {
+  /** Передаётся из PositionsKeepAlive (несколько экземпляров смонтированы сразу —
+   *  нельзя полагаться на useParams). Fallback на useParams для прямого роутинга. */
+  positionId?: string;
+}
+
+const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionId }) => {
+  const params = useParams<{ positionId: string }>();
+  const positionId = propPositionId ?? params.positionId;
   const { user } = useAuth();
   const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
   const { theme } = useTheme();
@@ -64,8 +71,8 @@ const PositionItems: React.FC = () => {
     fetchItems,
   } = useBoqItems(positionId);
 
-  // Регистрация/обновление внутренней вкладки приложения для этой позиции
-  usePositionTabRegistration(positionId, position);
+  // Обновление заголовка вкладки приложения для этой позиции
+  usePositionTabTitle(positionId, position);
 
   // Проверка дедлайна для блокировки редактирования
   const { canEdit: canEditByDeadline, loading: deadlineLoading } =

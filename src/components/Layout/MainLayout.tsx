@@ -13,7 +13,7 @@ import { menuItems, MOBILE_HIDDEN_KEYS } from './menuItems';
 import { CalculatorWidget } from './CalculatorWidget';
 import { NotesWidget } from './NotesWidget';
 import { NotificationsBell } from './NotificationsBell';
-import PositionTabsBar from './PositionTabsBar';
+import PositionsKeepAlive from './PositionsKeepAlive';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -455,8 +455,9 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             overflow: 'auto',
           }}
         >
-          {location.pathname.startsWith('/positions') && <PositionTabsBar />}
-          <Outlet />
+          {/* Раздел «Позиции» рендерится через keep-alive контейнер (список + открытые
+              позиции смонтированы одновременно), остальные роуты — обычный Outlet. */}
+          {location.pathname.startsWith('/positions') ? <PositionsKeepAlive /> : <Outlet />}
         </Content>
       </Layout>
     </Layout>

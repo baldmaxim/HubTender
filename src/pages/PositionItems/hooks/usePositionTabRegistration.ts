@@ -1,9 +1,7 @@
 import { useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { usePositionTabs } from '../../../contexts/PositionTabsContext';
 
 interface PositionLike {
-  tender_id?: string;
   position_number?: number | string | null;
   work_name?: string | null;
 }
@@ -11,26 +9,13 @@ interface PositionLike {
 const truncate = (s: string, max = 20) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 /**
- * Регистрирует вкладку текущей позиции (для прямых ссылок / перезагрузки) и
- * уточняет её заголовок, когда позиция загрузилась. Навигацию не выполняет —
- * мы уже находимся на странице позиции.
+ * Уточняет заголовок вкладки позиции, когда позиция загрузилась.
+ * Регистрация вкладки выполняется в PositionsKeepAlive (на уровне роутинга),
+ * поэтому здесь только setTabTitle. Навигацию не выполняет.
  */
-export function usePositionTabRegistration(
-  positionId: string | undefined,
-  position: PositionLike | null,
-) {
-  const [searchParams] = useSearchParams();
-  const { openTab, setTabTitle } = usePositionTabs();
-  const tenderIdFromUrl = searchParams.get('tenderId');
+export function usePositionTabTitle(positionId: string | undefined, position: PositionLike | null) {
+  const { setTabTitle } = usePositionTabs();
 
-  // Саморегистрация при заходе по прямой ссылке/обновлении страницы.
-  useEffect(() => {
-    if (!positionId) return;
-    openTab({ positionId, tenderId: tenderIdFromUrl ?? position?.tender_id ?? '', title: 'Позиция' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [positionId, tenderIdFromUrl]);
-
-  // Уточнение заголовка после загрузки позиции.
   useEffect(() => {
     if (!positionId || !position) return;
     const num = position.position_number;
