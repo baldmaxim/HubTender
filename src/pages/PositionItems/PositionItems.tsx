@@ -11,6 +11,7 @@ import ItemsTable from './components/ItemsTable';
 import ItemsMobileCards from './components/ItemsMobileCards';
 import ItemsToolbar from './components/ItemsToolbar';
 import PositionHeader from './components/PositionHeader';
+import PositionLandscapeInfo from './components/PositionLandscapeInfo';
 import AddItemForm from './components/AddItemForm';
 import TemplateSelectModal from './components/TemplateSelectModal';
 import AuditHistoryTab from './components/AuditHistoryTab';
@@ -167,6 +168,13 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
     if (isLandscapePhone) {
       return (
         <LandscapeTableOverlay theme={theme} width={1280}>
+          <PositionLandscapeInfo
+            position={position}
+            gpVolume={gpVolume}
+            gpNote={gpNote}
+            workName={workName}
+            unitCode={unitCode}
+          />
           <ItemsTable plain readOnly items={items} loading={loading} getCurrencyRate={getCurrencyRate} />
         </LandscapeTableOverlay>
       );

@@ -60,17 +60,19 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
           flexDirection: isPhoneDevice ? 'column' : 'row',
           gap: isPhoneDevice ? 8 : 0,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <FileTextOutlined style={{ fontSize: isPhoneDevice ? 24 : 32, color: 'white' }} />
-            <div>
-              <Text style={{ fontSize: isPhoneDevice ? 16 : 22, fontWeight: 600, margin: 0, color: 'white', display: 'block' }}>
-                {selectedTender.title}
-              </Text>
-              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: isPhoneDevice ? 12 : 14 }}>
-                Заказчик: {selectedTender.client_name}
-              </Text>
+          {!isPhoneDevice && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <FileTextOutlined style={{ fontSize: 32, color: 'white' }} />
+              <div>
+                <Text style={{ fontSize: 22, fontWeight: 600, margin: 0, color: 'white', display: 'block' }}>
+                  {selectedTender.title}
+                </Text>
+                <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14 }}>
+                  Заказчик: {selectedTender.client_name}
+                </Text>
+              </div>
             </div>
-          </div>
+          )}
           <Space>
             <Button
               type="primary"
@@ -147,11 +149,15 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
 
                   {/* Строка 2: Площади */}
                   <div style={{ marginBottom: 4, fontSize: 14 }}>
-                    <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Площадь по СП: </Text>
-                    <Text strong style={{ color: '#10b981' }}>{selectedTender.area_sp?.toLocaleString('ru-RU') || '0'} м²</Text>
+                    <span style={{ whiteSpace: 'nowrap' }}>
+                      <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Площадь по СП: </Text>
+                      <Text strong style={{ color: '#10b981' }}>{selectedTender.area_sp?.toLocaleString('ru-RU') || '0'} м²</Text>
+                    </span>
                     <Divider type="vertical" style={{ borderColor: currentTheme === 'dark' ? '#444' : '#d9d9d9' }} />
-                    <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Площадь Заказчика: </Text>
-                    <Text strong style={{ color: '#10b981' }}>{selectedTender.area_client?.toLocaleString('ru-RU') || '0'} м²</Text>
+                    <span style={{ whiteSpace: 'nowrap' }}>
+                      <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Площадь Заказчика: </Text>
+                      <Text strong style={{ color: '#10b981' }}>{selectedTender.area_client?.toLocaleString('ru-RU') || '0'} м²</Text>
+                    </span>
                   </div>
 
                   {/* Строка 3: Курсы валют */}

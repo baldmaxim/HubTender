@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, Select, Row, Col, Typography, Tag } from 'antd';
 import type { Tender } from '../../../lib/supabase';
 import { getVersionColorByTitle } from '../../../utils/versionColor';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Title, Text } = Typography;
 
@@ -33,40 +34,50 @@ export const TenderSelectionScreen: React.FC<TenderSelectionScreenProps> = ({
   onVersionChange,
   onTenderCardClick,
 }) => {
+  const { isPhone } = useIsMobile();
   return (
     <Card bordered={false} style={{ height: '100%' }}>
-      <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+      <div style={{ textAlign: 'center', padding: isPhone ? '24px 12px' : '40px 20px' }}>
         <Title level={3} style={{ marginBottom: 24 }}>
           Позиции заказчика
         </Title>
         <Text type="secondary" style={{ fontSize: 16, marginBottom: 24, display: 'block' }}>
           Выберите тендер для просмотра позиций
         </Text>
-        <Select
-          className="tender-select"
-          style={{ width: 400, marginBottom: 32 }}
-          placeholder="Выберите тендер"
-          value={selectedTenderTitle}
-          onChange={onTenderTitleChange}
-          showSearch
-          optionFilterProp="children"
-          filterOption={(input, option) =>
-            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-          }
-          options={tenderTitles}
-          size="large"
-        />
-
-        {selectedTenderTitle && (
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 16,
+          justifyContent: 'center',
+          maxWidth: 616,
+          margin: '0 auto 32px',
+        }}>
           <Select
-            style={{ width: 200, marginBottom: 32, marginLeft: 16 }}
-            placeholder="Выберите версию"
-            value={selectedVersion}
-            onChange={onVersionChange}
-            options={versions}
+            className="tender-select"
+            style={{ flex: '1 1 280px', maxWidth: 400, width: '100%' }}
+            placeholder="Выберите тендер"
+            value={selectedTenderTitle}
+            onChange={onTenderTitleChange}
+            showSearch
+            optionFilterProp="children"
+            filterOption={(input, option) =>
+              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+            }
+            options={tenderTitles}
             size="large"
           />
-        )}
+
+          {selectedTenderTitle && (
+            <Select
+              style={{ flex: '1 1 160px', maxWidth: 200, width: '100%' }}
+              placeholder="Выберите версию"
+              value={selectedVersion}
+              onChange={onVersionChange}
+              options={versions}
+              size="large"
+            />
+          )}
+        </div>
 
         {tenders.length > 0 && (
           <div style={{ marginTop: 32 }}>
