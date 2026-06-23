@@ -43,13 +43,16 @@ const PositionTabsBar: React.FC = () => {
   const onEdit: TabsProps['onEdit'] = (targetKey, action) => {
     if (action !== 'remove' || typeof targetKey !== 'string') return;
     const wasActive = targetKey === activeKey;
-    const idx = tabs.findIndex((t) => t.positionId === targetKey);
+    // Навигируем ДО закрытия: уводим URL с закрываемой позиции прежде, чем она
+    // исчезнет из tabs, чтобы не оставить промежуточный рендер «URL = закрытая
+    // позиция, но её уже нет в tabs» (на нём эффект deep-link возвращал бы вкладку).
+    if (wasActive) {
+      const idx = tabs.findIndex((t) => t.positionId === targetKey);
+      const remaining = tabs.filter((t) => t.positionId !== targetKey);
+      const next = remaining[idx - 1] ?? remaining[idx] ?? null;
+      navigate(next ? itemsUrl(next) : '/positions');
+    }
     closeTab(targetKey);
-    if (!wasActive) return; // закрыли неактивную вкладку — без навигации
-    const remaining = tabs.filter((t) => t.positionId !== targetKey);
-    const next = remaining[idx - 1] ?? remaining[idx] ?? null;
-    if (next) navigate(itemsUrl(next));
-    else navigate('/positions');
   };
 
   return (

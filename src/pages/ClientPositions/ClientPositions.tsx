@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
-import { usePositionTabs } from '../../contexts/PositionTabsContext';
+import { usePositionTabActions } from '../../contexts/PositionTabsContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClientPositions } from './hooks/useClientPositions';
 import { usePositionActions } from './hooks/usePositionActions';
@@ -35,7 +35,7 @@ interface TenderOption {
 const ClientPositions: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { openTab } = usePositionTabs();
+  const { openTab } = usePositionTabActions();
   const { theme: currentTheme } = useTheme();
   const { isPhoneDevice } = useIsMobile();
 

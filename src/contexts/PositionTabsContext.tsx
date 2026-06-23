@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 
 /** Открытая вкладка «Элементы позиции заказчика». positionId — ключ вкладки. */
 export interface PositionTab {
@@ -7,8 +7,8 @@ export interface PositionTab {
   title: string;
 }
 
-interface PositionTabsContextType {
-  tabs: PositionTab[];
+/** Стабильные действия над вкладками (без меняющегося списка tabs). */
+export interface PositionTabsActions {
   /**
    * Добавить вкладку (дедуп по positionId). Провайдер НЕ навигирует — навигация
    * остаётся на call-site/панели вкладок (URL = источник истины для активной вкладки).
@@ -20,7 +20,15 @@ interface PositionTabsContextType {
   setTabTitle: (positionId: string, title: string) => void;
 }
 
-const PositionTabsContext = createContext<PositionTabsContextType | undefined>(undefined);
+interface PositionTabsContextType extends PositionTabsActions {
+  tabs: PositionTab[];
+}
+
+// Состояние (tabs — меняется на open/close) и действия (стабильны) разнесены на
+// два контекста: консьюмеры только действий (заголовок вкладки в PositionItems,
+// открытие из списка) не перерендериваются при изменении списка вкладок.
+const PositionTabsStateContext = createContext<PositionTab[] | undefined>(undefined);
+const PositionTabsActionsContext = createContext<PositionTabsActions | undefined>(undefined);
 
 const STORAGE_KEY = 'tenderHub_position_tabs';
 
@@ -83,18 +91,37 @@ export const PositionTabsProvider: React.FC<PositionTabsProviderProps> = ({ chil
     });
   }, []);
 
+  const actions = useMemo<PositionTabsActions>(
+    () => ({ openTab, closeTab, setTabTitle }),
+    [openTab, closeTab, setTabTitle],
+  );
+
   return (
-    <PositionTabsContext.Provider value={{ tabs, openTab, closeTab, setTabTitle }}>
-      {children}
-    </PositionTabsContext.Provider>
+    <PositionTabsActionsContext.Provider value={actions}>
+      <PositionTabsStateContext.Provider value={tabs}>
+        {children}
+      </PositionTabsStateContext.Provider>
+    </PositionTabsActionsContext.Provider>
   );
 };
 
+/** Только стабильные действия — не перерендеривается при изменении списка вкладок. */
 // eslint-disable-next-line react-refresh/only-export-components
-export const usePositionTabs = () => {
-  const context = useContext(PositionTabsContext);
-  if (context === undefined) {
+export const usePositionTabActions = (): PositionTabsActions => {
+  const actions = useContext(PositionTabsActionsContext);
+  if (actions === undefined) {
+    throw new Error('usePositionTabActions must be used within a PositionTabsProvider');
+  }
+  return actions;
+};
+
+/** Список вкладок + действия. Перерендеривается при изменении tabs. */
+// eslint-disable-next-line react-refresh/only-export-components
+export const usePositionTabs = (): PositionTabsContextType => {
+  const tabs = useContext(PositionTabsStateContext);
+  const actions = useContext(PositionTabsActionsContext);
+  if (tabs === undefined || actions === undefined) {
     throw new Error('usePositionTabs must be used within a PositionTabsProvider');
   }
-  return context;
+  return { tabs, ...actions };
 };

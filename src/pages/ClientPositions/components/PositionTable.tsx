@@ -18,7 +18,7 @@ import type { ColumnsType } from 'antd/es/table';
 import type { ClientPosition, Tender } from '../../../lib/supabase';
 import { PositionRowActions } from './PositionRowActions';
 import { IconSwap } from '../../../components/transitions';
-import { usePositionTabs } from '../../../contexts/PositionTabsContext';
+import { usePositionTabActions } from '../../../contexts/PositionTabsContext';
 import { HideOnPhone } from '../../../components/responsive/HideOnPhone';
 
 const { Text } = Typography;
@@ -144,7 +144,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
   onToggleShowAll,
   tableScrollY = 600,
 }) => {
-  const { openTab } = usePositionTabs();
+  const { openTab } = usePositionTabActions();
   // Состояние для отслеживания открытой позиции
   const [expandedPositionId, setExpandedPositionId] = useState<string | null>(null);
 

@@ -25,7 +25,9 @@ export interface WorkLibraryInput {
 
 /** works_library + work_names embed, newest first. */
 export async function listWorksLibrary(): Promise<WorkLibraryRow[]> {
-  const res = await apiFetch<{ data: WorkLibraryRow[] }>('/api/v1/library/works');
+  const res = await apiFetch<{ data: WorkLibraryRow[] }>('/api/v1/library/works', {
+    cacheKey: 'library:works',
+  });
   return res.data ?? [];
 }
 
@@ -68,7 +70,9 @@ export interface MaterialLibraryInput {
 
 /** materials_library + material_names embed, newest first. */
 export async function listMaterialsLibrary(): Promise<MaterialLibraryRow[]> {
-  const res = await apiFetch<{ data: MaterialLibraryRow[] }>('/api/v1/library/materials');
+  const res = await apiFetch<{ data: MaterialLibraryRow[] }>('/api/v1/library/materials', {
+    cacheKey: 'library:materials',
+  });
   return res.data ?? [];
 }
 
@@ -155,7 +159,9 @@ export interface TemplateApiRow {
 }
 
 export async function listTemplates(): Promise<TemplateApiRow[]> {
-  const res = await apiFetch<{ data: TemplateApiRow[] }>('/api/v1/library/templates');
+  const res = await apiFetch<{ data: TemplateApiRow[] }>('/api/v1/library/templates', {
+    cacheKey: 'library:templates',
+  });
   return res.data ?? [];
 }
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { Card, Tabs } from 'antd';
 import { useParams } from 'react-router-dom';
 import WorkEditForm from './WorkEditForm';
@@ -411,4 +411,6 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleElement);
 }
 
-export default PositionItems;
+// memo: в keep-alive смонтировано несколько экземпляров (по вкладке на позицию);
+// positionId стабилен, поэтому скрытые вкладки не перерендериваются при open/close.
+export default memo(PositionItems);
