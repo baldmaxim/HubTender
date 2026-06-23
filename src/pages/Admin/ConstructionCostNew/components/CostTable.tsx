@@ -6,6 +6,7 @@ import React from 'react';
 import { Table, InputNumber, Typography, Spin, Input } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { CostRow } from '../hooks/useCostData';
+import { computeCostTotals } from '../utils/computeTotals';
 import { useTheme } from '../../../../contexts/ThemeContext';
 
 const { Text } = Typography;
@@ -345,20 +346,7 @@ const CostTable: React.FC<CostTableProps> = ({
         ];
 
   // Вычисляем итоговую строку
-  const totals = data.reduce(
-    (acc, row) => ({
-      materials: acc.materials + row.materials_cost,
-      works: acc.works + row.works_cost,
-      subMaterials: acc.subMaterials + row.sub_materials_cost,
-      subWorks: acc.subWorks + row.sub_works_cost,
-      materialsComp: acc.materialsComp + row.materials_comp_cost,
-      worksComp: acc.worksComp + row.works_comp_cost,
-      totalWorks: acc.totalWorks + row.works_cost + row.sub_works_cost + row.works_comp_cost,
-      totalMaterials: acc.totalMaterials + row.materials_cost + row.sub_materials_cost + row.materials_comp_cost,
-      total: acc.total + row.total_cost,
-    }),
-    { materials: 0, works: 0, subMaterials: 0, subWorks: 0, materialsComp: 0, worksComp: 0, totalWorks: 0, totalMaterials: 0, total: 0 }
-  );
+  const totals = computeCostTotals(data);
 
   return (
     <>
@@ -389,7 +377,7 @@ const CostTable: React.FC<CostTableProps> = ({
             childrenColumnName: 'children',
             indentSize: 20,
           }}
-          summary={() => (
+          summary={fitToScreen ? undefined : () => (
             <Table.Summary fixed>
               <Table.Summary.Row>
                 <Table.Summary.Cell index={0} colSpan={viewMode === 'simplified' ? 3 : 6}>

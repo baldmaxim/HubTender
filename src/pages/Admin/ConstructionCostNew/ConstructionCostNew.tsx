@@ -10,8 +10,10 @@ import CostFilters from './components/CostFilters';
 import CostTable from './components/CostTable';
 import CategoryPositionsModal from './components/CategoryPositionsModal';
 import TenderSelection from './components/TenderSelection';
+import CostTotalsBar from './components/CostTotalsBar';
 import { exportConstructionCostToExcel } from './utils/exportConstructionCostToExcel';
 import { filterCostData } from './utils/filterCostData';
+import { computeCostTotals } from './utils/computeTotals';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -211,7 +213,17 @@ const ConstructionCostNew: React.FC = () => {
         />
 
         {isLandscapePhone ? (
-          <LandscapeTableOverlay theme={currentTheme} width={1100}>
+          <LandscapeTableOverlay
+            theme={currentTheme}
+            fit="width"
+            footer={
+              <CostTotalsBar
+                totals={computeCostTotals(filteredData)}
+                viewMode={effectiveViewMode}
+                areaSp={selectedTender?.area_sp || 0}
+              />
+            }
+          >
             {costTable(true)}
           </LandscapeTableOverlay>
         ) : (

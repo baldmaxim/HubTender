@@ -7,6 +7,7 @@ import { Table, Typography, Tag, Empty } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { PositionWithCommercialCost } from '../types';
 import { formatCommercialCost } from '../../../utils/markupCalculator';
+import { computeCommerceTotals } from '../utils/computeCommerceTotals';
 
 const { Text } = Typography;
 const TABLE_SCROLL_X = 1840;
@@ -52,35 +53,10 @@ export default function CommerceTable({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const summary = useMemo(() => {
-    let totalBase = 0;
-    let totalMaterials = 0;
-    let totalWorks = 0;
-    let totalCommercial = 0;
-
-    for (const position of positions) {
-      totalBase += position.base_total || 0;
-      totalMaterials += position.material_cost_total || 0;
-      totalWorks += position.work_cost_total || 0;
-      totalCommercial += position.commercial_total || 0;
-    }
-
-    const totalWorksWithIns = totalWorks + insuranceTotal;
-    const totalCommercialWithIns = totalCommercial + insuranceTotal;
-
-    return {
-      totalBase,
-      totalMaterials,
-      totalWorks,
-      totalWorksWithIns,
-      totalCommercial,
-      totalCommercialWithIns,
-      materialPercent: totalCommercialWithIns > 0 ? ((totalMaterials / totalCommercialWithIns) * 100).toFixed(1) : '0.0',
-      workPercent: totalCommercialWithIns > 0 ? ((totalWorksWithIns / totalCommercialWithIns) * 100).toFixed(1) : '0.0',
-      totalMarkupCoefficient: totalBase > 0 ? totalCommercialWithIns / totalBase : 1,
-      baseTotalMatches: Math.abs(totalBase - referenceTotal) < 0.01,
-    };
-  }, [insuranceTotal, positions, referenceTotal]);
+  const summary = useMemo(
+    () => computeCommerceTotals(positions, insuranceTotal, referenceTotal),
+    [insuranceTotal, positions, referenceTotal],
+  );
 
   // Доля страхования на позицию.
   // Если у позиции есть pre-computed insurance_share (приходит из общего
@@ -311,7 +287,7 @@ export default function CommerceTable({
       pagination={false}
       scroll={fitToScreen ? undefined : { x: TABLE_SCROLL_X, y: tableScrollY }}
       virtual={!fitToScreen}
-      summary={() => {
+      summary={fitToScreen ? undefined : () => {
         const markupColor = summary.totalMarkupCoefficient > 1 ? 'green' : summary.totalMarkupCoefficient < 1 ? 'red' : 'default';
         const baseColor = summary.baseTotalMatches ? '#52c41a' : '#ff4d4f';
 

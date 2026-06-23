@@ -28,7 +28,7 @@ const TabResultsImpl: React.FC<TabResultsProps> = ({
   // не «вылезает» когда вкладка результатов не выбрана.
   if (isLandscapePhone && hasResults) {
     return (
-      <LandscapeTableOverlay theme={currentTheme} width={1800}>
+      <LandscapeTableOverlay theme={currentTheme} fit="width">
         <ResultsTable rows={rows} hasResults={hasResults} loading={loading} fitToScreen />
       </LandscapeTableOverlay>
     );

@@ -516,11 +516,11 @@ const FinancialIndicators: React.FC = () => {
                         </Button>
                       </div>
                     )}
-                    {/* Телефон в landscape: таблица сама раскрывается на весь экран
-                        (fixed-оверлей), масштаб подбирается так, чтобы все колонки и
-                        строки влезли без прокрутки. Поворот в портрет → карточный вид. */}
+                    {/* Телефон в landscape: таблица раскрывается на весь экран
+                        (fixed-оверлей); колонки вписываются по ширине, строки
+                        прокручиваются вертикально. Поворот в портрет → карточный вид. */}
                     {isLandscapePhone ? (
-                      <LandscapeTableOverlay theme={currentTheme}>
+                      <LandscapeTableOverlay theme={currentTheme} fit="width">
                         {indicatorsTableFitNode}
                       </LandscapeTableOverlay>
                     ) : (

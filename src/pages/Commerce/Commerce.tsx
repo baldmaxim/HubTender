@@ -8,7 +8,9 @@ import { useNavigate } from 'react-router-dom';
 import { usePositionTabs } from '../../contexts/PositionTabsContext';
 import { useCommerceData, useCommerceActions } from './hooks';
 import { TenderSelector, CommerceTable, CommerceCards, CommerceHeader } from './components';
+import CommerceTotalsBar from './components/CommerceTotalsBar';
 import { exportCommerceToExcel } from './utils/exportToExcel';
+import { computeCommerceTotals } from './utils/computeCommerceTotals';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
@@ -200,7 +202,16 @@ export default function Commerce() {
               insuranceTotal={insuranceTotal}
             />
           ) : isLandscapePhone ? (
-            <LandscapeTableOverlay theme={currentTheme} width={1840}>
+            <LandscapeTableOverlay
+              theme={currentTheme}
+              fit="width"
+              footer={
+                <CommerceTotalsBar
+                  totals={computeCommerceTotals(positions, insuranceTotal, referenceTotal)}
+                  insuranceTotal={insuranceTotal}
+                />
+              }
+            >
               <CommerceTable
                 positions={positions}
                 selectedTenderId={selectedTenderId}

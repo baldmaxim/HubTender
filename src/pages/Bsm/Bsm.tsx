@@ -221,7 +221,7 @@ const Bsm: React.FC = () => {
       {isPhone ? (
         <BsmCardList items={filteredItems} loading={loading} />
       ) : isLandscapePhone ? (
-        <LandscapeTableOverlay theme={currentTheme} width={1875}>
+        <LandscapeTableOverlay theme={currentTheme} fit="width">
           {renderTable(true)}
         </LandscapeTableOverlay>
       ) : (
