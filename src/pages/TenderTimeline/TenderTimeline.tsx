@@ -424,18 +424,20 @@ const TenderTimeline: React.FC = () => {
           />
 
           {isPhoneDevice ? (
-            <TimelineTenderCards
-              tenders={filteredTenders}
-              loading={tendersLoading}
-              expandedTenderId={expandedCardId}
-              canEditQuality={canEditQuality}
-              colorFillSecondary={colorFillSecondary}
-              colorBorderSecondary={colorBorderSecondary}
-              colorBgContainer={colorBgContainer}
-              onToggle={handleToggleTenderCard}
-              onOpenQuality={handleOpenQualityModal}
-              renderExpanded={renderExpandedGroups}
-            />
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <TimelineTenderCards
+                tenders={filteredTenders}
+                loading={tendersLoading}
+                expandedTenderId={expandedCardId}
+                canEditQuality={canEditQuality}
+                colorFillSecondary={colorFillSecondary}
+                colorBorderSecondary={colorBorderSecondary}
+                colorBgContainer={colorBgContainer}
+                onToggle={handleToggleTenderCard}
+                onOpenQuality={handleOpenQualityModal}
+                renderExpanded={renderExpandedGroups}
+              />
+            </div>
           ) : (
             <TimelineTenderTable
               tenders={filteredTenders}
