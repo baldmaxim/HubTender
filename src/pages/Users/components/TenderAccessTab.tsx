@@ -3,12 +3,14 @@ import { Table, Button, Modal, Select, DatePicker, message, Space, Tag, Tooltip 
 import { CalendarOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import type { TenderDeadlineExtension } from '../../../lib/supabase/types';
 import { getErrorMessage } from '../../../utils/errors';
 import { fetchTenders } from '../../../lib/api/tenders';
 import { listAccessUsers, setTenderExtensionForUsers } from '../../../lib/api/userAdmin';
+import { TenderAccessCards, DeadlineTag } from './TenderAccessCards';
 
-interface TenderRecord {
+export interface TenderRecord {
   id: string;
   tender_number: string;
   version: number;
@@ -24,7 +26,7 @@ interface UserRecord {
   tender_deadline_extensions?: TenderDeadlineExtension[];
 }
 
-interface UserExtensionDisplay {
+export interface UserExtensionDisplay {
   user_id: string;
   user_name: string;
   extended_deadline: string;
@@ -36,6 +38,7 @@ interface TenderAccessTabProps {
 
 const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) => {
   const { theme } = useTheme();
+  const { isPhone, isPhoneDevice } = useIsMobile();
   const [tenders, setTenders] = useState<TenderRecord[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [allUsersWithExtensions, setAllUsersWithExtensions] = useState<UserRecord[]>([]);
@@ -216,25 +219,12 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
       key: 'submission_deadline',
       width: 180,
       align: 'center' as const,
-      render: (deadline: string) => {
-        const date = dayjs(deadline);
-        const now = dayjs();
-        const isExpired = date.isBefore(now);
-        const daysUntil = date.diff(now, 'day');
-
-        return (
-          <Space>
-            <span>{date.format('DD.MM.YYYY HH:mm')}</span>
-            {isExpired ? (
-              <Tag color="red">Истек</Tag>
-            ) : daysUntil < 7 ? (
-              <Tag color="orange">{daysUntil}д</Tag>
-            ) : (
-              <Tag color="green">{daysUntil}д</Tag>
-            )}
-          </Space>
-        );
-      }
+      render: (deadline: string) => (
+        <Space>
+          <span>{dayjs(deadline).format('DD.MM.YYYY HH:mm')}</span>
+          <DeadlineTag deadline={deadline} />
+        </Space>
+      )
     },
     {
       title: <div style={{ textAlign: 'center' }}>Пользователь</div>,
@@ -267,25 +257,12 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
         }
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {usersWithAccess.map(u => {
-              const date = dayjs(u.extended_deadline);
-              const now = dayjs();
-              const isExpired = date.isBefore(now);
-              const daysUntil = date.diff(now, 'day');
-
-              return (
-                <Space key={u.user_id} size="small">
-                  <span>{date.format('DD.MM.YYYY HH:mm')}</span>
-                  {isExpired ? (
-                    <Tag color="red">Истек</Tag>
-                  ) : daysUntil < 7 ? (
-                    <Tag color="orange">{daysUntil}д</Tag>
-                  ) : (
-                    <Tag color="green">{daysUntil}д</Tag>
-                  )}
-                </Space>
-              );
-            })}
+            {usersWithAccess.map(u => (
+              <Space key={u.user_id} size="small">
+                <span>{dayjs(u.extended_deadline).format('DD.MM.YYYY HH:mm')}</span>
+                <DeadlineTag deadline={u.extended_deadline} />
+              </Space>
+            ))}
           </div>
         );
       }
@@ -328,13 +305,22 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
 
   return (
     <div>
-      <Table
-        columns={columns}
-        dataSource={filteredTenders}
-        rowKey="id"
-        loading={loading}
-        pagination={{ pageSize: 20 }}
-      />
+      {isPhoneDevice ? (
+        <TenderAccessCards
+          tenders={filteredTenders}
+          getUsersForTender={getUsersForTender}
+          onExtend={handleExtendAccess}
+          onDelete={handleOpenDeleteModal}
+        />
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={filteredTenders}
+          rowKey="id"
+          loading={loading}
+          pagination={{ pageSize: 20 }}
+        />
+      )}
 
       <Modal
         title={`Продлить доступ к тендеру №${selectedTender?.tender_number} v${selectedTender?.version}`}
@@ -343,7 +329,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
         onCancel={() => setModalVisible(false)}
         okText="Сохранить"
         cancelText="Отмена"
-        width={600}
+        width={isPhone ? '100%' : 600}
       >
         <Space direction="vertical" style={{ width: '100%' }} size="large">
           <div>
@@ -400,7 +386,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
         okText="Удалить"
         cancelText="Отмена"
         okType="danger"
-        width={600}
+        width={isPhone ? '100%' : 600}
       >
         <Space direction="vertical" style={{ width: '100%' }} size="large">
           <div>
