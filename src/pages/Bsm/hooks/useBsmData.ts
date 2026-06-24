@@ -46,26 +46,27 @@ export function useBsmData() {
       listMaterialNames(),
       listWorkNames(),
     ]);
-    const matMap = new Map(mats.map((m) => [m.id, m.name]));
-    const workMap = new Map(works.map((wk) => [wk.id, wk.name]));
-    return items.map((i) => ({
-      id: i.id,
-      boq_item_type: i.boq_item_type as string,
-      material_type: (i.material_type ?? null) as string | null,
-      quantity: i.quantity ?? null,
-      unit_code: i.unit_code as string,
-      total_amount: i.total_amount ?? null,
-      work_name_id: i.work_name_id ?? null,
-      material_name_id: i.material_name_id ?? null,
-      quote_link: i.quote_link ?? null,
-      detail_cost_category_id: i.detail_cost_category_id ?? null,
-      work_names: i.work_name_id && workMap.has(i.work_name_id)
-        ? { name: workMap.get(i.work_name_id)! }
-        : null,
-      material_names: i.material_name_id && matMap.has(i.material_name_id)
-        ? { name: matMap.get(i.material_name_id)! }
-        : null,
-    }));
+    const matMap = new Map(mats.map((m) => [m.id, m]));
+    const workMap = new Map(works.map((wk) => [wk.id, wk]));
+    return items.map((i) => {
+      const matRow = i.material_name_id ? matMap.get(i.material_name_id) : undefined;
+      const workRow = i.work_name_id ? workMap.get(i.work_name_id) : undefined;
+      return {
+        id: i.id,
+        boq_item_type: i.boq_item_type as string,
+        material_type: (i.material_type ?? null) as string | null,
+        quantity: i.quantity ?? null,
+        // boq-items-flat не отдаёт unit_code → резолвим из справочника номенклатуры
+        unit_code: ((i.unit_code as string) || workRow?.unit || matRow?.unit || '') as string,
+        total_amount: i.total_amount ?? null,
+        work_name_id: i.work_name_id ?? null,
+        material_name_id: i.material_name_id ?? null,
+        quote_link: i.quote_link ?? null,
+        detail_cost_category_id: i.detail_cost_category_id ?? null,
+        work_names: workRow ? { name: workRow.name } : null,
+        material_names: matRow ? { name: matRow.name } : null,
+      };
+    });
   };
 
   const getTenderTitles = (): TenderOption[] => {

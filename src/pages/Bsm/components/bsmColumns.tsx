@@ -86,7 +86,7 @@ export function buildBsmColumns(
       key: 'unit_code',
       width: 100,
       align: 'center',
-      render: (unit: UnitType) => <Tag color={getUnitColor(unit)}>{unit}</Tag>,
+      render: (unit: UnitType) => (unit ? <Tag color={getUnitColor(unit)}>{unit}</Tag> : <span>—</span>),
     },
     {
       title: 'Цена за ед.',

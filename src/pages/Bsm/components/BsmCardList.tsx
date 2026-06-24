@@ -35,7 +35,9 @@ export const BsmCardList: React.FC<BsmCardListProps> = ({ items, loading }) => {
                   {item.material_type}
                 </Tag>
               )}
-              <Tag color={getUnitColor(item.unit_code)} style={{ margin: 0 }}>{item.unit_code}</Tag>
+              {item.unit_code && (
+                <Tag color={getUnitColor(item.unit_code)} style={{ margin: 0 }}>{item.unit_code}</Tag>
+              )}
             </div>
 
             <Text strong style={{ display: 'block', wordBreak: 'break-word', marginBottom: 6 }}>{item.name}</Text>
