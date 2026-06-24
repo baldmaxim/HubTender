@@ -314,7 +314,12 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       <Layout>
         <Header
           style={{
-            padding: isPhone ? '0 12px' : '0 24px',
+            // iOS safe-area (PWA на весь экран): шапка ниже Dynamic Island, кнопка меню нажимается.
+            height: 'calc(64px + env(safe-area-inset-top))',
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 0,
+            paddingLeft: `max(${isPhone ? '12px' : '24px'}, env(safe-area-inset-left))`,
+            paddingRight: `max(${isPhone ? '12px' : '24px'}, env(safe-area-inset-right))`,
             background: currentTheme === 'dark' ? '#0a0a0a' : '#fff',
             display: 'flex',
             alignItems: 'center',
