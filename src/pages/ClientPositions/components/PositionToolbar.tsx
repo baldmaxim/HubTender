@@ -11,6 +11,7 @@ import {
 import type { Tender } from '../../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { FitOneLine } from '../../../components/responsive/FitOneLine';
 
 const { Text } = Typography;
 
@@ -46,7 +47,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
   onBackToSelection,
 }) => {
   const navigate = useNavigate();
-  const { isPhoneDevice } = useIsMobile();
+  const { isPhoneDevice, isPhone } = useIsMobile();
 
   return (
     <>
@@ -148,7 +149,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                   </div>
 
                   {/* Строка 2: Площади */}
-                  <div style={{ marginBottom: 4, fontSize: 14 }}>
+                  <FitOneLine enabled={isPhone} minFontSize={9} style={{ marginBottom: 4 }}>
                     <span style={{ whiteSpace: 'nowrap' }}>
                       <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Площадь по СП: </Text>
                       <Text strong style={{ color: '#10b981' }}>{selectedTender.area_sp?.toLocaleString('ru-RU') || '0'} м²</Text>
@@ -158,10 +159,10 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                       <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Площадь Заказчика: </Text>
                       <Text strong style={{ color: '#10b981' }}>{selectedTender.area_client?.toLocaleString('ru-RU') || '0'} м²</Text>
                     </span>
-                  </div>
+                  </FitOneLine>
 
                   {/* Строка 3: Курсы валют */}
-                  <div style={{ marginBottom: 4, fontSize: 14 }}>
+                  <FitOneLine enabled={isPhone} minFontSize={9} style={{ marginBottom: 4 }}>
                     <Text strong style={{ color: '#10b981' }}>Курс USD: </Text>
                     <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>{selectedTender.usd_rate?.toFixed(2) || '0.00'} Р/$</Text>
                     <Divider type="vertical" style={{ borderColor: currentTheme === 'dark' ? '#444' : '#d9d9d9' }} />
@@ -170,7 +171,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                     <Divider type="vertical" style={{ borderColor: currentTheme === 'dark' ? '#444' : '#d9d9d9' }} />
                     <Text strong style={{ color: '#10b981' }}>Курс CNY: </Text>
                     <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>{selectedTender.cny_rate?.toFixed(2) || '0.00'} Р/¥</Text>
-                  </div>
+                  </FitOneLine>
 
                   {/* Строка 4: Кнопки */}
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
