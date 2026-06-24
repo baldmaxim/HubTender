@@ -94,6 +94,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
   readOnly,
 }) => {
   const { isLandscapePhone } = useIsMobile();
+  const editingBlocked = readOnly || isLandscapePhone;
   const [loading, setLoading] = useState(false);
   const [modifiedRows, setModifiedRows] = useState<Record<string, Partial<MonthRow>>>({});
 
@@ -284,7 +285,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
       key: 'actual_amount',
       width: 200,
       render: (value: number, record) =>
-        readOnly ? (
+        editingBlocked ? (
           <Text>{value ? value.toLocaleString('ru-RU') : '—'}</Text>
         ) : (
           <InputNumber
@@ -308,7 +309,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
       key: 'forecast_amount',
       width: 200,
       render: (value: number | null, record) =>
-        readOnly ? (
+        editingBlocked ? (
           <Text>{value ? value.toLocaleString('ru-RU') : '—'}</Text>
         ) : (
           <InputNumber
@@ -332,7 +333,7 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
       dataIndex: 'note',
       key: 'note',
       render: (value: string | null, record) =>
-        readOnly ? (
+        editingBlocked ? (
           <Text>{value || '—'}</Text>
         ) : (
           <Input
