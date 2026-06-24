@@ -64,15 +64,15 @@ function getMapPageUrl(tender: TenderRegistryWithRelations): string | null {
 export function MapPopover({ tender, palette }: { tender: TenderRegistryWithRelations; palette: TenderMonitorPalette }) {
   const widgetUrl = getMapWidgetUrl(tender);
   const mapPageUrl = getMapPageUrl(tender);
-  const { isPhone } = useIsMobile();
+  const { isPhoneDevice } = useIsMobile();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   if (!widgetUrl) {
     return null;
   }
 
-  const mapContent = (
-    <div style={{ width: 300 }}>
+  const renderMapContent = (containerWidth: number | string) => (
+    <div style={{ width: containerWidth, maxWidth: '100%' }}>
       <iframe
         title={`map-${tender.id}`}
         src={widgetUrl}
@@ -117,7 +117,7 @@ export function MapPopover({ tender, palette }: { tender: TenderRegistryWithRela
     </button>
   );
 
-  if (isPhone) {
+  if (isPhoneDevice) {
     return (
       <>
         <button
@@ -151,7 +151,7 @@ export function MapPopover({ tender, palette }: { tender: TenderRegistryWithRela
           styles={{ body: { padding: 0 } }}
           maskStyle={{ background: 'rgba(0, 0, 0, 0.45)' }}
         >
-          <div style={{ padding: 16 }}>{mapContent}</div>
+          <div style={{ padding: 16 }}>{renderMapContent('100%')}</div>
         </Modal>
       </>
     );
@@ -163,7 +163,7 @@ export function MapPopover({ tender, palette }: { tender: TenderRegistryWithRela
       placement="bottom"
       mouseEnterDelay={0.15}
       destroyTooltipOnHide
-      content={mapContent}
+      content={renderMapContent(300)}
       overlayInnerStyle={{
         background: palette.panelBg,
         border: `1px solid ${palette.border}`,

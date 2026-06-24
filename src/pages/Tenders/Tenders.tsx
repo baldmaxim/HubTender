@@ -48,8 +48,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
   palette,
   isPhone = false,
 }) => {
-  // Текст блоков статистики ярче на 20% (приглушённый muted сдвигаем к яркому text) — на всех экранах.
-  const brightMuted = mixHex(palette.muted, palette.text, 0.2);
+  // Текст блоков статистики ярче: на телефоне сильнее (0.5), на остальных экранах 0.2.
+  const brightMuted = mixHex(palette.muted, palette.text, isPhone ? 0.5 : 0.2);
   return (
   <div
     className={blinking ? 'tender-monitor-alert-card' : undefined}
