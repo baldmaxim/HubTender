@@ -251,7 +251,18 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           flexDirection: 'column',
           height: '100vh',
           // На телефоне (портрет и ландшафт) меню всплывает поверх страницы (не сдвигает контент).
-          ...(isMenuOverlay ? { position: 'fixed' as const, left: 0, top: 0, zIndex: 1000 } : {}),
+          ...(isMenuOverlay
+            ? {
+                position: 'fixed' as const,
+                left: 0,
+                top: 0,
+                zIndex: 1000,
+                // iOS safe-area: содержимое меню (логотип TenderHUB) — ниже Dynamic Island,
+                // на одном уровне с кнопкой раскрытия меню в шапке; учесть боковой вырез в ландшафте.
+                paddingTop: 'env(safe-area-inset-top)',
+                paddingLeft: 'env(safe-area-inset-left)',
+              }
+            : {}),
         }}
         width={250}
       >
