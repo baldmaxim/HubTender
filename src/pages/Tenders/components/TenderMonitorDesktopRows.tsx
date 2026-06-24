@@ -194,7 +194,7 @@ export function TenderRow({
 
       <div style={{ padding: '12px 0', textAlign: 'center' }}>
         <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, justifyContent: 'center' }}>
-          <span style={{ color: dashboardStatus === 'calc' ? palette.warning : palette.textSecondary, fontSize: 8.4, fontWeight: 700 }}>
+          <span style={{ color: palette.sent, fontSize: 8.4, fontWeight: 700 }}>
             {formatDate(tender.submission_date)}
           </span>
           {formatTime(tender.submission_date) ? (

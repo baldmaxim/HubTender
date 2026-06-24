@@ -15,6 +15,7 @@ export interface TenderMonitorPalette {
   subtleText: string;
   title: string;
   warning: string;
+  sent: string;
   warningBg: string;
   warningBorder: string;
   danger: string;
@@ -54,6 +55,7 @@ export function getTenderMonitorPalette(isDark: boolean): TenderMonitorPalette {
       subtleText: '#6f7589',
       title: '#f0c45a',
       warning: '#f0c45a',
+      sent: '#ef9f27',
       warningBg: 'rgba(240,196,90,0.10)',
       warningBorder: 'rgba(240,196,90,0.24)',
       danger: '#e24b4a',
@@ -89,6 +91,7 @@ export function getTenderMonitorPalette(isDark: boolean): TenderMonitorPalette {
     subtleText: '#94a3b8',
     title: '#b7791f',
     warning: '#b7791f',
+    sent: '#c2740f',
     warningBg: 'rgba(183,121,31,0.10)',
     warningBorder: 'rgba(183,121,31,0.20)',
     danger: '#dc2626',
