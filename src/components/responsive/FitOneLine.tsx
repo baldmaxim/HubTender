@@ -37,21 +37,32 @@ export const FitOneLine: React.FC<FitOneLineProps> = ({
     if (!outer || !inner) return;
 
     const fit = () => {
-      // Измеряем естественную ширину при базовом шрифте, затем масштабируем.
-      inner.style.fontSize = `${baseFontSize}px`;
       const available = outer.clientWidth;
-      const needed = inner.scrollWidth;
-      let next = baseFontSize;
-      if (needed > available && needed > 0) {
-        next = Math.max(minFontSize, Math.floor((baseFontSize * available) / needed));
+      if (available <= 0) return;
+
+      // На время наших правок fontSize отключаем наблюдатель,
+      // чтобы собственные записи не зациклили fit().
+      ro.disconnect();
+
+      // Наибольший размер сначала; шаг вниз по 1px с перемером —
+      // корректно учитывает постоянные отступы разделителей.
+      let next = minFontSize;
+      for (let size = baseFontSize; size >= minFontSize; size--) {
+        inner.style.fontSize = `${size}px`;
+        if (inner.scrollWidth <= available) {
+          next = size;
+          break;
+        }
       }
+
       inner.style.fontSize = `${next}px`;
-      setFontSize(next);
+      setFontSize((prev) => (prev === next ? prev : next)); // no-op если стабильно
+
+      ro.observe(outer);
     };
 
-    fit();
     const ro = new ResizeObserver(fit);
-    ro.observe(outer);
+    fit();
     return () => ro.disconnect();
   }, [enabled, baseFontSize, minFontSize, children]);
 
