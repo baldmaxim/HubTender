@@ -27,11 +27,17 @@ export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, curren
 
   const deadline = dayjs(deadlineStr);
 
-  // Вычисляем общую длительность от даты создания до дедлайна
+  // Вычисляем общую длительность от даты создания до дедлайна.
+  // Если created_at отсутствует/невалиден — шкала на 0% (не зависает на 100%).
   const createdAt = dayjs(selectedTender.created_at);
-  const totalDays = deadline.diff(createdAt, 'day', true);
+  const hasAnchor = !!selectedTender.created_at && createdAt.isValid();
+  const totalDays = hasAnchor ? deadline.diff(createdAt, 'day', true) : 0;
   const daysRemaining = deadline.diff(now, 'day', true);
-  const progress = isExpired ? 100 : Math.max(0, Math.min(100, ((totalDays - daysRemaining) / totalDays) * 100));
+  const progress = isExpired
+    ? 100
+    : hasAnchor && totalDays > 0
+      ? Math.max(0, Math.min(100, ((totalDays - daysRemaining) / totalDays) * 100))
+      : 0;
 
   const getProgressColor = (progress: number): string => {
     if (isExpired) return '#c62828';
@@ -42,7 +48,7 @@ export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, curren
     return `rgb(${r}, ${g}, ${b})`;
   };
 
-  const percentage = Math.round(100 - progress);
+  const percentage = Math.round(progress);
 
   return (
     <div style={{
@@ -94,7 +100,7 @@ export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, curren
           fontWeight: 600,
           textShadow: '0 1px 2px rgba(0,0,0,0.5)'
         }}>
-          {isExpired ? '0%' : `${percentage}%`}
+          {`${percentage}%`}
         </Text>
       </div>
     </div>

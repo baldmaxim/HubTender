@@ -63,6 +63,9 @@ type FITenderRow struct {
 	FinancialApproved   *bool   `json:"financial_approved"`
 	FinancialApprovedBy *string `json:"financial_approved_by,omitempty"`
 	FinancialApprovedAt *string `json:"financial_approved_at,omitempty"`
+	// CreatedAt anchors the deadline progress bar on «Позиции Заказчика»
+	// (DeadlineBar считает долю прошедшего времени created_at→submission_deadline).
+	CreatedAt *string `json:"created_at,omitempty"`
 }
 
 func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, error) {
@@ -76,7 +79,8 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 		       area_sp, area_client, volume_title,
 		       upload_folder, bsm_link, tz_link, qa_form_link, project_folder_link,
 		       submission_deadline::text,
-		       financial_approved, financial_approved_by::text, financial_approved_at::text
+		       financial_approved, financial_approved_by::text, financial_approved_at::text,
+		       created_at::text
 		FROM public.tenders
 		WHERE id = $1
 	`, id).Scan(&t.ID, &t.Title, &t.TenderNumber, &t.ClientName, &t.Version, &t.IsArchived,
@@ -85,7 +89,8 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 		&t.AreaSP, &t.AreaClient, &t.VolumeTitle,
 		&t.UploadFolder, &t.BsmLink, &t.TzLink, &t.QaFormLink, &t.ProjectFolderLink,
 		&t.SubmissionDeadline,
-		&t.FinancialApproved, &t.FinancialApprovedBy, &t.FinancialApprovedAt)
+		&t.FinancialApproved, &t.FinancialApprovedBy, &t.FinancialApprovedAt,
+		&t.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
