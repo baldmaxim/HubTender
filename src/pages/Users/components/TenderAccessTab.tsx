@@ -355,6 +355,7 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
             <label>Новая дата дедлайна:</label>
             <DatePicker
               style={{ width: '100%' }}
+              popupClassName="datetime-popup-mobile"
               showTime
               format="DD.MM.YYYY HH:mm"
               value={extendedDeadline}
