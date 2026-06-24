@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Typography } from 'antd';
 import dayjs from 'dayjs';
 import type { Tender } from '../../../lib/supabase';
@@ -11,11 +11,21 @@ interface DeadlineBarProps {
 }
 
 export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, currentTheme }) => {
-  if (!selectedTender.submission_deadline) return null;
+  const [now, setNow] = useState(() => dayjs());
+  const deadlineStr = selectedTender.submission_deadline;
+  const isExpired = deadlineStr ? dayjs(deadlineStr).isBefore(now) : false;
 
-  const deadline = dayjs(selectedTender.submission_deadline);
-  const now = dayjs();
-  const isExpired = deadline.isBefore(now);
+  // Страница «Позиции заказчика» под keep-alive почти не перерисовывается, поэтому
+  // тикаем сами, чтобы шкала продвигалась. После дедлайна таймер не запускаем.
+  useEffect(() => {
+    if (!deadlineStr || isExpired) return;
+    const id = setInterval(() => setNow(dayjs()), 60_000); // минутной гранулярности достаточно — шкала меряется в днях
+    return () => clearInterval(id);
+  }, [deadlineStr, isExpired]);
+
+  if (!deadlineStr) return null;
+
+  const deadline = dayjs(deadlineStr);
 
   // Вычисляем общую длительность от даты создания до дедлайна
   const createdAt = dayjs(selectedTender.created_at);
