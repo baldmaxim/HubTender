@@ -23,6 +23,8 @@ export interface TreeNode {
   children?: TreeNode[];
   categoryId?: string;
   detailId?: string;
+  detailIds?: string[];
+  name?: string;
   location?: string;
   orderNum?: number;
 }
@@ -81,11 +83,14 @@ export const useConstructionCost = () => {
               unit: detail.unit,
               description: 'Нет описания',
               categoryId: detail.cost_category_id,
+              detailIds: [],
               orderNum: detail.order_num ?? undefined,
               children: [],
             };
             categoryNode.children.push(detailNode);
           }
+
+          detailNode.detailIds?.push(detail.id);
 
           if (detailNode && detailNode.children) {
             detailNode.children.push({
@@ -96,6 +101,7 @@ export const useConstructionCost = () => {
               description: 'Локация',
               detailId: detail.id,
               categoryId: detail.cost_category_id,
+              name: detail.name,
               location: detail.location,
               orderNum: detail.order_num ?? undefined,
             });
@@ -150,6 +156,8 @@ export const useConstructionCost = () => {
             await deleteCostCategory(record.categoryId);
           } else if (record.type === 'detail' && record.detailId) {
             await deleteDetailCostCategory(record.detailId);
+          } else if (record.type === 'detail' && record.detailIds?.length) {
+            await Promise.all(record.detailIds.map(deleteDetailCostCategory));
           }
 
           message.success('Запись успешно удалена');
@@ -175,6 +183,12 @@ export const useConstructionCost = () => {
           unit: values.unit,
           location: values.location,
         });
+      } else if (editingItem?.type === 'detail' && editingItem.detailIds?.length) {
+        await Promise.all(
+          editingItem.detailIds.map(id =>
+            updateDetailCostCategory(id, { name: values.name, unit: values.unit }),
+          ),
+        );
       }
 
       message.success('Изменения сохранены');

@@ -96,7 +96,7 @@ export const CostModals: React.FC<CostModalsProps> = ({
               ))}
             </Select>
           </Form.Item>
-          {editingItem?.type === 'detail' && (
+          {editingItem?.type === 'detail' && editingItem?.detailId && (
             <Form.Item
               name="location"
               label="Локация"

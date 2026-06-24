@@ -68,7 +68,7 @@ const ConstructionCost: React.FC = () => {
   const handleEdit = (record: TreeNode) => {
     setEditingItem(record);
     form.setFieldsValue({
-      name: record.structure,
+      name: record.name ?? record.structure,
       unit: record.unit,
       location: record.location,
     });
