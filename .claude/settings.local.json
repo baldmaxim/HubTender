@@ -62,7 +62,10 @@
       "PowerShell(npx eslint \"src/hooks/useDeadlineCheck.ts\" \"backend/\" --ext .ts,.tsx --max-warnings 0 2>&1 | Select-Object -Last 20; Write-Output \"---lint exit: $LASTEXITCODE\")",
       "PowerShell(npx tsc --noEmit 2>&1 | Select-Object -First 30; Write-Output \"---tsc exit: $LASTEXITCODE\")",
       "PowerShell(npx eslint ./src/hooks/useDeadlineCheck.ts --max-warnings 0 2>&1 | Select-Object -Last 15; Write-Output \"---lint exit: $LASTEXITCODE\")",
-      "PowerShell(git add src/pages/Tenders/utils/tenderMonitor.ts)"
+      "PowerShell(git add src/pages/Tenders/utils/tenderMonitor.ts)",
+      "PowerShell(git add src/components/Layout/MainLayout.tsx src/hooks/useFitScale.ts src/pages/Admin/ConstructionCostNew/components/CostFilters.tsx src/pages/Analytics/ObjectComparison/ObjectComparison.tsx src/pages/Bsm/Bsm.tsx src/pages/ClientPositions/components/PositionTable.tsx src/pages/Commerce/components/CommerceHeader.tsx src/pages/Commerce/components/CommerceTable.tsx src/pages/CostRedistribution/components/RedistributionHeader.tsx src/components/responsive/HideOnPhone.tsx)",
+      "PowerShell(git add src/pages/TenderTimeline/TenderTimeline.tsx)",
+      "PowerShell(npm run lint)"
     ],
     "deny": [],
     "ask": [],

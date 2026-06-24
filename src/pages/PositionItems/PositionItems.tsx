@@ -167,7 +167,7 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
     }
     if (isLandscapePhone) {
       return (
-        <LandscapeTableOverlay theme={theme} width={1280}>
+        <LandscapeTableOverlay theme={theme} fit="width">
           <PositionLandscapeInfo
             position={position}
             gpVolume={gpVolume}
