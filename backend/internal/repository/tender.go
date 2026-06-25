@@ -24,6 +24,7 @@ type TenderRow struct {
 	ConstructionScope               *string   `json:"construction_scope"`
 	IsArchived                      bool      `json:"is_archived"`
 	CachedGrandTotal                float64   `json:"cached_grand_total"`
+	BaseTotal                       float64   `json:"base_total"`
 	USDRate                         *float64  `json:"usd_rate"`
 	EURRate                         *float64  `json:"eur_rate"`
 	CNYRate                         *float64  `json:"cny_rate"`
@@ -141,6 +142,9 @@ func (r *TenderRepo) ListTenders(ctx context.Context, p TenderListParams) ([]Ten
 		       description,
 		       housing_class::text, construction_scope::text,
 		       is_archived, cached_grand_total,
+		       COALESCE((SELECT SUM(bi.total_amount)
+		                 FROM public.boq_items bi
+		                 WHERE bi.tender_id = tenders.id), 0) AS base_total,
 		       usd_rate, eur_rate, cny_rate,
 		       area_client, area_sp,
 		       submission_deadline::text,
@@ -170,6 +174,7 @@ func (r *TenderRepo) ListTenders(ctx context.Context, p TenderListParams) ([]Ten
 			&row.Description,
 			&row.HousingClass, &row.ConstructionScope,
 			&row.IsArchived, &row.CachedGrandTotal,
+			&row.BaseTotal,
 			&row.USDRate, &row.EURRate, &row.CNYRate,
 			&row.AreaClient, &row.AreaSP,
 			&row.SubmissionDeadline,

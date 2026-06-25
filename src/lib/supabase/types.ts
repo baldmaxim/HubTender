@@ -47,6 +47,8 @@ export interface Tender extends TenderInsert {
   updated_at: string;
   created_by?: string;
   cached_grand_total?: number;
+  // Базовая стоимость ПЗ = SUM(boq_items.total_amount), считается на лету в Go BFF.
+  base_total?: number;
   // Статус согласования «Финансовых показателей», привязан к версии тендера.
   financial_approved?: boolean;
   financial_approved_by?: string | null;

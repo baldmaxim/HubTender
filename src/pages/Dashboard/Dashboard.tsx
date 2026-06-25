@@ -46,14 +46,14 @@ const Dashboard: React.FC = () => {
   const fetchTenders = async () => {
     setLoading(true);
     try {
-      // Активные тендеры + cached_grand_total (поддерживается триггером
-      // на boq_items/tender_markup_percentage/subcontract_growth_exclusions —
-      // server-authoritative; убирает N batched-запросов к boq_items).
+      // Активные тендеры + base_total (ПЗ = SUM(boq_items.total_amount),
+      // считается на лету в Go BFF скалярным подзапросом; убирает N
+      // batched-запросов к boq_items с фронта).
       const all = await apiFetchTenders();
       const data = all.filter((t: Tender) => !t.is_archived);
 
       const formattedData: TenderTableData[] = (data || []).map((tender: Tender) => {
-        const boqCost = tender.cached_grand_total || 0;
+        const boqCost = tender.base_total || 0;
 
         // Рассчитываем стоимость за м²
         const constructionArea = tender.area_sp || 0;
