@@ -13,6 +13,7 @@ import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
 import { getTenderById } from '../../../lib/api/fi';
 import { listBoqItemsFullByPosition } from '../../../lib/api/positions';
 import { getErrorMessage } from '../../../utils/errors';
+import { validateBoqRowBasics } from '../../../utils/boq/importRowValidation';
 
 // ===========================
 // ТИПЫ И ИНТЕРФЕЙСЫ
@@ -243,6 +244,9 @@ export const useBoqItemsImport = () => {
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  // Явный статус результата импорта — чтобы не выводить «успех» из uploadProgress.
+  const [importStatus, setImportStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Справочники
   const [workNamesMap, setWorkNamesMap] = useState<Map<string, string>>(new Map());
@@ -539,6 +543,17 @@ export const useBoqItemsImport = () => {
         });
       }
 
+      // 5.1 Количество и коэффициенты (общие правила, см. validateBoqRowBasics)
+      validateBoqRowBasics(item).forEach((issue) => {
+        (issue.severity === 'warning' ? warnings : errors).push({
+          rowIndex: row,
+          type: 'missing_field',
+          field: issue.field,
+          message: issue.message,
+          severity: issue.severity,
+        });
+      });
+
       // 6. КРИТИЧНО: Проверка наличия в номенклатуре
       if (isWork(item.boq_item_type)) {
         const key = buildNomenclatureLookupKey(item.nameText, item.unit_code);
@@ -797,9 +812,12 @@ export const useBoqItemsImport = () => {
     positionId: string,
     tenderId: string
   ): Promise<boolean> => {
+    let currentRow: number | null = null;
     try {
       setUploading(true);
       setUploadProgress(0);
+      setImportStatus('running');
+      setImportError(null);
 
       // Загружаем курсы валют из tender
       const rates = await loadCurrencyRates(tenderId);
@@ -822,6 +840,7 @@ export const useBoqItemsImport = () => {
       // Вставляем элементы в том же порядке, что и в файле
       for (let i = 0; i < data.length; i++) {
         const item = data[i];
+        currentRow = item.rowIndex;
         const actualSortNumber = maxSortNumber + 1 + i;
 
         // Логирование первых 3 элементов для отладки сортировки
@@ -894,10 +913,15 @@ export const useBoqItemsImport = () => {
       console.log('[BoqImport] Импорт завершён. Всего элементов:', totalItems);
       console.log('[BoqImport] Диапазон sort_number:', `${maxSortNumber + 1} - ${maxSortNumber + totalItems}`);
       message.success(`Успешно импортировано ${totalItems} элементов`);
+      setImportStatus('success');
       return true;
     } catch (error) {
+      const detail = getErrorMessage(error);
+      const withRow = currentRow != null ? `Строка ${currentRow}: ${detail}` : detail;
       console.error('Ошибка импорта:', error);
-      message.error('Ошибка при импорте: ' + getErrorMessage(error));
+      setImportError(withRow);
+      setImportStatus('error');
+      message.error('Ошибка при импорте: ' + detail);
       return false;
     } finally {
       setUploading(false);
@@ -979,6 +1003,8 @@ export const useBoqItemsImport = () => {
     setParsedData([]);
     setValidationResult(null);
     setUploadProgress(0);
+    setImportStatus('idle');
+    setImportError(null);
   };
 
   return {
@@ -987,6 +1013,8 @@ export const useBoqItemsImport = () => {
     validationResult,
     uploading,
     uploadProgress,
+    importStatus,
+    importError,
 
     // Методы
     loadNomenclature,

@@ -259,7 +259,7 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			$12,
 			$13,
 			COALESCE($14::public.currency_type, 'RUB'::public.currency_type),
-			COALESCE($15, 0),
+			COALESCE($15, 0::numeric),
 			$16::public.delivery_price_type,
 			$17,
 			$18,

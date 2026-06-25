@@ -521,9 +521,11 @@ const ClientPositions: React.FC = () => {
         open={massImportModalOpen}
         tenderId={selectedTenderId || ''}
         tenderTitle={selectedTender?.title || ''}
-        onClose={(success) => {
+        onClose={() => {
           setMassImportModalOpen(false);
-          if (success && selectedTenderId) {
+          // Обновляем всегда: при частичной/ошибочной загрузке уже
+          // закоммиченные строки иначе не появятся до ручной перезагрузки.
+          if (selectedTenderId) {
             fetchClientPositions(selectedTenderId);
           }
         }}

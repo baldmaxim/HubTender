@@ -33,6 +33,8 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
     validationResult,
     uploading,
     uploadProgress,
+    importStatus,
+    importError,
     clientPositionsMap,
     existingItemsByPosition,
     availableUnits,
@@ -220,7 +222,11 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
 
     if (currentStep === 2) {
       return [
-        <Button key="close" onClick={() => handleClose(true)} disabled={uploading}>
+        <Button
+          key="close"
+          onClick={() => handleClose(importStatus === 'success')}
+          disabled={uploading}
+        >
           Закрыть
         </Button>,
       ];
@@ -618,31 +624,69 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
                 </Panel>
               </Collapse>
             )}
+
+            {/* Предупреждения (не блокируют импорт): незаполненные коэффициенты и т.п. */}
+            {validationResult && validationResult.warnings.length > 0 && (
+              <Collapse style={{ marginBottom: 16 }}>
+                <Panel
+                  header={
+                    <Space>
+                      <WarningOutlined style={{ color: '#faad14' }} />
+                      <span>Предупреждения ({validationResult.warnings.length}) — не блокируют импорт</span>
+                    </Space>
+                  }
+                  key="warnings"
+                >
+                  <List
+                    size="small"
+                    dataSource={validationResult.warnings.slice(0, 50)}
+                    renderItem={item => (
+                      <List.Item>
+                        <Text type="warning">
+                          Строка {item.rowIndex}: {item.message}
+                        </Text>
+                      </List.Item>
+                    )}
+                    footer={validationResult.warnings.length > 50 ? <Text type="secondary">...и ещё {validationResult.warnings.length - 50} предупреждений</Text> : undefined}
+                  />
+                </Panel>
+              </Collapse>
+            )}
           </div>
         )}
 
         {/* Шаг 2: Импорт */}
         {currentStep === 2 && (
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Alert
-              type="info"
-              message="Импорт данных"
-              description={
-                parsedData.length > 0
-                  ? `Импортируется ${parsedData.length} элементов в ${matchedCount} позиций${positionOnlyCount > 0 ? ` + обновление ${positionOnlyCount} поз. ГП` : ''}`
-                  : `Обновляется ${positionOnlyCount} позиций (данные ГП)`
-              }
-              showIcon
-            />
-            {uploading && (
-              <Progress
-                percent={uploadProgress}
-                status="active"
-                strokeColor={{ from: '#10b981', to: '#059669' }}
-              />
+            {importStatus === 'running' && (
+              <>
+                <Alert
+                  type="info"
+                  message="Импорт данных"
+                  description={
+                    parsedData.length > 0
+                      ? `Импортируется ${parsedData.length} элементов в ${matchedCount} позиций${positionOnlyCount > 0 ? ` + обновление ${positionOnlyCount} поз. ГП` : ''}`
+                      : `Обновляется ${positionOnlyCount} позиций (данные ГП)`
+                  }
+                  showIcon
+                />
+                <Progress
+                  percent={uploadProgress}
+                  status="active"
+                  strokeColor={{ from: '#10b981', to: '#059669' }}
+                />
+              </>
             )}
-            {!uploading && uploadProgress === 0 && (
+            {importStatus === 'success' && (
               <Alert type="success" message="Импорт завершён успешно!" showIcon />
+            )}
+            {importStatus === 'error' && (
+              <Alert
+                type="error"
+                message="Импорт не выполнен — данные не загружены"
+                description={importError || 'Произошла ошибка при импорте.'}
+                showIcon
+              />
             )}
           </Space>
         )}

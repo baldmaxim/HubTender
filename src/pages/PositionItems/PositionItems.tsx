@@ -337,9 +337,11 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
           open={importModalVisible}
           positionId={positionId}
           tenderId={position.tender_id}
-          onClose={(success) => {
+          onClose={() => {
             setImportModalVisible(false);
-            if (success) fetchItems();
+            // Обновляем всегда: при ошибке часть элементов уже вставлена
+            // (вставка идёт по одному), иначе они не появятся до перезагрузки.
+            fetchItems();
           }}
         />
       )}

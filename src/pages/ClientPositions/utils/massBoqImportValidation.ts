@@ -11,6 +11,7 @@ import {
   buildNomenclatureLookupKey,
   findCostCategoryId,
 } from './massBoqImportUtils';
+import { validateBoqRowBasics } from '../../../utils/boq/importRowValidation';
 
 // ===========================
 // ВАЛИДАЦИЯ
@@ -172,6 +173,17 @@ export const validateBoqData = (
         severity: 'error',
       });
     }
+
+    // 3.1 Количество и коэффициенты (общие правила, см. validateBoqRowBasics)
+    validateBoqRowBasics(item).forEach((issue) => {
+      (issue.severity === 'warning' ? warnings : errors).push({
+        rowIndex: row,
+        type: 'missing_field',
+        field: issue.field,
+        message: issue.message,
+        severity: issue.severity,
+      });
+    });
 
     // 4. Проверка номенклатуры
     if (isWork(item.boq_item_type)) {

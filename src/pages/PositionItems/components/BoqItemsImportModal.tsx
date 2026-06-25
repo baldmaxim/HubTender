@@ -26,6 +26,8 @@ export const BoqItemsImportModal: React.FC<BoqItemsImportModalProps> = ({
     validationResult,
     uploading,
     uploadProgress,
+    importStatus,
+    importError,
     loadNomenclature,
     parseExcelFile,
     validateParsedData,
@@ -159,7 +161,11 @@ export const BoqItemsImportModal: React.FC<BoqItemsImportModalProps> = ({
 
     if (currentStep === 2) {
       return [
-        <Button key="close" onClick={() => handleClose(true)} disabled={uploading}>
+        <Button
+          key="close"
+          onClick={() => handleClose(importStatus === 'success')}
+          disabled={uploading}
+        >
           Закрыть
         </Button>,
       ];
@@ -206,21 +212,36 @@ export const BoqItemsImportModal: React.FC<BoqItemsImportModalProps> = ({
         {/* Шаг 2: Импорт */}
         {currentStep === 2 && (
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Alert
-              type="info"
-              message="Импорт данных"
-              description={`Импортировано ${parsedData.length} элементов в базу данных`}
-              showIcon
-            />
-            {uploading && (
-              <Progress
-                percent={uploadProgress}
-                status="active"
-                strokeColor={{ from: '#10b981', to: '#059669' }}
+            {importStatus === 'running' && (
+              <>
+                <Alert
+                  type="info"
+                  message="Импорт данных"
+                  description={`Загрузка ${parsedData.length} элементов в базу данных…`}
+                  showIcon
+                />
+                <Progress
+                  percent={uploadProgress}
+                  status="active"
+                  strokeColor={{ from: '#10b981', to: '#059669' }}
+                />
+              </>
+            )}
+            {importStatus === 'success' && (
+              <Alert
+                type="success"
+                message="Импорт завершён успешно!"
+                description={`Импортировано элементов: ${parsedData.length}`}
+                showIcon
               />
             )}
-            {!uploading && uploadProgress === 0 && (
-              <Alert type="success" message="Импорт завершён успешно!" showIcon />
+            {importStatus === 'error' && (
+              <Alert
+                type="error"
+                message="Импорт не выполнен — данные не загружены"
+                description={importError || 'Произошла ошибка при импорте.'}
+                showIcon
+              />
             )}
           </Space>
         )}

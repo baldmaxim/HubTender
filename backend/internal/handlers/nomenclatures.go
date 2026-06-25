@@ -197,6 +197,12 @@ func (h *NomenclaturesHandler) CreateMaterialName(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.svc.CreateMaterialName(r.Context(), in); err != nil {
+		if p := apierr.ProblemFromPgErr(err, map[string]string{
+			"material_names_unit_fkey": "Указанная единица измерения не существует",
+		}); p != nil {
+			p.Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to create material name")
 		return
 	}
@@ -215,6 +221,12 @@ func (h *NomenclaturesHandler) UpdateMaterialName(w http.ResponseWriter, r *http
 		return
 	}
 	if err := h.svc.UpdateMaterialName(r.Context(), id, in); err != nil {
+		if p := apierr.ProblemFromPgErr(err, map[string]string{
+			"material_names_unit_fkey": "Указанная единица измерения не существует",
+		}); p != nil {
+			p.Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to update material name")
 		return
 	}
@@ -264,6 +276,12 @@ func (h *NomenclaturesHandler) CreateWorkName(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err := h.svc.CreateWorkName(r.Context(), in); err != nil {
+		if p := apierr.ProblemFromPgErr(err, map[string]string{
+			"work_names_unit_fkey": "Указанная единица измерения не существует",
+		}); p != nil {
+			p.Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to create work name")
 		return
 	}
@@ -282,6 +300,12 @@ func (h *NomenclaturesHandler) UpdateWorkName(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err := h.svc.UpdateWorkName(r.Context(), id, in); err != nil {
+		if p := apierr.ProblemFromPgErr(err, map[string]string{
+			"work_names_unit_fkey": "Указанная единица измерения не существует",
+		}); p != nil {
+			p.Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to update work name")
 		return
 	}

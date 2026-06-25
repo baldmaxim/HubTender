@@ -40,6 +40,9 @@ export const useMassBoqImport = () => {
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  // Явный статус результата импорта — чтобы не выводить «успех» из uploadProgress.
+  const [importStatus, setImportStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [importError, setImportError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>('');
 
   // Справочники
@@ -253,6 +256,8 @@ export const useMassBoqImport = () => {
     try {
       setUploading(true);
       setUploadProgress(5);
+      setImportStatus('running');
+      setImportError(null);
 
       const positionUpdatesPayload = Array.from(positionUpdates.values())
         .filter(posData =>
@@ -402,15 +407,17 @@ export const useMassBoqImport = () => {
           updatedPositionsCount, expectedPositions,
           droppedItems, droppedRows,
         });
-        message.error(
+        const mismatchMsg =
           `Импортировано ${insertedItemsCount} из ${expectedItems} элементов, ` +
           `обновлено ${updatedPositionsCount} из ${expectedPositions} позиций` +
           (droppedItems > 0 ? `; пропущено строк без позиции: ${droppedItems}` : '') +
-          ' — часть данных не загружена. Проверьте позиции.',
-          10,
-        );
-        // Данные, которые вставились, закоммичены — даём UI обновиться.
-        return true;
+          ' — часть данных не загружена. Проверьте позиции.';
+        message.error(mismatchMsg, 10);
+        // Частичная загрузка трактуется как ошибка: модалка не закрывается,
+        // показываем расхождение, пользователь проверяет позиции.
+        setImportError(mismatchMsg);
+        setImportStatus('error');
+        return false;
       }
 
       const msgParts: string[] = [];
@@ -421,17 +428,21 @@ export const useMassBoqImport = () => {
         msgParts.push(`обновлено ${updatedPositionsCount} позиций`);
       }
       message.success(`Импортировано: ${msgParts.join(', ')}`);
+      setImportStatus('success');
       return true;
     } catch (error) {
       // Расшифровываем структурно: apiFetch кладёт причину (RFC 7807 detail)
       // в error.message, а статус и тело — в error.status / error.body.
       const e = error as { status?: number; body?: { detail?: string; title?: string } };
+      const detail = getErrorMessage(error);
       console.error('Ошибка импорта:', {
         status: e?.status,
-        message: getErrorMessage(error),
+        message: detail,
         body: e?.body,
       });
-      message.error('Ошибка импорта: ' + getErrorMessage(error), 8);
+      message.error('Ошибка импорта: ' + detail, 8);
+      setImportError(detail);
+      setImportStatus('error');
       return false;
     } finally {
       setUploading(false);
@@ -567,6 +578,8 @@ export const useMassBoqImport = () => {
     setPositionUpdates(new Map());
     setValidationResult(null);
     setUploadProgress(0);
+    setImportStatus('idle');
+    setImportError(null);
     setExistingItemsByPosition(new Map());
     setFileName('');
     setUnitMappings({});
@@ -604,6 +617,8 @@ export const useMassBoqImport = () => {
     validationResult,
     uploading,
     uploadProgress,
+    importStatus,
+    importError,
     clientPositionsMap,
     existingItemsByPosition,
 
