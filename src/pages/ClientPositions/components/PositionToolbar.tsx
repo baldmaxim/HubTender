@@ -149,7 +149,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                   </div>
 
                   {/* Строка 2: Площади */}
-                  <FitOneLine enabled={isPhone} minFontSize={8} style={{ marginBottom: 4 }}>
+                  <FitOneLine enabled={isPhone} baseFontSize={isPhone ? 11 : 14} minFontSize={8} style={{ marginBottom: 4 }}>
                     <span style={{ whiteSpace: 'nowrap' }}>
                       <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Площадь по СП: </Text>
                       <Text strong style={{ color: '#10b981' }}>{selectedTender.area_sp?.toLocaleString('ru-RU') || '0'} м²</Text>
@@ -162,7 +162,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                   </FitOneLine>
 
                   {/* Строка 3: Курсы валют */}
-                  <FitOneLine enabled={isPhone} minFontSize={8} style={{ marginBottom: 4 }}>
+                  <FitOneLine enabled={isPhone} baseFontSize={isPhone ? 10 : 14} minFontSize={8} style={{ marginBottom: 4 }}>
                     <Text strong style={{ color: '#10b981' }}>Курс USD: </Text>
                     <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>{selectedTender.usd_rate?.toFixed(2) || '0.00'} Р/$</Text>
                     <Divider type="vertical" style={{ margin: '0 4px', borderColor: currentTheme === 'dark' ? '#444' : '#d9d9d9' }} />
