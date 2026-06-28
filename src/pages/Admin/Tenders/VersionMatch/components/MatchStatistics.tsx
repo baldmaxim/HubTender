@@ -28,12 +28,31 @@ interface MatchStatisticsProps {
  * - Удаленные позиции
  */
 export function MatchStatistics({ matches, loading = false }: MatchStatisticsProps) {
-  // Подсчет статистики
-  const autoMatches = matches.filter(m => m.matchType === 'auto').length;
-  const lowConfMatches = matches.filter(m => m.matchType === 'low_confidence').length;
-  const manualMatches = matches.filter(m => m.matchType === 'manual').length;
-  const newPositions = matches.filter(m => m.matchType === 'new').length;
-  const deletedPositions = matches.filter(m => m.matchType === 'deleted').length;
+  // Подсчёт статистики за один проход (вместо пяти .filter)
+  let autoMatches = 0;
+  let lowConfMatches = 0;
+  let manualMatches = 0;
+  let newPositions = 0;
+  let deletedPositions = 0;
+  for (const m of matches) {
+    switch (m.matchType) {
+      case 'auto':
+        autoMatches++;
+        break;
+      case 'low_confidence':
+        lowConfMatches++;
+        break;
+      case 'manual':
+        manualMatches++;
+        break;
+      case 'new':
+        newPositions++;
+        break;
+      case 'deleted':
+        deletedPositions++;
+        break;
+    }
+  }
 
   return (
     <Card

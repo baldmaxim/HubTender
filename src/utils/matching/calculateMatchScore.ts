@@ -8,7 +8,7 @@
  * - volume близость: 10%
  */
 
-import { calculateStringSimilarity, calculateVolumeProximity } from './similarity';
+import { calculateStringSimilarity, calculateVolumeProximity, similarityFromNormalized } from './similarity';
 import type { ClientPosition } from '../../lib/supabase';
 
 /**
@@ -39,11 +39,15 @@ export interface MatchScoreBreakdown {
  *
  * @param oldPos - позиция из старой версии тендера
  * @param newPos - позиция из новой версии (Excel)
+ * @param oldWorkNameNorm - (опц.) заранее нормализованное наименование старой позиции
+ * @param newWorkNameNorm - (опц.) заранее нормализованное наименование новой позиции
  * @returns детализированная оценка с общим score
  */
 export function calculateMatchScore(
   oldPos: ClientPosition,
-  newPos: ParsedRow
+  newPos: ParsedRow,
+  oldWorkNameNorm?: string,
+  newWorkNameNorm?: string
 ): MatchScoreBreakdown {
   // Нормализация строк для сравнения
   const normalizeString = (str: string | null | undefined): string => {
@@ -55,11 +59,17 @@ export function calculateMatchScore(
   const newItemNo = normalizeString(newPos.item_no);
   const itemNoMatch = oldItemNo === newItemNo ? 30 : 0;
 
-  // 2. Схожесть наименования работы - 50 баллов
-  const nameSimilarity = calculateStringSimilarity(
-    oldPos.work_name || '',
-    newPos.work_name || ''
-  );
+  // 2. Схожесть наименования работы - 50 баллов.
+  // Если переданы заранее нормализованные имена — переиспользуем их (без повторного
+  // прогона тяжёлой normalizeString). Guard по сырым строкам идентичен calculateStringSimilarity.
+  let nameSimilarity: number;
+  if (!oldPos.work_name || !newPos.work_name) {
+    nameSimilarity = 0;
+  } else if (oldWorkNameNorm !== undefined && newWorkNameNorm !== undefined) {
+    nameSimilarity = similarityFromNormalized(oldWorkNameNorm, newWorkNameNorm);
+  } else {
+    nameSimilarity = calculateStringSimilarity(oldPos.work_name, newPos.work_name);
+  }
   const nameSimil = nameSimilarity * 50;
 
   // 3. Совпадение единицы измерения - 10 баллов

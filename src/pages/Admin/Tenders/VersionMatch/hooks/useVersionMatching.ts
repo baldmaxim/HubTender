@@ -2,15 +2,81 @@
  * Основной хук для сопоставления версий тендера
  */
 
-import { useReducer, useCallback, useEffect, useMemo } from 'react';
+import { useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import { message } from 'antd';
 import type { Tender, ClientPosition } from '../../../../../lib/supabase';
 import { fetchPositionsWithCosts } from '../../../../../lib/api/positions';
-import type { ParsedRow } from '../../../../../utils/matching';
-import { findBestMatches } from '../../../../../utils/matching';
+import type { ParsedRow, MatchResult } from '../../../../../utils/matching';
 import { executeVersionTransfer } from '../../../../../utils/versionTransfer';
+import type { MatchWorkerRequest, MatchWorkerResponse } from '../../../../../utils/matching/matching.worker';
 import { matchReducer, initialMatchState, type MatchPair, type VersionMatchState } from '../types';
 import { getErrorMessage } from '../../../../../utils/errors';
+
+/**
+ * Собрать пары сопоставления из «сырых» результатов алгоритма.
+ * Чистая функция — логика идентична прежней инлайн-версии, вынесена для переиспользования
+ * из обработчика сообщения воркера.
+ */
+function buildMatchPairs(
+  matches: MatchResult[],
+  newPositions: ParsedRow[],
+  oldPositions: ClientPosition[],
+  oldPositionsById: Map<string, ClientPosition>
+): MatchPair[] {
+  const matchMap = new Map<number, MatchResult>();
+  matches.forEach(match => {
+    matchMap.set(match.newPositionIndex, match);
+  });
+
+  const matchedOldIds = new Set(matches.map(m => m.oldPositionId));
+  const matchPairs: MatchPair[] = [];
+
+  newPositions.forEach((newPos, idx) => {
+    const match = matchMap.get(idx);
+
+    if (match) {
+      const oldPosition = oldPositionsById.get(match.oldPositionId);
+
+      if (oldPosition) {
+        matchPairs.push({
+          oldPosition,
+          newPosition: newPos,
+          score: match.score,
+          matchType: match.matchType,
+          transferData: match.matchType === 'auto' || match.matchType === 'low_confidence',
+          isAdditional: false,
+        });
+        return;
+      }
+    }
+
+    matchPairs.push({
+      oldPosition: null,
+      newPosition: newPos,
+      score: null,
+      matchType: 'new',
+      transferData: false,
+      isAdditional: false,
+    });
+  });
+
+  const unmatchedOldPositions = oldPositions
+    .filter(oldPos => !matchedOldIds.has(oldPos.id))
+    .sort((a, b) => (a.position_number || 0) - (b.position_number || 0));
+
+  unmatchedOldPositions.forEach(oldPos => {
+    matchPairs.push({
+      oldPosition: oldPos,
+      newPosition: null,
+      score: null,
+      matchType: 'deleted',
+      transferData: false,
+      isAdditional: false,
+    });
+  });
+
+  return matchPairs;
+}
 
 export interface UseVersionMatchingProps {
   sourceTender: Tender | null;
@@ -34,6 +100,22 @@ export function useVersionMatching({
   newPositions,
 }: UseVersionMatchingProps): UseVersionMatchingResult {
   const [state, dispatch] = useReducer(matchReducer, initialMatchState);
+
+  // Воркер сопоставления создаётся один раз на время жизни хука.
+  const workerRef = useRef<Worker | null>(null);
+
+  useEffect(() => {
+    const worker = new Worker(
+      new URL('../../../../../utils/matching/matching.worker.ts', import.meta.url),
+      { type: 'module' }
+    );
+    workerRef.current = worker;
+
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, []);
 
   const oldPositionsById = useMemo(
     () => new Map(state.oldPositions.map(position => [position.id, position])),
@@ -82,62 +164,30 @@ export function useVersionMatching({
       return;
     }
 
+    const worker = workerRef.current;
+    if (!worker) {
+      message.error('Модуль сопоставления ещё не готов, попробуйте ещё раз');
+      return;
+    }
+
     dispatch({ type: 'SET_LOADING', payload: true });
 
-    window.setTimeout(() => {
+    const oldPositionsSnapshot = state.oldPositions;
+
+    const cleanup = () => {
+      worker.removeEventListener('message', handleMessage);
+      worker.removeEventListener('error', handleError);
+    };
+
+    const handleMessage = (ev: MessageEvent<MatchWorkerResponse>) => {
+      cleanup();
       try {
-        const matches = findBestMatches(state.oldPositions, newPositions);
-        const matchMap = new Map<number, typeof matches[0]>();
-        matches.forEach(match => {
-          matchMap.set(match.newPositionIndex, match);
-        });
-
-        const matchedOldIds = new Set(matches.map(m => m.oldPositionId));
-        const matchPairs: MatchPair[] = [];
-
-        newPositions.forEach((newPos, idx) => {
-          const match = matchMap.get(idx);
-
-          if (match) {
-            const oldPosition = oldPositionsById.get(match.oldPositionId);
-
-            if (oldPosition) {
-              matchPairs.push({
-                oldPosition,
-                newPosition: newPos,
-                score: match.score,
-                matchType: match.matchType,
-                transferData: match.matchType === 'auto' || match.matchType === 'low_confidence',
-                isAdditional: false,
-              });
-              return;
-            }
-          }
-
-          matchPairs.push({
-            oldPosition: null,
-            newPosition: newPos,
-            score: null,
-            matchType: 'new',
-            transferData: false,
-            isAdditional: false,
-          });
-        });
-
-        const unmatchedOldPositions = state.oldPositions
-          .filter(oldPos => !matchedOldIds.has(oldPos.id))
-          .sort((a, b) => (a.position_number || 0) - (b.position_number || 0));
-
-        unmatchedOldPositions.forEach(oldPos => {
-          matchPairs.push({
-            oldPosition: oldPos,
-            newPosition: null,
-            score: null,
-            matchType: 'deleted',
-            transferData: false,
-            isAdditional: false,
-          });
-        });
+        const matchPairs = buildMatchPairs(
+          ev.data.matches,
+          newPositions,
+          oldPositionsSnapshot,
+          oldPositionsById
+        );
 
         dispatch({ type: 'SET_MATCHES', payload: matchPairs });
 
@@ -150,7 +200,23 @@ export function useVersionMatching({
       } finally {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
-    }, 0);
+    };
+
+    const handleError = (err: ErrorEvent) => {
+      cleanup();
+      console.error('Ошибка воркера сопоставления:', err);
+      message.error('Не удалось выполнить сопоставление');
+      dispatch({ type: 'SET_LOADING', payload: false });
+    };
+
+    worker.addEventListener('message', handleMessage);
+    worker.addEventListener('error', handleError);
+
+    const request: MatchWorkerRequest = {
+      oldPositions: oldPositionsSnapshot,
+      newPositions,
+    };
+    worker.postMessage(request);
   }, [state.oldPositions, newPositions, oldPositionsById]);
 
   const toggleTransfer = useCallback((oldId: string) => {

@@ -161,7 +161,8 @@ function buildQuickScore(candidate: PositionMeta, current: ParsedRowMeta): numbe
 
 function evaluateBestMatch(
   candidates: PositionMeta[],
-  current: ParsedRowMeta
+  current: ParsedRowMeta,
+  scoreCache: Map<string, MatchScoreBreakdown>
 ): { oldPos: ClientPosition; score: MatchScoreBreakdown } | null {
   let bestMatch: {
     oldPos: ClientPosition;
@@ -169,7 +170,18 @@ function evaluateBestMatch(
   } | null = null;
 
   for (const candidate of candidates) {
-    const score = calculateMatchScore(candidate.position, current.position);
+    // Score детерминирован для пары (candidate, current) — кэшируем в рамках одной новой
+    // позиции, чтобы не пересчитывать кандидата, попавшего в несколько списков (exact/strong/shortlist/fallback).
+    let score = scoreCache.get(candidate.position.id);
+    if (score === undefined) {
+      score = calculateMatchScore(
+        candidate.position,
+        current.position,
+        candidate.normalizedWorkName,
+        current.normalizedWorkName
+      );
+      scoreCache.set(candidate.position.id, score);
+    }
 
     if (!bestMatch || score.total > bestMatch.score.total) {
       bestMatch = {
@@ -243,8 +255,15 @@ function collectCandidatePool(
     addCandidates(candidates, oldMetas, usedOldPositions, seenIds);
   }
 
-  return candidates
-    .sort((left, right) => buildQuickScore(right, current) - buildQuickScore(left, current));
+  // quickScore считаем один раз на кандидата, затем сортируем по готовому ключу
+  // (раньше компаратор пересчитывал buildQuickScore дважды на каждое сравнение).
+  const scored = candidates.map(candidate => ({
+    candidate,
+    quick: buildQuickScore(candidate, current),
+  }));
+  scored.sort((left, right) => right.quick - left.quick);
+
+  return scored.map(item => item.candidate);
 }
 
 /**
@@ -293,18 +312,20 @@ export function findBestMatches(
   }
 
   for (const current of newMetas) {
+    // Кэш score'ов в пределах текущей новой позиции (сбрасывается на каждой итерации).
+    const scoreCache = new Map<string, MatchScoreBreakdown>();
     const exactCandidates = getUnusedCandidates(byExactKey.get(buildExactKey(current)), usedOldPositions);
     let bestMatch: { oldPos: ClientPosition; score: MatchScoreBreakdown } | null = null;
 
     if (exactCandidates.length > 0) {
-      bestMatch = evaluateBestMatch(exactCandidates, current);
+      bestMatch = evaluateBestMatch(exactCandidates, current, scoreCache);
     }
 
     if (!bestMatch) {
       const strongCandidates = getUnusedCandidates(byStrongKey.get(buildStrongKey(current)), usedOldPositions);
 
       if (strongCandidates.length > 0) {
-        bestMatch = evaluateBestMatch(strongCandidates, current);
+        bestMatch = evaluateBestMatch(strongCandidates, current, scoreCache);
       }
     }
 
@@ -319,7 +340,7 @@ export function findBestMatches(
       );
 
       const shortlistedCandidates = candidatePool.slice(0, MAX_FULL_SCORE_CANDIDATES);
-      const shortlistedBestMatch = evaluateBestMatch(shortlistedCandidates, current);
+      const shortlistedBestMatch = evaluateBestMatch(shortlistedCandidates, current, scoreCache);
 
       if (
         shortlistedBestMatch &&
@@ -340,7 +361,7 @@ export function findBestMatches(
           !evaluatedIds.has(candidate.position.id)
         );
 
-        const fallbackBestMatch = evaluateBestMatch(remainingCandidates, current);
+        const fallbackBestMatch = evaluateBestMatch(remainingCandidates, current, scoreCache);
 
         if (
           fallbackBestMatch &&

@@ -2,7 +2,7 @@
  * Метрики схожести для сопоставления позиций заказчика
  */
 
-import { levenshteinDistance } from './levenshtein';
+import { levenshteinDistanceNormalized } from './levenshtein';
 
 /**
  * Нормализовать строку для сравнения
@@ -19,6 +19,23 @@ export function normalizeString(str: string): string {
 }
 
 /**
+ * Процент схожести по двум УЖЕ нормализованным строкам (без повторной нормализации).
+ * Позволяет переиспользовать заранее посчитанные `normalizeString`-значения в горячем пути.
+ *
+ * @param normalized1 - первая нормализованная строка
+ * @param normalized2 - вторая нормализованная строка
+ * @returns процент схожести от 0 до 1
+ */
+export function similarityFromNormalized(normalized1: string, normalized2: string): number {
+  const maxLength = Math.max(normalized1.length, normalized2.length);
+
+  if (maxLength === 0) return 1;
+
+  // Similarity = 1 - (distance / maxLength)
+  return 1 - levenshteinDistanceNormalized(normalized1, normalized2) / maxLength;
+}
+
+/**
  * Вычислить процент схожести двух строк на основе расстояния Левенштейна
  * @param str1 - первая строка
  * @param str2 - вторая строка
@@ -28,16 +45,7 @@ export function calculateStringSimilarity(str1: string, str2: string): number {
   if (!str1 || !str2) return 0;
 
   // Нормализуем строки перед сравнением
-  const normalized1 = normalizeString(str1);
-  const normalized2 = normalizeString(str2);
-
-  const distance = levenshteinDistance(normalized1, normalized2);
-  const maxLength = Math.max(normalized1.length, normalized2.length);
-
-  if (maxLength === 0) return 1;
-
-  // Similarity = 1 - (distance / maxLength)
-  return 1 - distance / maxLength;
+  return similarityFromNormalized(normalizeString(str1), normalizeString(str2));
 }
 
 /**
