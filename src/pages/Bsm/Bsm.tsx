@@ -175,12 +175,12 @@ const Bsm: React.FC = () => {
         <Title level={4} style={{ margin: 0 }}>Базовая Стоимость Материалов и Работ</Title>
       )}
       <Space size="middle" wrap direction={isPhone ? 'vertical' : 'horizontal'} style={isPhone ? { width: '100%' } : undefined}>
-        <Space size="small" style={isPhone ? { width: '100%' } : undefined}>
-          {!isPhone && <Text type="secondary" style={{ fontSize: 16 }}>Тендер:</Text>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : 'auto' }}>
+          {!isPhone && <Text type="secondary" style={{ fontSize: 16, whiteSpace: 'nowrap' }}>Тендер:</Text>}
           <Select
             className="tender-select"
             placeholder="Выберите тендер"
-            style={{ width: isPhone ? '100%' : 350, fontSize: 16 }}
+            style={{ width: isPhone ? undefined : 350, flex: isPhone ? 1 : undefined, minWidth: 0, fontSize: 16 }}
             value={selectedTenderTitle}
             onChange={handleTenderTitleChange}
             showSearch
@@ -189,24 +189,24 @@ const Bsm: React.FC = () => {
             options={getTenderTitles()}
             allowClear
           />
-        </Space>
-        <Space size="small" style={isPhone ? { width: '100%' } : undefined}>
-          {!isPhone && <Text type="secondary" style={{ fontSize: 16 }}>Версия:</Text>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : 'auto' }}>
+          {!isPhone && <Text type="secondary" style={{ fontSize: 16, whiteSpace: 'nowrap' }}>Версия:</Text>}
           <Select
             placeholder="Версия"
             value={selectedVersion}
             onChange={handleVersionChange}
             disabled={!selectedTenderTitle}
             options={selectedTenderTitle ? getVersionsForTitle(selectedTenderTitle) : []}
-            style={{ width: isPhone ? '100%' : 140 }}
+            style={{ width: isPhone ? undefined : 140, flex: isPhone ? 1 : undefined, minWidth: 0 }}
           />
-        </Space>
+        </div>
       </Space>
     </Space>
   );
 
   return (
-    <Card bordered={false} style={{ height: '100%' }} styles={{ header: { borderBottom: 'none', paddingBottom: 0 } }} title={headerNode}>
+    <Card bordered={false} style={{ height: '100%' }} styles={{ header: { borderBottom: 'none', paddingBottom: 0, ...(isPhone ? { paddingInline: 8 } : {}) }, body: isPhone ? { padding: 8 } : undefined }} title={headerNode}>
       {/* Тулбар над вкладками на телефоне */}
       {isPhoneDevice && <div style={{ marginBottom: 12 }}>{filterControls(true)}</div>}
 
