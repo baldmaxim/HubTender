@@ -223,6 +223,11 @@ export const useClientPositions = () => {
       // обновлялось онлайн так же, как сумма/строки (см. план).
       void fetchClientPositions(selectedTender.id, { fresh: true });
     },
+    // selfEchoOnly: таблица и детальная вкладка PositionItems оба keep-alive и
+    // подписаны на tender:<id>. Правка примечания в PositionItems штампует общий
+    // модульный реестр и иначе глушила бы рефетч таблицы. Своё эхо таблицы по-
+    // прежнему подавляется через mutatedAtRef (markLocalMutation).
+    { selfEchoOnly: true },
   );
 
   // Оптимистичное обнуление работ/материалов у позиций (clear-boq): строки

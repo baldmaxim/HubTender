@@ -39,6 +39,18 @@ export interface RealtimeRefetchOptions {
   echoMs?: number;
   /** Optional extra filter; return false to skip the refetch for this event. */
   shouldRefetch?: (event: RealtimeEvent) => boolean;
+  /**
+   * Suppress only THIS instance's own echo (via the local mutatedAtRef), and
+   * ignore the module-level cross-hook registry.
+   *
+   * Needed for keep-alive sibling views on the same topic: the ClientPositions
+   * table and the PositionItems detail tab are both mounted and both subscribe
+   * to `tender:<id>`. A mutation in PositionItems stamps the shared registry and
+   * would otherwise suppress the table's legitimate refetch (e.g. a GP-note edit
+   * never reaching the table). The table's own optimistic mutations still go
+   * through markLocalMutation → mutatedAtRef, so self-echo stays suppressed.
+   */
+  selfEchoOnly?: boolean;
 }
 
 export interface RealtimeRefetchResult {
@@ -53,14 +65,16 @@ export function useRealtimeRefetch(
   refetch: RealtimeTopicHandler,
   opts: RealtimeRefetchOptions = {},
 ): RealtimeRefetchResult {
-  const { enabled = true, echoMs = DEFAULT_ECHO_MS, shouldRefetch } = opts;
+  const { enabled = true, echoMs = DEFAULT_ECHO_MS, shouldRefetch, selfEchoOnly = false } = opts;
   const mutatedAtRef = useRef<number>(0);
 
   const active = useRealtimeTopic(
     topic,
     (event) => {
       if (Date.now() - mutatedAtRef.current < echoMs) return;
-      if (topic && mutatedWithin(topic, echoMs)) return;
+      // selfEchoOnly: skip the shared cross-hook registry so a sibling keep-alive
+      // view's mutation can't suppress this subscription's refetch.
+      if (!selfEchoOnly && topic && mutatedWithin(topic, echoMs)) return;
       if (shouldRefetch && !shouldRefetch(event)) return;
       refetch(event);
     },
