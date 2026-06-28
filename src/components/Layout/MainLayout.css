@@ -34,8 +34,8 @@
   transform: translateY(-2px);
 }
 
-/* Телефон, раскрытое меню: высота кнопки-логотипа = высоте шапки (64px) */
-.logo.logo-phone {
+/* Раскрытое меню (все вьюпорты): высота кнопки-логотипа = высоте шапки (64px) */
+.logo.logo-compact {
   height: 64px;
   box-sizing: border-box;
   padding: 6px 16px;

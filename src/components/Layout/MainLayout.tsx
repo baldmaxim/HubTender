@@ -40,7 +40,7 @@ interface MainLayoutProps {
 }
 
 const MainLayout: React.FC<MainLayoutProps> = () => {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
@@ -48,8 +48,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   const { isPhone, isLandscapePhone, isPhoneDevice, isMobile, screens } = useIsMobile();
   // «Мобильный» layout = <992px (телефон + планшет), как и переключение на карточный вид.
   const isMobileLayout = !screens.lg;
-  // Меню всплывает поверх контента на телефоне (портрет <768 и ландшафт), не сдвигая страницу.
-  const isMenuOverlay = isMobile || isLandscapePhone;
+  // Меню всплывает поверх контента на всех вьюпортах (телефон, планшет, десктоп), не сдвигая страницу.
+  const isMenuOverlay = true;
 
   // Название текущей страницы для шапки (на телефонах). /path → PAGE_LABELS,
   // c учётом параметрических роутов (паттерн как в hasPageAccess).
@@ -117,8 +117,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     if (e.domEvent && 'button' in e.domEvent && !e.domEvent.button) {
       e.domEvent.preventDefault();
       navigate(e.key);
-      // На мобильных после выбора пункта сворачиваем меню, освобождая место под контент
-      if (isMobileLayout) setCollapsed(true);
+      // Меню — оверлей на всех вьюпортах: после выбора пункта сворачиваем, освобождая контент
+      setCollapsed(true);
     }
   };
 
@@ -242,7 +242,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         trigger={null}
         collapsible
         collapsed={collapsed}
-        collapsedWidth={isMobileLayout ? 0 : 80}
+        collapsedWidth={0}
         className={`sidebar-${currentTheme}`}
         style={{
           background: currentTheme === 'dark' ? '#0a0a0a' : '#fff',
@@ -267,7 +267,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         width={250}
       >
         <div
-          className={`logo logo-${currentTheme} ${isPhoneDevice && !collapsed ? 'logo-phone' : ''}`}
+          className={`logo logo-${currentTheme} ${!collapsed ? 'logo-compact' : ''}`}
           onClick={() => navigate('/dashboard')}
           style={{ cursor: 'pointer', flexShrink: 0 }}
         >
