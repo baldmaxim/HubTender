@@ -25,6 +25,8 @@ interface CostTableProps {
   readOnly?: boolean;
   /** Для ландшафтного оверлея: без внутреннего скролла и без fixed-колонок (вписывается масштабом). */
   fitToScreen?: boolean;
+  /** Портретный телефон: открепляем «Примечание» справа (закреплена только «Наименование»). */
+  isPhone?: boolean;
 }
 
 const fmtVolume = (value: number) =>
@@ -42,6 +44,7 @@ const CostTable: React.FC<CostTableProps> = ({
   areaSp,
   readOnly = false,
   fitToScreen = false,
+  isPhone = false,
 }) => {
   const { theme } = useTheme();
 
@@ -262,7 +265,7 @@ const CostTable: React.FC<CostTableProps> = ({
       dataIndex: 'notes',
       key: 'notes',
       width: 150,
-      fixed: fitToScreen ? undefined : 'right',
+      fixed: (fitToScreen || isPhone) ? undefined : 'right',
       render: (value: string | undefined, record: CostRow) =>
         readOnly ? (
           <Text>{value || '—'}</Text>

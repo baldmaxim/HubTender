@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Button, Space, Typography, Select, Card } from 'antd';
+import { Button, Typography, Select, Card } from 'antd';
 import { useCostData } from './hooks/useCostData';
 import CostFilters from './components/CostFilters';
 import CostTable from './components/CostTable';
@@ -135,11 +135,12 @@ const ConstructionCostNew: React.FC = () => {
       areaSp={selectedTender?.area_sp || 0}
       readOnly={readOnly}
       fitToScreen={fitToScreen}
+      isPhone={isPhone}
     />
   );
 
   return (
-    <div style={{ margin: '-16px', padding: '24px', height: isPhoneDevice ? 'auto' : 'calc(100vh - 64px)' }}>
+    <div style={{ margin: '-16px', padding: isPhone ? 8 : 24, height: isPhoneDevice ? 'auto' : 'calc(100vh - 64px)' }}>
       <div style={{ marginBottom: 16 }}>
         <Button
           type="primary"
@@ -164,10 +165,10 @@ const ConstructionCostNew: React.FC = () => {
       )}
 
       <div style={{ marginBottom: 8, display: 'flex', alignItems: isPhone ? 'stretch' : 'center', gap: isPhone ? 8 : 16, flexWrap: 'wrap', flexDirection: isPhone ? 'column' : 'row' }}>
-        <Space size="small" style={isPhone ? { width: '100%' } : undefined}>
-          <Text type="secondary">Тендер:</Text>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : 'auto' }}>
+          <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>Тендер:</Text>
           <Select
-            style={{ width: isPhone ? '100%' : 300 }}
+            style={{ width: isPhone ? undefined : 300, flex: isPhone ? 1 : undefined, minWidth: 0 }}
             placeholder="Выберите тендер"
             value={selectedTenderTitle}
             onChange={handleTenderTitleChange}
@@ -179,22 +180,22 @@ const ConstructionCostNew: React.FC = () => {
               (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
             }
           />
-        </Space>
+        </div>
         {selectedTenderTitle && (
-          <Space size="small" style={isPhone ? { width: '100%' } : undefined}>
-            <Text type="secondary">Версия:</Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : 'auto' }}>
+            <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>Версия:</Text>
             <Select
-              style={{ width: isPhone ? '100%' : 150 }}
+              style={{ width: isPhone ? undefined : 150, flex: isPhone ? 1 : undefined, minWidth: 0 }}
               placeholder="Выберите версию"
               value={selectedVersion}
               onChange={handleVersionChange}
               options={getVersionsForTitle(selectedTenderTitle)}
             />
-          </Space>
+          </div>
         )}
       </div>
 
-      <Card bordered={false} style={{ height: isPhoneDevice ? 'auto' : 'calc(100% - 140px)' }}>
+      <Card bordered={false} bodyStyle={{ padding: isPhone ? 8 : 24 }} style={{ height: isPhoneDevice ? 'auto' : 'calc(100% - 140px)' }}>
         <CostFilters
           costType={costType}
           viewMode={effectiveViewMode}
