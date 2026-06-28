@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useFitScale } from '../../hooks/useFitScale';
 
 interface LandscapeTableOverlayProps {
@@ -10,8 +10,12 @@ interface LandscapeTableOverlayProps {
    * Режим вписывания:
    * - 'contain' (по умолчанию): масштаб по min(ширина, высота) — таблица целиком без скролла.
    * - 'width': масштаб только по ширине; строки, не влезающие по высоте, скроллятся вертикально.
+   * - 'zoom': масштаб по ИЗВЕСТНОЙ ширине `width` через CSS `zoom` (а не transform:scale).
+   *   Контент раскладывается в обычном потоке → нет одного гигантского композитного слоя,
+   *   поэтому большие таблицы (тысячи строк) не дают чёрный экран на мобильных GPU.
+   *   Вертикальный скролл — нативный. Замеров нет → нет петли ResizeObserver.
    */
-  fit?: 'contain' | 'width';
+  fit?: 'contain' | 'width' | 'zoom';
   /** Закреплённая полоса под скроллом (вне scale), видна всегда. Только для fit='width'. */
   footer?: React.ReactNode;
   children: React.ReactNode;
@@ -38,6 +42,47 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
 }) => {
   const { outerRef, innerRef, scale, natW, natH } = useFitScale(fit === 'width' ? 'width' : 'both');
   const background = theme === 'dark' ? '#1f1f1f' : '#ffffff';
+
+  // Реактивная ширина окна для режима 'zoom' (известная ширина контента → фактор без замеров).
+  const [availW, setAvailW] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : width,
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const update = () => setAvailW(window.innerWidth);
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+    };
+  }, []);
+
+  if (fit === 'zoom') {
+    const PAD = 4;
+    const zoom = Math.min((availW - PAD * 2) / width, 1);
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1100,
+          background,
+          padding: PAD,
+          overflowX: 'hidden',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        <style>{`
+          .lto-fit-zoom .ant-table.ant-table-small .ant-table-cell { padding: 2px 4px; }
+        `}</style>
+        <div className="lto-fit-zoom" style={{ width, zoom: String(zoom) }}>
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   if (fit === 'width') {
     return (

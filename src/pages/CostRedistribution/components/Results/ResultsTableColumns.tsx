@@ -36,14 +36,24 @@ export interface ResultRow {
   rounded_total_works?: number;
 }
 
-export const getResultsTableColumns = (fitToScreen = false): ColumnsType<ResultRow> => {
+/**
+ * Сумма ширин leaf-колонок таблицы результатов (натуральная ширина).
+ * Используется как делитель для CSS zoom в ландшафтном оверлее (fit="zoom").
+ * Должна совпадать с фактической суммой width всех конечных колонок ниже.
+ */
+export const RESULTS_TABLE_WIDTH = 1820;
+
+export const getResultsTableColumns = (
+  fitToScreen = false,
+  nameWidth = 300,
+): ColumnsType<ResultRow> => {
   return [
     {
       title: <div style={{ textAlign: 'center' }}>Наименование</div>,
       key: 'name',
       // fixed-колонки ломаются под transform:scale в ландшафтном оверлее — отключаем там.
       ...(fitToScreen ? {} : { fixed: 'left' as const }),
-      width: 300,
+      width: fitToScreen ? 300 : nameWidth,
       render: (_, record) => {
         const itemNoColor = record.isLeaf ? '#52c41a' : '#ff7875';
         const paddingLeft = record.is_additional ? 20 : 0;

@@ -4,7 +4,7 @@
 
 import React, { memo } from 'react';
 import { ResultsTable } from './Results/ResultsTable';
-import type { ResultRow } from './Results/ResultsTableColumns';
+import { RESULTS_TABLE_WIDTH, type ResultRow } from './Results/ResultsTableColumns';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../../components/responsive/LandscapeTableOverlay';
@@ -27,8 +27,10 @@ const TabResultsImpl: React.FC<TabResultsProps> = ({
   // Неактивная вкладка скрыта через display:none у Ant Tabs, поэтому fixed-оверлей
   // не «вылезает» когда вкладка результатов не выбрана.
   if (isLandscapePhone && hasResults) {
+    // fit="zoom" с известной шириной (RESULTS_TABLE_WIDTH): масштаб через CSS zoom вместо
+    // transform:scale — большие таблицы не дают чёрный экран на мобильных GPU.
     return (
-      <LandscapeTableOverlay theme={currentTheme} fit="width">
+      <LandscapeTableOverlay theme={currentTheme} fit="zoom" width={RESULTS_TABLE_WIDTH}>
         <ResultsTable rows={rows} hasResults={hasResults} loading={loading} fitToScreen />
       </LandscapeTableOverlay>
     );

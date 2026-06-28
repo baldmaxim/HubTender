@@ -4,6 +4,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Tabs, message } from 'antd';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { useTheme } from '../../contexts/ThemeContext';
 import { loadTenderInsurance } from '../../lib/api/insurance';
 import { RedistributionHeader } from './components/RedistributionHeader';
 import { TabSetup } from './components/TabSetup';
@@ -30,6 +32,8 @@ const SAVED_TAG_DURATION_MS = 2000;
 
 const CostRedistribution: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState('setup');
+  const { isPhone } = useIsMobile();
+  const { theme: currentTheme } = useTheme();
   const [insuranceTotal, setInsuranceTotal] = useState(0);
   const [savedRecently, setSavedRecently] = useState(false);
   const [autosaveNonce, setAutosaveNonce] = useState(0);
@@ -450,6 +454,24 @@ const CostRedistribution: React.FC = () => {
         items={tabItems}
         activeKey={activeTab}
         onChange={setActiveTab}
+        // На телефоне панель вкладок липкая: при скролле результатов уходит шапка,
+        // вкладки закрепляются у верха экрана (скролл-контейнер — Content с overflow:auto).
+        renderTabBar={
+          isPhone
+            ? (tabBarProps, DefaultTabBar) => (
+                <div
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 10,
+                    background: currentTheme === 'dark' ? '#141414' : '#ffffff',
+                  }}
+                >
+                  <DefaultTabBar {...tabBarProps} style={{ margin: 0 }} />
+                </div>
+              )
+            : undefined
+        }
       />
     </div>
   );

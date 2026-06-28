@@ -4,14 +4,14 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Table, Alert } from 'antd';
-import { getResultsTableColumns, type ResultRow } from './ResultsTableColumns';
+import { getResultsTableColumns, RESULTS_TABLE_WIDTH, type ResultRow } from './ResultsTableColumns';
+import { useIsMobile } from '../../../../hooks/useIsMobile';
 
-function getTableScrollY(): number {
+function getViewport(): { width: number; height: number } {
   if (typeof window === 'undefined') {
-    return 600;
+    return { width: 1200, height: 800 };
   }
-
-  return Math.max(window.innerHeight - 350, 320);
+  return { width: window.innerWidth, height: window.innerHeight };
 }
 
 interface ResultsTableProps {
@@ -28,21 +28,32 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({
   loading = false,
   fitToScreen = false,
 }) => {
-  const [tableScrollY, setTableScrollY] = useState(getTableScrollY);
-  const columns = useMemo(() => getResultsTableColumns(fitToScreen), [fitToScreen]);
+  const { isPhone } = useIsMobile();
+  const [vp, setVp] = useState(getViewport);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
       return undefined;
     }
-
-    const handleResize = () => {
-      setTableScrollY(getTableScrollY());
-    };
-
+    const handleResize = () => setVp(getViewport());
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, []);
+
+  // Телефон-портрет: «Наименование» ≈ половина экрана, остальные колонки — скроллом вправо.
+  // Внутренний вертикальный скролл выключаем — таблица скроллится страницей до верха.
+  const phonePortrait = isPhone && !fitToScreen;
+  const tableScrollY = Math.max(vp.height - 350, 320);
+  const nameWidth = phonePortrait ? Math.max(Math.round(vp.width * 0.5), 140) : 300;
+
+  const columns = useMemo(
+    () => getResultsTableColumns(fitToScreen, nameWidth),
+    [fitToScreen, nameWidth],
+  );
 
   if (!hasResults) {
     return (
@@ -64,9 +75,11 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({
         loading={loading}
         bordered
         size="small"
-        scroll={fitToScreen ? undefined : { x: 1800, y: tableScrollY }}
+        tableLayout={fitToScreen ? 'fixed' : undefined}
+        style={fitToScreen ? { width: RESULTS_TABLE_WIDTH } : undefined}
+        scroll={fitToScreen ? undefined : phonePortrait ? { x: 1800 } : { x: 1800, y: tableScrollY }}
         pagination={false}
-        virtual={!fitToScreen}
+        virtual={!fitToScreen && !phonePortrait}
       />
     </div>
   );

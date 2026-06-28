@@ -56,27 +56,47 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
   savedRecently = false,
 }) => {
   const { isPhone, isPhoneDevice } = useIsMobile();
+
+  // Компактный блок «подпись над числом» с подписью в одну строку — для телефона и десктопа.
+  const renderStat = (title: string, value: number, color?: string) => (
+    <div style={{ padding: isPhone ? '0 4px' : '0 12px', textAlign: 'center' }}>
+      <Statistic
+        title={<span style={{ whiteSpace: 'nowrap', fontSize: isPhone ? 11 : undefined }}>{title}</span>}
+        value={value}
+        precision={0}
+        formatter={(v) => <AnimatedNumber value={formatRuInteger(v as number | string)} />}
+        valueStyle={{ fontSize: isPhone ? 16 : 18, ...(color ? { color, fontWeight: 600 } : {}) }}
+      />
+    </div>
+  );
+
   return (
-    <Card style={{ marginBottom: 16 }}>
-      <Space direction="vertical" style={{ width: '100%' }} size="middle">
-        <Space align="center" size="middle">
-          {!isPhoneDevice && (
-            <Title level={2} style={{ margin: 0 }}>
-              Перераспределение стоимости работ
-            </Title>
-          )}
-          {saving && (
-            <Tag icon={<LoadingOutlined />} color="processing">
-              Сохраняется…
-            </Tag>
-          )}
-          {!saving && savedRecently && (
-            <Space align="center" size={4}>
-              <SuccessCheck show size={18} color="#10b981" strokeWidth={5} />
-              <Tag color="success">Сохранено</Tag>
-            </Space>
-          )}
-        </Space>
+    <Card
+      style={{ marginBottom: isPhone ? 8 : 16 }}
+      styles={{ body: { padding: isPhone ? '6px 12px' : 24 } }}
+    >
+      <Space direction="vertical" style={{ width: '100%' }} size={isPhone ? 8 : 'middle'}>
+        {/* Пустую верхнюю строку на телефоне не рендерим — иначе зазор над фильтром. */}
+        {(!isPhoneDevice || saving || savedRecently) && (
+          <Space align="center" size="middle">
+            {!isPhoneDevice && (
+              <Title level={2} style={{ margin: 0 }}>
+                Перераспределение стоимости работ
+              </Title>
+            )}
+            {saving && (
+              <Tag icon={<LoadingOutlined />} color="processing">
+                Сохраняется…
+              </Tag>
+            )}
+            {!saving && savedRecently && (
+              <Space align="center" size={4}>
+                <SuccessCheck show size={18} color="#10b981" strokeWidth={5} />
+                <Tag color="success">Сохранено</Tag>
+              </Space>
+            )}
+          </Space>
+        )}
 
         <Row gutter={16} align="middle">
           <Col xs={24} sm={12} lg={4}>
@@ -127,66 +147,59 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
             <Col
               xs={24}
               lg={16}
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                justifyContent: isPhone ? 'center' : 'flex-end',
-                gap: isPhone ? 12 : 24,
-                alignItems: 'center',
-              }}
+              style={
+                isPhone
+                  ? { display: 'flex', flexDirection: 'column', gap: 8 }
+                  : {
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      justifyContent: 'flex-end',
+                      gap: 24,
+                      alignItems: 'center',
+                    }
+              }
             >
-              <div style={{ padding: '0 12px', textAlign: 'center' }}>
-                <Statistic
-                  title="Итого материалы"
-                  value={totals.totalMaterials}
-                  precision={0}
-                  formatter={(value) => <AnimatedNumber value={formatRuInteger(value as number | string)} />}
-                  valueStyle={{ fontSize: 18 }}
-                />
-              </div>
-              <div style={{ padding: '0 12px', textAlign: 'center' }}>
-                <Statistic
-                  title="Итого работы"
-                  value={totals.totalWorks}
-                  precision={0}
-                  formatter={(value) => <AnimatedNumber value={formatRuInteger(value as number | string)} />}
-                  valueStyle={{ fontSize: 18 }}
-                />
-              </div>
-              <div style={{ padding: '0 12px', textAlign: 'center' }}>
-                <Statistic
-                  title="Итого"
-                  value={totals.total}
-                  precision={0}
-                  formatter={(value) => <AnimatedNumber value={formatRuInteger(value as number | string)} />}
-                  valueStyle={{ color: '#10b981', fontWeight: 600, fontSize: 18 }}
-                />
-              </div>
-              {insuranceTotal > 0 && (
-                <div style={{ padding: '0 12px', textAlign: 'center', borderLeft: '2px solid #10b981' }}>
-                  <Statistic
-                    title="Страхование от судимостей"
-                    value={insuranceTotal}
-                    precision={0}
-                    formatter={(value) => <AnimatedNumber value={formatRuInteger(value as number | string)} />}
-                    valueStyle={{ color: '#10b981', fontWeight: 600, fontSize: 18 }}
-                  />
-                  <div style={{ fontSize: 12, color: '#10b981' }}>
-                    Включено в работы и итог: {Math.round(totals.total).toLocaleString('ru-RU')}
+              {isPhone ? (
+                <>
+                  {/* Телефон: 4 итога в 2 строки, подпись над числом, без «включено в работы и итог». */}
+                  <div style={{ display: 'flex', justifyContent: 'space-around', gap: 8 }}>
+                    {renderStat('Итого материалы', totals.totalMaterials)}
+                    {renderStat('Итого работы', totals.totalWorks)}
                   </div>
-                </div>
-              )}
-              {hasResults && onExport && !isPhoneDevice && (
-                <Button
-                  type="primary"
-                  icon={<DownloadOutlined />}
-                  onClick={onExport}
-                  size="large"
-                  block={isPhone}
-                  style={{ marginLeft: isPhone ? 0 : 12 }}
-                >
-                  Экспорт в Excel
-                </Button>
+                  <div style={{ display: 'flex', justifyContent: 'space-around', gap: 8 }}>
+                    {renderStat('Итого', totals.total, '#10b981')}
+                    {insuranceTotal > 0 &&
+                      renderStat('Страхование от судимостей', insuranceTotal, '#10b981')}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {renderStat('Итого материалы', totals.totalMaterials)}
+                  {renderStat('Итого работы', totals.totalWorks)}
+                  {renderStat('Итого', totals.total, '#10b981')}
+                  {insuranceTotal > 0 && (
+                    <div style={{ padding: '0 12px', textAlign: 'center', borderLeft: '2px solid #10b981' }}>
+                      <Statistic
+                        title="Страхование от судимостей"
+                        value={insuranceTotal}
+                        precision={0}
+                        formatter={(value) => <AnimatedNumber value={formatRuInteger(value as number | string)} />}
+                        valueStyle={{ color: '#10b981', fontWeight: 600, fontSize: 18 }}
+                      />
+                    </div>
+                  )}
+                  {hasResults && onExport && !isPhoneDevice && (
+                    <Button
+                      type="primary"
+                      icon={<DownloadOutlined />}
+                      onClick={onExport}
+                      size="large"
+                      style={{ marginLeft: 12 }}
+                    >
+                      Экспорт в Excel
+                    </Button>
+                  )}
+                </>
               )}
             </Col>
           )}
