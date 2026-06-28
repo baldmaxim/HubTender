@@ -26,10 +26,12 @@ export const FitOneLine: React.FC<FitOneLineProps> = ({
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [fontSize, setFontSize] = useState(baseFontSize);
+  const [scale, setScale] = useState(1);
 
   useLayoutEffect(() => {
     if (!enabled) {
       setFontSize(baseFontSize);
+      setScale(1);
       return;
     }
     const outer = outerRef.current;
@@ -40,28 +42,34 @@ export const FitOneLine: React.FC<FitOneLineProps> = ({
       const available = outer.clientWidth;
       if (available <= 0) return;
 
-      // На время наших правок fontSize отключаем наблюдатель,
-      // чтобы собственные записи не зациклили fit().
-      ro.disconnect();
-
-      // Наибольший размер сначала; шаг вниз по 1px с перемером —
-      // корректно учитывает постоянные отступы разделителей.
-      let next = minFontSize;
+      // 1) Наибольший размер сначала; шаг вниз по 1px с перемером —
+      //    корректно учитывает постоянные отступы разделителей. Рендер чёткий.
+      inner.style.transform = 'none';
+      let nextSize = minFontSize;
       for (let size = baseFontSize; size >= minFontSize; size--) {
         inner.style.fontSize = `${size}px`;
         if (inner.scrollWidth <= available) {
-          next = size;
+          nextSize = size;
           break;
         }
       }
+      inner.style.fontSize = `${nextSize}px`;
 
-      inner.style.fontSize = `${next}px`;
-      setFontSize((prev) => (prev === next ? prev : next)); // no-op если стабильно
+      // 2) Если даже на минимальном шрифте не влезло — дожимаем масштабом,
+      //    чтобы гарантированно не обрезать (transform не влияет на scrollWidth).
+      const overflow = inner.scrollWidth;
+      const nextScale = overflow > available ? Math.max(0.1, available / overflow) : 1;
+      inner.style.transform = nextScale < 1 ? `scale(${nextScale})` : 'none';
 
-      ro.observe(outer);
+      setFontSize((prev) => (prev === nextSize ? prev : nextSize)); // no-op если стабильно
+      setScale((prev) => (prev === nextScale ? prev : nextScale));
     };
 
+    // Наблюдаем outer всегда (а не после успешного fit) — иначе при первом замере
+    // с clientWidth === 0 наблюдатель не подключался бы и строка осталась бы на base.
+    // RO следит за outer; записи в inner.style его не дёргают, setState защищён prev===next.
     const ro = new ResizeObserver(fit);
+    ro.observe(outer);
     fit();
     return () => ro.disconnect();
   }, [enabled, baseFontSize, minFontSize, children]);
@@ -72,7 +80,16 @@ export const FitOneLine: React.FC<FitOneLineProps> = ({
 
   return (
     <div ref={outerRef} style={{ overflow: 'hidden', ...style }}>
-      <div ref={innerRef} style={{ display: 'inline-block', whiteSpace: 'nowrap', fontSize }}>
+      <div
+        ref={innerRef}
+        style={{
+          display: 'inline-block',
+          whiteSpace: 'nowrap',
+          fontSize,
+          transform: scale < 1 ? `scale(${scale})` : undefined,
+          transformOrigin: 'right center',
+        }}
+      >
         {children}
       </div>
     </div>
