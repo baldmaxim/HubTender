@@ -13,7 +13,7 @@ import (
 
 // boqAuditRollbackServicer is the interface the handler depends on.
 type boqAuditRollbackServicer interface {
-	RollbackDeleted(ctx context.Context, auditID string) (string, error)
+	RollbackDeleted(ctx context.Context, auditID, changedBy string) (string, error)
 	ListByPosition(ctx context.Context, f repository.BoqAuditListFilter) ([]repository.BoqAuditRow, error)
 }
 
@@ -35,7 +35,8 @@ func NewBoqAuditRollbackHandler(svc boqAuditRollbackServicer) *BoqAuditRollbackH
 //   - 409 — id already exists / position or tender deleted
 //   - 500 — unexpected DB error
 func (h *BoqAuditRollbackHandler) Rollback(w http.ResponseWriter, r *http.Request) {
-	if middleware.UserFromContext(r.Context()) == nil {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
 		apierr.Unauthorized("missing auth context").Render(w)
 		return
 	}
@@ -45,7 +46,7 @@ func (h *BoqAuditRollbackHandler) Rollback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	newID, err := h.svc.RollbackDeleted(r.Context(), auditID)
+	newID, err := h.svc.RollbackDeleted(r.Context(), auditID, authUser.ID)
 	if err != nil {
 		var rbErr *repository.ErrAuditRollback
 		if errors.As(err, &rbErr) {

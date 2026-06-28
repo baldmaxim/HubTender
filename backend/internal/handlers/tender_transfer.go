@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
@@ -71,6 +72,11 @@ type transferReq struct {
 //   - 400 — validation failure
 //   - 500 — unexpected DB error
 func (h *TenderTransferHandler) Transfer(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
 	sourceTenderID := chi.URLParam(r, "id")
 	if sourceTenderID == "" {
 		apierr.BadRequest("missing tender id").Render(w)
@@ -113,6 +119,7 @@ func (h *TenderTransferHandler) Transfer(w http.ResponseWriter, r *http.Request)
 		SourceTenderID: sourceTenderID,
 		NewPositions:   newPositions,
 		Matches:        matches,
+		ChangedBy:      authUser.ID,
 	}
 
 	result, err := h.svc.ExecuteVersionTransfer(r.Context(), in)

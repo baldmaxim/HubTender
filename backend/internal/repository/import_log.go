@@ -211,6 +211,12 @@ func (r *ImportLogRepo) CancelSession(ctx context.Context, sessionID, cancelledB
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	// Атрибутируем удаление импортированных строк отменившему пользователю
+	// (иначе триггерный аудит запишет «Системную операцию»).
+	if err := setAuditUser(ctx, tx, cancelledBy); err != nil {
+		return nil, fmt.Errorf("importLogRepo.CancelSession: %w", err)
+	}
+
 	var (
 		ownerID  string
 		snapshot []byte

@@ -14,10 +14,10 @@ type positionRepoer interface {
 	GetPositionByID(ctx context.Context, id string) (*repository.PositionRow, error)
 	CreatePosition(ctx context.Context, in repository.CreatePositionInput) (*repository.PositionRow, error)
 	UpdatePosition(ctx context.Context, id string, in repository.UpdatePositionInput) (*repository.PositionRow, error)
-	BulkDeletePositions(ctx context.Context, positionIDs []string) error
+	BulkDeletePositions(ctx context.Context, positionIDs []string, changedBy string) error
 	CreateAdditionalPosition(ctx context.Context, in repository.CreateAdditionalPositionInput) (string, error)
 	UpdatePositionsNote(ctx context.Context, ids []string, note string) error
-	ClearPositionsBoq(ctx context.Context, ids []string) error
+	ClearPositionsBoq(ctx context.Context, ids []string, changedBy string) error
 	ShiftPositionsLevel(ctx context.Context, ids []string, delta int) error
 	ListBoqPreviewByPositions(ctx context.Context, positionIDs []string) ([]repository.BoqPreviewRow, error)
 	RecomputePositionTotals(ctx context.Context, positionID string) error
@@ -98,8 +98,9 @@ func (s *PositionService) BulkDeletePositions(
 	ctx context.Context,
 	positionIDs []string,
 	tenderID string,
+	changedBy string,
 ) error {
-	if err := s.repo.BulkDeletePositions(ctx, positionIDs); err != nil {
+	if err := s.repo.BulkDeletePositions(ctx, positionIDs, changedBy); err != nil {
 		return fmt.Errorf("positionService.BulkDeletePositions: %w", err)
 	}
 	if tenderID != "" {
@@ -225,9 +226,9 @@ func (s *PositionService) UpdatePositionsNote(
 
 // ClearPositionsBoq deletes boq_items + zeroes totals for the given positions.
 func (s *PositionService) ClearPositionsBoq(
-	ctx context.Context, ids []string, tenderID string,
+	ctx context.Context, ids []string, tenderID string, changedBy string,
 ) error {
-	if err := s.repo.ClearPositionsBoq(ctx, ids); err != nil {
+	if err := s.repo.ClearPositionsBoq(ctx, ids, changedBy); err != nil {
 		return fmt.Errorf("positionService.ClearPositionsBoq: %w", err)
 	}
 	s.invalidateTender(tenderID)

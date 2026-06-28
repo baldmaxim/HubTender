@@ -34,7 +34,7 @@ func NewBoqAuditRollbackRepo(pool *pgxpool.Pool) *BoqAuditRollbackRepo {
 // created_at/updated_at are dropped so fresh defaults apply. The boq_items
 // audit trigger logs this INSERT as a new audit row (same as the previous
 // client-side supabase.from('boq_items').insert path).
-func (r *BoqAuditRollbackRepo) RollbackDeleted(ctx context.Context, auditID string) (string, error) {
+func (r *BoqAuditRollbackRepo) RollbackDeleted(ctx context.Context, auditID, changedBy string) (string, error) {
 	var opType string
 	var hasOld bool
 	err := r.pool.QueryRow(ctx, `
@@ -61,8 +61,19 @@ func (r *BoqAuditRollbackRepo) RollbackDeleted(ctx context.Context, auditID stri
 		}
 	}
 
+	// Транзакция нужна, чтобы set_config('app.user_id', ..., is_local=true)
+	// действовал на тот же INSERT — триггер аудита проставит автора восстановления.
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return "", fmt.Errorf("boqAuditRollbackRepo: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := setAuditUser(ctx, tx, changedBy); err != nil {
+		return "", fmt.Errorf("boqAuditRollbackRepo: %w", err)
+	}
+
 	var newID string
-	err = r.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO public.boq_items
 		SELECT * FROM jsonb_populate_record(
 			NULL::public.boq_items,
@@ -83,6 +94,9 @@ func (r *BoqAuditRollbackRepo) RollbackDeleted(ctx context.Context, auditID stri
 			return "", &ErrAuditRollback{HTTPStatus: 500, Message: pgErr.Message}
 		}
 		return "", fmt.Errorf("boqAuditRollbackRepo: re-insert: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("boqAuditRollbackRepo: commit: %w", err)
 	}
 	return newID, nil
 }

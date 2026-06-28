@@ -184,6 +184,21 @@ func changedFields(old, new *BoqItemRow) []string {
 	return out
 }
 
+// setAuditUser propagates the acting user into the app.user_id GUC so the
+// boq_items audit trigger (log_boq_items_changes → auth.uid()) records
+// changed_by instead of writing a NULL-author "Системная операция" row.
+// Transaction-local (set_config is_local=true); no-op for an empty userID.
+// Call right after BeginTx, before any boq_items mutation in the same tx.
+func setAuditUser(ctx context.Context, tx pgx.Tx, userID string) error {
+	if userID == "" {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.user_id', $1, true)`, userID); err != nil {
+		return fmt.Errorf("setAuditUser: %w", err)
+	}
+	return nil
+}
+
 // skipBoqAuditTrigger tells the boq_items audit trigger (log_boq_items_changes)
 // to stand down for the current transaction. Methods that write their own
 // curated audit row(s) via insertAudit call this first; otherwise the trigger

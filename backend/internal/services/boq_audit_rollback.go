@@ -10,7 +10,7 @@ import (
 
 // boqAuditRollbackRepoer is the interface BoqAuditRollbackService depends on.
 type boqAuditRollbackRepoer interface {
-	RollbackDeleted(ctx context.Context, auditID string) (string, error)
+	RollbackDeleted(ctx context.Context, auditID, changedBy string) (string, error)
 	ListByPosition(ctx context.Context, f repository.BoqAuditListFilter) ([]repository.BoqAuditRow, error)
 }
 
@@ -28,8 +28,8 @@ func NewBoqAuditRollbackService(repo *repository.BoqAuditRollbackRepo, c *cache.
 
 // RollbackDeleted re-inserts a DELETE'd BOQ item and clears tender list cache
 // (the new row affects aggregate totals across views).
-func (s *BoqAuditRollbackService) RollbackDeleted(ctx context.Context, auditID string) (string, error) {
-	newID, err := s.repo.RollbackDeleted(ctx, auditID)
+func (s *BoqAuditRollbackService) RollbackDeleted(ctx context.Context, auditID, changedBy string) (string, error) {
+	newID, err := s.repo.RollbackDeleted(ctx, auditID, changedBy)
 	if err != nil {
 		return "", fmt.Errorf("boqAuditRollbackService.RollbackDeleted: %w", err)
 	}

@@ -120,6 +120,7 @@ func (r *BulkBoqRepo) SetQuoteLinkByName(
 	ctx context.Context,
 	tenderID, field, value string,
 	quoteLink *string,
+	changedBy string,
 ) (int, error) {
 	var col string
 	switch field {
@@ -130,12 +131,25 @@ func (r *BulkBoqRepo) SetQuoteLinkByName(
 	default:
 		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByName: invalid field %q", field)
 	}
-	tag, err := r.pool.Exec(ctx,
+	// Транзакция нужна, чтобы set_config('app.user_id', ..., is_local=true)
+	// действовал на тот же UPDATE — иначе триггерный аудит запишет автора NULL.
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByName: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := setAuditUser(ctx, tx, changedBy); err != nil {
+		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByName: %w", err)
+	}
+	tag, err := tx.Exec(ctx,
 		`UPDATE public.boq_items SET quote_link = $3
 		 WHERE tender_id = $1::uuid AND `+col+` = $2::uuid`,
 		tenderID, value, quoteLink)
 	if err != nil {
 		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByName: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByName: commit: %w", err)
 	}
 	return int(tag.RowsAffected()), nil
 }
@@ -145,15 +159,27 @@ func (r *BulkBoqRepo) SetQuoteLinkByIDs(
 	ctx context.Context,
 	ids []string,
 	quoteLink *string,
+	changedBy string,
 ) (int, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	tag, err := r.pool.Exec(ctx,
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByIDs: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := setAuditUser(ctx, tx, changedBy); err != nil {
+		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByIDs: %w", err)
+	}
+	tag, err := tx.Exec(ctx,
 		`UPDATE public.boq_items SET quote_link = $2 WHERE id = ANY($1::uuid[])`,
 		ids, quoteLink)
 	if err != nil {
 		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByIDs: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("bulkBoqRepo.SetQuoteLinkByIDs: commit: %w", err)
 	}
 	return int(tag.RowsAffected()), nil
 }

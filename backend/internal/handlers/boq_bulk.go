@@ -15,8 +15,8 @@ import (
 // bulkBoqServicer is the interface BulkBoqHandler depends on.
 type bulkBoqServicer interface {
 	BulkUpdateCommercial(ctx context.Context, rows []repository.BulkCommercialRow) (int, error)
-	SetQuoteLinkByName(ctx context.Context, tenderID, field, value string, quoteLink *string) (int, error)
-	SetQuoteLinkByIDs(ctx context.Context, ids []string, quoteLink *string) (int, error)
+	SetQuoteLinkByName(ctx context.Context, tenderID, field, value string, quoteLink *string, changedBy string) (int, error)
+	SetQuoteLinkByIDs(ctx context.Context, ids []string, quoteLink *string, changedBy string) (int, error)
 }
 
 // BulkBoqHandler handles bulk BOQ mutation endpoints.
@@ -71,7 +71,8 @@ type quoteLinkByNameReq struct {
 
 // SetQuoteLinkByName handles PATCH /api/v1/tenders/{id}/boq/quote-link.
 func (h *BulkBoqHandler) SetQuoteLinkByName(w http.ResponseWriter, r *http.Request) {
-	if middleware.UserFromContext(r.Context()) == nil {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
 		apierr.Unauthorized("missing auth context").Render(w)
 		return
 	}
@@ -89,7 +90,7 @@ func (h *BulkBoqHandler) SetQuoteLinkByName(w http.ResponseWriter, r *http.Reque
 		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
 		return
 	}
-	count, err := h.svc.SetQuoteLinkByName(r.Context(), tenderID, req.Field, req.Value, req.QuoteLink)
+	count, err := h.svc.SetQuoteLinkByName(r.Context(), tenderID, req.Field, req.Value, req.QuoteLink, authUser.ID)
 	if err != nil {
 		apierr.InternalFromErr(w, r, err, "failed to update quote link")
 		return
@@ -104,7 +105,8 @@ type quoteLinkByIDsReq struct {
 
 // SetQuoteLinkByIDs handles PATCH /api/v1/boq/quote-link-by-ids.
 func (h *BulkBoqHandler) SetQuoteLinkByIDs(w http.ResponseWriter, r *http.Request) {
-	if middleware.UserFromContext(r.Context()) == nil {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
 		apierr.Unauthorized("missing auth context").Render(w)
 		return
 	}
@@ -117,7 +119,7 @@ func (h *BulkBoqHandler) SetQuoteLinkByIDs(w http.ResponseWriter, r *http.Reques
 		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
 		return
 	}
-	count, err := h.svc.SetQuoteLinkByIDs(r.Context(), req.IDs, req.QuoteLink)
+	count, err := h.svc.SetQuoteLinkByIDs(r.Context(), req.IDs, req.QuoteLink, authUser.ID)
 	if err != nil {
 		apierr.InternalFromErr(w, r, err, "failed to update quote link")
 		return

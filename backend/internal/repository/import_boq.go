@@ -151,13 +151,9 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 
 	// Прокидываем акт. пользователя в GUC, чтобы триггерный аудит
 	// (log_boq_items_changes → auth.uid()) атрибутировал импортируемые строки
-	// этому пользователю, а не писал «Системную операцию». set_config(.., true)
-	// транзакционно-локален (как SET LOCAL) и не утекает через пул/PgBouncer;
-	// SET LOCAL не принимает bind-параметр, поэтому используем set_config.
-	if in.UserID != "" {
-		if _, err := tx.Exec(ctx, `SELECT set_config('app.user_id', $1, true)`, in.UserID); err != nil {
-			return nil, fmt.Errorf("importRepo.BulkImport: set app.user_id: %w", err)
-		}
+	// этому пользователю, а не писал «Системную операцию».
+	if err := setAuditUser(ctx, tx, in.UserID); err != nil {
+		return nil, fmt.Errorf("importRepo.BulkImport: %w", err)
 	}
 
 	result := &ImportResult{}

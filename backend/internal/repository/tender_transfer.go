@@ -35,6 +35,7 @@ type TransferInput struct {
 	SourceTenderID string
 	NewPositions   []NewPositionInput
 	Matches        []MatchInput
+	ChangedBy      string // app users UUID for audit attribution (app.user_id)
 }
 
 // TransferResult mirrors the JSONB returned by execute_version_transfer.
@@ -106,6 +107,12 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// Атрибутируем создаваемые/обновляемые boq_items пользователю, выполнившему
+	// перенос версии (иначе триггерный аудит запишет «Системную операцию»).
+	if err := setAuditUser(ctx, tx, in.ChangedBy); err != nil {
+		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
+	}
 
 	// Suppress the per-row grand-total recompute (O(N²) over boq_items) during
 	// the bulk copy; recomputed once before commit (Step 13c). SET LOCAL is

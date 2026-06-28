@@ -14,8 +14,8 @@ type bulkBoqRepoer interface {
 		ctx context.Context,
 		rows []repository.BulkCommercialRow,
 	) (int, []string, error)
-	SetQuoteLinkByName(ctx context.Context, tenderID, field, value string, quoteLink *string) (int, error)
-	SetQuoteLinkByIDs(ctx context.Context, ids []string, quoteLink *string) (int, error)
+	SetQuoteLinkByName(ctx context.Context, tenderID, field, value string, quoteLink *string, changedBy string) (int, error)
+	SetQuoteLinkByIDs(ctx context.Context, ids []string, quoteLink *string, changedBy string) (int, error)
 }
 
 // BulkBoqService handles bulk commercial cost updates and cache invalidation.
@@ -56,8 +56,9 @@ func (s *BulkBoqService) SetQuoteLinkByName(
 	ctx context.Context,
 	tenderID, field, value string,
 	quoteLink *string,
+	changedBy string,
 ) (int, error) {
-	n, err := s.repo.SetQuoteLinkByName(ctx, tenderID, field, value, quoteLink)
+	n, err := s.repo.SetQuoteLinkByName(ctx, tenderID, field, value, quoteLink, changedBy)
 	if err != nil {
 		return 0, fmt.Errorf("bulkBoqService.SetQuoteLinkByName: %w", err)
 	}
@@ -69,8 +70,9 @@ func (s *BulkBoqService) SetQuoteLinkByIDs(
 	ctx context.Context,
 	ids []string,
 	quoteLink *string,
+	changedBy string,
 ) (int, error) {
-	n, err := s.repo.SetQuoteLinkByIDs(ctx, ids, quoteLink)
+	n, err := s.repo.SetQuoteLinkByIDs(ctx, ids, quoteLink, changedBy)
 	if err != nil {
 		return 0, fmt.Errorf("bulkBoqService.SetQuoteLinkByIDs: %w", err)
 	}

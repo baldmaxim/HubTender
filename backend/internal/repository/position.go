@@ -344,7 +344,7 @@ func (r *PositionRepo) CreateAdditionalPosition(ctx context.Context, in CreateAd
 // BulkDeletePositions deletes the given client_positions and all their
 // boq_items in one transaction (replicating the legacy two-step batched
 // delete in usePositionDelete — raw delete, no audit, same as before).
-func (r *PositionRepo) BulkDeletePositions(ctx context.Context, positionIDs []string) error {
+func (r *PositionRepo) BulkDeletePositions(ctx context.Context, positionIDs []string, changedBy string) error {
 	if len(positionIDs) == 0 {
 		return nil
 	}
@@ -353,6 +353,10 @@ func (r *PositionRepo) BulkDeletePositions(ctx context.Context, positionIDs []st
 		return fmt.Errorf("positionRepo.BulkDeletePositions: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if err := setAuditUser(ctx, tx, changedBy); err != nil {
+		return fmt.Errorf("positionRepo.BulkDeletePositions: %w", err)
+	}
 
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM public.boq_items WHERE client_position_id = ANY($1::uuid[])`,
@@ -446,7 +450,7 @@ func (r *PositionRepo) UpdatePositionsNote(ctx context.Context, ids []string, no
 
 // ClearPositionsBoq deletes all boq_items of the given positions and zeroes
 // their totals — one tx (replicates the legacy delete-then-zero two-step).
-func (r *PositionRepo) ClearPositionsBoq(ctx context.Context, ids []string) error {
+func (r *PositionRepo) ClearPositionsBoq(ctx context.Context, ids []string, changedBy string) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -455,6 +459,10 @@ func (r *PositionRepo) ClearPositionsBoq(ctx context.Context, ids []string) erro
 		return fmt.Errorf("positionRepo.ClearPositionsBoq: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if err := setAuditUser(ctx, tx, changedBy); err != nil {
+		return fmt.Errorf("positionRepo.ClearPositionsBoq: %w", err)
+	}
 
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM public.boq_items WHERE client_position_id = ANY($1::uuid[])`,

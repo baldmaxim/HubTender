@@ -20,10 +20,10 @@ type positionWriteServicer interface {
 	GetPositionByID(ctx context.Context, id string) (*repository.PositionRow, error)
 	CreatePosition(ctx context.Context, in repository.CreatePositionInput) (*repository.PositionRow, error)
 	UpdatePosition(ctx context.Context, id string, in repository.UpdatePositionInput, tenderID string) (*repository.PositionRow, error)
-	BulkDeletePositions(ctx context.Context, positionIDs []string, tenderID string) error
+	BulkDeletePositions(ctx context.Context, positionIDs []string, tenderID string, changedBy string) error
 	CreateAdditionalPosition(ctx context.Context, in repository.CreateAdditionalPositionInput) (string, error)
 	UpdatePositionsNote(ctx context.Context, ids []string, note, tenderID string) error
-	ClearPositionsBoq(ctx context.Context, ids []string, tenderID string) error
+	ClearPositionsBoq(ctx context.Context, ids []string, tenderID string, changedBy string) error
 	ShiftPositionsLevel(ctx context.Context, ids []string, delta int, tenderID string) error
 	RecomputePositionTotals(ctx context.Context, positionID, tenderID string) error
 	UpdatePositionFields(ctx context.Context, id string, in repository.UpdatePositionFieldsInput, tenderID string) error
@@ -178,7 +178,8 @@ type bulkDeletePositionsReq struct {
 // BulkDeletePositions handles POST /api/v1/positions/bulk-delete — deletes the
 // given client_positions and their boq_items atomically.
 func (h *PositionWriteHandler) BulkDeletePositions(w http.ResponseWriter, r *http.Request) {
-	if middleware.UserFromContext(r.Context()) == nil {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
 		apierr.Unauthorized("missing auth context").Render(w)
 		return
 	}
@@ -191,7 +192,7 @@ func (h *PositionWriteHandler) BulkDeletePositions(w http.ResponseWriter, r *htt
 		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
 		return
 	}
-	if err := h.svc.BulkDeletePositions(r.Context(), req.PositionIDs, req.TenderID); err != nil {
+	if err := h.svc.BulkDeletePositions(r.Context(), req.PositionIDs, req.TenderID, authUser.ID); err != nil {
 		apierr.InternalFromErr(w, r, err, "failed to delete positions")
 		return
 	}
@@ -279,7 +280,8 @@ type clearPositionsBoqReq struct {
 
 // ClearPositionsBoq handles POST /api/v1/positions/clear-boq.
 func (h *PositionWriteHandler) ClearPositionsBoq(w http.ResponseWriter, r *http.Request) {
-	if middleware.UserFromContext(r.Context()) == nil {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
 		apierr.Unauthorized("missing auth context").Render(w)
 		return
 	}
@@ -292,7 +294,7 @@ func (h *PositionWriteHandler) ClearPositionsBoq(w http.ResponseWriter, r *http.
 		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
 		return
 	}
-	if err := h.svc.ClearPositionsBoq(r.Context(), req.PositionIDs, req.TenderID); err != nil {
+	if err := h.svc.ClearPositionsBoq(r.Context(), req.PositionIDs, req.TenderID, authUser.ID); err != nil {
 		apierr.InternalFromErr(w, r, err, "failed to clear positions boq")
 		return
 	}
