@@ -32,7 +32,7 @@ const SAVED_TAG_DURATION_MS = 2000;
 
 const CostRedistribution: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState('setup');
-  const { isPhone } = useIsMobile();
+  const { isPhone, isPhoneDevice } = useIsMobile();
   const { theme: currentTheme } = useTheme();
   const [insuranceTotal, setInsuranceTotal] = useState(0);
   const [savedRecently, setSavedRecently] = useState(false);
@@ -451,8 +451,10 @@ const CostRedistribution: React.FC = () => {
       />
 
       <Tabs
-        items={tabItems}
-        activeKey={activeTab}
+        // На телефоне (портрет и ландшафт) оставляем только «Таблицу результатов»;
+        // настройка и «Между строками» — только на десктопе/планшете.
+        items={isPhoneDevice ? tabItems.filter((t) => t.key === 'results') : tabItems}
+        activeKey={isPhoneDevice ? 'results' : activeTab}
         onChange={setActiveTab}
         // На телефоне панель вкладок липкая: при скролле результатов уходит шапка,
         // вкладки закрепляются у верха экрана (скролл-контейнер — Content с overflow:auto).
