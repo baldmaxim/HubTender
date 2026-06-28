@@ -1380,7 +1380,15 @@ BEGIN
       v_old_val := to_jsonb(OLD.*) -> v_key;
       v_new_val := to_jsonb(NEW.*) -> v_key;
 
-      IF v_key NOT IN ('updated_at', 'created_at')
+      -- Commercial-cost columns are recomputed in bulk whenever markup % change
+      -- (BulkUpdateCommercial → plain UPDATE → this trigger). Those are not user
+      -- edits and must not surface in the position change history, so they are
+      -- excluded here exactly like the timestamp columns. An UPDATE that touches
+      -- only these columns yields an empty v_changed_fields and is skipped below.
+      IF v_key NOT IN ('updated_at', 'created_at',
+                       'commercial_markup',
+                       'total_commercial_material_cost',
+                       'total_commercial_work_cost')
          AND (v_old_val IS DISTINCT FROM v_new_val) THEN
         v_changed_fields := array_append(v_changed_fields, v_key);
       END IF;

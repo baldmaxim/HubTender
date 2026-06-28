@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Table, Tag, Button, Modal } from 'antd';
+import { Table, Tag, Button, Modal, Alert } from 'antd';
 import { HistoryOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useAuditHistory } from '../hooks/useAuditHistory';
@@ -27,7 +27,7 @@ interface AuditHistoryTableProps {
  * Таблица истории изменений BOQ items
  */
 const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ positionId, filters, readOnly = false, plain = false }) => {
-  const { auditRecords, loading } = useAuditHistory(positionId, filters);
+  const { auditRecords, loading, error } = useAuditHistory(positionId, filters);
   const { rollback, rolling } = useAuditRollback();
 
   const handleRollback = (record: BoqItemAudit) => {
@@ -107,17 +107,28 @@ const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ positionId, filte
   );
 
   return (
-    <Table
-      columns={columns}
-      dataSource={auditRecords}
-      loading={loading}
-      rowKey="id"
-      pagination={{
-        pageSize: 20,
-        showTotal: (total) => `Всего: ${total}`,
-      }}
-      scroll={plain ? undefined : { x: 1200 }}
-    />
+    <>
+      {error && !loading && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="Не удалось загрузить историю изменений"
+          description={error.message}
+        />
+      )}
+      <Table
+        columns={columns}
+        dataSource={auditRecords}
+        loading={loading}
+        rowKey="id"
+        pagination={{
+          pageSize: 20,
+          showTotal: (total) => `Всего: ${total}`,
+        }}
+        scroll={plain ? undefined : { x: 1200 }}
+      />
+    </>
   );
 };
 

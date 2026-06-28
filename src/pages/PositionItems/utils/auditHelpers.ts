@@ -7,6 +7,32 @@ import dayjs from 'dayjs';
  * @param record - Запись из audit log
  * @returns Массив описаний изменений полей
  */
+/**
+ * Поля, которые меняет только пересчёт коммерческой стоимости (смена % наценок),
+ * плюс служебные таймстемпы. Изменение исключительно этих полей — не фактическая
+ * правка строки и не должно показываться в истории. Зеркалит исключения в
+ * SQL-фильтре `ListByPosition` и в триггере `log_boq_items_changes()`.
+ */
+export const COMMERCIAL_RECALC_FIELDS: readonly string[] = [
+  'commercial_markup',
+  'total_commercial_material_cost',
+  'total_commercial_work_cost',
+  'updated_at',
+  'created_at',
+];
+
+/**
+ * true, если запись — это пересчёт коммерческой стоимости, а не фактическая
+ * правка: UPDATE, у которого все изменённые поля входят в
+ * COMMERCIAL_RECALC_FIELDS (включая пустой changed_fields). INSERT/DELETE —
+ * всегда фактические операции. Защита-дубль к серверному фильтру.
+ */
+export function isCommercialRecalcRecord(record: BoqItemAudit): boolean {
+  if (record.operation_type !== 'UPDATE') return false;
+  const fields = record.changed_fields ?? [];
+  return fields.every((f) => COMMERCIAL_RECALC_FIELDS.includes(f));
+}
+
 export function getFieldDiffs(record: BoqItemAudit): AuditDiffField[] {
   // Для INSERT и DELETE не показываем diff
   if (record.operation_type === 'INSERT' || record.operation_type === 'DELETE') {
@@ -20,7 +46,10 @@ export function getFieldDiffs(record: BoqItemAudit): AuditDiffField[] {
   }
 
   return changed_fields
-    .filter((field) => !['updated_at', 'created_at'].includes(field))
+    // Прячем и таймстемпы, и коммерческий пересчёт: на легаси-строках со
+    // смешанным changed_fields ({quantity, commercial_markup, ...}) сама строка
+    // показывается (есть реальная правка), но коммерческие поля в дифф не идут.
+    .filter((field) => !COMMERCIAL_RECALC_FIELDS.includes(field))
     .map((field) => ({
       field,
       oldValue: (old_data as unknown as Record<string, unknown>)[field],

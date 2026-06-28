@@ -409,6 +409,12 @@ CREATE INDEX IF NOT EXISTS idx_tenders_created_by ON public.tenders(created_by);
 CREATE INDEX IF NOT EXISTS idx_tenders_markup_tactic_id ON public.tenders(markup_tactic_id);
 CREATE INDEX IF NOT EXISTS idx_user_position_filters_tender_id ON public.user_position_filters(tender_id);
 CREATE INDEX IF NOT EXISTS idx_boq_items_audit_item_date ON public.boq_items_audit(boq_item_id, changed_at DESC);
+-- Audit-history read path (ListByPosition) filters by the audited row's
+-- client_position_id pulled from the JSONB snapshot. Without these expression
+-- indexes the OR'd predicate forces a full seqscan of boq_items_audit.
+-- (Present in the original Supabase schema; carried over to Yandex here.)
+CREATE INDEX IF NOT EXISTS idx_audit_new_position ON public.boq_items_audit ((new_data ->> 'client_position_id'));
+CREATE INDEX IF NOT EXISTS idx_audit_old_position ON public.boq_items_audit ((old_data ->> 'client_position_id'));
 
 -- Remaining FK-gap indexes (PROD migration 10).
 CREATE INDEX IF NOT EXISTS idx_boq_items_import_session_id ON public.boq_items(import_session_id);

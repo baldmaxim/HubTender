@@ -3,6 +3,7 @@ import { listBoqAuditByPosition } from '../../../lib/api/boq';
 import { listWorkNames, listMaterialNames } from '../../../lib/api/nomenclatures';
 import { listAllDetailCostCategoriesByOrder } from '../../../lib/api/costs';
 import type { BoqItemAudit, AuditFilters } from '../../../types/audit';
+import { isCommercialRecalcRecord } from '../utils/auditHelpers';
 
 interface UseAuditHistoryReturn {
   auditRecords: BoqItemAudit[];
@@ -47,10 +48,13 @@ export function useAuditHistory(
         operationType: filters.operationType,
       });
 
-      let transformedData: BoqItemAudit[] = (data || []).map((record) => ({
-        ...(record as unknown as BoqItemAudit),
-        user: Array.isArray(record.user) ? record.user[0] : record.user,
-      }));
+      let transformedData: BoqItemAudit[] = (data || [])
+        .map((record) => ({
+          ...(record as unknown as BoqItemAudit),
+          user: Array.isArray(record.user) ? record.user[0] : record.user,
+        }))
+        // Защита-дубль к серверному фильтру: прячем коммерческий пересчёт.
+        .filter((record) => !isCommercialRecalcRecord(record));
 
       // Шаг 3: Загрузить названия работ, материалов и затрат
       const workNameIds = new Set<string>();
@@ -82,29 +86,28 @@ export function useAuditHistory(
 
       // Имена/категории — Go-helpers отдают полные списки, фильтруем по ids
       // на клиенте (выборки маленькие, audit-модал открывается редко).
+      // Три запроса гоним параллельно (Promise.all): последовательные await
+      // утраивали задержку, и таймаут любого из них давал пустую таблицу.
+      const [allWorks, allMaterials, allCategories] = await Promise.all([
+        workNameIds.size > 0 ? listWorkNames() : Promise.resolve([]),
+        materialNameIds.size > 0 ? listMaterialNames() : Promise.resolve([]),
+        costCategoryIds.size > 0 ? listAllDetailCostCategoriesByOrder() : Promise.resolve([]),
+      ]);
+
       const workNamesMap = new Map<string, string>();
-      if (workNameIds.size > 0) {
-        const allWorks = await listWorkNames();
-        allWorks.forEach((wn) => {
-          if (workNameIds.has(wn.id)) workNamesMap.set(wn.id, wn.name);
-        });
-      }
+      allWorks.forEach((wn) => {
+        if (workNameIds.has(wn.id)) workNamesMap.set(wn.id, wn.name);
+      });
 
       const materialNamesMap = new Map<string, string>();
-      if (materialNameIds.size > 0) {
-        const allMaterials = await listMaterialNames();
-        allMaterials.forEach((mn) => {
-          if (materialNameIds.has(mn.id)) materialNamesMap.set(mn.id, mn.name);
-        });
-      }
+      allMaterials.forEach((mn) => {
+        if (materialNameIds.has(mn.id)) materialNamesMap.set(mn.id, mn.name);
+      });
 
       const costCategoriesMap = new Map<string, string>();
-      if (costCategoryIds.size > 0) {
-        const allCategories = await listAllDetailCostCategoriesByOrder();
-        allCategories.forEach((cc) => {
-          if (costCategoryIds.has(cc.id)) costCategoriesMap.set(cc.id, cc.name);
-        });
-      }
+      allCategories.forEach((cc) => {
+        if (costCategoryIds.has(cc.id)) costCategoriesMap.set(cc.id, cc.name);
+      });
 
       // Добавить названия к каждой записи
       transformedData = transformedData.map((record) => {

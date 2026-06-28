@@ -137,6 +137,19 @@ func (r *BoqAuditRollbackRepo) ListByPosition(ctx context.Context, f BoqAuditLis
 		  AND ($3::timestamptz IS NULL OR bia.changed_at <= $3::timestamptz)
 		  AND ($4::uuid        IS NULL OR bia.changed_by      = $4::uuid)
 		  AND ($5::text        IS NULL OR bia.operation_type  = $5)
+		  -- Hide commercial-cost recalculation noise: an UPDATE whose changed
+		  -- fields are entirely commercial columns (or timestamps, or empty) is a
+		  -- markup-driven recompute, not a user edit. INSERT/DELETE always kept.
+		  -- Historical rows already in the table are filtered here; new ones are
+		  -- no longer written (see log_boq_items_changes()).
+		  AND (
+		    bia.operation_type <> 'UPDATE'
+		    OR NOT (COALESCE(bia.changed_fields, '{}') <@ ARRAY[
+		        'commercial_markup',
+		        'total_commercial_material_cost',
+		        'total_commercial_work_cost',
+		        'updated_at', 'created_at']::text[])
+		  )
 		ORDER BY bia.changed_at DESC
 	`, f.PositionID, f.DateFrom, f.DateTo, f.UserID, f.OperationType)
 	if err != nil {
