@@ -29,6 +29,8 @@ const ConstructionCostNew: React.FC = () => {
   const readOnly = isMobile || isLandscapePhone;
   const [searchText, setSearchText] = useState('');
   const [viewMode, setViewMode] = useState<'detailed' | 'summary' | 'simplified'>('detailed');
+  // На телефоне по умолчанию «Упрощённое», пока пользователь сам не переключит вид.
+  const [viewModeTouched, setViewModeTouched] = useState(false);
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
   const [modalCategory, setModalCategory] = useState<
     { id: string; detailName: string; categoryName: string } | null
@@ -51,7 +53,6 @@ const ConstructionCostNew: React.FC = () => {
     getVersionsForTitle,
     handleTenderTitleChange,
     handleVersionChange,
-    fetchConstructionCosts,
     handleVolumeChange,
     handleNotesChange,
   } = useCostData();
@@ -59,8 +60,8 @@ const ConstructionCostNew: React.FC = () => {
   // Проверка роли для фильтрации архивных тендеров в карточках
   const shouldFilterArchived = user?.role_code === 'engineer' || user?.role_code === 'moderator';
 
-  // На телефоне в портрете принудительно «упрощённое» представление (узкий экран).
-  const effectiveViewMode = isPhone ? 'simplified' : viewMode;
+  // На телефоне открываем в «упрощённом» виде, но даём переключить (см. viewModeTouched).
+  const effectiveViewMode = isPhone && !viewModeTouched ? 'simplified' : viewMode;
 
   // Обработчик экспорта
   const handleExport = () => {
@@ -140,7 +141,7 @@ const ConstructionCostNew: React.FC = () => {
   );
 
   return (
-    <div style={{ margin: '-16px', padding: isPhone ? 8 : 24, height: isPhoneDevice ? 'auto' : 'calc(100vh - 64px)' }}>
+    <div style={{ margin: isPhone ? '-16px 0' : '-16px', padding: isPhone ? 8 : 24, height: isPhoneDevice ? 'auto' : 'calc(100vh - 64px)' }}>
       <div style={{ marginBottom: 16 }}>
         <Button
           type="primary"
@@ -165,7 +166,7 @@ const ConstructionCostNew: React.FC = () => {
       )}
 
       <div style={{ marginBottom: 8, display: 'flex', alignItems: isPhone ? 'stretch' : 'center', gap: isPhone ? 8 : 16, flexWrap: 'wrap', flexDirection: isPhone ? 'column' : 'row' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '50%' : 'auto' }}>
           <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>Тендер:</Text>
           <Select
             style={{ width: isPhone ? undefined : 300, flex: isPhone ? 1 : undefined, minWidth: 0 }}
@@ -182,7 +183,7 @@ const ConstructionCostNew: React.FC = () => {
           />
         </div>
         {selectedTenderTitle && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '50%' : 'auto' }}>
             <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>Версия:</Text>
             <Select
               style={{ width: isPhone ? undefined : 150, flex: isPhone ? 1 : undefined, minWidth: 0 }}
@@ -195,20 +196,19 @@ const ConstructionCostNew: React.FC = () => {
         )}
       </div>
 
-      <Card bordered={false} bodyStyle={{ padding: isPhone ? 8 : 24 }} style={{ height: isPhoneDevice ? 'auto' : 'calc(100% - 140px)' }}>
+      <Card bordered={false} bodyStyle={{ padding: isPhone ? '8px 0' : 24 }} style={{ height: isPhoneDevice ? 'auto' : 'calc(100% - 140px)' }}>
         <CostFilters
           costType={costType}
           viewMode={effectiveViewMode}
           searchText={searchText}
           onCostTypeChange={setCostType}
-          onViewModeChange={setViewMode}
+          onViewModeChange={(v) => { setViewMode(v); setViewModeTouched(true); }}
           onSearchChange={setSearchText}
           onExpandAll={() => {
             const allKeys = filteredData.filter(row => row.is_category).map(row => row.key);
             setExpandedRowKeys(allKeys);
           }}
           onCollapseAll={() => setExpandedRowKeys([])}
-          onRefresh={fetchConstructionCosts}
           onExport={handleExport}
           disableExport={!selectedTenderId || filteredData.length === 0}
         />

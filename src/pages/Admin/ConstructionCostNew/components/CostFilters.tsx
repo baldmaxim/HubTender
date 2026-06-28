@@ -1,6 +1,6 @@
 import React from 'react';
 import { Space, Typography, Segmented, Button, Input } from 'antd';
-import { SearchOutlined, ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
+import { SearchOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../../../hooks/useIsMobile';
 
 const { Text } = Typography;
@@ -14,7 +14,6 @@ interface CostFiltersProps {
   onSearchChange: (value: string) => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
-  onRefresh: () => void;
   onExport: () => void;
   disableExport: boolean;
 }
@@ -28,11 +27,28 @@ const CostFilters: React.FC<CostFiltersProps> = ({
   onSearchChange,
   onExpandAll,
   onCollapseAll,
-  onRefresh,
   onExport,
   disableExport,
 }) => {
   const { isPhone, isPhoneDevice } = useIsMobile();
+
+  const viewModeOptions = [
+    { label: 'Детальное', value: 'detailed' },
+    { label: 'Итоговое', value: 'summary' },
+    { label: 'Упрощенное', value: 'simplified' },
+  ];
+
+  const expandButtons = (
+    <Space>
+      <Button size="small" onClick={onExpandAll}>
+        Развернуть все
+      </Button>
+      <Button size="small" onClick={onCollapseAll}>
+        Свернуть все
+      </Button>
+    </Space>
+  );
+
   return (
     <div style={{ marginBottom: 16 }}>
       <div
@@ -58,31 +74,30 @@ const CostFilters: React.FC<CostFiltersProps> = ({
               onChange={(value) => onCostTypeChange(value as 'base' | 'commercial')}
             />
           </Space>
-          <Space size="large" wrap>
-            {/* Представление скрыто на телефоне — там принудительно «Упрощённое» */}
-            {!isPhone && (
+          {isPhone ? (
+            <>
+              {/* Представление — отдельной строкой под «Тип затрат» (блочный сегмент) */}
+              <Segmented
+                block
+                options={viewModeOptions}
+                value={viewMode}
+                onChange={(value) => onViewModeChange(value as 'detailed' | 'summary' | 'simplified')}
+              />
+              {expandButtons}
+            </>
+          ) : (
+            <Space size="large" wrap>
               <Space>
                 <Text>Представление:</Text>
                 <Segmented
-                  options={[
-                    { label: 'Детальное', value: 'detailed' },
-                    { label: 'Итоговое', value: 'summary' },
-                    { label: 'Упрощенное', value: 'simplified' },
-                  ]}
+                  options={viewModeOptions}
                   value={viewMode}
                   onChange={(value) => onViewModeChange(value as 'detailed' | 'summary' | 'simplified')}
                 />
               </Space>
-            )}
-            <Space>
-              <Button size="small" onClick={onExpandAll}>
-                Развернуть все
-              </Button>
-              <Button size="small" onClick={onCollapseAll}>
-                Свернуть все
-              </Button>
+              {expandButtons}
             </Space>
-          </Space>
+          )}
         </Space>
 
         {/* Правая часть */}
@@ -92,21 +107,16 @@ const CostFilters: React.FC<CostFiltersProps> = ({
           align={isPhone ? 'start' : 'end'}
           style={isPhone ? { width: '100%' } : undefined}
         >
-          <Space>
-            {!isPhoneDevice && (
-              <Button
-                type="primary"
-                icon={<DownloadOutlined />}
-                onClick={onExport}
-                disabled={disableExport}
-              >
-                Экспорт
-              </Button>
-            )}
-            <Button icon={<ReloadOutlined />} onClick={onRefresh}>
-              Обновить
+          {!isPhoneDevice && (
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              onClick={onExport}
+              disabled={disableExport}
+            >
+              Экспорт
             </Button>
-          </Space>
+          )}
           <Input
             placeholder="Поиск..."
             prefix={<SearchOutlined />}
