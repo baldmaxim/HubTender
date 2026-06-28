@@ -7,6 +7,8 @@ interface FitOneLineProps {
   baseFontSize?: number;
   /** Минимально допустимый размер шрифта в px. */
   minFontSize?: number;
+  /** Выравнивание содержимого и точка масштабирования. */
+  align?: 'left' | 'right' | 'center';
   style?: React.CSSProperties;
   children: React.ReactNode;
 }
@@ -20,6 +22,7 @@ export const FitOneLine: React.FC<FitOneLineProps> = ({
   enabled = true,
   baseFontSize = 14,
   minFontSize = 9,
+  align = 'right',
   style,
   children,
 }) => {
@@ -75,11 +78,11 @@ export const FitOneLine: React.FC<FitOneLineProps> = ({
   }, [enabled, baseFontSize, minFontSize, children]);
 
   if (!enabled) {
-    return <div style={{ fontSize: baseFontSize, ...style }}>{children}</div>;
+    return <div style={{ fontSize: baseFontSize, textAlign: align, ...style }}>{children}</div>;
   }
 
   return (
-    <div ref={outerRef} style={{ overflow: 'hidden', ...style }}>
+    <div ref={outerRef} style={{ overflow: 'hidden', textAlign: align, ...style }}>
       <div
         ref={innerRef}
         style={{
@@ -87,7 +90,7 @@ export const FitOneLine: React.FC<FitOneLineProps> = ({
           whiteSpace: 'nowrap',
           fontSize,
           transform: scale < 1 ? `scale(${scale})` : undefined,
-          transformOrigin: 'right center',
+          transformOrigin: `${align} center`,
         }}
       >
         {children}

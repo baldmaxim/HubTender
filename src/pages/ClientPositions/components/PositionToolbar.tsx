@@ -138,7 +138,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
             {/* Средний блок: Информация о тендере */}
             <Col xs={24} lg={15}>
               {selectedTender ? (
-                <div style={{ textAlign: 'right' }}>
+                <div style={{ textAlign: isPhone ? 'center' : 'right' }}>
                   {/* Строка 1: Название и заказчик */}
                   <div style={{ marginBottom: 4, fontSize: 14 }}>
                     <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Название: </Text>
@@ -149,7 +149,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                   </div>
 
                   {/* Строка 2: Площади */}
-                  <FitOneLine enabled={isPhone} baseFontSize={isPhone ? 11 : 14} minFontSize={5} style={{ marginBottom: 4 }}>
+                  <FitOneLine enabled={isPhone} align={isPhone ? 'center' : 'right'} baseFontSize={isPhone ? 11 : 14} minFontSize={5} style={{ marginBottom: 4 }}>
                     <span style={{ whiteSpace: 'nowrap' }}>
                       <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Площадь по СП: </Text>
                       <Text strong style={{ color: '#10b981' }}>{selectedTender.area_sp?.toLocaleString('ru-RU') || '0'} м²</Text>
@@ -162,7 +162,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                   </FitOneLine>
 
                   {/* Строка 3: Курсы валют */}
-                  <FitOneLine enabled={isPhone} baseFontSize={isPhone ? 10 : 14} minFontSize={5} style={{ marginBottom: 4 }}>
+                  <FitOneLine enabled={isPhone} align={isPhone ? 'center' : 'right'} baseFontSize={isPhone ? 10 : 14} minFontSize={5} style={{ marginBottom: 4 }}>
                     <Text strong style={{ color: '#10b981' }}>Курс USD: </Text>
                     <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>{selectedTender.usd_rate?.toFixed(2) || '0.00'} Р/$</Text>
                     <Divider type="vertical" style={{ margin: '0 4px', borderColor: currentTheme === 'dark' ? '#444' : '#d9d9d9' }} />
