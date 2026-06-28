@@ -3414,6 +3414,10 @@ const MarkupConstructor: React.FC = () => {
                           filterOption={(input, option) =>
                             (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                           }
+                          optionRender={(option) => {
+                            const tender = tenders.find((t) => t.id === option.value);
+                            return `${option.label} (v${tender?.version || 1})`;
+                          }}
                           options={tenders.map((tender) => ({
                             value: tender.id,
                             label: `${tender.tender_number} - ${tender.title}`,
