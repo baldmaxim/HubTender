@@ -38,10 +38,10 @@ type RawBoqItem = {
   parent_work_item_id: string | null;
 };
 
-async function loadAllPositions(tenderId: string): Promise<ClientPosition[]> {
+async function loadAllPositions(tenderId: string, fresh?: boolean): Promise<ClientPosition[]> {
   // Go: /tenders/:id/positions/with-costs (ORDER BY position_number,id);
   // пагинация больше не нужна — сервер отдаёт всё.
-  const rows = await fetchPositionsWithCosts(tenderId);
+  const rows = await fetchPositionsWithCosts(tenderId, { fresh });
   return rows as unknown as ClientPosition[];
 }
 
@@ -219,7 +219,9 @@ export const useClientPositions = () => {
       dropPositionsCache(selectedTender.id);
       invalidateApiCache(`positions:${selectedTender.id}`);
       void fetchTenders();
-      void fetchClientPositions(selectedTender.id);
+      // fresh: минуем серверный кэш positions/with-costs, чтобы примечание ГП
+      // обновлялось онлайн так же, как сумма/строки (см. план).
+      void fetchClientPositions(selectedTender.id, { fresh: true });
     },
   );
 
@@ -309,7 +311,7 @@ export const useClientPositions = () => {
   );
 
   const fetchClientPositions = useCallback(
-    async (tenderId: string) => {
+    async (tenderId: string, opts?: { fresh?: boolean }) => {
       const recentTs = recentlyFetchedRef.current.get(tenderId);
       const fetchedRecently = recentTs !== undefined && Date.now() - recentTs < RECENT_FETCH_MS;
 
@@ -330,7 +332,7 @@ export const useClientPositions = () => {
 
       try {
         const [positions, boqItems, tender] = await Promise.all([
-          loadAllPositions(tenderId),
+          loadAllPositions(tenderId, opts?.fresh),
           loadAllBoqItems(tenderId),
           loadTenderById(tenderId),
         ]);

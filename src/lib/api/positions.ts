@@ -41,10 +41,18 @@ export interface PositionWithCostsRow {
  * Go path: single request, ~30s server cache + singleflight.
  * Supabase path: paginated RPC calls in 1000-row chunks.
  */
-export async function fetchPositionsWithCosts(tenderId: string): Promise<PositionWithCostsRow[]> {
+export async function fetchPositionsWithCosts(
+  tenderId: string,
+  opts?: { fresh?: boolean },
+): Promise<PositionWithCostsRow[]> {
   const res = await apiFetch<{ data: PositionWithCostsRow[] }>(
     `/api/v1/tenders/${encodeURIComponent(tenderId)}/positions/with-costs`,
-    { cacheKey: `positions:${tenderId}` }
+    {
+      cacheKey: `positions:${tenderId}`,
+      // На realtime-рефетче минуем серверный 30-сек кэш, чтобы примечание ГП
+      // было таким же свежим, как сумма/строки (boq-items-flat не кэшируется).
+      ...(opts?.fresh ? { headers: { 'Cache-Control': 'no-cache' } } : {}),
+    }
   );
   return res.data ?? [];
 }

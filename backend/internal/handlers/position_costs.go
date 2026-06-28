@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/su10/hubtender/backend/internal/repository"
@@ -12,6 +13,7 @@ import (
 // positionCostsServicer is the interface PositionCostsHandler depends on.
 type positionCostsServicer interface {
 	GetPositionsWithCosts(ctx context.Context, tenderID string) ([]repository.PositionWithCostsRow, error)
+	InvalidateCache(tenderID string)
 }
 
 // PositionCostsHandler serves GET /api/v1/tenders/{id}/positions/with-costs.
@@ -32,6 +34,14 @@ func (h *PositionCostsHandler) GetPositionsWithCosts(w http.ResponseWriter, r *h
 	if tenderID == "" {
 		apierr.BadRequest("missing tender id").Render(w)
 		return
+	}
+
+	// Cache-Control: no-cache (sent by the frontend on realtime-triggered
+	// refetches) forces a cache miss so the note/manual_note is as fresh as the
+	// uncached boq-items-flat path. Without this, the 30s server cache can serve
+	// a stale note to an observer right after another user edited it.
+	if strings.Contains(r.Header.Get("Cache-Control"), "no-cache") {
+		h.svc.InvalidateCache(tenderID)
 	}
 
 	rows, err := h.svc.GetPositionsWithCosts(r.Context(), tenderID)
