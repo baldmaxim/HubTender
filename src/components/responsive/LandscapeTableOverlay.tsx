@@ -61,6 +61,8 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
   if (fit === 'zoom') {
     const PAD = 4;
     const zoom = Math.min((availW - PAD * 2) / width, 1);
+    // Фон закреплённой шапки (непрозрачный, отдельно от фона тела).
+    const headBg = theme === 'dark' ? '#1d1d1d' : '#fafafa';
     return (
       <div
         style={{
@@ -76,6 +78,14 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
       >
         <style>{`
           .lto-fit-zoom .ant-table.ant-table-small .ant-table-cell { padding: 2px 4px; }
+          /* Скролл-контейнер — сам оверлей: снимаем overflow у обёрток AntD,
+             иначе sticky-шапка прилипнет к нескроллящейся обёртке. */
+          .lto-fit-zoom .ant-table,
+          .lto-fit-zoom .ant-table-container,
+          .lto-fit-zoom .ant-table-content { overflow: visible; }
+          /* Закрепляем шапку (обе строки сгруппированных заголовков) при скролле. */
+          .lto-fit-zoom .ant-table-thead { position: sticky; top: 0; z-index: 11; }
+          .lto-fit-zoom .ant-table-thead > tr > th { background: ${headBg}; }
         `}</style>
         <div className="lto-fit-zoom" style={{ width, zoom: String(zoom) }}>
           {children}
