@@ -188,6 +188,10 @@ export async function updatePositionsNote(
       manual_note: manualNote,
       tender_id: tenderId ?? undefined,
     }),
+    // Без таймаута: на крупных тендерах под нагрузкой запись может ждать
+    // коннект/локи дольше 10 c (дефолт DEFAULT_FETCH_TIMEOUT_MS), иначе
+    // AbortSignal обрывает запрос → ложная ошибка вставки примечания.
+    timeoutMs: 0,
   });
 }
 
@@ -199,6 +203,7 @@ export async function clearPositionsBoq(
   await apiFetch<undefined>('/api/v1/positions/clear-boq', {
     method: 'POST',
     body: JSON.stringify({ position_ids: positionIds, tender_id: tenderId ?? undefined }),
+    timeoutMs: 0, // bulk-tx: на крупных тендерах не укладывается в дефолтные 10 c
   });
 }
 
@@ -215,6 +220,7 @@ export async function shiftPositionsLevel(
       delta,
       tender_id: tenderId ?? undefined,
     }),
+    timeoutMs: 0, // bulk-write: не обрывать по 10-сек таймауту на крупных тендерах
   });
 }
 

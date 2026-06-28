@@ -20,6 +20,7 @@ export const usePositionActions = (
   setLoading: (loading: boolean) => void,
   fetchClientPositions: (tenderId: string) => Promise<void>,
   applyLocalBoqClear: (positionIds: string[]) => void,
+  applyLocalNoteUpdate: (positionIds: string[], note: string) => void,
   applyLocalPositionRemove: (positionIds: string[]) => void,
   currentTheme: string,
   readOnly?: boolean,
@@ -194,18 +195,18 @@ export const usePositionActions = (
 
     if (!copiedNoteValue || !copiedNotePositionId) return;
 
+    const note = copiedNoteValue;
     setLoading(true);
     try {
-      await updatePositionsNote([targetPositionId], copiedNoteValue, selectedTenderId);
+      await updatePositionsNote([targetPositionId], note, selectedTenderId);
 
       // Сбросить состояние
       setCopiedNoteValue(null);
       setCopiedNotePositionId(null);
 
-      // Обновить таблицу
-      if (selectedTenderId) {
-        await fetchClientPositions(selectedTenderId);
-      }
+      // Оптимистично проставить note локально, без тяжёлого рефетча тендера
+      // (который на крупных тендерах рвётся по таймауту → ложная ошибка).
+      applyLocalNoteUpdate([targetPositionId], note);
 
       message.success('Примечание ГП успешно вставлено');
     } catch (error) {
@@ -223,17 +224,15 @@ export const usePositionActions = (
 
     setIsBulkPasting(true);
     const results = { success: 0, failed: 0 };
+    const ids = Array.from(selectedTargetIds);
+    const note = copiedNoteValue;
 
     try {
       // Go: один атомарный батч-update (= ANY(uuid[])) вместо цикла.
-      await updatePositionsNote(
-        Array.from(selectedTargetIds),
-        copiedNoteValue,
-        selectedTenderId,
-      );
-      results.success = selectedTargetIds.size;
+      await updatePositionsNote(ids, note, selectedTenderId);
+      results.success = ids.length;
 
-      const total = selectedTargetIds.size;
+      const total = ids.length;
       if (results.failed === 0) {
         message.success(
           `Успешно вставлено примечание в ${total} ${pluralize(total, 'позицию', 'позиции', 'позиций')}`
@@ -248,9 +247,11 @@ export const usePositionActions = (
       setCopiedNoteValue(null);
       setCopiedNotePositionId(null);
 
-      if (selectedTenderId) {
-        await fetchClientPositions(selectedTenderId);
-      }
+      // Оптимистично проставить note локально вместо полного рефетча тендера:
+      // после записи серверный кэш positions:with_costs инвалидируется, и
+      // тяжёлый fetchClientPositions на крупных тендерах рвётся по 10-сек
+      // таймауту → пользователь видел ошибку и неизменное примечание.
+      applyLocalNoteUpdate(ids, note);
     } catch (error) {
       console.error('Ошибка массовой вставки примечания:', error);
       message.error('Ошибка массовой вставки примечания: ' + getErrorMessage(error));

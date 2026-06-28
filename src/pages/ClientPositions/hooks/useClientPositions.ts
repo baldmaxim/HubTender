@@ -262,6 +262,25 @@ export const useClientPositions = () => {
     [positionCounts, clientPositions, markLocalMutation],
   );
 
+  // Оптимистичное проставление «примечания ГП» (manual_note) у выбранных
+  // позиций без полного рефетча тендера: запись note не влияет на
+  // works/materials/total, поэтому достаточно подменить поле в state.
+  // markLocalMutation() гасит self-echo WS (NOTIFY от UPDATE), иначе тяжёлый
+  // fetchClientPositions снова дёрнется и упрётся в 10-сек таймаут.
+  const applyLocalNoteUpdate = useCallback(
+    (positionIds: string[], note: string) => {
+      const ids = new Set(positionIds);
+      markLocalMutation();
+
+      const nextPositions = clientPositions.map((p) =>
+        ids.has(p.id) ? { ...p, manual_note: note } : p,
+      );
+      setRowCacheRows(nextPositions);
+      setClientPositions(nextPositions);
+    },
+    [clientPositions, markLocalMutation],
+  );
+
   // Оптимистичное удаление строк целиком (ДОП / массовое удаление строк
   // заказчика). На бэке это два DELETE без перенумерации сиблингов, поэтому
   // локальное удаление строки полностью корректно.
@@ -343,6 +362,7 @@ export const useClientPositions = () => {
     leafPositionIndices,
     fetchClientPositions,
     applyLocalBoqClear,
+    applyLocalNoteUpdate,
     applyLocalPositionRemove,
   };
 };

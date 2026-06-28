@@ -68,6 +68,7 @@ const ClientPositions: React.FC = () => {
     leafPositionIndices,
     fetchClientPositions,
     applyLocalBoqClear,
+    applyLocalNoteUpdate,
     applyLocalPositionRemove,
   } = useClientPositions();
 
@@ -108,7 +109,7 @@ const ClientPositions: React.FC = () => {
     clearAllModes,
     undoTargetSelection,
     undoDeleteSelection,
-  } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, applyLocalBoqClear, applyLocalPositionRemove, currentTheme, isReadOnlyByDeadline);
+  } = usePositionActions(clientPositions, setClientPositions, setLoading, fetchClientPositions, applyLocalBoqClear, applyLocalNoteUpdate, applyLocalPositionRemove, currentTheme, isReadOnlyByDeadline);
 
   const {
     isPositionDeleteMode,
