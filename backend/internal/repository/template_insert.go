@@ -109,6 +109,10 @@ func (r *BoqRepo) InsertTemplateItems(
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	if err := skipBoqAuditTrigger(ctx, tx); err != nil {
+		return nil, fmt.Errorf("boqRepo.InsertTemplateItems: %w", err)
+	}
+
 	// 1. Template (default detail_cost_category_id).
 	var tmplDCC string
 	err = tx.QueryRow(ctx,

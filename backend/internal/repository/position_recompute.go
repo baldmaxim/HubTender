@@ -53,6 +53,10 @@ func (r *BoqRepo) RecomputeLinkedMaterialsForWork(
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	if err := skipBoqAuditTrigger(ctx, tx); err != nil {
+		return 0, fmt.Errorf("boqRepo.RecomputeLinkedMaterialsForWork: %w", err)
+	}
+
 	var workQty *float64
 	var workTenderID string
 	if err := tx.QueryRow(ctx,

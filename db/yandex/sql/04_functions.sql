@@ -1364,6 +1364,13 @@ DECLARE
   v_old_val jsonb;
   v_new_val jsonb;
 BEGIN
+  -- Пути Go-репозитория, которые сами пишут аудит через insertAudit, ставят
+  -- этот транзакционно-локальный флаг — тогда триггер не пишет дубль (иначе на
+  -- каждую правку выходило по две строки: одна авторская, одна «Системная»).
+  IF current_setting('app.skip_boq_audit', true) = 'on' THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
   -- Resolve acting user id via the auth.uid() compatibility shim
   -- (app.user_id / app.current_user_id GUC; NULL when unset).
   BEGIN

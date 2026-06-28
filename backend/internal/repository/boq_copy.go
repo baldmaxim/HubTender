@@ -33,6 +33,10 @@ func (r *BoqRepo) CopyPositionItems(
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	if err := skipBoqAuditTrigger(ctx, tx); err != nil {
+		return nil, fmt.Errorf("boqRepo.CopyPositionItems: %w", err)
+	}
+
 	// Validate positions + same-tender constraint inside the tx.
 	var srcTender, tgtTender string
 	if err := tx.QueryRow(ctx,

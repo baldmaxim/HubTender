@@ -184,6 +184,18 @@ func changedFields(old, new *BoqItemRow) []string {
 	return out
 }
 
+// skipBoqAuditTrigger tells the boq_items audit trigger (log_boq_items_changes)
+// to stand down for the current transaction. Methods that write their own
+// curated audit row(s) via insertAudit call this first; otherwise the trigger
+// also fires and writes a duplicate row with a NULL author (the app.user_id
+// GUC is not set on these paths). Transaction-local (set_config is_local=true).
+func skipBoqAuditTrigger(ctx context.Context, tx pgx.Tx) error {
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.skip_boq_audit', 'on', true)`); err != nil {
+		return fmt.Errorf("skipBoqAuditTrigger: %w", err)
+	}
+	return nil
+}
+
 // insertAudit writes a single row to public.boq_items_audit inside an
 // already-open transaction. Nil []byte values are sent as SQL NULL.
 func insertAudit(
@@ -226,6 +238,10 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		return nil, fmt.Errorf("boqRepo.CreateBoqItem: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if err := skipBoqAuditTrigger(ctx, tx); err != nil {
+		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
+	}
 
 	sortNum := 0
 	if in.SortNumber != nil {

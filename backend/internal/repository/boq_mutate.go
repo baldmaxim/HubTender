@@ -18,6 +18,10 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItem
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	if err := skipBoqAuditTrigger(ctx, tx); err != nil {
+		return nil, fmt.Errorf("boqRepo.UpdateBoqItem: %w", err)
+	}
+
 	// Lock and fetch current row inside the transaction.
 	lockQ := "SELECT " + boqScanCols + " FROM public.boq_items WHERE id = $1 FOR UPDATE"
 	oldItem, err := scanBoqItemRow(tx.QueryRow(ctx, lockQ, id))
@@ -147,6 +151,10 @@ func (r *BoqRepo) DeleteBoqItem(ctx context.Context, id, changedBy string) (*Boq
 		return nil, fmt.Errorf("boqRepo.DeleteBoqItem: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if err := skipBoqAuditTrigger(ctx, tx); err != nil {
+		return nil, fmt.Errorf("boqRepo.DeleteBoqItem: %w", err)
+	}
 
 	// Lock the row first so we capture a stable snapshot for the audit.
 	lockQ := "SELECT " + boqScanCols + " FROM public.boq_items WHERE id = $1 FOR UPDATE"
