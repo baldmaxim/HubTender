@@ -60,9 +60,12 @@ const ObjectComparison: React.FC = () => {
     saveNote(categoryName, detailKey, value);
   }, [saveNote]);
 
+  // В портрете телефона колонка категории = половина ширины экрана.
+  const categoryWidth = isPhone ? Math.round(window.innerWidth / 2) : 280;
+
   const columns: ColumnsType<ComparisonRow> = useMemo(() => {
     if (loadedCount === 0) {
-      return [{ title: 'Категория затрат', dataIndex: 'category', key: 'category', width: 280 }];
+      return [{ title: 'Категория затрат', dataIndex: 'category', key: 'category', width: categoryWidth }];
     }
 
     const isMulti = loadedCount > 2;
@@ -75,12 +78,13 @@ const ObjectComparison: React.FC = () => {
       key: 'category',
       // fixed-колонка ломается под transform:scale в ландшафтном оверлее
       ...(useOverlay ? {} : { fixed: 'left' as const }),
-      width: 280,
+      width: categoryWidth,
       render: (text: string, record: ComparisonRow) => (
         <Text
           strong={record.is_main_category || record.is_location}
           italic={record.is_location}
           type={record.is_location ? 'secondary' : undefined}
+          style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
         >
           {text}
         </Text>
@@ -146,10 +150,10 @@ const ObjectComparison: React.FC = () => {
     return result;
     // loadedInfos is intentionally excluded; adding it would cause excessive recomputation
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenderInfos, effectiveViewMode, handleNoteBlur, loadedCount, readOnly, useOverlay]);
+  }, [tenderInfos, effectiveViewMode, handleNoteBlur, loadedCount, readOnly, useOverlay, categoryWidth]);
 
   const scrollX = isMultiTender
-    ? 280 + loadedCount * 250
+    ? categoryWidth + loadedCount * 250
     : isDetailed ? 2930 : 1230;
 
   // Stats for 2-tender diff
@@ -199,7 +203,18 @@ const ObjectComparison: React.FC = () => {
   );
 
   return (
-    <div style={{ padding: isPhoneDevice ? 12 : 24 }}>
+    <div
+      style={{
+        paddingTop: isPhoneDevice ? 12 : 24,
+        paddingBottom: isPhoneDevice ? 12 : 24,
+        paddingLeft: isPhoneDevice ? 4 : 24,
+        paddingRight: isPhoneDevice ? 4 : 24,
+        // В ландшафте <Content> (MainLayout) даёт 16px по бокам — гасим отрицательным
+        // margin, чтобы контент дошёл до края экрана. В портрете у Content боков нет.
+        marginLeft: isLandscapePhone ? -16 : 0,
+        marginRight: isLandscapePhone ? -16 : 0,
+      }}
+    >
       {loadedTenderIds.map((id) => (
         <TenderRealtimeRefresh key={id} tenderId={id} onChange={refreshComparison} />
       ))}
@@ -306,9 +321,9 @@ const ObjectComparison: React.FC = () => {
             </div>
           </Card>
         ) : comparisonData.length > 0 ? (
-          <Card title={comparisonCardTitle}>
+          <Card title={comparisonCardTitle} styles={{ body: { padding: isPhoneDevice ? 0 : undefined } }}>
             {useOverlay ? (
-              <LandscapeTableOverlay theme={currentTheme} width={scrollX}>
+              <LandscapeTableOverlay theme={currentTheme} fit="zoom" width={scrollX}>
                 <Table
                   columns={columns}
                   dataSource={comparisonData}
