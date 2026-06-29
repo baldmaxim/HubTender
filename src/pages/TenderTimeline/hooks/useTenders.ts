@@ -180,6 +180,26 @@ function pickCanonicalTenderVersion(tenders: TenderRow[]): Map<string, TenderRow
   return canonicalByNumber;
 }
 
+// Тендер считается архивным, только если ВСЕ его версии в архиве.
+// Любая неархивная версия → тендер «в работе» (на хронологии версионности нет,
+// ключ = tender_number). Источник — таблица tenders, не tender_registry.
+function computeAllVersionsArchivedByNumber(tenders: TenderRow[]): Map<string, boolean> {
+  const byNumber = new Map<string, TenderRow[]>();
+
+  tenders.forEach((tender) => {
+    const list = byNumber.get(tender.tender_number) || [];
+    list.push(tender);
+    byNumber.set(tender.tender_number, list);
+  });
+
+  const result = new Map<string, boolean>();
+  byNumber.forEach((versions, number) => {
+    result.set(number, versions.length > 0 && versions.every((version) => Boolean(version.is_archived)));
+  });
+
+  return result;
+}
+
 function dedupeRegistryRowsByTenderNumber(rows: TenderRegistryRow[]): TenderRegistryRow[] {
   const uniqueByNumber = new Map<string, TenderRegistryRow>();
 
@@ -248,6 +268,7 @@ export function useTenders(): UseTendersResult {
       }
 
       const canonicalTendersByNumber = pickCanonicalTenderVersion((payload.tenders || []) as TenderRow[]);
+      const archivedByNumber = computeAllVersionsArchivedByNumber((payload.tenders || []) as TenderRow[]);
 
       const normalized = registryRows
         .filter((registryRow) => {
@@ -270,7 +291,9 @@ export function useTenders(): UseTendersResult {
           title: tender?.title || registryRow.title,
           tender_number: tender?.tender_number || registryRow.tender_number || '—',
           submission_deadline: tender?.submission_deadline || registryRow.submission_date || null,
-          is_archived: Boolean(registryRow.is_archived ?? tender?.is_archived),
+          is_archived: registryRow.tender_number
+            ? Boolean(archivedByNumber.get(registryRow.tender_number))
+            : false,
           overallScore,
           qualityLevel,
           groupsCount: getGroupsCount(groups),
