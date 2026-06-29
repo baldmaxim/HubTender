@@ -284,7 +284,7 @@ const Dashboard: React.FC = () => {
     );
 
     return (
-      <div className={`dashboard-container ${currentTheme}`} style={{ padding: '24px' }}>
+      <div className={`dashboard-container ${currentTheme}`} style={{ padding: isPhone ? 0 : '24px' }}>
         {/* Компактная шапка страницы */}
         <div style={{
           display: 'flex',
