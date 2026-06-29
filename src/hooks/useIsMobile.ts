@@ -14,10 +14,27 @@ function useViewport() {
   );
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const onChange = () => setVp(read());
+    // Анимация поворота шлёт пачку resize-событий. Без коалесинга каждый тик
+    // безусловно коммитил новый объект-литерал, и bailout React по Object.is не
+    // срабатывал — перерисовывались все ~75 потребителей useIsMobile. rAF
+    // схлопывает пачку в один кадр, а функциональный setVp с equality-guard
+    // возвращает prev при неизменных booleans → пустой тик не рендерит никого.
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      const next = read();
+      setVp((prev) =>
+        prev.short === next.short && prev.landscape === next.landscape ? prev : next,
+      );
+    };
+    const onChange = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(apply);
+    };
     window.addEventListener('resize', onChange);
     window.addEventListener('orientationchange', onChange);
     return () => {
+      if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', onChange);
       window.removeEventListener('orientationchange', onChange);
     };
