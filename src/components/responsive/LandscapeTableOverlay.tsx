@@ -16,7 +16,7 @@ interface LandscapeTableOverlayProps {
    *   Вертикальный скролл — нативный. Замеров нет → нет петли ResizeObserver.
    */
   fit?: 'contain' | 'width' | 'zoom';
-  /** Закреплённая полоса под скроллом (вне scale), видна всегда. Только для fit='width'. */
+  /** Закреплённая полоса под скроллом (вне scale), видна всегда. Для fit='width' и fit='zoom'. */
   footer?: React.ReactNode;
   children: React.ReactNode;
 }
@@ -71,14 +71,13 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
           zIndex: 1100,
           background,
           padding: PAD,
-          overflowX: 'hidden',
-          overflowY: 'auto',
-          WebkitOverflowScrolling: 'touch',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         <style>{`
           .lto-fit-zoom .ant-table.ant-table-small .ant-table-cell { padding: 2px 4px; }
-          /* Скролл-контейнер — сам оверлей: снимаем overflow у обёрток AntD,
+          /* Скролл-контейнер — внутренний блок ниже: снимаем overflow у обёрток AntD,
              иначе sticky-шапка прилипнет к нескроллящейся обёртке. */
           .lto-fit-zoom .ant-table,
           .lto-fit-zoom .ant-table-container,
@@ -87,9 +86,30 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
           .lto-fit-zoom .ant-table-thead { position: sticky; top: 0; z-index: 11; }
           .lto-fit-zoom .ant-table-thead > tr > th { background: ${headBg}; }
         `}</style>
-        <div className="lto-fit-zoom" style={{ width, zoom: String(zoom) }}>
-          {children}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowX: 'hidden',
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          <div className="lto-fit-zoom" style={{ width, zoom: String(zoom) }}>
+            {children}
+          </div>
         </div>
+        {footer && (
+          <div
+            style={{
+              flex: '0 0 auto',
+              borderTop: `1px solid ${theme === 'dark' ? '#303030' : '#f0f0f0'}`,
+              background,
+            }}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     );
   }

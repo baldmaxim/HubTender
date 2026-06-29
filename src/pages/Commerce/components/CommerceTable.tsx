@@ -11,6 +11,8 @@ import { computeCommerceTotals } from '../utils/computeCommerceTotals';
 
 const { Text } = Typography;
 const TABLE_SCROLL_X = 1840;
+/** Ширина для ландшафтного fit-оверлея: TABLE_SCROLL_X минус скрытая в fit колонка «Примечание» (200). */
+export const COMMERCE_TABLE_FIT_WIDTH = 1640;
 
 function getTableScrollY(): number {
   if (typeof window === 'undefined') {

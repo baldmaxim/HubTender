@@ -7,7 +7,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePositionTabs } from '../../contexts/PositionTabsContext';
 import { useCommerceData, useCommerceActions } from './hooks';
-import { TenderSelector, CommerceTable, CommerceCards, CommerceHeader } from './components';
+import { TenderSelector, CommerceTable, CommerceCards, CommerceHeader, COMMERCE_TABLE_FIT_WIDTH } from './components';
 import CommerceTotalsBar from './components/CommerceTotalsBar';
 import { exportCommerceToExcel } from './utils/exportToExcel';
 import { computeCommerceTotals } from './utils/computeCommerceTotals';
@@ -205,7 +205,8 @@ export default function Commerce() {
           ) : isLandscapePhone ? (
             <LandscapeTableOverlay
               theme={currentTheme}
-              fit="width"
+              fit="zoom"
+              width={COMMERCE_TABLE_FIT_WIDTH}
               footer={
                 <CommerceTotalsBar
                   totals={computeCommerceTotals(positions, insuranceTotal, referenceTotal)}

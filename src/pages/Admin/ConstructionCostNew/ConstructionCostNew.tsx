@@ -8,6 +8,7 @@ import { Button, Typography, Select, Card } from 'antd';
 import { useCostData } from './hooks/useCostData';
 import CostFilters from './components/CostFilters';
 import CostTable from './components/CostTable';
+import { COST_TABLE_FIT_WIDTH } from './components/costTableWidths';
 import CategoryPositionsModal from './components/CategoryPositionsModal';
 import TenderSelection from './components/TenderSelection';
 import CostTotalsBar from './components/CostTotalsBar';
@@ -216,7 +217,8 @@ const ConstructionCostNew: React.FC = () => {
         {isLandscapePhone ? (
           <LandscapeTableOverlay
             theme={currentTheme}
-            fit="width"
+            fit="zoom"
+            width={COST_TABLE_FIT_WIDTH[effectiveViewMode]}
             footer={
               <CostTotalsBar
                 totals={computeCostTotals(filteredData)}
