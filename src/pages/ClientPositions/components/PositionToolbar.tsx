@@ -11,7 +11,7 @@ import {
 import type { Tender } from '../../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '../../../hooks/useIsMobile';
-import { FitOneLine } from '../../../components/responsive/FitOneLine';
+import { AutoFitText } from '../../../components/AutoFitText';
 
 const { Text } = Typography;
 
@@ -48,6 +48,48 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
 }) => {
   const navigate = useNavigate();
   const { isPhoneDevice, isPhone } = useIsMobile();
+
+  const txt: React.CSSProperties = { color: currentTheme === 'dark' ? '#fff' : '#000' };
+  const green: React.CSSProperties = { color: '#10b981' };
+  const vDivider = (
+    <Divider type="vertical" style={{ margin: '0 4px', borderColor: currentTheme === 'dark' ? '#444' : '#d9d9d9' }} />
+  );
+  // Десктоп: одна строка справа с разделителями (как раньше).
+  const deskRow: React.CSSProperties = { marginBottom: 4, fontSize: 14 };
+  // Атомарные чанки «метрик»: nowrap, чтобы значение не рвалось посередине при переносе.
+  // Рендерятся только при выбранном тендере; optional chaining — чтобы избежать null-доступа.
+  const metrics = {
+    areaSp: (
+      <span style={{ whiteSpace: 'nowrap' }}>
+        <Text style={txt}>Площадь по СП: </Text>
+        <Text strong style={green}>{selectedTender?.area_sp?.toLocaleString('ru-RU') || '0'} м²</Text>
+      </span>
+    ),
+    areaClient: (
+      <span style={{ whiteSpace: 'nowrap' }}>
+        <Text style={txt}>Площадь Заказчика: </Text>
+        <Text strong style={green}>{selectedTender?.area_client?.toLocaleString('ru-RU') || '0'} м²</Text>
+      </span>
+    ),
+    rateUsd: (
+      <span style={{ whiteSpace: 'nowrap' }}>
+        <Text strong style={green}>Курс USD: </Text>
+        <Text style={txt}>{selectedTender?.usd_rate?.toFixed(2) || '0.00'} Р/$</Text>
+      </span>
+    ),
+    rateEur: (
+      <span style={{ whiteSpace: 'nowrap' }}>
+        <Text strong style={green}>Курс EUR: </Text>
+        <Text style={txt}>{selectedTender?.eur_rate?.toFixed(2) || '0.00'} Р/€</Text>
+      </span>
+    ),
+    rateCny: (
+      <span style={{ whiteSpace: 'nowrap' }}>
+        <Text strong style={green}>Курс CNY: </Text>
+        <Text style={txt}>{selectedTender?.cny_rate?.toFixed(2) || '0.00'} Р/¥</Text>
+      </span>
+    ),
+  };
 
   return (
     <>
@@ -138,43 +180,40 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
             {/* Средний блок: Информация о тендере */}
             <Col xs={24} lg={15}>
               {selectedTender ? (
-                <div style={{ textAlign: isPhone ? 'center' : 'right' }}>
+                <div style={{ textAlign: isPhone ? 'left' : 'right' }}>
                   {/* Строка 1: Название и заказчик */}
-                  <div style={{ marginBottom: 4, fontSize: 14 }}>
-                    <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Название: </Text>
-                    <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>{selectedTender.title}</Text>
-                    <Divider type="vertical" style={{ borderColor: currentTheme === 'dark' ? '#444' : '#d9d9d9' }} />
-                    <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Заказчик: </Text>
-                    <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>{selectedTender.client_name}</Text>
+                  <div style={{ marginBottom: 4, fontSize: isPhone ? 12 : 14 }}>
+                    <Text strong style={txt}>Название: </Text>
+                    <Text style={txt}>{selectedTender.title}</Text>
+                    {vDivider}
+                    <Text strong style={txt}>Заказчик: </Text>
+                    <Text style={txt}>{selectedTender.client_name}</Text>
                   </div>
 
-                  {/* Строка 2: Площади */}
-                  <FitOneLine enabled={isPhone} align={isPhone ? 'center' : 'right'} baseFontSize={isPhone ? 11 : 14} minFontSize={5} style={{ marginBottom: 4 }}>
-                    <span style={{ whiteSpace: 'nowrap' }}>
-                      <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Площадь по СП: </Text>
-                      <Text strong style={{ color: '#10b981' }}>{selectedTender.area_sp?.toLocaleString('ru-RU') || '0'} м²</Text>
-                    </span>
-                    <Divider type="vertical" style={{ margin: '0 4px', borderColor: currentTheme === 'dark' ? '#444' : '#d9d9d9' }} />
-                    <span style={{ whiteSpace: 'nowrap' }}>
-                      <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>Площадь Заказчика: </Text>
-                      <Text strong style={{ color: '#10b981' }}>{selectedTender.area_client?.toLocaleString('ru-RU') || '0'} м²</Text>
-                    </span>
-                  </FitOneLine>
+                  {/* Строка 2: Площади — телефон: одна строка слева, авто-уменьшение шрифта (пол 5px) */}
+                  {isPhone ? (
+                    <div style={{ marginBottom: 4 }}>
+                      <AutoFitText align="left" minFontSize={5} maxFontSize={13}>
+                        {metrics.areaSp}{vDivider}{metrics.areaClient}
+                      </AutoFitText>
+                    </div>
+                  ) : (
+                    <div style={deskRow}>{metrics.areaSp}{vDivider}{metrics.areaClient}</div>
+                  )}
 
-                  {/* Строка 3: Курсы валют */}
-                  <FitOneLine enabled={isPhone} align={isPhone ? 'center' : 'right'} baseFontSize={isPhone ? 10 : 14} minFontSize={5} style={{ marginBottom: 4 }}>
-                    <Text strong style={{ color: '#10b981' }}>Курс USD: </Text>
-                    <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>{selectedTender.usd_rate?.toFixed(2) || '0.00'} Р/$</Text>
-                    <Divider type="vertical" style={{ margin: '0 4px', borderColor: currentTheme === 'dark' ? '#444' : '#d9d9d9' }} />
-                    <Text strong style={{ color: '#10b981' }}>Курс EUR: </Text>
-                    <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>{selectedTender.eur_rate?.toFixed(2) || '0.00'} Р/€</Text>
-                    <Divider type="vertical" style={{ margin: '0 4px', borderColor: currentTheme === 'dark' ? '#444' : '#d9d9d9' }} />
-                    <Text strong style={{ color: '#10b981' }}>Курс CNY: </Text>
-                    <Text style={{ color: currentTheme === 'dark' ? '#fff' : '#000' }}>{selectedTender.cny_rate?.toFixed(2) || '0.00'} Р/¥</Text>
-                  </FitOneLine>
+                  {/* Строка 3: Курсы валют — телефон: одна строка слева, авто-уменьшение шрифта (пол 5px) */}
+                  {isPhone ? (
+                    <div style={{ marginBottom: 4 }}>
+                      <AutoFitText align="left" minFontSize={5} maxFontSize={13}>
+                        {metrics.rateUsd}{vDivider}{metrics.rateEur}{vDivider}{metrics.rateCny}
+                      </AutoFitText>
+                    </div>
+                  ) : (
+                    <div style={deskRow}>{metrics.rateUsd}{vDivider}{metrics.rateEur}{vDivider}{metrics.rateCny}</div>
+                  )}
 
                   {/* Строка 4: Кнопки */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <div style={{ display: 'flex', justifyContent: isPhone ? 'flex-start' : 'flex-end' }}>
                     <Space wrap size="small">
                       {selectedTender.upload_folder && (
                         <Button
