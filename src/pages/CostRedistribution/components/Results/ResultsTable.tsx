@@ -35,17 +35,30 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({
     if (typeof window === 'undefined') {
       return undefined;
     }
-    const handleResize = () => setVp(getViewport());
+    // Коалесим пачку resize-тиков поворота в один кадр (rAF) + bailout при неизменных
+    // размерах — иначе на каждый тик новый объект vp перерисовывает таблицу.
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      const next = getViewport();
+      setVp((prev) => (prev.width === next.width && prev.height === next.height ? prev : next));
+    };
+    const handleResize = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(apply);
+    };
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
     return () => {
+      if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
     };
   }, []);
 
   // Телефон-портрет: «Наименование» ≈ половина экрана, остальные колонки — скроллом вправо.
-  // Внутренний вертикальный скролл выключаем — таблица скроллится страницей до верха.
+  // Внутренний вертикальный скролл включён (scroll.y) → работает виртуализация AntD:
+  // на крупном тендере в DOM держим только видимые строки, а не все сразу.
   const phonePortrait = isPhone && !fitToScreen;
   const tableScrollY = Math.max(vp.height - 350, 320);
   const nameWidth = phonePortrait ? Math.max(Math.round(vp.width * 0.5), 140) : 300;
@@ -77,9 +90,9 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({
         size="small"
         tableLayout={fitToScreen ? 'fixed' : undefined}
         style={fitToScreen ? { width: RESULTS_TABLE_WIDTH } : undefined}
-        scroll={fitToScreen ? undefined : phonePortrait ? { x: 1800 } : { x: 1800, y: tableScrollY }}
+        scroll={fitToScreen ? undefined : { x: 1800, y: tableScrollY }}
         pagination={false}
-        virtual={!fitToScreen && !phonePortrait}
+        virtual={!fitToScreen}
       />
     </div>
   );

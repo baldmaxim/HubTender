@@ -1,8 +1,20 @@
+import { memo, useMemo } from 'react';
 import { Table, Button, Space, Tag, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EditOutlined, DeleteOutlined, LinkOutlined, UpOutlined, DownOutlined } from '@ant-design/icons';
 import type { BoqItemFull, CurrencyType } from '../../../lib/supabase';
 import { currencySymbols, getBoqTypeTagStyle } from './boqColors';
+import { formatRu } from '../../../utils/format/currency';
+
+/** Стабильная ссылка на пустой Set — дефолт для selectedDeleteIds, чтобы не ломать мемо. */
+const EMPTY_DELETE_IDS = new Set<string>();
+
+/**
+ * Натуральная ширина «плоской» (plain) таблицы для ландшафтного оверлея с fit="zoom".
+ * Сумма ширин колонок, рендеримых в plain-режиме (без 'sort'/'actions'):
+ * 80+150+200+70+70+90+70+100+110+100+100+120 = 1260.
+ */
+export const ITEMS_PLAIN_FIT_WIDTH = 1260;
 
 interface ItemsTableProps {
   items: BoqItemFull[];
@@ -36,7 +48,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
   expandedRowRender,
   readOnly,
   isDeleteMode = false,
-  selectedDeleteIds = new Set(),
+  selectedDeleteIds = EMPTY_DELETE_IDS,
   plain = false,
 }) => {
   const getRowClassName = (record: BoqItemFull): string => {
@@ -60,6 +72,17 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
     }
   };
 
+  // Индекс id → элемент: убирает O(n²) (items.find на каждую строку в render-колбэках).
+  const itemById = useMemo(() => {
+    const map = new Map<string, BoqItemFull>();
+    for (const it of items) map.set(it.id, it);
+    return map;
+  }, [items]);
+
+  // Колонки мемоизируем: под keep-alive несколько таблиц смонтированы сразу и
+  // перерисовываются на каждый поворот/ресайз — без мемо это пересборка ~12 колонок и
+  // прогон всех render-колбэков. Хелперы держим внутри мемо, чтобы не плодить зависимости.
+  const columns = useMemo<ColumnsType<BoqItemFull>>(() => {
   const canMoveItemUp = (record: BoqItemFull, index: number): boolean => {
     // Привязанный материал
     if (record.parent_work_item_id) {
@@ -206,7 +229,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       render: (_: unknown, record: BoqItemFull) => {
         const isMaterial = ['мат', 'суб-мат', 'мат-комп.'].includes(record.boq_item_type);
         const parentWork = record.parent_work_item_id
-          ? items.find(item => item.id === record.parent_work_item_id)
+          ? itemById.get(record.parent_work_item_id)
           : null;
 
         return (
@@ -251,7 +274,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
         if (isMaterial && value) {
           let tooltipTitle = '';
           if (record.parent_work_item_id) {
-            const parentWork = items.find(item => item.id === record.parent_work_item_id);
+            const parentWork = itemById.get(record.parent_work_item_id);
             const workQty = parentWork?.quantity || 0;
             const convCoef = record.conversion_coefficient || 1;
             const consCoef = record.consumption_coefficient || 1;
@@ -287,7 +310,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       render: (_: unknown, record: BoqItemFull) => {
         const symbol = currencySymbols[record.currency_type || 'RUB'];
         return record.unit_rate
-          ? `${record.unit_rate.toLocaleString('ru-RU')} ${symbol}`
+          ? `${formatRu(record.unit_rate)} ${symbol}`
           : '-';
       },
     },
@@ -321,7 +344,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
             </Tooltip>
           );
         } else if (record.delivery_price_type === 'суммой' && record.delivery_amount) {
-          return `${record.delivery_amount.toLocaleString('ru-RU')}`;
+          return `${formatRu(record.delivery_amount)}`;
         }
 
         return '-';
@@ -334,7 +357,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       align: 'center',
       render: (_: unknown, record: BoqItemFull) => {
         const total = calculateTotal(record);
-        const displayValue = total > 0 ? `${total.toLocaleString('ru-RU')}` : '-';
+        const displayValue = total > 0 ? `${formatRu(total)}` : '-';
 
         if (total > 0) {
           const qty = record.quantity || 0;
@@ -455,10 +478,25 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
   ];
 
   // В plain-режиме (оверлей) убираем колонки сортировки и действий, а также
-  // единственную fixed-колонку — иначе ломается transform:scale у оверлея.
-  const columns = plain
+  // единственную fixed-колонку — fixed-колонки несовместимы с оверлеем
+  // (и transform:scale, и CSS zoom при overflow:visible).
+  return plain
     ? baseColumns.filter((c) => c.key !== 'sort' && c.key !== 'actions')
     : baseColumns;
+  }, [
+    items,
+    itemById,
+    getCurrencyRate,
+    isDeleteMode,
+    selectedDeleteIds,
+    readOnly,
+    expandedRowKeys,
+    onEditClick,
+    onStartDelete,
+    onToggleDeleteSelection,
+    onMoveItem,
+    plain,
+  ]);
 
   return (
     <Table
@@ -486,4 +524,4 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
   );
 };
 
-export default ItemsTable;
+export default memo(ItemsTable);

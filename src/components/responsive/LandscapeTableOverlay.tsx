@@ -49,12 +49,22 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
   );
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-    const update = () => setAvailW(window.innerWidth);
-    window.addEventListener('resize', update);
-    window.addEventListener('orientationchange', update);
+    // Поворот шлёт пачку resize-событий — коалесим в один кадр (rAF), один setState.
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      setAvailW(window.innerWidth);
+    };
+    const onChange = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(apply);
+    };
+    window.addEventListener('resize', onChange);
+    window.addEventListener('orientationchange', onChange);
     return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('orientationchange', update);
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', onChange);
+      window.removeEventListener('orientationchange', onChange);
     };
   }, []);
 

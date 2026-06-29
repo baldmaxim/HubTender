@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, Table, Select, Tabs, Input, message, Button, Typography, Space } from 'antd';
 import { SearchOutlined, FileExcelOutlined, ArrowLeftOutlined, LinkOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 import { useBsmData } from './hooks/useBsmData';
-import { buildBsmColumns } from './components/bsmColumns';
+import { buildBsmColumns, BSM_TABLE_FIT_WIDTH } from './components/bsmColumns';
 import { BsmTenderSelectionScreen } from './components/BsmTenderSelectionScreen';
 import { BsmCardList } from './components/BsmCardList';
 import { exportBsmToExcel } from './utils/bsmExport';
@@ -41,8 +41,9 @@ const Bsm: React.FC = () => {
     handleApplyQuoteLinks,
   } = useBsmData();
 
-  // Уникальные затраты для фильтра (сортируем, '—' в конец)
-  const expenseOptions = (() => {
+  // Уникальные затраты для фильтра (сортируем, '—' в конец). Мемо: иначе Set+sort
+  // прогоняется по всем элементам на каждый рендер (в т.ч. поворот/ввод в других полях).
+  const expenseOptions = useMemo(() => {
     const unique = new Set<string>();
     allItems.forEach(item => { if (item.expense_label) unique.add(item.expense_label); });
     return Array.from(unique)
@@ -52,26 +53,30 @@ const Bsm: React.FC = () => {
         return a.localeCompare(b, 'ru');
       })
       .map(label => ({ value: label, label }));
-  })();
+  }, [allItems]);
 
-  const getFilteredItems = (filterType: 'all' | 'materials' | 'works') => {
+  // Фильтрация: 3 прохода .filter по allItems — мемоизируем по реальным входам фильтра.
+  const filteredItems = useMemo(() => {
     let filtered = allItems;
-    if (filterType === 'materials') {
+    if (activeTab === 'materials') {
       filtered = filtered.filter(item => isMaterial(item.boq_item_type));
-    } else if (filterType === 'works') {
+    } else if (activeTab === 'works') {
       filtered = filtered.filter(item => !isMaterial(item.boq_item_type));
     }
     if (selectedExpense) {
       filtered = filtered.filter(item => item.expense_label === selectedExpense);
     }
     if (searchText) {
-      filtered = filtered.filter(item => item.name.toLowerCase().includes(searchText.toLowerCase()));
+      const q = searchText.toLowerCase();
+      filtered = filtered.filter(item => item.name.toLowerCase().includes(q));
     }
     return filtered;
-  };
+  }, [allItems, activeTab, selectedExpense, searchText]);
 
-  const filteredItems = getFilteredItems(activeTab);
-  const columns = buildBsmColumns(handleUpdateQuoteLink, readOnly);
+  const columns = useMemo(
+    () => buildBsmColumns(handleUpdateQuoteLink, readOnly),
+    [handleUpdateQuoteLink, readOnly],
+  );
 
   const handleExportToExcel = () => {
     const ok = exportBsmToExcel(filteredItems, selectedTenderTitle);
@@ -82,11 +87,11 @@ const Bsm: React.FC = () => {
     }
   };
 
-  const tabItems = [
+  const tabItems = useMemo(() => [
     { key: 'all', label: `Общее (${allItems.length})` },
     { key: 'materials', label: `Материалы (${allItems.filter(item => isMaterial(item.boq_item_type)).length})` },
     { key: 'works', label: `Работы (${allItems.filter(item => !isMaterial(item.boq_item_type)).length})` },
-  ];
+  ], [allItems]);
 
   // Экран выбора тендера
   if (!selectedTenderId) {
@@ -221,7 +226,7 @@ const Bsm: React.FC = () => {
       {isPhone ? (
         <BsmCardList items={filteredItems} loading={loading} />
       ) : isLandscapePhone ? (
-        <LandscapeTableOverlay theme={currentTheme} fit="width">
+        <LandscapeTableOverlay theme={currentTheme} fit="zoom" width={BSM_TABLE_FIT_WIDTH}>
           {renderTable(true)}
         </LandscapeTableOverlay>
       ) : (

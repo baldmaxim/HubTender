@@ -1,7 +1,10 @@
+import { useMemo } from 'react';
 import { Card, Space, Tag, Typography, Empty } from 'antd';
 import { LinkOutlined } from '@ant-design/icons';
 import type { BoqItemFull } from '../../../lib/supabase';
 import { currencySymbols, getBoqTypeTagStyle, isMaterialType } from './boqColors';
+import { formatRu } from '../../../utils/format/currency';
+import { useIncrementalRender } from '../../../hooks/useIncrementalRender';
 
 const { Text } = Typography;
 
@@ -19,17 +22,27 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
 
 /** Портретный телефонный read-only список элементов позиции (вместо широкой таблицы). */
 const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({ items, totalSum }) => {
+  // Индекс id → элемент: убирает O(n²) (items.find на каждую карточку).
+  const itemById = useMemo(() => {
+    const map = new Map<string, BoqItemFull>();
+    for (const it of items) map.set(it.id, it);
+    return map;
+  }, [items]);
+
+  // Инкрементальный рендер: на крупной позиции не строим все карточки разом.
+  const { visible, sentinelRef, hasMore } = useIncrementalRender(items);
+
   if (items.length === 0) {
     return <Empty description="Нет элементов" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
 
   return (
     <Space direction="vertical" size={8} style={{ width: '100%' }}>
-      {items.map((item) => {
+      {visible.map((item) => {
         const { bgColor, textColor } = getBoqTypeTagStyle(item.boq_item_type);
         const isMat = isMaterialType(item.boq_item_type);
         const parentWork = item.parent_work_item_id
-          ? items.find((i) => i.id === item.parent_work_item_id)
+          ? itemById.get(item.parent_work_item_id)
           : null;
         const symbol = currencySymbols[item.currency_type || 'RUB'];
         const total = item.total_amount || 0;
@@ -69,17 +82,19 @@ const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({ items, totalSum }) 
               {item.quantity?.toFixed(5) || '-'} {item.unit_code || ''}
             </Field>
             <Field label="Цена за ед.">
-              {item.unit_rate ? `${item.unit_rate.toLocaleString('ru-RU')} ${symbol}` : '-'}
+              {item.unit_rate ? `${formatRu(item.unit_rate)} ${symbol}` : '-'}
             </Field>
             <Field label="Итого">
-              <span style={{ color: '#10b981' }}>{total > 0 ? total.toLocaleString('ru-RU') : '-'}</span>
+              <span style={{ color: '#10b981' }}>{total > 0 ? formatRu(total) : '-'}</span>
             </Field>
           </Card>
         );
       })}
 
+      {hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
+
       <div style={{ textAlign: 'right', fontSize: 16, fontWeight: 'bold', padding: '4px 8px' }}>
-        Итого: <span style={{ color: '#10b981' }}>{Math.round(totalSum).toLocaleString('ru-RU')}</span>
+        Итого: <span style={{ color: '#10b981' }}>{formatRu(Math.round(totalSum))}</span>
       </div>
     </Space>
   );

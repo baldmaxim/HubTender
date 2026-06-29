@@ -2,19 +2,17 @@
  * Ячейка для отображения суммы перераспределения с цветом
  */
 
-import React from 'react';
+import React, { memo } from 'react';
 import { ArrowUpOutlined, ArrowDownOutlined, MinusOutlined } from '@ant-design/icons';
+import { formatRu2 } from '../../../../utils/format/currency';
 
 interface RedistributionAmountCellProps {
   amount: number;
 }
 
-export const RedistributionAmountCell: React.FC<RedistributionAmountCellProps> = ({ amount }) => {
+const RedistributionAmountCellBase: React.FC<RedistributionAmountCellProps> = ({ amount }) => {
   const absAmount = Math.abs(amount);
-  const formattedAmount = absAmount.toLocaleString('ru-RU', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const formattedAmount = formatRu2(absAmount);
 
   if (amount > 0.01) {
     // Добавление
@@ -42,3 +40,6 @@ export const RedistributionAmountCell: React.FC<RedistributionAmountCellProps> =
     );
   }
 };
+
+/** memo: ячейка рендерится в каждой строке таблицы; пере-рендер только при смене amount. */
+export const RedistributionAmountCell = memo(RedistributionAmountCellBase);

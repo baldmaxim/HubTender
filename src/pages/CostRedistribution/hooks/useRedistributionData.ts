@@ -129,22 +129,37 @@ export function useRedistributionData() {
     setLoading(true);
 
     try {
-      const calculationContext = await loadLiveCommercialCalculationContext(tenderId, tacticId);
+      // Контекст расчёта и сырые boq_items независимы — грузим параллельно
+      // (раньше шли последовательно: wall-clock = сумма двух запросов).
+      const [calculationContext, rawRows] = await Promise.all([
+        loadLiveCommercialCalculationContext(tenderId, tacticId),
+        listBoqItemsFullByTender(tenderId),
+      ]);
       resetLiveCommercialCalculationCache();
 
-      const raw = (await listBoqItemsFullByTender(tenderId)) as unknown as RedistributionBoqItem[];
+      const raw = rawRows as unknown as RedistributionBoqItem[];
 
-      const allBoqItems: RedistributionBoqItem[] = raw.map((item) => {
-        const { materialCost, workCost } = calculateLiveCommercialAmounts(
-          item as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0],
-          calculationContext,
-        );
-        return {
-          ...item,
-          total_commercial_material_cost: materialCost,
-          total_commercial_work_cost: workCost,
-        };
-      });
+      // Расчёт коммерческих сумм — синхронный O(items). На крупном тендере это длинная
+      // блокирующая задача (фриз UI/анимаций при загрузке). Считаем чанками, уступая кадр
+      // между ними; для ≤CHUNK элементов проход один — без накладных расходов.
+      const CHUNK = 500;
+      const allBoqItems: RedistributionBoqItem[] = [];
+      for (let i = 0; i < raw.length; i += CHUNK) {
+        for (const item of raw.slice(i, i + CHUNK)) {
+          const { materialCost, workCost } = calculateLiveCommercialAmounts(
+            item as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0],
+            calculationContext,
+          );
+          allBoqItems.push({
+            ...item,
+            total_commercial_material_cost: materialCost,
+            total_commercial_work_cost: workCost,
+          });
+        }
+        if (i + CHUNK < raw.length) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
+      }
 
       setBoqItems(allBoqItems);
     } catch (error) {

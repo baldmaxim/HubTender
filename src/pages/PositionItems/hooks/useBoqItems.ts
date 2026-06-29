@@ -44,7 +44,14 @@ interface Template {
   detail_cost_category_full?: string | null;
 }
 
-export const useBoqItems = (positionId: string | undefined) => {
+/**
+ * @param skipEditData когда true (телефон в любой ориентации — UI редактирования не
+ *   рендерится), не грузим edit-only справочники (works/materials/templates/
+ *   costCategories/work+materialNames). Гейт по «телефону», а не по общему readOnly:
+ *   на десктопе после дедлайна формы редактирования всё ещё рендерятся (disabled) и
+ *   им нужны списки имён для подписей.
+ */
+export const useBoqItems = (positionId: string | undefined, skipEditData = false) => {
   const [position, setPosition] = useState<ClientPosition | null>(null);
   const [items, setItems] = useState<BoqItemFull[]>([]);
   const [works, setWorks] = useState<WorkLibraryFull[]>([]);
@@ -122,15 +129,6 @@ export const useBoqItems = (positionId: string | undefined) => {
       return aSortNum - bSortNum;
     });
 
-    console.log('[sortItemsByHierarchy] Первые 3 после сортировки по sort_number:');
-    sortedItems.slice(0, 3).forEach((item, index) => {
-      console.log(`  ${index}:`, {
-        sort_number: item.sort_number,
-        name: (item as { work_names?: { name?: string }; material_names?: { name?: string } }).work_names?.name || (item as { work_names?: { name?: string }; material_names?: { name?: string } }).material_names?.name,
-        type: item.boq_item_type,
-      });
-    });
-
     // Проходим по отсортированным элементам
     sortedItems.forEach(item => {
       if (processedIds.has(item.id)) return;
@@ -149,15 +147,6 @@ export const useBoqItems = (positionId: string | undefined) => {
           processedIds.add(mat.id);
         });
       }
-    });
-
-    console.log('[sortItemsByHierarchy] Первые 3 в финальном результате:');
-    result.slice(0, 3).forEach((item, index) => {
-      console.log(`  ${index}:`, {
-        sort_number: item.sort_number,
-        name: (item as { work_names?: { name?: string }; material_names?: { name?: string } }).work_names?.name || (item as { work_names?: { name?: string }; material_names?: { name?: string } }).material_names?.name,
-        type: item.boq_item_type,
-      });
     });
 
     return result;
@@ -203,24 +192,17 @@ export const useBoqItems = (positionId: string | undefined) => {
       };
       const data = (await listBoqItemsFullByPosition(positionId)) as unknown as RawBoqItemJoin[];
 
-      // Логирование первых 3 элементов для отладки порядка
-      if (data && data.length > 0) {
-        console.log('[fetchItems] Первые 3 элемента из БД:');
-        data.slice(0, 3).forEach((item, index) => {
-          console.log(`  ${index}:`, {
-            sort_number: item.sort_number,
-            name: item.work_names?.name || item.material_names?.name,
-            type: item.boq_item_type,
-          });
-        });
-      }
-
+      // Fallback-ставка нужна ТОЛЬКО для строк без сохранённого unit_rate. Раньше
+      // полные библиотеки тянулись всегда, когда были material/work-строки, —
+      // в обычном случае (у всех строк есть unit_rate) это лишние 2 запроса.
+      const needsRate = (item: RawBoqItemJoin) =>
+        item.unit_rate === null || item.unit_rate === undefined;
       const materialIds = (data || [])
-        .filter(item => item.material_name_id)
+        .filter(item => item.material_name_id && needsRate(item))
         .map(item => item.material_name_id);
 
       const workIds = (data || [])
-        .filter(item => item.work_name_id)
+        .filter(item => item.work_name_id && needsRate(item))
         .map(item => item.work_name_id);
 
       let materialRates: Record<string, number> = {};
@@ -420,16 +402,21 @@ export const useBoqItems = (positionId: string | undefined) => {
 
     fetchPositionData();
     fetchItems();
-    fetchWorks();
-    fetchMaterials();
-    fetchTemplates();
-    fetchCostCategories();
-    fetchWorkNames();
-    fetchMaterialNames();
     fetchUnits();
+
+    // Edit-only справочники: на телефоне UI редактирования не рендерится —
+    // не тратим ~6 параллельных запросов (полные библиотеки + номенклатуры).
+    if (!skipEditData) {
+      fetchWorks();
+      fetchMaterials();
+      fetchTemplates();
+      fetchCostCategories();
+      fetchWorkNames();
+      fetchMaterialNames();
+    }
     // fetch functions are stable; intentionally excluded to avoid refetch loop on positionId change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [positionId]);
+  }, [positionId, skipEditData]);
 
   // Native WS hub (Go BFF) — рефетч элементов при изменении boq_items тендера.
   // Self-echo собственных правок подавляется через markRealtimeMutation в

@@ -2,6 +2,8 @@ import React from 'react';
 import { Card, Tag, Typography, Empty, Spin, Space, Input } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import type { ClientPosition, Tender } from '../../../lib/supabase';
+import { formatRu } from '../../../utils/format/currency';
+import { useIncrementalRender } from '../../../hooks/useIncrementalRender';
 
 const { Text } = Typography;
 
@@ -32,6 +34,9 @@ export const PositionCardList: React.FC<PositionCardListProps> = ({
   onSearchQueryChange,
   onRowClick,
 }) => {
+  // Инкрементальный рендер: на крупном тендере не строим все карточки позиций разом.
+  const { visible, sentinelRef, hasMore } = useIncrementalRender(clientPositions);
+
   return (
     <div style={{ marginTop: 16 }}>
       <Input
@@ -49,7 +54,7 @@ export const PositionCardList: React.FC<PositionCardListProps> = ({
         <Empty description="Нет позиций заказчика" style={{ padding: 40 }} />
       ) : (
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
-          {clientPositions.map((record, index) => {
+          {visible.map((record, index) => {
             const isLeaf = leafPositionIndices.has(record.id);
             const sectionColor = isLeaf ? '#52c41a' : '#ff7875';
             const counts = positionCounts[record.id] || { works: 0, materials: 0, total: 0 };
@@ -125,7 +130,7 @@ export const PositionCardList: React.FC<PositionCardListProps> = ({
                     </span>
                     {counts.total > 0 && (
                       <Text strong style={{ fontSize: 15, color: '#389e0d' }}>
-                        {Math.round(counts.total).toLocaleString('ru-RU')}
+                        {formatRu(Math.round(counts.total))}
                       </Text>
                     )}
                   </div>
@@ -133,6 +138,7 @@ export const PositionCardList: React.FC<PositionCardListProps> = ({
               </Card>
             );
           })}
+          {hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
         </Space>
       )}
     </div>

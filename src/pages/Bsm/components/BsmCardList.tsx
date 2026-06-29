@@ -2,6 +2,8 @@ import React from 'react';
 import { Card, Tag, Typography, Empty, Spin, Space } from 'antd';
 import type { BoqItemData } from '../types';
 import { getUnitColor, getItemTypeStyle, getMaterialTypeStyle } from '../utils/bsmStyles';
+import { formatRu, formatRu2 } from '../../../utils/format/currency';
+import { useIncrementalRender } from '../../../hooks/useIncrementalRender';
 
 const { Text, Link } = Typography;
 
@@ -12,6 +14,9 @@ interface BsmCardListProps {
 
 /** Карточный (read-only) вид БСМ для телефона в портрете. */
 export const BsmCardList: React.FC<BsmCardListProps> = ({ items, loading }) => {
+  // Инкрементальный рендер: на крупном тендере не строим все карточки разом.
+  const { visible, sentinelRef, hasMore } = useIncrementalRender(items);
+
   if (loading) {
     return <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>;
   }
@@ -21,7 +26,7 @@ export const BsmCardList: React.FC<BsmCardListProps> = ({ items, loading }) => {
 
   return (
     <Space direction="vertical" size={8} style={{ width: '100%' }}>
-      {items.map((item) => {
+      {visible.map((item) => {
         const typeStyle = getItemTypeStyle(item.boq_item_type);
         const matStyle = getMaterialTypeStyle(item.material_type);
         return (
@@ -46,8 +51,8 @@ export const BsmCardList: React.FC<BsmCardListProps> = ({ items, loading }) => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: 12 }}>
               <div><Text type="secondary">Кол-во: </Text><Text>{item.total_quantity.toFixed(2)}</Text></div>
               <div><Text type="secondary">Позиций: </Text><Text>{item.usage_count}</Text></div>
-              <div><Text type="secondary">Цена/ед.: </Text><Text>{item.price_per_unit.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽</Text></div>
-              <div><Text type="secondary">Сумма: </Text><Text strong>{Math.round(item.total_amount).toLocaleString('ru-RU')}</Text></div>
+              <div><Text type="secondary">Цена/ед.: </Text><Text>{formatRu2(item.price_per_unit)} ₽</Text></div>
+              <div><Text type="secondary">Сумма: </Text><Text strong>{formatRu(Math.round(item.total_amount))}</Text></div>
             </div>
 
             {item.quote_link && (
@@ -59,6 +64,7 @@ export const BsmCardList: React.FC<BsmCardListProps> = ({ items, loading }) => {
           </Card>
         );
       })}
+      {hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
     </Space>
   );
 };

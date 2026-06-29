@@ -7,7 +7,7 @@ import { useBoqItems } from './hooks/useBoqItems';
 import { useItemActions } from './hooks/useItemActions';
 import { useItemBulkActions } from './hooks/useItemBulkActions';
 import { usePositionTabTitle } from './hooks/usePositionTabRegistration';
-import ItemsTable from './components/ItemsTable';
+import ItemsTable, { ITEMS_PLAIN_FIT_WIDTH } from './components/ItemsTable';
 import ItemsMobileCards from './components/ItemsMobileCards';
 import ItemsToolbar from './components/ItemsToolbar';
 import PositionHeader from './components/PositionHeader';
@@ -70,7 +70,7 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
     getCurrencyRate,
     fetchPositionData,
     fetchItems,
-  } = useBoqItems(positionId);
+  } = useBoqItems(positionId, isPhoneDevice);
 
   // Обновление заголовка вкладки приложения для этой позиции
   usePositionTabTitle(positionId, position);
@@ -167,7 +167,7 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
     }
     if (isLandscapePhone) {
       return (
-        <LandscapeTableOverlay theme={theme} fit="width">
+        <LandscapeTableOverlay theme={theme} fit="zoom" width={ITEMS_PLAIN_FIT_WIDTH}>
           <PositionLandscapeInfo
             position={position}
             gpVolume={gpVolume}

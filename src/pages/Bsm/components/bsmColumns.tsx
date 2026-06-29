@@ -3,8 +3,15 @@ import type { ColumnsType } from 'antd/es/table';
 import type { UnitType, BoqItemType } from '../../../lib/supabase';
 import type { BoqItemData } from '../types';
 import { getUnitColor, getItemTypeStyle, getMaterialTypeStyle } from '../utils/bsmStyles';
+import { formatRu, formatRu2 } from '../../../utils/format/currency';
 
 const { Link } = Typography;
+
+/**
+ * Натуральная ширина таблицы БСМ для ландшафтного оверлея с fit="zoom".
+ * Сумма ширин всех колонок: 110+120+240+300+120+100+150+180+130+325 = 1775.
+ */
+export const BSM_TABLE_FIT_WIDTH = 1775;
 
 /**
  * Колонки таблицы БСМ. readOnly (телефон) — ссылка на КП показывается ссылкой/текстом
@@ -96,7 +103,7 @@ export function buildBsmColumns(
       align: 'center',
       render: (price: number) => (
         <div style={{ textAlign: 'center' }}>
-          {price.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽
+          {formatRu2(price)} ₽
         </div>
       ),
       sorter: (a: BoqItemData, b: BoqItemData) => a.price_per_unit - b.price_per_unit,
@@ -108,7 +115,7 @@ export function buildBsmColumns(
       width: 180,
       align: 'center',
       render: (amount: number) => (
-        <div style={{ textAlign: 'center' }}>{Math.round(amount).toLocaleString('ru-RU')}</div>
+        <div style={{ textAlign: 'center' }}>{formatRu(Math.round(amount))}</div>
       ),
       sorter: (a: BoqItemData, b: BoqItemData) => a.total_amount - b.total_amount,
     },

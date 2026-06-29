@@ -24,7 +24,7 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 import { AutoFitText } from '../../components/AutoFitText';
 import { useFinancialData } from './hooks/useFinancialData';
 import { IndicatorsCharts } from './components/IndicatorsCharts';
-import { IndicatorsTable } from './components/IndicatorsTable';
+import { IndicatorsTable, INDICATORS_TABLE_FIT_WIDTH } from './components/IndicatorsTable';
 import { IndicatorsFilters } from './components/IndicatorsFilters';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 import './FinancialIndicators.css';
@@ -520,7 +520,7 @@ const FinancialIndicators: React.FC = () => {
                         (fixed-оверлей); колонки вписываются по ширине, строки
                         прокручиваются вертикально. Поворот в портрет → карточный вид. */}
                     {isLandscapePhone ? (
-                      <LandscapeTableOverlay theme={currentTheme} fit="width">
+                      <LandscapeTableOverlay theme={currentTheme} fit="zoom" width={INDICATORS_TABLE_FIT_WIDTH}>
                         {indicatorsTableFitNode}
                       </LandscapeTableOverlay>
                     ) : (

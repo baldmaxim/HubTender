@@ -32,7 +32,8 @@ export function AutoFitText({
     const container = containerRef.current;
     const text = textRef.current;
     if (!container || !text) return;
-    const fit = () => {
+    // Подбор шрифта — цикл с принудительным reflow (read scrollWidth → write fontSize).
+    const measure = () => {
       let size = maxFontSize;
       text.style.fontSize = `${size}px`;
       while (size > minFontSize && text.scrollWidth > container.clientWidth) {
@@ -41,10 +42,28 @@ export function AutoFitText({
       }
       setFontSize(size);
     };
-    fit();
-    const ro = new ResizeObserver(fit);
+    // Первый замер — синхронно (до кадра), чтобы не было мигания.
+    measure();
+    let lastWidth = container.clientWidth;
+    let frame = 0;
+    // ResizeObserver при повороте шлёт пачку срабатываний. Коалесим в один кадр и
+    // пропускаем подбор, если ширина контейнера не изменилась (часть тиков — шум).
+    const onResize = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const w = container.clientWidth;
+        if (w === lastWidth) return;
+        lastWidth = w;
+        measure();
+      });
+    };
+    const ro = new ResizeObserver(onResize);
     ro.observe(container);
-    return () => ro.disconnect();
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      ro.disconnect();
+    };
   }, [children, maxFontSize, minFontSize]);
 
   return (

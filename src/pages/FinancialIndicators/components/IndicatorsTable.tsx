@@ -10,6 +10,9 @@ import { IndicatorsTableCards } from './IndicatorsTableCards';
 
 const { Text } = Typography;
 
+/** Натуральная ширина таблицы показателей — для scroll.x и ландшафтного оверлея fit="zoom". */
+export const INDICATORS_TABLE_FIT_WIDTH = 1080;
+
 interface IndicatorsTableProps {
   data: IndicatorRow[];
   spTotal: number;
@@ -257,7 +260,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
           pagination={false}
           bordered
           size="small"
-          scroll={fitToScreen ? undefined : { x: 1080 }}
+          scroll={fitToScreen ? undefined : { x: INDICATORS_TABLE_FIT_WIDTH }}
           rowClassName={(record) => {
             if (record.is_header) return `header-row-${currentTheme}`;
             if (record.is_total) return `total-row-${currentTheme}`;

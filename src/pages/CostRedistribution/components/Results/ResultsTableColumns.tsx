@@ -5,6 +5,7 @@
 import { Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { RedistributionAmountCell } from './RedistributionAmountCell';
+import { formatRu2 } from '../../../../utils/format/currency';
 
 export interface ResultRow {
   key: string;
@@ -118,10 +119,7 @@ export const getResultsTableColumns = (
       align: 'center',
       render: (_, record) => {
         const value = record.rounded_material_unit_price ?? record.material_unit_price;
-        return value.toLocaleString('ru-RU', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
+        return formatRu2(value);
       },
     },
     {
@@ -135,11 +133,7 @@ export const getResultsTableColumns = (
           key: 'work_unit_price_before',
           width: 120,
           align: 'center',
-          render: (value) =>
-            value.toLocaleString('ru-RU', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            }),
+          render: (value) => formatRu2(value),
         },
         {
           title: <div style={{ textAlign: 'center' }}>После</div>,
@@ -149,10 +143,7 @@ export const getResultsTableColumns = (
           align: 'center',
           render: (_, record) => {
             const value = record.rounded_work_unit_price_after ?? record.work_unit_price_after;
-            return value.toLocaleString('ru-RU', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            });
+            return formatRu2(value);
           },
         },
       ],
@@ -165,10 +156,7 @@ export const getResultsTableColumns = (
       align: 'center',
       render: (_, record) => {
         const value = record.rounded_total_materials ?? record.total_materials;
-        return value.toLocaleString('ru-RU', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
+        return formatRu2(value);
       },
     },
     {
@@ -182,11 +170,7 @@ export const getResultsTableColumns = (
           key: 'total_works_before',
           width: 130,
           align: 'center',
-          render: (value) =>
-            value.toLocaleString('ru-RU', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            }),
+          render: (value) => formatRu2(value),
         },
         {
           title: <div style={{ textAlign: 'center' }}>После</div>,
@@ -196,10 +180,7 @@ export const getResultsTableColumns = (
           align: 'center',
           render: (_, record) => {
             const value = record.rounded_total_works ?? record.total_works_after;
-            return value.toLocaleString('ru-RU', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            });
+            return formatRu2(value);
           },
         },
       ],

@@ -43,12 +43,22 @@ export function useFitScale(axis: 'both' | 'width' = 'both') {
     ro.observe(inner);
     // Поворот экрана иногда «доносит» финальную раскладку на кадр позже, чем
     // срабатывает ResizeObserver, — пересчитываем масштаб ещё и по событиям окна.
-    window.addEventListener('resize', fit);
-    window.addEventListener('orientationchange', fit);
+    // Коалесим пачку resize-тиков поворота в один кадр (rAF).
+    let frame = 0;
+    const onWindowChange = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        fit();
+      });
+    };
+    window.addEventListener('resize', onWindowChange);
+    window.addEventListener('orientationchange', onWindowChange);
     return () => {
+      if (frame) window.cancelAnimationFrame(frame);
       ro.disconnect();
-      window.removeEventListener('resize', fit);
-      window.removeEventListener('orientationchange', fit);
+      window.removeEventListener('resize', onWindowChange);
+      window.removeEventListener('orientationchange', onWindowChange);
     };
   }, [axis]);
 
