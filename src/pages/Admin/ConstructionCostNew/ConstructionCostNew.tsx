@@ -166,7 +166,7 @@ const ConstructionCostNew: React.FC = () => {
       )}
 
       <div style={{ marginBottom: 8, display: 'flex', alignItems: isPhone ? 'stretch' : 'center', gap: isPhone ? 8 : 16, flexWrap: 'wrap', flexDirection: isPhone ? 'column' : 'row' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '50%' : 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : 'auto' }}>
           <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>Тендер:</Text>
           <Select
             style={{ width: isPhone ? undefined : 300, flex: isPhone ? 1 : undefined, minWidth: 0 }}
