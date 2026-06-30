@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, App, Drawer, Form, Skeleton, Typography, theme, Input } from 'antd';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, App, Drawer, Form, Segmented, Skeleton, Typography, theme, Input } from 'antd';
 import { reconcileTenderGroups, setTenderGroupQuality } from '../../lib/api/timeline';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useHorizontalSwipe } from '../../hooks/useHorizontalSwipe';
 import { useTenderAssignableUsers } from './hooks/useTenderAssignableUsers';
 import { useTenders, type TimelineTenderListItem } from './hooks/useTenders';
 import { useTenderGroups } from './hooks/useTenderGroups';
@@ -47,6 +48,7 @@ const TenderTimeline: React.FC = () => {
   const { tenders, loading: tendersLoading, error: tendersError, refetch: refetchTenders } = useTenders();
   const [qualityForm] = Form.useForm<GroupQualityFormValues>();
   const [searchValue, setSearchValue] = useState('');
+  const [activeTab, setActiveTab] = useState<'active' | 'archive'>('active');
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -104,6 +106,39 @@ const TenderTimeline: React.FC = () => {
       );
     });
   }, [searchValue, tenders]);
+
+  const tabCounts = useMemo(
+    () => ({
+      active: filteredTenders.filter((tender) => !tender.is_archived).length,
+      archive: filteredTenders.filter((tender) => tender.is_archived).length,
+    }),
+    [filteredTenders]
+  );
+
+  const visibleTenders = useMemo(
+    () =>
+      filteredTenders.filter((tender) =>
+        activeTab === 'archive' ? tender.is_archived : !tender.is_archived
+      ),
+    [filteredTenders, activeTab]
+  );
+
+  const goToTabOffset = useCallback(
+    (delta: number) => {
+      const tabs = ['active', 'archive'] as const;
+      const index = tabs.indexOf(activeTab);
+      const next = (((index + delta) % tabs.length) + tabs.length) % tabs.length;
+      if (next !== index) {
+        setActiveTab(tabs[next]);
+      }
+    },
+    [activeTab]
+  );
+
+  const tabSwipe = useHorizontalSwipe({
+    onSwipeLeft: () => goToTabOffset(1),
+    onSwipeRight: () => goToTabOffset(-1),
+  });
 
   const selectedTender = useMemo(
     () => tenders.find((tender) => tender.id === selectedTenderId) || null,
@@ -423,10 +458,30 @@ const TenderTimeline: React.FC = () => {
             style={{ maxWidth: isPhoneDevice ? '100%' : 420 }}
           />
 
+          <Segmented
+            block={isPhoneDevice}
+            value={activeTab}
+            onChange={(value) => setActiveTab(value as 'active' | 'archive')}
+            options={[
+              { label: `В работе (${tabCounts.active})`, value: 'active' },
+              { label: `В архиве (${tabCounts.archive})`, value: 'archive' },
+            ]}
+            style={{ maxWidth: isPhoneDevice ? '100%' : 420 }}
+          />
+
           {isPhoneDevice ? (
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <div
+              {...tabSwipe}
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                touchAction: 'pan-y',
+              }}
+            >
               <TimelineTenderCards
-                tenders={filteredTenders}
+                tenders={visibleTenders}
                 loading={tendersLoading}
                 expandedTenderId={expandedCardId}
                 canEditQuality={canEditQuality}
@@ -440,7 +495,7 @@ const TenderTimeline: React.FC = () => {
             </div>
           ) : (
             <TimelineTenderTable
-              tenders={filteredTenders}
+              tenders={visibleTenders}
               loading={tendersLoading}
               expandedTenderIds={expandedTenderIds}
               canEditQuality={canEditQuality}
