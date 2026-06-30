@@ -11,7 +11,6 @@ import {
 import type { Tender } from '../../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '../../../hooks/useIsMobile';
-import { AutoFitText } from '../../../components/AutoFitText';
 
 const { Text } = Typography;
 
@@ -190,23 +189,19 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                     <Text style={txt}>{selectedTender.client_name}</Text>
                   </div>
 
-                  {/* Строка 2: Площади — телефон: одна строка слева, авто-уменьшение шрифта (пол 5px) */}
+                  {/* Строка 2: Площади — телефон: одна строка слева, фикс. шрифт 5px (без автоподгонки) */}
                   {isPhone ? (
-                    <div style={{ marginBottom: 4 }}>
-                      <AutoFitText align="left" minFontSize={5} maxFontSize={13}>
-                        {metrics.areaSp}{vDivider}{metrics.areaClient}
-                      </AutoFitText>
+                    <div style={{ marginBottom: 4, fontSize: 5, whiteSpace: 'nowrap' }}>
+                      {metrics.areaSp}{vDivider}{metrics.areaClient}
                     </div>
                   ) : (
                     <div style={deskRow}>{metrics.areaSp}{vDivider}{metrics.areaClient}</div>
                   )}
 
-                  {/* Строка 3: Курсы валют — телефон: одна строка слева, авто-уменьшение шрифта (пол 5px) */}
+                  {/* Строка 3: Курсы валют — телефон: одна строка слева, фикс. шрифт 5px (без автоподгонки) */}
                   {isPhone ? (
-                    <div style={{ marginBottom: 4 }}>
-                      <AutoFitText align="left" minFontSize={5} maxFontSize={13}>
-                        {metrics.rateUsd}{vDivider}{metrics.rateEur}{vDivider}{metrics.rateCny}
-                      </AutoFitText>
+                    <div style={{ marginBottom: 4, fontSize: 5, whiteSpace: 'nowrap' }}>
+                      {metrics.rateUsd}{vDivider}{metrics.rateEur}{vDivider}{metrics.rateCny}
                     </div>
                   ) : (
                     <div style={deskRow}>{metrics.rateUsd}{vDivider}{metrics.rateEur}{vDivider}{metrics.rateCny}</div>
