@@ -489,6 +489,45 @@ grep -E '^VITE_SUPABASE_(URL|PUBLISHABLE_KEY)=' /opt/hubtender-build/.env.produc
 # Заполни реальными значениями (без угловых скобок).
 ```
 
+Сборка фронта падает с `Killed` (`rendering chunks ... Killed`):
+
+Это **kernel OOM** — серверу не хватило RAM на Vite-сборку (sourcemap + Sentry в
+фазе `rendering chunks`). Не путать с `JavaScript heap out of memory` (это лимит
+V8 со стектрейсом). Поднимать `--max-old-space-size` тут БЕСПОЛЕЗНО и только
+ухудшит — нужно дать памяти, а не разрешить её больше есть.
+
+```bash
+free -h            # сколько RAM/swap; при <3 ГБ суммарно сборка рискует упасть
+swapon --show
+```
+
+Штатный фикс — добавить swap-файл (сборка станет чуть медленнее, sourcemap в
+Sentry сохраняются). Разово на сервере:
+
+```bash
+ssh root@45.80.128.254
+fallocate -l 4G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=4096
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab   # чтобы пережил перезагрузку
+free -h
+```
+
+Затем повторить (бэкенд уже задеплоен — достаточно `frontend`):
+
+```bash
+cd /opt/hubtender-build
+bash scripts/deploy-server.sh frontend
+```
+
+Аварийный обход без swap — собрать без sourcemap (теряются читаемые трейсы в
+Sentry до следующей нормальной сборки):
+
+```bash
+BUILD_NO_SOURCEMAP=1 bash scripts/deploy-server.sh frontend
+```
+
 `docker build` падает на `./backend`:
 
 ```bash

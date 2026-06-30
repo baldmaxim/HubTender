@@ -172,9 +172,21 @@ deploy_frontend() {
   export SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT
   [ -n "${SENTRY_AUTH_TOKEN:-}" ] || warn "SENTRY_AUTH_TOKEN пуст — source maps не уйдут в Sentry"
 
+  # Память: Vite-сборка с sourcemap в фазе rendering chunks легко съедает 1.5–3 ГБ.
+  # Если суммарно (свободная RAM + swap) мало — предупреждаем и подсказываем фикс,
+  # иначе ядро прибьёт node по OOM (в логе — голое `Killed`).
+  local mem_avail_mb swap_total_mb
+  mem_avail_mb="$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
+  swap_total_mb="$(awk '/^SwapTotal:/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
+  log "память: MemAvailable=${mem_avail_mb}MB, SwapTotal=${swap_total_mb}MB"
+  if [ "$(( mem_avail_mb + swap_total_mb ))" -lt 3072 ]; then
+    warn "доступно <3 ГБ (RAM+swap) — Vite может словить OOM (Killed) в фазе rendering chunks"
+    warn "фикс: добавь swap (см. DEPLOY.md → «Сборка фронта падает с Killed») или собери с BUILD_NO_SOURCEMAP=1"
+  fi
+
   log "npm run build:prod"
   npm run build:prod
-  [ -f dist/index.html ] || fail "dist/index.html не появился"
+  [ -f dist/index.html ] || fail "dist/index.html не появился (вероятно OOM — см. DEPLOY.md «Сборка фронта падает с Killed»)"
 
   local ts; ts="$(date +%Y%m%d-%H%M%S)"
   local backup_dir="$SITE_DIR/backups/public"

@@ -11,10 +11,15 @@ export default defineConfig(({ mode }) => {
   // VITE_SENTRY_RELEASE из git SHA, и он должен перебить значение из .env.production.yandex.
   const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN || env.SENTRY_AUTH_TOKEN
   const sentryRelease = process.env.VITE_SENTRY_RELEASE || env.VITE_SENTRY_RELEASE
+  // Аварийный режим для слабых по RAM серверов: BUILD_NO_SOURCEMAP=1 убирает
+  // генерацию sourcemap и заливку в Sentry — снимает пик памяти в фазе
+  // `rendering chunks` (на проде ловили kernel OOM → `Killed`), ценой читаемых
+  // трейсов в Sentry. Штатный путь — оставить sourcemap и добавить swap.
+  const noSourcemap = process.env.BUILD_NO_SOURCEMAP === '1'
   // Source-map upload ON только когда явно проставлены и токен, и release-имя.
   // Локальный `npm run build` (mode=production, .env без VITE_SENTRY_RELEASE)
   // не льёт ничего; `npm run build:prod` (mode=production.yandex, .env.production.yandex с VITE_SENTRY_RELEASE) — льёт.
-  const enableSentryUpload = isProd && Boolean(sentryAuthToken) && Boolean(sentryRelease)
+  const enableSentryUpload = isProd && !noSourcemap && Boolean(sentryAuthToken) && Boolean(sentryRelease)
 
   return {
     plugins: [
@@ -74,11 +79,14 @@ export default defineConfig(({ mode }) => {
       : undefined,
     build: {
       outDir: 'dist',
-      sourcemap: isProd ? 'hidden' : true,
+      sourcemap: noSourcemap ? false : isProd ? 'hidden' : true,
       target: 'es2020',
       cssCodeSplit: true,
       chunkSizeWarningLimit: 800,
       rollupOptions: {
+        // Меньше параллельных файловых операций → ниже пик RAM в фазе rendering
+        // chunks (по умолчанию 20). Защита от OOM на проде со скромной памятью.
+        maxParallelFileOps: 4,
         output: {
           manualChunks: {
             'vendor-react': ['react', 'react-dom', 'react-router-dom'],
