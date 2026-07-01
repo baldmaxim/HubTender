@@ -2,7 +2,7 @@
  * Конфигурация колонок для таблицы результатов
  */
 
-import { Tag } from 'antd';
+import { Tag, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { RedistributionAmountCell } from './RedistributionAmountCell';
 import { formatRu2 } from '../../../../utils/format/currency';
@@ -47,6 +47,9 @@ export const RESULTS_TABLE_WIDTH = 1820;
 export const getResultsTableColumns = (
   fitToScreen = false,
   nameWidth = 300,
+  // Телефон-портрет: имя в одну строку (ellipsis+Tooltip) → детерминированная высота строк,
+  // иначе перенос текста в узкой колонке даёт разную высоту и петлю переизмерения rc-virtual-list.
+  singleLineName = false,
 ): ColumnsType<ResultRow> => {
   return [
     {
@@ -58,32 +61,42 @@ export const getResultsTableColumns = (
       render: (_, record) => {
         const itemNoColor = record.isLeaf ? '#52c41a' : '#ff7875';
         const paddingLeft = record.is_additional ? 20 : 0;
+        const inner = (
+          <div
+            style={{
+              fontWeight: 500,
+              ...(singleLineName
+                ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+                : {}),
+            }}
+          >
+            {record.is_additional ? (
+              <Tag color="orange" style={{ marginRight: 8 }}>
+                ДОП
+              </Tag>
+            ) : record.section_number ? (
+              <Tag color="blue" style={{ marginRight: 8 }}>
+                {record.section_number}
+              </Tag>
+            ) : null}
+            {record.item_no && (
+              <span style={{ marginRight: 8, color: itemNoColor, fontWeight: 600 }}>
+                {record.item_no}
+              </span>
+            )}
+            <span
+              style={{
+                fontWeight: record.isLeaf ? undefined : 700,
+                fontFamily: record.isLeaf ? undefined : 'Georgia, "Times New Roman", serif',
+              }}
+            >
+              {record.work_name}
+            </span>
+          </div>
+        );
         return (
           <div style={{ paddingLeft }}>
-            <div style={{ fontWeight: 500 }}>
-              {record.is_additional ? (
-                <Tag color="orange" style={{ marginRight: 8 }}>
-                  ДОП
-                </Tag>
-              ) : record.section_number ? (
-                <Tag color="blue" style={{ marginRight: 8 }}>
-                  {record.section_number}
-                </Tag>
-              ) : null}
-              {record.item_no && (
-                <span style={{ marginRight: 8, color: itemNoColor, fontWeight: 600 }}>
-                  {record.item_no}
-                </span>
-              )}
-              <span
-                style={{
-                  fontWeight: record.isLeaf ? undefined : 700,
-                  fontFamily: record.isLeaf ? undefined : 'Georgia, "Times New Roman", serif',
-                }}
-              >
-                {record.work_name}
-              </span>
-            </div>
+            {singleLineName ? <Tooltip title={record.work_name}>{inner}</Tooltip> : inner}
           </div>
         );
       },

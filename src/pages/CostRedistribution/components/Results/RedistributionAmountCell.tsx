@@ -3,13 +3,15 @@
  */
 
 import React, { memo } from 'react';
-import { ArrowUpOutlined, ArrowDownOutlined, MinusOutlined } from '@ant-design/icons';
 import { formatRu2 } from '../../../../utils/format/currency';
 
 interface RedistributionAmountCellProps {
   amount: number;
 }
 
+// Стрелки — лёгкие unicode-глифы вместо SVG-иконок @ant-design/icons: при 500+ строк
+// virtual монтирует ячейку на каждую видимую строку при скролле, и парс/вставка SVG
+// заметно дороже текстового глифа на мобильном CPU.
 const RedistributionAmountCellBase: React.FC<RedistributionAmountCellProps> = ({ amount }) => {
   const absAmount = Math.abs(amount);
   const formattedAmount = formatRu2(absAmount);
@@ -18,7 +20,7 @@ const RedistributionAmountCellBase: React.FC<RedistributionAmountCellProps> = ({
     // Добавление
     return (
       <span style={{ color: '#52c41a', fontWeight: 500 }}>
-        <ArrowUpOutlined style={{ marginRight: 4 }} />
+        <span style={{ marginRight: 4 }}>▲</span>
         +{formattedAmount}
       </span>
     );
@@ -26,7 +28,7 @@ const RedistributionAmountCellBase: React.FC<RedistributionAmountCellProps> = ({
     // Вычитание
     return (
       <span style={{ color: '#ff4d4f', fontWeight: 500 }}>
-        <ArrowDownOutlined style={{ marginRight: 4 }} />
+        <span style={{ marginRight: 4 }}>▼</span>
         {formattedAmount}
       </span>
     );
@@ -34,7 +36,7 @@ const RedistributionAmountCellBase: React.FC<RedistributionAmountCellProps> = ({
     // Без изменений
     return (
       <span style={{ color: '#999' }}>
-        <MinusOutlined style={{ marginRight: 4 }} />
+        <span style={{ marginRight: 4 }}>–</span>
         0.00
       </span>
     );

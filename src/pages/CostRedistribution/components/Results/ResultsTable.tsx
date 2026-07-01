@@ -64,8 +64,8 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({
   const nameWidth = phonePortrait ? Math.max(Math.round(vp.width * 0.5), 140) : 300;
 
   const columns = useMemo(
-    () => getResultsTableColumns(fitToScreen, nameWidth),
-    [fitToScreen, nameWidth],
+    () => getResultsTableColumns(fitToScreen, nameWidth, phonePortrait),
+    [fitToScreen, nameWidth, phonePortrait],
   );
 
   if (!hasResults) {
@@ -80,7 +80,15 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({
   }
 
   return (
-    <div style={{ width: '100%' }}>
+    <div style={{ width: '100%' }} className={phonePortrait ? 'crr-results-portrait' : undefined}>
+      {phonePortrait && (
+        // Единая высота строк тела: при virtual строки с Tag и без него иначе разной высоты,
+        // что запускает петлю переизмерения rc-virtual-list (collectHeight → syncScrollTop) на
+        // каждом кадре скролла. Фиксированная высота делает itemHeight детерминированным.
+        <style>{`
+          .crr-results-portrait .ant-table-row .ant-table-cell { height: 34px; overflow: hidden; }
+        `}</style>
+      )}
       <Table
         columns={columns}
         dataSource={rows}
