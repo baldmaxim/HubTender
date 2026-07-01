@@ -4,8 +4,6 @@
 
 import { Card, Spin, Empty } from 'antd';
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { usePositionTabs } from '../../contexts/PositionTabsContext';
 import { useCommerceData, useCommerceActions } from './hooks';
 import { TenderSelector, CommerceTable, CommerceCards, CommerceHeader, COMMERCE_TABLE_FIT_WIDTH } from './components';
 import CommerceTotalsBar from './components/CommerceTotalsBar';
@@ -16,8 +14,6 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 
 export default function Commerce() {
-  const navigate = useNavigate();
-  const { openTab } = usePositionTabs();
   const { isPhone, isLandscapePhone } = useIsMobile();
   const { theme: currentTheme } = useTheme();
   // Архивные тендеры отображаются в фильтре для всех пользователей
@@ -143,12 +139,12 @@ export default function Commerce() {
     exportCommerceToExcel(positions, selectedTender, insuranceTotal);
   };
 
-  // Навигация к позиции — открываем внутренней вкладкой приложения
+  // Навигация к позиции — открываем в новой вкладке браузера, чтобы «Форма КП»
+  // сохранялась в исходной вкладке.
   const handleNavigateToPosition = (positionId: string) => {
-    if (selectedTenderId) {
-      openTab({ positionId, tenderId: selectedTenderId, title: 'Позиция' });
-      navigate(`/positions/${positionId}/items?tenderId=${selectedTenderId}&positionId=${positionId}`);
-    }
+    if (!selectedTenderId) return;
+    const url = `/positions/${positionId}/items?tenderId=${selectedTenderId}&positionId=${positionId}`;
+    window.open(url, '_blank', 'noopener');
   };
 
   // Если тендер не выбран, показываем только выбор тендера
