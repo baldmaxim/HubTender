@@ -264,7 +264,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               }
             : {}),
         }}
-        width={250}
+        width={screens.lg ? 300 : 250}
       >
         <div
           className={`logo logo-${currentTheme} ${!collapsed ? 'logo-compact' : ''}`}
