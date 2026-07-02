@@ -55,47 +55,52 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
   );
   // Десктоп: одна строка справа с разделителями (как раньше).
   const deskRow: React.CSSProperties = { marginBottom: 4, fontSize: 14 };
-  // Телефон: одна строка, 5px. Перебиваем глобальное правило Settings.css
+  // Телефон: читаемый 12px. Перебиваем глобальное правило Settings.css
   // `.ant-typography { font-size: var(--font-size-base) }` (без !important),
   // локально опуская переменную — иначе AntD <Text> остаётся 14px (правило задаёт
   // размер прямо на элементе, и унаследованный от родителя fontSize проигрывает).
+  // whiteSpace на строке не фиксируем: при разрастании числа сработает перенос
+  // вместо обрезки справа (nowrap оставлен на самих чанках — значение не рвётся).
   const phoneMetricRow = {
     marginBottom: 4,
-    fontSize: 5, // для разделителей (.ant-divider не в списке Settings.css)
-    whiteSpace: 'nowrap',
-    '--font-size-base': '5px', // двигает font-size у вложенных .ant-typography
+    fontSize: 12, // для разделителей (.ant-divider не в списке Settings.css)
+    '--font-size-base': '12px', // двигает font-size у вложенных .ant-typography
   } as React.CSSProperties;
+  // Телефон читаемо укладывается в рамку за счёт сокращения подписей:
+  // «Площадь по СП» → «S СП», «Курс USD: … Р/$» → «USD: …» (запятая-разделитель).
+  const rateFmt = (rate?: number) =>
+    (rate ?? 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Атомарные чанки «метрик»: nowrap, чтобы значение не рвалось посередине при переносе.
   // Рендерятся только при выбранном тендере; optional chaining — чтобы избежать null-доступа.
   const metrics = {
     areaSp: (
       <span style={{ whiteSpace: 'nowrap' }}>
-        <Text style={txt}>Площадь по СП: </Text>
+        <Text style={txt}>{isPhone ? 'S СП: ' : 'Площадь по СП: '}</Text>
         <Text strong style={green}>{selectedTender?.area_sp?.toLocaleString('ru-RU') || '0'} м²</Text>
       </span>
     ),
     areaClient: (
       <span style={{ whiteSpace: 'nowrap' }}>
-        <Text style={txt}>Площадь Заказчика: </Text>
+        <Text style={txt}>{isPhone ? 'S Заказчика: ' : 'Площадь Заказчика: '}</Text>
         <Text strong style={green}>{selectedTender?.area_client?.toLocaleString('ru-RU') || '0'} м²</Text>
       </span>
     ),
     rateUsd: (
       <span style={{ whiteSpace: 'nowrap' }}>
-        <Text strong style={green}>Курс USD: </Text>
-        <Text style={txt}>{selectedTender?.usd_rate?.toFixed(2) || '0.00'} Р/$</Text>
+        <Text strong style={green}>{isPhone ? 'USD: ' : 'Курс USD: '}</Text>
+        <Text style={txt}>{isPhone ? rateFmt(selectedTender?.usd_rate) : `${selectedTender?.usd_rate?.toFixed(2) || '0.00'} Р/$`}</Text>
       </span>
     ),
     rateEur: (
       <span style={{ whiteSpace: 'nowrap' }}>
-        <Text strong style={green}>Курс EUR: </Text>
-        <Text style={txt}>{selectedTender?.eur_rate?.toFixed(2) || '0.00'} Р/€</Text>
+        <Text strong style={green}>{isPhone ? 'EUR: ' : 'Курс EUR: '}</Text>
+        <Text style={txt}>{isPhone ? rateFmt(selectedTender?.eur_rate) : `${selectedTender?.eur_rate?.toFixed(2) || '0.00'} Р/€`}</Text>
       </span>
     ),
     rateCny: (
       <span style={{ whiteSpace: 'nowrap' }}>
-        <Text strong style={green}>Курс CNY: </Text>
-        <Text style={txt}>{selectedTender?.cny_rate?.toFixed(2) || '0.00'} Р/¥</Text>
+        <Text strong style={green}>{isPhone ? 'CNY: ' : 'Курс CNY: '}</Text>
+        <Text style={txt}>{isPhone ? rateFmt(selectedTender?.cny_rate) : `${selectedTender?.cny_rate?.toFixed(2) || '0.00'} Р/¥`}</Text>
       </span>
     ),
   };
