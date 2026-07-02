@@ -172,7 +172,7 @@ export default function Commerce() {
       bordered={false}
       style={{ height: '100%' }}
       headStyle={{ borderBottom: 'none', paddingBottom: 0 }}
-      bodyStyle={{ padding: isPhone ? '8px 0' : 24 }}
+      styles={{ body: { padding: isPhone ? '8px 0' : 0 } }}
       title={
         <CommerceHeader
           tenders={tenders}

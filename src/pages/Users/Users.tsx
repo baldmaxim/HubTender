@@ -253,7 +253,7 @@ const Users: React.FC = () => {
       children: (
         <>
           {!isPhoneDevice && (
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ margin: '0 24px 16px' }}>
               <Button type="primary" onClick={() => { createRoleForm.resetFields(); setIsCreateRoleModalVisible(true); }}>
                 Создать роль
               </Button>
@@ -283,8 +283,11 @@ const Users: React.FC = () => {
             <span>Управление пользователями</span>
           </div>
         }
+        styles={{ body: { padding: 0 } }}
       >
+        <style>{`.users-tabs-flush > .ant-tabs-nav { padding: 0 24px; }`}</style>
         <Tabs
+          className="users-tabs-flush"
           activeKey={activeTab}
           onChange={setActiveTab}
           items={tabItems}

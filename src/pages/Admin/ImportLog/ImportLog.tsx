@@ -328,6 +328,7 @@ const ImportLog: React.FC = () => {
 
   return (
     <Card
+      styles={{ body: { padding: 0 } }}
       extra={
         <Space>
           <Select

@@ -208,15 +208,15 @@ const Bsm: React.FC = () => {
   );
 
   return (
-    <Card bordered={false} style={{ height: '100%' }} styles={{ header: { borderBottom: 'none', paddingBottom: 0, ...(isPhone ? { paddingInline: 8 } : {}) }, body: isPhone ? { padding: 8 } : undefined }} title={headerNode}>
+    <Card bordered={false} style={{ height: '100%' }} styles={{ header: { borderBottom: 'none', paddingBottom: 0, ...(isPhone ? { paddingInline: 8 } : {}) }, body: isPhone ? { padding: 8 } : { padding: 0 } }} title={headerNode}>
       {/* Тулбар над вкладками на телефоне */}
-      {isPhoneDevice && <div style={{ marginBottom: 12 }}>{filterControls(true)}</div>}
+      {isPhoneDevice && <div style={{ marginBottom: 12, padding: isPhone ? 0 : '0 24px' }}>{filterControls(true)}</div>}
 
       <Tabs
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key as 'all' | 'materials' | 'works')}
         items={tabItems}
-        style={{ marginBottom: 16 }}
+        style={{ marginBottom: 16, padding: isPhone ? '0 8px' : '0 24px' }}
         tabBarExtraContent={isPhoneDevice ? undefined : filterControls(false)}
       />
 

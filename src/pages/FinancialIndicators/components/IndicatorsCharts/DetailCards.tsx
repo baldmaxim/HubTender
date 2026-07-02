@@ -75,8 +75,9 @@ export const BreakdownDetailCard: React.FC<{
           style={{
             background: currentTheme === 'dark' ? '#1f1f1f' : '#ffffff',
           }}
+          styles={{ body: { padding: 0 } }}
         >
-          <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 16, padding: '24px 24px 0' }}>
             <Title level={5} style={{ margin: 0, marginBottom: 4 }}>
               Детализация по категориям затрат
             </Title>
@@ -172,8 +173,9 @@ export const SummaryTableCard: React.FC<{
           style={{
             background: currentTheme === 'dark' ? '#1f1f1f' : '#ffffff',
           }}
+          styles={{ body: { padding: 0 } }}
         >
-          <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 16, padding: '24px 24px 0' }}>
             <Title level={5} style={{ margin: 0, marginBottom: 4 }}>
               Краткая сводка
             </Title>

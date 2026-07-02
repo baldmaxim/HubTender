@@ -194,30 +194,32 @@ const ConstructionCostNew: React.FC = () => {
         )}
       </div>
 
-      <Card bordered={false} bodyStyle={{ padding: isPhone ? '8px 0' : 24 }} style={{ height: isPhoneDevice ? 'auto' : 'calc(100% - 140px)' }}>
-        <CostFilters
-          costType={costType}
-          viewMode={effectiveViewMode}
-          searchText={searchText}
-          onCostTypeChange={setCostType}
-          onViewModeChange={(v) => { setViewMode(v); setViewModeTouched(true); }}
-          onSearchChange={setSearchText}
-          onExpandAll={() => {
-            // Рекурсивно собираем ключи всех строк с детьми (над-группа +
-            // вложенные категории + локации), иначе ВИС-категории внутри
-            // над-группы «ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ» не раскроются.
-            const collectKeys = (rows: typeof filteredData): string[] =>
-              rows.flatMap(row =>
-                row.children && row.children.length > 0
-                  ? [row.key, ...collectKeys(row.children)]
-                  : [],
-              );
-            setExpandedRowKeys(collectKeys(filteredData));
-          }}
-          onCollapseAll={() => setExpandedRowKeys([])}
-          onExport={handleExport}
-          disableExport={!selectedTenderId || filteredData.length === 0}
-        />
+      <Card bordered={false} styles={{ body: { padding: 0 } }} style={{ height: isPhoneDevice ? 'auto' : 'calc(100% - 140px)' }}>
+        <div style={{ padding: isPhone ? '8px 8px 0' : '24px 24px 0' }}>
+          <CostFilters
+            costType={costType}
+            viewMode={effectiveViewMode}
+            searchText={searchText}
+            onCostTypeChange={setCostType}
+            onViewModeChange={(v) => { setViewMode(v); setViewModeTouched(true); }}
+            onSearchChange={setSearchText}
+            onExpandAll={() => {
+              // Рекурсивно собираем ключи всех строк с детьми (над-группа +
+              // вложенные категории + локации), иначе ВИС-категории внутри
+              // над-группы «ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ» не раскроются.
+              const collectKeys = (rows: typeof filteredData): string[] =>
+                rows.flatMap(row =>
+                  row.children && row.children.length > 0
+                    ? [row.key, ...collectKeys(row.children)]
+                    : [],
+                );
+              setExpandedRowKeys(collectKeys(filteredData));
+            }}
+            onCollapseAll={() => setExpandedRowKeys([])}
+            onExport={handleExport}
+            disableExport={!selectedTenderId || filteredData.length === 0}
+          />
+        </div>
 
         {isLandscapePhone ? (
           <LandscapeTableOverlay

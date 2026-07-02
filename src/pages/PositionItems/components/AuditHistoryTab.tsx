@@ -29,9 +29,11 @@ const AuditHistoryTab: React.FC<AuditHistoryTabProps> = ({ positionId }) => {
   }
 
   return (
-    <Card>
+    <Card styles={{ body: { padding: 0 } }}>
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        <AuditFilters filters={filters} onChange={setFilters} />
+        <div style={{ padding: '24px 24px 0' }}>
+          <AuditFilters filters={filters} onChange={setFilters} />
+        </div>
         <AuditHistoryTable positionId={positionId} filters={filters} readOnly={isPhoneDevice} />
       </Space>
     </Card>

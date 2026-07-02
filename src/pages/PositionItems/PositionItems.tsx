@@ -305,7 +305,7 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
                       />
                     )
                   }
-                  styles={isPhoneDevice ? { body: { padding: 8 } } : undefined}
+                  styles={{ body: { padding: isPhoneDevice ? 8 : 0 } }}
                 >
                   {itemsBody}
                 </Card>

@@ -362,9 +362,9 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
 
   return (
     <div>
-      <Card bordered={false}>
+      <Card bordered={false} styles={{ body: { padding: 0 } }}>
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          <div>
+          <div style={{ padding: '24px 24px 0' }}>
             <Title level={4} style={{ margin: 0 }}>
               Настройка роста субподряда
             </Title>
@@ -375,10 +375,12 @@ export const SubcontractGrowthTab: React.FC<SubcontractGrowthTabProps> = ({ tend
           </div>
 
           {!tenderId && (
-            <Empty
-              description="Выберите тендер для настройки роста субподряда"
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            />
+            <div style={{ padding: '0 24px 24px' }}>
+              <Empty
+                description="Выберите тендер для настройки роста субподряда"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
+            </div>
           )}
 
           {tenderId && (
