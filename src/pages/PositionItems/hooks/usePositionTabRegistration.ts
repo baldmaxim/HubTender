@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { usePositionTabActions } from '../../../contexts/PositionTabsContext';
+import { useWorkspaceTabActions } from '../../../contexts/WorkspaceTabsContext';
 
 interface PositionLike {
   position_number?: number | string | null;
@@ -14,7 +14,7 @@ const truncate = (s: string, max = 20) => (s.length > max ? `${s.slice(0, max - 
  * поэтому здесь только setTabTitle. Навигацию не выполняет.
  */
 export function usePositionTabTitle(positionId: string | undefined, position: PositionLike | null) {
-  const { setTabTitle } = usePositionTabActions();
+  const { setTabTitle } = useWorkspaceTabActions();
 
   useEffect(() => {
     if (!positionId || !position) return;

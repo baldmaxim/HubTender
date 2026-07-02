@@ -18,7 +18,7 @@ import type { ColumnsType } from 'antd/es/table';
 import type { ClientPosition, Tender } from '../../../lib/types';
 import { PositionRowActions } from './PositionRowActions';
 import { IconSwap } from '../../../components/transitions';
-import { usePositionTabActions } from '../../../contexts/PositionTabsContext';
+import { useWorkspaceTabActions } from '../../../contexts/WorkspaceTabsContext';
 import { HideOnPhone } from '../../../components/responsive/HideOnPhone';
 
 const { Text } = Typography;
@@ -144,7 +144,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
   onToggleShowAll,
   tableScrollY = 600,
 }) => {
-  const { openTab } = usePositionTabActions();
+  const { openPositionTab } = useWorkspaceTabActions();
   // Состояние для отслеживания открытой позиции
   const [expandedPositionId, setExpandedPositionId] = useState<string | null>(null);
 
@@ -550,7 +550,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
                 // Средний клик — открываем фоновой внутренней вкладкой (без навигации)
-                openTab(
+                openPositionTab(
                   {
                     positionId: record.id,
                     tenderId: selectedTender.id,

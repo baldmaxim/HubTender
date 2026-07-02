@@ -1,67 +1,56 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Tabs } from 'antd';
 import type { TabsProps } from 'antd';
 import { useNavigate, useMatch, useLocation } from 'react-router-dom';
-import { usePositionTabs, type PositionTab } from '../../contexts/PositionTabsContext';
-import type { WorkspacePage } from './workspacePages';
-
-const itemsUrl = (t: Pick<PositionTab, 'positionId' | 'tenderId'>) =>
-  `/positions/${t.positionId}/items?tenderId=${t.tenderId}&positionId=${t.positionId}`;
-
-interface WorkspaceTabsBarProps {
-  /** Открытые страницы-якоря (несъёмные вкладки) в порядке реестра. */
-  openedPages: WorkspacePage[];
-}
+import { useWorkspaceTabs, type WorkspaceTab } from '../../contexts/WorkspaceTabsContext';
+import { WORKSPACE_PAGES } from './workspacePages';
 
 /**
- * Панель вкладок «рабочего стола»: несъёмные якоря страниц («Позиции» / «Форма КП» / «Затраты»)
- * + по закрываемой вкладке на каждую открытую позицию. activeKey выводится ИЗ URL (источник
- * истины). Рендерится только на workspace-роутах (см. MainLayout).
+ * Панель вкладок «рабочего стола»: по вкладке на каждую открытую страницу-якорь
+ * («Позиции» / «Форма КП» / «Затраты») + по вкладке на каждую открытую позицию — все
+ * закрываемые, симметрично. activeKey выводится ИЗ URL (источник истины). Рендерится
+ * только на workspace-роутах (см. MainLayout).
  */
-const WorkspaceTabsBar: React.FC<WorkspaceTabsBarProps> = ({ openedPages }) => {
-  const { tabs, closeTab } = usePositionTabs();
+const WorkspaceTabsBar: React.FC = () => {
+  const { tabs, closeTab } = useWorkspaceTabs();
   const navigate = useNavigate();
   const location = useLocation();
   const match = useMatch('/positions/:positionId/items');
   const currentPositionId = match?.params.positionId;
 
-  // Пока нет открытых позиций — панель не показываем (на одиночной странице нет лишней вкладки).
-  if (tabs.length === 0) return null;
+  // Порядок отображения (не влияет на порядок хранения): якоря — в порядке реестра,
+  // затем позиции — в порядке открытия.
+  const ordered = useMemo(() => {
+    const pages = tabs
+      .filter((t): t is Extract<WorkspaceTab, { kind: 'page' }> => t.kind === 'page')
+      .sort((a, b) => WORKSPACE_PAGES.findIndex((p) => p.path === a.key) - WORKSPACE_PAGES.findIndex((p) => p.path === b.key));
+    const positions = tabs.filter((t) => t.kind === 'position');
+    return [...pages, ...positions];
+  }, [tabs]);
 
-  const activePagePath = openedPages.find((p) => p.path === location.pathname)?.path;
-  const activeKey =
-    currentPositionId && tabs.some((t) => t.positionId === currentPositionId)
-      ? currentPositionId
-      : activePagePath ?? openedPages[0]?.path ?? '';
+  // Пока нет ни одной открытой вкладки — панель не показываем.
+  if (ordered.length === 0) return null;
 
-  const items: TabsProps['items'] = [
-    ...openedPages.map((p) => ({ key: p.path, label: p.title, closable: false })),
-    ...tabs.map((t) => ({ key: t.positionId, label: t.title || 'Позиция', closable: true })),
-  ];
+  const activeKey = currentPositionId ?? location.pathname;
+
+  const items: TabsProps['items'] = ordered.map((t) => ({ key: t.key, label: t.title, closable: true }));
 
   const onChange = (key: string) => {
-    const page = openedPages.find((p) => p.path === key);
-    if (page) {
-      navigate(page.path);
-      return;
-    }
-    const tab = tabs.find((t) => t.positionId === key);
-    if (tab) navigate(itemsUrl(tab));
+    const tab = tabs.find((t) => t.key === key);
+    if (tab) navigate(tab.path);
   };
 
   const onEdit: TabsProps['onEdit'] = (targetKey, action) => {
-    // Закрываются только позиции (страницы-якоря closable:false).
     if (action !== 'remove' || typeof targetKey !== 'string') return;
     const wasActive = targetKey === activeKey;
-    // Навигируем ДО закрытия: уводим URL с закрываемой позиции прежде, чем она исчезнет из tabs,
-    // чтобы не оставить промежуточный рендер «URL = закрытая позиция, но её уже нет в tabs» (на
-    // нём deep-link эффект вернул бы вкладку).
+    // Навигируем ДО закрытия: уводим URL с закрываемой вкладки прежде, чем она исчезнет из
+    // tabs, чтобы не оставить промежуточный рендер «URL = закрытая вкладка, но её уже нет в
+    // tabs» (на нём deep-link эффект вернул бы вкладку).
     if (wasActive) {
-      const idx = tabs.findIndex((t) => t.positionId === targetKey);
-      const remaining = tabs.filter((t) => t.positionId !== targetKey);
-      const nextPos = remaining[idx - 1] ?? remaining[idx] ?? null;
-      const fallbackPage = openedPages[openedPages.length - 1]?.path ?? '/positions';
-      navigate(nextPos ? itemsUrl(nextPos) : fallbackPage);
+      const idx = ordered.findIndex((t) => t.key === targetKey);
+      const remaining = ordered.filter((t) => t.key !== targetKey);
+      const next = remaining[idx - 1] ?? remaining[idx] ?? null;
+      navigate(next ? next.path : '/dashboard');
     }
     closeTab(targetKey);
   };

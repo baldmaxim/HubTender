@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation, useMatch, useSearchParams } from 'react-router-dom';
 import WorkspaceTabsBar from './WorkspaceTabsBar';
 import PositionItems from '../../pages/PositionItems/PositionItems';
-import { usePositionTabs } from '../../contexts/PositionTabsContext';
+import { useWorkspaceTabs } from '../../contexts/WorkspaceTabsContext';
 import { WORKSPACE_PAGES } from './workspacePages';
 
 /**
  * Keep-alive «рабочего стола» вкладок: страницы-якоря («Позиции», «Форма КП», «Затраты») и
- * все открытые позиции смонтированы одновременно, неактивные скрыты через display:none. Так
- * переключение между вкладками не сбрасывает их состояние (прокрутку, фильтры, выбранный тендер).
+ * все открытые позиции монтируются только пока присутствуют в единственном списке `tabs`
+ * (WorkspaceTabsContext) — неактивные скрыты через display:none, закрытые не рендерятся
+ * вовсе. Так переключение между вкладками не сбрасывает их состояние (прокрутку, фильтры,
+ * выбранный тендер), а закрытие — реально размонтирует и вычищает вкладку из sessionStorage.
  *
  * Рендерится вместо <Outlet/> для workspace-роутов (см. MainLayout + isWorkspacePath), поэтому
  * route-элементы этих путей не монтируются повторно.
@@ -16,58 +18,53 @@ import { WORKSPACE_PAGES } from './workspacePages';
 const WorkspaceKeepAlive: React.FC = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { tabs, openTab } = usePositionTabs();
+  const { tabs, openPageTab, openPositionTab } = useWorkspaceTabs();
   const match = useMatch('/positions/:positionId/items');
   const currentPositionId = match?.params.positionId;
-  const currentPagePath = WORKSPACE_PAGES.find((p) => p.path === location.pathname)?.path;
-
-  // Открытые (смонтированные) страницы-якоря. Ленивое монтирование: страница попадает сюда,
-  // только став активной, затем остаётся (скрыта через display). Поэтому переход из «Формы КП»/
-  // «Затрат» не монтирует список «Позиции» и не тянет его авто-загрузку по ?tenderId=.
-  const [openedPages, setOpenedPages] = useState<Set<string>>(() =>
-    currentPagePath ? new Set([currentPagePath]) : new Set(),
-  );
-  useEffect(() => {
-    if (!currentPagePath) return;
-    setOpenedPages((prev) => (prev.has(currentPagePath) ? prev : new Set(prev).add(currentPagePath)));
-  }, [currentPagePath]);
-
-  const openedPageList = useMemo(
-    () => WORKSPACE_PAGES.filter((p) => openedPages.has(p.path)),
-    [openedPages],
-  );
 
   // tabs читаем через ref: эффект должен реагировать ТОЛЬКО на смену URL, а не на мутации
   // списка вкладок.
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
 
-  // Deep-link: если открыта позиция, которой ещё нет в tabs — регистрируем её. ВАЖНО: tabs НЕ в
-  // зависимостях (иначе при закрытии активной вкладки эффект вернул бы её на промежуточном
-  // рендере — «нужно нажать × дважды»; инвариант: закрытие активной вкладки сопровождается
-  // навигацией прочь, см. onEdit в WorkspaceTabsBar).
+  // Deep-link: если текущий URL (позиция или страница-якорь) ещё не представлен вкладкой —
+  // регистрируем её. ВАЖНО: tabs НЕ в зависимостях (иначе при закрытии активной вкладки эффект
+  // вернул бы её на промежуточном рендере — «нужно нажать × дважды»; инвариант: закрытие
+  // активной вкладки сопровождается навигацией прочь, см. onEdit в WorkspaceTabsBar).
   useEffect(() => {
-    if (currentPositionId && !tabsRef.current.some((t) => t.positionId === currentPositionId)) {
-      openTab({ positionId: currentPositionId, tenderId: searchParams.get('tenderId') ?? '', title: 'Позиция' });
+    if (currentPositionId) {
+      if (!tabsRef.current.some((t) => t.key === currentPositionId)) {
+        openPositionTab({ positionId: currentPositionId, tenderId: searchParams.get('tenderId') ?? '', title: 'Позиция' });
+      }
+      return;
     }
-  }, [currentPositionId, searchParams, openTab]);
+    const page = WORKSPACE_PAGES.find((p) => p.path === location.pathname);
+    if (page && !tabsRef.current.some((t) => t.key === page.path)) {
+      openPageTab(page.path);
+    }
+  }, [location.pathname, currentPositionId, searchParams, openPageTab, openPositionTab]);
 
   return (
     <>
-      <WorkspaceTabsBar openedPages={openedPageList} />
-      {openedPageList.map((page) => {
-        const Page = page.component;
+      <WorkspaceTabsBar />
+      {tabs.map((tab) => {
+        const isActive = tab.key === (currentPositionId ?? location.pathname);
+        if (tab.kind === 'page') {
+          const page = WORKSPACE_PAGES.find((p) => p.path === tab.key);
+          if (!page) return null; // защита от «протухшей» sessionStorage-записи после deploy
+          const Page = page.component;
+          return (
+            <div key={tab.key} style={{ display: isActive ? 'block' : 'none', height: '100%' }}>
+              <Page />
+            </div>
+          );
+        }
         return (
-          <div key={page.path} style={{ display: location.pathname === page.path ? 'block' : 'none', height: '100%' }}>
-            <Page />
+          <div key={tab.key} style={{ display: isActive ? 'block' : 'none' }}>
+            <PositionItems positionId={tab.positionId} />
           </div>
         );
       })}
-      {tabs.map((t) => (
-        <div key={t.positionId} style={{ display: currentPositionId === t.positionId ? 'block' : 'none' }}>
-          <PositionItems positionId={t.positionId} />
-        </div>
-      ))}
     </>
   );
 };

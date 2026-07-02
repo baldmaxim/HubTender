@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
-import { usePositionTabActions } from '../../contexts/PositionTabsContext';
+import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
+import { buildPositionTabPath } from '../../lib/cache/workspaceTabsStorage';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClientPositions } from './hooks/useClientPositions';
 import { usePositionActions } from './hooks/usePositionActions';
@@ -35,7 +36,7 @@ interface TenderOption {
 const ClientPositions: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { openTab } = usePositionTabActions();
+  const { openPositionTab } = useWorkspaceTabActions();
   const { theme: currentTheme } = useTheme();
   const { isPhoneDevice } = useIsMobile();
 
@@ -299,14 +300,14 @@ const ClientPositions: React.FC = () => {
   const handleRowClick = useCallback((record: { id: string; position_number?: number }) => {
     const isLeaf = leafPositionIndices.has(record.id);
     if (isLeaf && selectedTender) {
-      openTab({
+      openPositionTab({
         positionId: record.id,
         tenderId: selectedTender.id,
         title: record.position_number != null ? `№ ${record.position_number}` : 'Позиция',
       });
-      navigate(`/positions/${record.id}/items?tenderId=${selectedTender.id}&positionId=${record.id}`);
+      navigate(buildPositionTabPath(record.id, selectedTender.id));
     }
-  }, [leafPositionIndices, selectedTender, openTab, navigate]);
+  }, [leafPositionIndices, selectedTender, openPositionTab, navigate]);
 
 
   // Обработчик возврата к выбору

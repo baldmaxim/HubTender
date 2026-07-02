@@ -7,7 +7,8 @@ import React from 'react';
 import { Modal, Table, Typography, Spin } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate } from 'react-router-dom';
-import { usePositionTabActions } from '../../../../contexts/PositionTabsContext';
+import { useWorkspaceTabActions } from '../../../../contexts/WorkspaceTabsContext';
+import { buildPositionTabPath } from '../../../../lib/cache/workspaceTabsStorage';
 import {
   useCategoryPositions,
   type CategoryPositionRow,
@@ -33,18 +34,18 @@ const CategoryPositionsModal: React.FC<CategoryPositionsModalProps> = ({
 }) => {
   const { rows, loading } = useCategoryPositions(tenderId, open ? category?.id ?? null : null);
   const navigate = useNavigate();
-  const { openTab } = usePositionTabActions();
+  const { openPositionTab } = useWorkspaceTabActions();
 
   // Открываем элементы позиции внутренней вкладкой приложения (keep-alive): «Затраты» остаются
   // смонтированной вкладкой. Закрываем модалку, чтобы она не висела на скрытой странице.
   const openPosition = (record: CategoryPositionRow) => {
     if (!tenderId) return;
-    openTab({
+    openPositionTab({
       positionId: record.id,
       tenderId,
       title: record.position_number != null ? `№ ${record.position_number}` : 'Позиция',
     });
-    navigate(`/positions/${record.id}/items?tenderId=${tenderId}&positionId=${record.id}`);
+    navigate(buildPositionTabPath(record.id, tenderId));
     onClose();
   };
 

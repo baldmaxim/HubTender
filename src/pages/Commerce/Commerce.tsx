@@ -5,7 +5,8 @@
 import { Card, Spin, Empty } from 'antd';
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePositionTabActions } from '../../contexts/PositionTabsContext';
+import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
+import { buildPositionTabPath } from '../../lib/cache/workspaceTabsStorage';
 import { useCommerceData, useCommerceActions } from './hooks';
 import { TenderSelector, CommerceTable, CommerceCards, CommerceHeader, COMMERCE_TABLE_FIT_WIDTH } from './components';
 import CommerceTotalsBar from './components/CommerceTotalsBar';
@@ -17,7 +18,7 @@ import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTabl
 
 export default function Commerce() {
   const navigate = useNavigate();
-  const { openTab } = usePositionTabActions();
+  const { openPositionTab } = useWorkspaceTabActions();
   const { isPhone, isLandscapePhone } = useIsMobile();
   const { theme: currentTheme } = useTheme();
   // Архивные тендеры отображаются в фильтре для всех пользователей
@@ -147,8 +148,8 @@ export default function Commerce() {
   // остаётся смонтированной вкладкой и сохраняет состояние.
   const handleNavigateToPosition = (positionId: string) => {
     if (!selectedTenderId) return;
-    openTab({ positionId, tenderId: selectedTenderId, title: 'Позиция' });
-    navigate(`/positions/${positionId}/items?tenderId=${selectedTenderId}&positionId=${positionId}`);
+    openPositionTab({ positionId, tenderId: selectedTenderId, title: 'Позиция' });
+    navigate(buildPositionTabPath(positionId, selectedTenderId));
   };
 
   // Если тендер не выбран, показываем только выбор тендера

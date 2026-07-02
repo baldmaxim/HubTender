@@ -1,5 +1,6 @@
 import type { AppSession } from './types';
 import { invalidateAll as clearPositionRowCache } from '../cache/positionRowCache';
+import { clearWorkspaceTabs } from '../cache/workspaceTabsStorage';
 
 // localStorage key prefix for every app-auth value. Distinct from any
 // Supabase key so the two systems can coexist during the cutover.
@@ -72,6 +73,9 @@ export function clearSession(): void {
     if (k && k.startsWith(PREFIX)) toRemove.push(k);
   }
   for (const k of toRemove) ls.removeItem(k);
+  // sessionStorage не трогается автоматически — вкладки рабочего стола переживали бы
+  // logout/login в одной вкладке браузера, если их не чистить явно здесь.
+  clearWorkspaceTabs();
 }
 
 // Type guard for AppSession — keeps loadSession honest if the wire shape
