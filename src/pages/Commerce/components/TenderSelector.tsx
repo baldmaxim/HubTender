@@ -70,7 +70,7 @@ export default function TenderSelector({
     <Card bordered={false} style={{ height: '100%' }}>
       <div style={{ textAlign: 'center', padding: '40px 20px' }}>
         <Title level={3} style={{ marginBottom: 24 }}>
-          <DollarOutlined /> Коммерция
+          <DollarOutlined /> Форма КП
         </Title>
         <Text type="secondary" style={{ fontSize: 16, marginBottom: 24, display: 'block' }}>
           Выберите тендер для просмотра коммерческих стоимостей

@@ -11,7 +11,7 @@ import { BsmCardList } from './components/BsmCardList';
 import { exportBsmToExcel } from './utils/bsmExport';
 import { isMaterial } from './utils/bsmStyles';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const Bsm: React.FC = () => {
   const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
@@ -176,9 +176,6 @@ const Bsm: React.FC = () => {
       >
         Назад к выбору
       </Button>
-      {!isPhoneDevice && (
-        <Title level={4} style={{ margin: 0 }}>Базовая Стоимость Материалов и Работ</Title>
-      )}
       <Space size="middle" wrap direction={isPhone ? 'vertical' : 'horizontal'} style={isPhone ? { width: '100%' } : undefined}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : 'auto' }}>
           {!isPhone && <Text type="secondary" style={{ fontSize: 16, whiteSpace: 'nowrap' }}>Тендер:</Text>}

@@ -29,7 +29,7 @@ dayjs.extend(duration);
 dayjs.extend(relativeTime);
 dayjs.locale('ru');
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const Dashboard: React.FC = () => {
   const { theme: currentTheme } = useTheme();
@@ -294,19 +294,14 @@ const Dashboard: React.FC = () => {
           gap: 16,
           flexWrap: 'wrap'
         }}>
-          {/* Левая часть: заголовок (на телефоне его показывает шапка MainLayout) */}
+          {/* Левая часть: описание раздела (заголовок страницы показывает общая шапка MainLayout) */}
           {!isPhoneDevice && (
             <div style={{ flex: '1 1 auto', minWidth: 300 }}>
               <Space align="center" size={12}>
                 <DashboardOutlined style={{ fontSize: 22, color: token.colorPrimary }} />
-                <div>
-                  <Title level={3} style={{ margin: 0, lineHeight: 1.2 }}>
-                    Дашборд тендеров
-                  </Title>
-                  <Text type="secondary" style={{ fontSize: 13 }}>
-                    Обзор активных тендеров и основные показатели
-                  </Text>
-                </div>
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  Обзор активных тендеров и основные показатели
+                </Text>
               </Space>
             </div>
           )}

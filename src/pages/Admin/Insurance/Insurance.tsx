@@ -337,7 +337,6 @@ export default function Insurance() {
           >
             Назад к выбору
           </Button>
-          <Title level={4} style={{ margin: 0 }}>Страхование от судимостей</Title>
           <Space wrap>
             <Text type="secondary">Тендер:</Text>
             <Select

@@ -20,7 +20,7 @@ import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../../components/responsive/LandscapeTableOverlay';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const ConstructionCostNew: React.FC = () => {
   const { user } = useAuth();
@@ -155,9 +155,6 @@ const ConstructionCostNew: React.FC = () => {
 
       {!isPhoneDevice && (
         <div style={{ marginBottom: 16, display: 'flex', alignItems: 'baseline', gap: 16 }}>
-          <Title level={4} style={{ margin: 0 }}>
-            Затраты на строительство
-          </Title>
           {selectedTender?.area_sp && (
             <Text type="secondary">
               Площадь объекта по СП: <Text strong>{selectedTender.area_sp.toLocaleString('ru-RU')} м²</Text>

@@ -368,15 +368,6 @@ const FinancialIndicators: React.FC = () => {
         </Button>
       </div>
 
-      {/* На телефоне заголовок уже есть в шапке (pageTitle) — в теле его не дублируем. */}
-      {!isPhoneDevice && (
-        <div style={{ marginBottom: 16 }}>
-          <Title level={4} style={{ margin: 0 }}>
-            Финансовые показатели
-          </Title>
-        </div>
-      )}
-
       <IndicatorsFilters
         tenders={tenders}
         selectedTenderTitle={selectedTenderTitle}

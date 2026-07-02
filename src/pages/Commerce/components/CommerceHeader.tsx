@@ -5,14 +5,13 @@
 import { Button, Select, Space, Typography, Tooltip, Tag } from 'antd';
 import {
   FileExcelOutlined,
-  ArrowLeftOutlined,
-  DollarOutlined
+  ArrowLeftOutlined
 } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import type { MarkupTactic, TenderOption } from '../types';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface CommerceHeaderProps {
   tenders: Tender[];
@@ -104,13 +103,6 @@ export default function CommerceHeader({
       >
         Назад к выбору
       </Button>
-      {!isPhoneDevice && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Title level={4} style={{ margin: 0 }}>
-            <DollarOutlined /> Коммерция
-          </Title>
-        </div>
-      )}
       <div
         style={{
           display: 'flex',

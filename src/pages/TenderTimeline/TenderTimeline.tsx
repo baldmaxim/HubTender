@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, App, Drawer, Form, Segmented, Skeleton, Typography, theme, Input } from 'antd';
+import { Alert, App, Drawer, Form, Segmented, Skeleton, theme, Input } from 'antd';
 import { reconcileTenderGroups, setTenderGroupQuality } from '../../lib/api/timeline';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { useAuth } from '../../contexts/AuthContext';
@@ -25,7 +25,6 @@ import { TimelineTenderTable } from './components/TimelineTenderTable';
 import { TimelineTenderCards } from './components/TimelineTenderCards';
 import { GroupQualityModal, type GroupQualityFormValues } from './components/GroupQualityModal';
 
-const { Title, Text } = Typography;
 const { Search } = Input;
 const TIMELINE_PANEL_WIDTH = 520;
 const QUALITY_READONLY_ROLE_CODES = ['engineer', 'senior_group'] as const;
@@ -435,17 +434,6 @@ const TenderTimeline: React.FC = () => {
         }}
       >
         <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {!isPhoneDevice && (
-            <div>
-              <Title level={3} style={{ marginBottom: 4 }}>
-                Хронология расчёта тендеров
-              </Title>
-              <Text type="secondary" style={{ display: 'none' }}>
-                Реестр тендеров с уровнем качества, автоматически собранными командами и хронологией согласования по каждому участнику.
-              </Text>
-            </div>
-          )}
-
           {tendersError ? (
             <Alert type="error" showIcon message="Ошибка загрузки тендеров" description={tendersError} />
           ) : null}

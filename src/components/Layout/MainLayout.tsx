@@ -351,7 +351,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             <span
               className="trigger"
               onClick={() => toggleSidebar(!collapsed)}
-              style={{ cursor: 'pointer', fontSize: '18px', display: 'inline-flex' }}
+              style={{ cursor: 'pointer', fontSize: '18px', display: 'inline-flex', flexShrink: 0 }}
             >
               <IconSwap
                 state={collapsed ? 'b' : 'a'}
@@ -359,11 +359,17 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
                 iconB={<MenuUnfoldOutlined />}
               />
             </span>
-            {/* Название страницы вверху (телефоны, в т.ч. landscape) */}
-            {(isMobile || isLandscapePhone) && pageTitle && (
+            {/* Название текущей страницы — единственное место показа (страницы больше не дублируют его) */}
+            {pageTitle && (
               <Text
                 strong
-                style={{ fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                style={{
+                  fontSize: 16,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  minWidth: 0,
+                }}
               >
                 {pageTitle}
               </Text>

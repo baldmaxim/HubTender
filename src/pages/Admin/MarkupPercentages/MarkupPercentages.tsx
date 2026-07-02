@@ -409,9 +409,6 @@ const MarkupPercentages: React.FC = () => {
           >
             Назад к выбору
           </Button>
-          <Title level={4} style={{ margin: 0 }}>
-            Проценты наценок
-          </Title>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
             <Space size="middle" wrap>
               <Space size="small">

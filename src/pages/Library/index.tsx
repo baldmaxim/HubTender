@@ -1,10 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Tabs, Input, Button, Space, Typography } from 'antd';
+import { Tabs, Input, Button, Space } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import MaterialsTab, { type MaterialsTabHandle } from './MaterialsTab/MaterialsTab';
 import WorksTab, { type WorksTabHandle } from './WorksTab/WorksTab';
-
-const { Title } = Typography;
 
 const Library: React.FC = () => {
   const [activeTab, setActiveTab] = useState('materials');
@@ -35,9 +33,6 @@ const Library: React.FC = () => {
 
   return (
     <div style={{ margin: '-16px', padding: '24px' }}>
-      <Title level={4} style={{ margin: '0 0 16px 0' }}>
-        Библиотека материалов и работ
-      </Title>
       <Tabs
         activeKey={activeTab}
         onChange={(key) => {

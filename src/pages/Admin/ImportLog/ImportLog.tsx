@@ -328,7 +328,6 @@ const ImportLog: React.FC = () => {
 
   return (
     <Card
-      title="Журнал импортов строк заказчика"
       extra={
         <Space>
           <Select

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Tabs, Button, Space, Input, Typography } from 'antd';
+import { Tabs, Button, Space, Input } from 'antd';
 import { PlusOutlined, SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import type { TabsProps } from 'antd';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
@@ -11,8 +11,6 @@ import { WorksTab, type WorksTabRef } from './components/WorksTab';
 import { UnitsTab, type UnitsTabRef } from './components/UnitsTab';
 import { NomenclatureImport } from './components/NomenclatureImport';
 import './Nomenclatures.css';
-
-const { Title } = Typography;
 
 const unitColors: Record<string, string> = {
   'шт': 'blue',
@@ -167,9 +165,6 @@ const Nomenclatures: React.FC = () => {
         flexDirection: 'column'
       }}
     >
-      <Title level={4} style={{ margin: '0 0 16px 0' }}>
-        Номенклатуры
-      </Title>
       <Tabs
         defaultActiveKey="materials"
         items={tabItems}

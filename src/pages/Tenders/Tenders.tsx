@@ -220,12 +220,11 @@ const Tenders: React.FC = () => {
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%' }}>
-        {/* Заголовок и кнопки управления — скрыты на телефонах (название в шапке, режим просмотра).
+        {/* Описание и кнопки управления — скрыты на телефонах (заголовок страницы — в общей шапке, здесь режим просмотра).
             В ландшафте телефона isMobile=false, поэтому добавляем !isLandscapePhone, чтобы не дублировать шапку. */}
         {!isMobile && !isLandscapePhone && (
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div>
-              <div style={{ color: palette.text, fontSize: 30, fontWeight: 700, marginBottom: 6 }}>Перечень тендеров</div>
               <div style={{ color: palette.muted, fontSize: 14 }}>
                 Реестр с контролем подачи КП, звонков и общей хронологии тендера.
               </div>

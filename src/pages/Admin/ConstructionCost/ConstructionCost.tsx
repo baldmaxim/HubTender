@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Space, Modal, Form, Typography } from 'antd';
+import { Button, Space, Modal, Form } from 'antd';
 import {
   PlusOutlined,
   DeleteOutlined,
@@ -15,7 +15,6 @@ import { ImportExcel } from './components/ImportExcel';
 import { CostModals } from './components/CostModals';
 
 const { confirm } = Modal;
-const { Title } = Typography;
 
 const unitColors: Record<string, string> = {
   'шт': 'blue',
@@ -151,9 +150,6 @@ const ConstructionCost: React.FC = () => {
 
   return (
     <div style={{ margin: '-16px', padding: '24px' }}>
-      <Title level={4} style={{ margin: '0 0 16px 0' }}>
-        Справочник затрат
-      </Title>
       <div>
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Space>

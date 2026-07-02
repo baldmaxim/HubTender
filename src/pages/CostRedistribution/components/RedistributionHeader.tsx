@@ -3,14 +3,12 @@
  */
 
 import React from 'react';
-import { Card, Row, Col, Select, Typography, Space, Statistic, Button, Tag } from 'antd';
+import { Card, Row, Col, Select, Space, Statistic, Button, Tag } from 'antd';
 import { DownloadOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import type { MarkupTactic } from '../hooks';
 import { AnimatedNumber, SuccessCheck } from '../../../components/transitions';
 import { useIsMobile } from '../../../hooks/useIsMobile';
-
-const { Title } = Typography;
 
 // Один модульный Intl.NumberFormat для всех Statistic в шапке —
 // раньше на каждый ре-рендер создавалась новая regex-замена inline.
@@ -79,11 +77,6 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
         {/* Пустую верхнюю строку на телефоне не рендерим — иначе зазор над фильтром. */}
         {(!isPhoneDevice || saving || savedRecently) && (
           <Space align="center" size="middle">
-            {!isPhoneDevice && (
-              <Title level={2} style={{ margin: 0 }}>
-                Перераспределение стоимости работ
-              </Title>
-            )}
             {saving && (
               <Tag icon={<LoadingOutlined />} color="processing">
                 Сохраняется…
