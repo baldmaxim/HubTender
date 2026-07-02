@@ -42,6 +42,14 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = () => {
   const [collapsed, setCollapsed] = useState(true);
+  // Гасит внутренние transition/motion антд-меню на время явного открытия/закрытия
+  // сайдбара, чтобы анимировалась только его ширина (см. .sidebar-toggling в CSS).
+  const [isToggling, setIsToggling] = useState(false);
+  const toggleSidebar = (next: boolean) => {
+    setIsToggling(true);
+    setCollapsed(next);
+    window.setTimeout(() => setIsToggling(false), 260);
+  };
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
@@ -119,7 +127,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       e.domEvent.preventDefault();
       navigate(e.key);
       // Меню — оверлей на всех вьюпортах: после выбора пункта сворачиваем, освобождая контент
-      setCollapsed(true);
+      toggleSidebar(true);
     }
   };
 
@@ -244,7 +252,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         collapsible
         collapsed={collapsed}
         collapsedWidth={screens.lg ? 80 : 0}
-        className={`sidebar-${currentTheme}`}
+        className={`sidebar-${currentTheme} ${isToggling ? 'sidebar-toggling' : ''}`}
         style={{
           background: currentTheme === 'dark' ? '#0a0a0a' : '#fff',
           borderRight: currentTheme === 'light' ? '1px solid #f0f0f0' : 'none',
@@ -319,7 +327,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
       {/* Затемнение под раскрытым оверлей-меню на телефоне (портрет и ландшафт) */}
       {isMenuOverlay && !collapsed && (
         <div
-          onClick={() => setCollapsed(true)}
+          onClick={() => toggleSidebar(true)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 999 }}
         />
       )}
@@ -342,7 +350,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <span
               className="trigger"
-              onClick={() => setCollapsed(!collapsed)}
+              onClick={() => toggleSidebar(!collapsed)}
               style={{ cursor: 'pointer', fontSize: '18px', display: 'inline-flex' }}
             >
               <IconSwap

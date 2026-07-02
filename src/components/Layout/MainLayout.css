@@ -6,7 +6,7 @@
   margin: 16px;
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
 }
 
 /* Dark theme logo */
@@ -166,6 +166,18 @@
   flex: 1 !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
+}
+
+/* На время явного открытия/закрытия сайдбара гасим внутренние transition/motion
+   антд-меню, чтобы анимировалась только ширина <Sider> (горизонтальный wipe),
+   без вертикального "прыжка" от переключения iconOnly<->inline и раскрытия группы. */
+.sidebar-toggling .ant-menu-item,
+.sidebar-toggling .ant-menu-submenu-title,
+.sidebar-toggling .ant-menu-submenu-arrow,
+.sidebar-toggling .ant-menu-title-content,
+.sidebar-toggling .ant-motion-collapse {
+  transition: none !important;
+  animation: none !important;
 }
 
 /* Custom scrollbar for sidebar menu container */
