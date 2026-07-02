@@ -481,6 +481,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           style={{
             // На телефоне убираем боковые отступы (контент до краёв экрана).
             padding: isMobile ? '8px 0' : 16,
+            // На рабочих вкладках (Позиции/Форма КП/Затраты) зазор до навигатора вкладок меньше стандартного.
+            paddingTop: isMobile ? 8 : (isWorkspacePath(location.pathname) ? 8 : 16),
             minHeight: 280,
             background: colorBgContainer,
             overflow: 'auto',

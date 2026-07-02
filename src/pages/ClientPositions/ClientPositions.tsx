@@ -405,7 +405,6 @@ const ClientPositions: React.FC = () => {
       <div style={{
         background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)',
         borderRadius: '8px',
-        margin: '16px 0 0 0',
       }}>
         <PositionToolbar
           selectedTender={selectedTender}
