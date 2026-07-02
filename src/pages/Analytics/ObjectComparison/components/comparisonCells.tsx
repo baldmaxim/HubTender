@@ -58,7 +58,7 @@ export const NoteCell: React.FC<{
       autoSize={{ minRows: 1, maxRows: 3 }}
       placeholder="—"
       variant="borderless"
-      style={{ padding: '2px 4px', fontSize: '13px' }}
+      style={{ padding: '2px 4px', fontSize: '13px', textAlign: 'center' }}
     />
   );
 };
