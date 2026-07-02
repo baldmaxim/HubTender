@@ -11,14 +11,14 @@ import type {
   BoqItemFull,
 } from '../../../lib/supabase';
 import { recomputePositionTotals, updatePositionFields } from '../../../lib/api/positions';
-import { recomputeLinkedMaterials } from '../../../lib/api/boq';
-import { insertTemplateItems } from '../../../utils/insertTemplateItems';
-import { useAuth } from '../../../contexts/AuthContext';
 import {
+  recomputeLinkedMaterials,
   insertBoqItemWithAudit,
   updateBoqItemWithAudit,
   deleteBoqItemWithAudit,
-} from '../../../lib/supabaseWithAudit';
+} from '../../../lib/api/boq';
+import { insertTemplateItems } from '../../../utils/insertTemplateItems';
+import { useAuth } from '../../../contexts/AuthContext';
 import { getErrorMessage } from '../../../utils/errors';
 import { markRealtimeMutation } from '../../../lib/realtime/useRealtimeRefetch';
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { message } from 'antd';
 import { apiFetch } from '../../../lib/api/client';
-import { updateBoqItemWithAudit } from '../../../lib/supabaseWithAudit';
+import { updateBoqItemWithAudit } from '../../../lib/api/boq';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { BoqItemAudit } from '../../../types/audit';
 import type { BoqItemInsert } from '../../../lib/supabase';

@@ -1,7 +1,7 @@
 import { Modal, message } from 'antd';
 import type { BoqItemFull } from '../../../lib/supabase';
 import { clearPositionsBoq } from '../../../lib/api/positions';
-import { deleteBoqItemWithAudit, updateBoqItemWithAudit } from '../../../lib/supabaseWithAudit';
+import { deleteBoqItemWithAudit, updateBoqItemWithAudit } from '../../../lib/api/boq';
 import { getErrorMessage } from '../../../utils/errors';
 
 interface CostCategoryOption {

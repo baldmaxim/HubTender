@@ -2,7 +2,7 @@ import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { message } from 'antd';
 import { useAuth } from '../../../contexts/AuthContext';
-import { insertBoqItemWithAudit } from '../../../lib/supabaseWithAudit';
+import { insertBoqItemWithAudit } from '../../../lib/api/boq';
 import {
   listWorkNames,
   listMaterialNames,

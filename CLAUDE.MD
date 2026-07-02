@@ -110,11 +110,8 @@ import type { Tender } from '../lib/supabase/types';
 ### Realtime (WebSocket-хаб)
 Go BFF гоняет Postgres `LISTEN/NOTIFY` → WebSocket-брокер (дебаунс 200 мс на топик). Фронтовый хук: `src/lib/realtime/useRealtimeTopic(topic, handler)`. Топики: `notifications:<user_id>`, `tender:<tender_id>`, `tenders`. Изменения в `boq_items`, `client_positions`, `cost_redistribution_results` и `construction_cost_volumes` веером расходятся в соответствующий `tender:<id>`; `tenders` рассылается наряду с per-tender-топиком при тендер-левел изменениях. Публикации неблокирующие — медленные клиенты дропаются, когда у них заполняется send-буфер (с логом). Слушатель pg авто-переподключается с экспоненциальным backoff (500 мс → 30 с).
 
-### Audit-лог (BOQ Items) — легаси
-Депрекейтнутая обёртка живёт в `src/lib/supabaseWithAudit.ts`:
-- `insertBoqItemWithAudit`, `updateBoqItemWithAudit`, `deleteBoqItemWithAudit`.
-
-Сейчас она зовёт Go BFF (`POST/PATCH/DELETE /api/v1/items/*`), audit-строки пишутся в той же `pgx.Tx`, что и мутация (см. `backend/internal/repository/boq_mutate.go`). TODO: заменить 4 call-site'а в `src/pages/PositionItems/` на typed wrappers в `src/lib/api/boq.ts` и удалить модуль (см. doc 43 F18).
+### Audit-лог (BOQ Items)
+Типизированные обёртки `insertBoqItemWithAudit`, `updateBoqItemWithAudit`, `deleteBoqItemWithAudit` живут в `src/lib/api/boq.ts` (call-site'ы — хуки в `src/pages/PositionItems/`). Зовут Go BFF (`POST/PATCH/DELETE /api/v1/items/*`), audit-строки пишутся в той же `pgx.Tx`, что и мутация (см. `backend/internal/repository/boq_mutate.go`).
 
 ### Конвенции БД
 - UUID-первичные ключи через `uuid_generate_v4()`
@@ -175,7 +172,6 @@ src/pages/PageName/
 - `src/lib/api/` — **хелперы Go BFF (новый путь)**, один файл на домен
 - `src/lib/realtime/` — низкоуровневый `ws.ts`-клиент + React-хук `useRealtimeTopic`
 - `src/lib/supabase/` — TS-типы + хелперы прав доступа (`hasPageAccess`, `canManageUsers`). SDK удалён, имя папки — исторический legacy.
-- `src/lib/supabaseWithAudit.ts` — deprecated wrapper для BOQ audit, теперь зовёт Go BFF; см. doc 43 F18
 - `src/services/` — кросс-страничные сервисы (cost import, markup tactics). Логика расчётов Phase 5 всё ещё живёт здесь на TS-стороне, пока `backend/internal/calc/` не подключён к хендлерам.
 - `src/utils/` — общие хелперы, разбитые по подмодулям `boq/`, `excel/`, `matching/`, `versionTransfer/`
 - `scripts/` — Node dev-утилиты. Поддерживаемые: `smoke/`, `dual-run/`, `cutover/`. Архив исторических ad-hoc DBA-инструментов — `scripts/archive/` (не часть стандартного workflow, оставлен для истории).
