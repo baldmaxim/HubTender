@@ -243,7 +243,7 @@ export const buildCostRows = (input: BuildCostRowsInput): CostRow[] => {
   if (visCategories.length > 0) {
     const visChildren = [...visCategories].sort(
       (a, b) => (a.order_num || 0) - (b.order_num || 0),
-    );
+    ).map((c) => ({ ...c, is_vis_subcategory: true }));
     const superGroup: CostRow = {
       key: VIS_SUPER_GROUP_KEY,
       cost_category_name: VIS_SUPER_GROUP_NAME,

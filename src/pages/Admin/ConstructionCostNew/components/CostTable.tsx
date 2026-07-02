@@ -364,11 +364,11 @@ const CostTable: React.FC<CostTableProps> = ({
           background-color: ${theme === 'dark' ? '#4a4a3a' : '#ede9d0'} !important;
         }
         .supergroup-row > td {
-          background-color: ${theme === 'dark' ? '#26402f' : '#d9f0e3'} !important;
+          background-color: ${theme === 'dark' ? '#3a3a2a' : '#f5f5dc'} !important;
           font-weight: 700;
         }
         .supergroup-row:hover > td {
-          background-color: ${theme === 'dark' ? '#2f4d39' : '#c7e8d5'} !important;
+          background-color: ${theme === 'dark' ? '#4a4a3a' : '#ede9d0'} !important;
         }
       `}</style>
       <Spin spinning={loading}>
@@ -383,7 +383,15 @@ const CostTable: React.FC<CostTableProps> = ({
               : { x: readOnly ? 'max-content' : undefined, y: 'calc(100dvh - 340px)' }
           }
           bordered
-          rowClassName={(record) => record.is_super_group ? 'supergroup-row' : record.is_category ? 'category-row' : ''}
+          rowClassName={(record) =>
+            record.is_super_group
+              ? 'supergroup-row'
+              : record.is_vis_subcategory
+              ? ''
+              : record.is_category
+              ? 'category-row'
+              : ''
+          }
           expandable={{
             expandedRowKeys: expandedRowKeys,
             onExpandedRowsChange: (keys) => onExpandedRowsChange(keys as string[]),

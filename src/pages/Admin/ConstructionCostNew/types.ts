@@ -22,6 +22,7 @@ export interface CostRow {
   is_category?: boolean;
   is_location?: boolean;  // Промежуточный уровень группировки по локализации
   is_super_group?: boolean;  // Над-группа над категориями (ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ)
+  is_vis_subcategory?: boolean;  // Дочерняя категория над-группы ВИС — без своего фона
   children?: CostRow[];
   notes?: string;
 }
