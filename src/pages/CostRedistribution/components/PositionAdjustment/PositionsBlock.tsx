@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { Button, Card, Space, Table, Tag, Typography } from 'antd';
+import { Button, Card, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { ClientPosition } from '../../hooks';
 import { collectSectionDescendants } from '../../../../utils/positions/collectSectionDescendants';
@@ -85,8 +85,15 @@ function PositionsBlockImpl({
       render: (_, record) => {
         const itemNoColor = record.isLeaf ? '#52c41a' : '#ff7875';
         const paddingLeft = record.is_additional ? 16 : 0;
-        return (
-          <div style={{ paddingLeft }}>
+        const inner = (
+          <div
+            style={{
+              paddingLeft,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
             {record.is_additional ? (
               <Tag color="orange" style={{ marginRight: 6 }}>
                 ДОП
@@ -111,6 +118,7 @@ function PositionsBlockImpl({
             </span>
           </div>
         );
+        return <Tooltip title={record.work_name}>{inner}</Tooltip>;
       },
     },
     {
@@ -160,45 +168,57 @@ function PositionsBlockImpl({
   };
 
   return (
-    <Card
-      size="small"
-      title={
-        <Space>
-          <Text strong>{title}</Text>
-          <Button size="small" onClick={allSelected ? handleClear : handleSelectAll}>
-            {allSelected ? 'Снять все' : 'Выбрать все'}
-          </Button>
-          <Button size="small" onClick={handleClear} disabled={selectedIds.size === 0}>
-            Очистить
-          </Button>
-        </Space>
-      }
-      styles={{ body: { padding: 0 } }}
-    >
-      <Table<BlockRow>
+    <>
+      {/* Фиксированная высота строк тела — обязательное условие для virtual:
+          переменная высота (перенос "Наименование") иначе вызывает петлю
+          переизмерения rc-virtual-list (collectHeight → syncScrollTop) на
+          каждом кадре скролла, см. аналогичный фикс в ResultsTable.tsx. */}
+      <style>{`
+        .crr-position-block .ant-table-tbody .ant-table-cell { height: 34px; overflow: hidden; }
+      `}</style>
+      <Card
         size="small"
-        columns={columns}
-        dataSource={rows}
-        rowSelection={rowSelection}
-        pagination={false}
-        scroll={{ y: 520 }}
-        summary={() => (
-          <Table.Summary fixed="bottom">
-            <Table.Summary.Row>
-              <Table.Summary.Cell index={0} colSpan={2} align="right">
-                <Text strong>Выбрано: {totals.count}</Text>
-              </Table.Summary.Cell>
-              <Table.Summary.Cell index={1} align="right">
-                <Text strong>{formatNumber(totals.selectedSum)}</Text>
-              </Table.Summary.Cell>
-              <Table.Summary.Cell index={2} align="right">
-                <DeltaCell value={totals.deltaSum} />
-              </Table.Summary.Cell>
-            </Table.Summary.Row>
-          </Table.Summary>
-        )}
-      />
-    </Card>
+        className="crr-position-block"
+        title={
+          <Space>
+            <Text strong>{title}</Text>
+            <Button size="small" onClick={allSelected ? handleClear : handleSelectAll}>
+              {allSelected ? 'Снять все' : 'Выбрать все'}
+            </Button>
+            <Button size="small" onClick={handleClear} disabled={selectedIds.size === 0}>
+              Очистить
+            </Button>
+          </Space>
+        }
+        styles={{ body: { padding: 0 } }}
+      >
+        <Table<BlockRow>
+          size="small"
+          rowKey="position_id"
+          columns={columns}
+          dataSource={rows}
+          rowSelection={rowSelection}
+          pagination={false}
+          scroll={{ y: 520 }}
+          virtual
+          summary={() => (
+            <Table.Summary fixed="bottom">
+              <Table.Summary.Row>
+                <Table.Summary.Cell index={0} colSpan={2} align="right">
+                  <Text strong>Выбрано: {totals.count}</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={1} align="right">
+                  <Text strong>{formatNumber(totals.selectedSum)}</Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={2} align="right">
+                  <DeltaCell value={totals.deltaSum} />
+                </Table.Summary.Cell>
+              </Table.Summary.Row>
+            </Table.Summary>
+          )}
+        />
+      </Card>
+    </>
   );
 }
 
