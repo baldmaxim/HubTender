@@ -310,16 +310,6 @@ const ClientPositions: React.FC = () => {
   }, [leafPositionIndices, selectedTender, openPositionTab, navigate]);
 
 
-  // Обработчик возврата к выбору
-  const handleBackToSelection = () => {
-    setSelectedTender(null);
-    setSelectedTenderId(null);
-    setSelectedTenderTitle(null);
-    setSelectedVersion(null);
-    setClientPositions([]);
-    setSearchParams({});
-  };
-
   // Обработчик клика по карточке тендера
   const handleTenderCardClick = (tender: Tender) => {
     setSelectedTenderTitle(tender.title);
@@ -417,7 +407,6 @@ const ClientPositions: React.FC = () => {
           totalSum={effectiveTotalSum}
           onTenderTitleChange={handleTenderTitleChange}
           onVersionChange={handleVersionChange}
-          onBackToSelection={handleBackToSelection}
         />
 
         <DeadlineBar selectedTender={selectedTender} currentTheme={currentTheme} />

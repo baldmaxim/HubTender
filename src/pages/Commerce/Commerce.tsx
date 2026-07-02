@@ -131,13 +131,6 @@ export default function Commerce() {
     setSelectedTenderId(tenderId);
   };
 
-  // Обработка возврата к выбору тендера
-  const handleBack = () => {
-    setSelectedTenderId(undefined);
-    setSelectedTenderTitle(null);
-    setSelectedVersion(null);
-  };
-
   // Обработка экспорта в Excel
   const handleExportToExcel = () => {
     const selectedTender = tenders.find(t => t.id === selectedTenderId);
@@ -184,7 +177,6 @@ export default function Commerce() {
           loading={loading}
           calculating={calculating}
           positionsCount={positions.length}
-          onBack={handleBack}
           onTenderTitleChange={handleTenderTitleChange}
           onVersionChange={handleVersionChange}
           onTacticChange={handleTacticChange}

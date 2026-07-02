@@ -5,7 +5,6 @@ import {
   FileTextOutlined,
   QuestionCircleOutlined,
   FolderOutlined,
-  ArrowLeftOutlined,
   DashboardOutlined,
 } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
@@ -30,7 +29,6 @@ interface PositionToolbarProps {
   totalSum: number;
   onTenderTitleChange: (title: string) => void;
   onVersionChange: (version: number) => void;
-  onBackToSelection: () => void;
 }
 
 export const PositionToolbar: React.FC<PositionToolbarProps> = ({
@@ -43,7 +41,6 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
   totalSum,
   onTenderTitleChange,
   onVersionChange,
-  onBackToSelection,
 }) => {
   const navigate = useNavigate();
   const { isPhoneDevice, isPhone } = useIsMobile();
@@ -107,8 +104,8 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
 
   return (
     <>
-      {/* Верхняя шапка с названием тендера и кнопками */}
-      {selectedTender && (
+      {/* Верхняя шапка с названием тендера и кнопками (десктоп: на телефоне нечего показывать без кнопки «Назад к выбору») */}
+      {selectedTender && !isPhoneDevice && (
         <div style={{
           padding: isPhoneDevice ? '12px 16px' : '12px 32px',
           display: 'flex',
@@ -117,36 +114,24 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
           flexDirection: isPhoneDevice ? 'column' : 'row',
           gap: isPhoneDevice ? 8 : 0,
         }}>
-          {!isPhoneDevice && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <FileTextOutlined style={{ fontSize: 32, color: 'white' }} />
-              <div>
-                <Text style={{ fontSize: 22, fontWeight: 600, margin: 0, color: 'white', display: 'block' }}>
-                  {selectedTender.title}
-                </Text>
-                <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14 }}>
-                  Заказчик: {selectedTender.client_name}
-                </Text>
-              </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <FileTextOutlined style={{ fontSize: 32, color: 'white' }} />
+            <div>
+              <Text style={{ fontSize: 22, fontWeight: 600, margin: 0, color: 'white', display: 'block' }}>
+                {selectedTender.title}
+              </Text>
+              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14 }}>
+                Заказчик: {selectedTender.client_name}
+              </Text>
             </div>
-          )}
+          </div>
           <Space>
             <Button
-              type="primary"
-              style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
-              icon={<ArrowLeftOutlined />}
-              onClick={onBackToSelection}
+              icon={<DashboardOutlined />}
+              onClick={() => navigate('/dashboard')}
             >
-              Назад к выбору
+              К дашборду
             </Button>
-            {!isPhoneDevice && (
-              <Button
-                icon={<DashboardOutlined />}
-                onClick={() => navigate('/dashboard')}
-              >
-                К дашборду
-              </Button>
-            )}
           </Space>
         </div>
       )}

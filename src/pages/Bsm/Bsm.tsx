@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Card, Table, Select, Tabs, Input, message, Button, Typography, Space } from 'antd';
-import { SearchOutlined, FileExcelOutlined, ArrowLeftOutlined, LinkOutlined } from '@ant-design/icons';
+import { SearchOutlined, FileExcelOutlined, LinkOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
@@ -164,18 +164,6 @@ const Bsm: React.FC = () => {
 
   const headerNode = (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <Button
-        icon={<ArrowLeftOutlined />}
-        type="primary"
-        onClick={() => {
-          setSelectedTenderId(null);
-          setSelectedTenderTitle(null);
-          setSelectedVersion(null);
-        }}
-        style={{ padding: '4px 15px', display: 'inline-flex', alignItems: 'center', width: 'fit-content', backgroundColor: '#10b981', borderColor: '#10b981' }}
-      >
-        Назад к выбору
-      </Button>
       <Space size="middle" wrap direction={isPhone ? 'vertical' : 'horizontal'} style={isPhone ? { width: '100%' } : undefined}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isPhone ? '100%' : 'auto' }}>
           {!isPhone && <Text type="secondary" style={{ fontSize: 16, whiteSpace: 'nowrap' }}>Тендер:</Text>}

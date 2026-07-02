@@ -4,8 +4,7 @@
 
 import { Button, Select, Space, Typography, Tooltip, Tag } from 'antd';
 import {
-  FileExcelOutlined,
-  ArrowLeftOutlined
+  FileExcelOutlined
 } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import type { MarkupTactic, TenderOption } from '../types';
@@ -23,7 +22,6 @@ interface CommerceHeaderProps {
   loading: boolean;
   calculating: boolean;
   positionsCount: number;
-  onBack: () => void;
   onTenderTitleChange: (title: string) => void;
   onVersionChange: (version: number) => void;
   onTacticChange: (tacticId: string) => void;
@@ -42,7 +40,6 @@ export default function CommerceHeader({
   loading,
   calculating,
   positionsCount,
-  onBack,
   onTenderTitleChange,
   onVersionChange,
   onTacticChange,
@@ -88,21 +85,6 @@ export default function CommerceHeader({
 
   return (
     <Space direction="vertical" size={8} style={{ width: '100%' }}>
-      <Button
-        icon={<ArrowLeftOutlined />}
-        type="primary"
-        onClick={onBack}
-        style={{
-          padding: '4px 15px',
-          display: 'inline-flex',
-          alignItems: 'center',
-          width: 'fit-content',
-          backgroundColor: '#10b981',
-          borderColor: '#10b981'
-        }}
-      >
-        Назад к выбору
-      </Button>
       <div
         style={{
           display: 'flex',

@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Button, Typography, Select, Card } from 'antd';
+import { Typography, Select, Card } from 'antd';
 import { useCostData } from './hooks/useCostData';
 import CostFilters from './components/CostFilters';
 import CostTable from './components/CostTable';
@@ -49,7 +49,6 @@ const ConstructionCostNew: React.FC = () => {
     setSelectedTenderId,
     setSelectedTenderTitle,
     setSelectedVersion,
-    setData,
     getTenderTitles,
     getVersionsForTitle,
     handleTenderTitleChange,
@@ -89,14 +88,6 @@ const ConstructionCostNew: React.FC = () => {
     setSelectedTenderTitle(title);
     setSelectedVersion(version);
     setSelectedTenderId(tenderId);
-  };
-
-  // Обработчик возврата к выбору тендера
-  const handleBackToSelection = () => {
-    setSelectedTenderId(null);
-    setSelectedTenderTitle(null);
-    setSelectedVersion(null);
-    setData([]);
   };
 
   // Если тендер не выбран, показываем компонент выбора
@@ -143,16 +134,6 @@ const ConstructionCostNew: React.FC = () => {
 
   return (
     <div style={{ margin: isPhone ? '-16px 0' : '-16px', padding: isPhone ? 8 : 24, height: isPhoneDevice ? 'auto' : 'calc(100vh - 64px)' }}>
-      <div style={{ marginBottom: 16 }}>
-        <Button
-          type="primary"
-          style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
-          onClick={handleBackToSelection}
-        >
-          ← Назад к выбору тендера
-        </Button>
-      </div>
-
       {!isPhoneDevice && (
         <div style={{ marginBottom: 16, display: 'flex', alignItems: 'baseline', gap: 16 }}>
           {selectedTender?.area_sp && (

@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {
   Card, Select, InputNumber, Typography, Space,
-  Row, Col, message, Button, Tag,
+  Row, Col, message, Tag,
 } from 'antd';
-import { SafetyCertificateOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { SafetyCertificateOutlined } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import {
   fetchInsuranceTenders,
@@ -324,19 +324,6 @@ export default function Insurance() {
       loading={loading}
       title={
         <Space direction="vertical" size={6} style={{ width: '100%' }}>
-          <Button
-            icon={<ArrowLeftOutlined />}
-            type="primary"
-            onClick={() => {
-              setSelectedTenderId(null);
-              setSelectedTenderTitle(null);
-              setSelectedVersion(null);
-              setFormData({ ...DEFAULT_DATA });
-            }}
-            style={{ backgroundColor: '#10b981', borderColor: '#10b981', width: 'fit-content' }}
-          >
-            Назад к выбору
-          </Button>
           <Space wrap>
             <Text type="secondary">Тендер:</Text>
             <Select

@@ -15,7 +15,7 @@ import {
   Tag,
   Tabs,
 } from 'antd';
-import { SaveOutlined, ReloadOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { SaveOutlined, ReloadOutlined } from '@ant-design/icons';
 import { Tender, TenderMarkupPercentageInsert, MarkupParameter, MarkupTactic } from '../../../lib/types';
 import { fetchTenders as apiFetchTenders } from '../../../lib/api/tenders';
 import {
@@ -388,27 +388,6 @@ const MarkupPercentages: React.FC = () => {
       headStyle={{ borderBottom: 'none', paddingBottom: 0 }}
       title={
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
-          <Button
-            icon={<ArrowLeftOutlined />}
-            type="primary"
-            onClick={() => {
-              setSelectedTenderId(null);
-              setSelectedTenderTitle(null);
-              setSelectedVersion(null);
-              setSelectedTacticId(null);
-              form.resetFields();
-            }}
-            style={{
-              padding: '4px 15px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              width: 'fit-content',
-              backgroundColor: '#10b981',
-              borderColor: '#10b981'
-            }}
-          >
-            Назад к выбору
-          </Button>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
             <Space size="middle" wrap>
               <Space size="small">

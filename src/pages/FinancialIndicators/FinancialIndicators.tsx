@@ -354,20 +354,6 @@ const FinancialIndicators: React.FC = () => {
 
   return (
     <div className="financial-indicators-page">
-      <div style={{ marginBottom: 16, marginLeft: isPhoneDevice ? 12 : 0 }}>
-        <Button
-          type="primary"
-          style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
-          onClick={() => {
-            setSelectedTenderId(null);
-            setSelectedTenderTitle('');
-            setSelectedVersion(null);
-          }}
-        >
-          ← Назад к выбору тендера
-        </Button>
-      </div>
-
       <IndicatorsFilters
         tenders={tenders}
         selectedTenderTitle={selectedTenderTitle}
