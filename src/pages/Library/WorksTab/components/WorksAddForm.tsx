@@ -1,7 +1,7 @@
 import React from 'react';
 import { Form, Row, Col, Select, AutoComplete, Input, InputNumber, Space, Button, Tooltip, theme } from 'antd';
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
-import { WorkName, WorkItemType, UnitType } from '../../../../lib/supabase';
+import { WorkName, WorkItemType, UnitType } from '../../../../lib/types';
 import type { FormInstance } from 'antd';
 
 interface WorksAddFormProps {

@@ -1,5 +1,5 @@
 import { TabKey } from '../types';
-import type { MarkupSequences as DbMarkupSequences, BaseCosts as DbBaseCosts, MarkupStep } from '../../../../lib/supabase/types';
+import type { MarkupSequences as DbMarkupSequences, BaseCosts as DbBaseCosts, MarkupStep } from '../../../../lib/types/types';
 
 // Маппинг между английскими (UI) и русскими (DB) ключами
 const EN_TO_RU_KEY_MAP: Record<TabKey, keyof DbMarkupSequences> = {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { useUndoableSet } from './useUndoableSet';
-import type { ClientPosition } from '../../../lib/supabase';
+import type { ClientPosition } from '../../../lib/types';
 import { bulkDeletePositions } from '../../../lib/api/positions';
 import { pluralize } from '../../../utils/pluralize';
 import { collectSectionDescendants } from '../../../utils/positions/collectSectionDescendants';

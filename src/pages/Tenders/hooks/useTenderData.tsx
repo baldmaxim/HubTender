@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { TenderRegistryWithRelations, TenderStatus, ConstructionScope } from '../../../lib/supabase';
+import type { TenderRegistryWithRelations, TenderStatus, ConstructionScope } from '../../../lib/types';
 import {
   fetchTenderRegistryWithRelations,
   fetchTenderStatuses,

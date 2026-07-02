@@ -4,7 +4,7 @@ import { CalendarOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
-import type { TenderDeadlineExtension } from '../../../lib/supabase/types';
+import type { TenderDeadlineExtension } from '../../../lib/types/types';
 import { getErrorMessage } from '../../../utils/errors';
 import { fetchTenders } from '../../../lib/api/tenders';
 import { listAccessUsers, setTenderExtensionForUsers } from '../../../lib/api/userAdmin';

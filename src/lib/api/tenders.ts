@@ -2,7 +2,7 @@
 // The Go endpoint returns the full tenders row — JSON keys match
 // Database['public']['Tables']['tenders']['Row'], so the Supabase `Tender`
 // type works at both call sites without adaptation.
-import type { Tender } from '../supabase/types';
+import type { Tender } from '../types/types';
 import { apiFetch } from './client';
 
 export interface ListTendersParams {

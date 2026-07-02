@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, Typography, Space, Form, InputNumber, Button, Spin, Row, Col } from 'antd';
 import { SaveOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { FormInstance } from 'antd';
-import type { MarkupParameter } from '../../../../lib/supabase';
+import type { MarkupParameter } from '../../../../lib/types';
 import { parseNumberInput, formatNumberInput } from '../../../../utils/numberFormat';
 
 const { Title, Text } = Typography;

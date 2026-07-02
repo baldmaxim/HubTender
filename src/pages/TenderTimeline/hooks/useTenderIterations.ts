@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listTimelineGroupIterations } from '../../../lib/api/timeline';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
-import type { TenderIterationWithRelations } from '../../../lib/supabase/types';
+import type { TenderIterationWithRelations } from '../../../lib/types/types';
 
 interface UseTenderIterationsResult {
   iterations: TenderIterationWithRelations[];

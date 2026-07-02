@@ -1,6 +1,6 @@
 import { Button, Select, AutoComplete, InputNumber, Input, Tag } from 'antd';
 import { CloseOutlined, SaveOutlined, LinkOutlined } from '@ant-design/icons';
-import type { BoqItemFull, MaterialName } from '../../../lib/supabase';
+import type { BoqItemFull, MaterialName } from '../../../lib/types';
 import { useMaterialEditForm } from '../hooks/useMaterialEditForm';
 import { FieldLabel, type CostCategoryOption } from './editFormShared';
 import { getBorderColor, getWorkTypeColor } from './editFormColors';

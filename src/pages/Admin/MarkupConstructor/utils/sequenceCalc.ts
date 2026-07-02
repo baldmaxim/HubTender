@@ -1,4 +1,4 @@
-import type { MarkupStep } from '../../../../lib/supabase';
+import type { MarkupStep } from '../../../../lib/types';
 
 // Значение процента наценки по ключу параметра (в UI — form.getFieldValue).
 export type GetPercent = (key: string | number) => number;

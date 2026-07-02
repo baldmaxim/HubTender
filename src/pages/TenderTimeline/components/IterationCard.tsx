@@ -1,6 +1,6 @@
 import React from 'react';
 import { Avatar, Button, Card, Space, Tag, Typography, theme } from 'antd';
-import type { TenderIterationWithRelations } from '../../../lib/supabase/types';
+import type { TenderIterationWithRelations } from '../../../lib/types/types';
 import {
   formatAmount,
   formatDate,

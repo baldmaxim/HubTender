@@ -1,4 +1,4 @@
-import type { MarkupParameter, MarkupStep } from '../../../../lib/supabase';
+import type { MarkupParameter, MarkupStep } from '../../../../lib/types';
 import { ACTIONS } from '../constants';
 import type { GetPercent } from './sequenceCalc';
 

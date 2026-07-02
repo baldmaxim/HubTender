@@ -1,5 +1,5 @@
 import { Modal, message } from 'antd';
-import type { BoqItemFull } from '../../../lib/supabase';
+import type { BoqItemFull } from '../../../lib/types';
 import { clearPositionsBoq } from '../../../lib/api/positions';
 import { deleteBoqItemWithAudit, updateBoqItemWithAudit } from '../../../lib/api/boq';
 import { getErrorMessage } from '../../../utils/errors';

@@ -1,4 +1,4 @@
-import type { BoqItemFull, Tender } from '../../lib/supabase';
+import type { BoqItemFull, Tender } from '../../lib/types';
 import { getMarkupTactic } from '../../lib/api/markup';
 import { getTenderById } from '../../lib/api/fi';
 import {

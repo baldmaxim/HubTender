@@ -20,7 +20,7 @@ import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
 import { useTheme } from '../../../../contexts/ThemeContext';
 import { useIsMobile } from '../../../../hooks/useIsMobile';
-import type { ProjectFull, ProjectAgreement } from '../../../../lib/supabase/types';
+import type { ProjectFull, ProjectAgreement } from '../../../../lib/types/types';
 import {
   listProjectAgreements,
   createProjectAgreement,

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/types';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import { fetchTenders } from '../../../lib/api/tenders';
 import { createSystemNotification } from '../../../lib/api/notifications';

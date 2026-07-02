@@ -1,7 +1,7 @@
 import React from 'react';
 import { Typography, Space, Row, Col, Tag, Button, theme } from 'antd';
 import { EditOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
-import type { MarkupParameter, MarkupStep } from '../../../../lib/supabase';
+import type { MarkupParameter, MarkupStep } from '../../../../lib/types';
 import type { TabKey } from '../types';
 import type { StepBuilder } from '../hooks/useStepBuilderState';
 import { buildStepFormula, buildDetailedFormula } from '../utils/formulaDisplay';

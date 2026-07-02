@@ -3,7 +3,7 @@ import { Typography, Tooltip } from 'antd';
 import dayjs from 'dayjs';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
-import type { ProjectFull, ProjectCompletion } from '../../../../lib/supabase/types';
+import type { ProjectFull, ProjectCompletion } from '../../../../lib/types/types';
 import { COLORS, formatMoney, type MonthData } from './ganttUtils';
 
 // Плагины идемпотентны — повторное extend безопасно.

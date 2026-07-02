@@ -15,7 +15,7 @@ import { DeadlineBar } from './components/DeadlineBar';
 import { PositionTable } from './components/PositionTable';
 import AddAdditionalPositionModal from './AddAdditionalPositionModal';
 import { MassBoqImportModal } from './components/MassBoqImportModal';
-import type { Tender } from '../../lib/supabase';
+import type { Tender } from '../../lib/types';
 import { collectSectionDescendants } from '../../utils/positions/collectSectionDescendants';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { filterPositionsBySearch } from './utils/positionSearch';

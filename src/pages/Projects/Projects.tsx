@@ -16,7 +16,7 @@ import { ProjectCards } from './components/ProjectCards';
 import { GanttChart } from './components/GanttChart';
 import { ProjectModal } from './components/ProjectModal';
 
-import type { ProjectFull } from '../../lib/supabase/types';
+import type { ProjectFull } from '../../lib/types/types';
 
 
 const Projects: React.FC = () => {

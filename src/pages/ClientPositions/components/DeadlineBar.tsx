@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Typography } from 'antd';
 import dayjs from 'dayjs';
-import type { Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/types';
 
 const { Text } = Typography;
 

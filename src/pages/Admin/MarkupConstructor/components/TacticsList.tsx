@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, Typography, Space, Input, Button, Spin, List, Tag, theme } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import type { MarkupTactic } from '../../../../lib/supabase';
+import type { MarkupTactic } from '../../../../lib/types';
 
 const { Title, Text } = Typography;
 

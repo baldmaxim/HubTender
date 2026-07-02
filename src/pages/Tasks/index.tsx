@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Tabs, Select, message } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { canManageUsers } from '../../lib/supabase/types';
+import { canManageUsers } from '../../lib/types/types';
 import { listTimelineAssignableUsers } from '../../lib/api/timeline';
 import TaskListTab from './TaskListTab';
 import EmployeeTasksTab from './EmployeeTasksTab';

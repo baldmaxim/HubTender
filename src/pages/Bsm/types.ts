@@ -1,4 +1,4 @@
-import type { UnitType, BoqItemType } from '../../lib/supabase';
+import type { UnitType, BoqItemType } from '../../lib/types';
 
 export interface TenderOption {
   value: string;

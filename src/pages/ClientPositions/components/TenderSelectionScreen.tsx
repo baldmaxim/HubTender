@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, Select, Row, Col, Typography, Tag } from 'antd';
-import type { Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/types';
 import { getVersionColorByTitle } from '../../../utils/versionColor';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Card, Space, Tag, Typography, Empty } from 'antd';
 import { LinkOutlined } from '@ant-design/icons';
-import type { BoqItemFull } from '../../../lib/supabase';
+import type { BoqItemFull } from '../../../lib/types';
 import { currencySymbols, getBoqTypeTagStyle, isMaterialType } from './boqColors';
 import { formatRu } from '../../../utils/format/currency';
 import { useIncrementalRender } from '../../../hooks/useIncrementalRender';

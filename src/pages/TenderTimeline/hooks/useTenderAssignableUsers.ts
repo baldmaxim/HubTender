@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { TimelineUserRef } from '../../../lib/supabase/types';
+import type { TimelineUserRef } from '../../../lib/types/types';
 import { listTimelineAssignableUsers } from '../../../lib/api/timeline';
 import { DEFAULT_TENDER_TEAMS, normalizeFullName } from '../utils/timeline.utils';
 

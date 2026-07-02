@@ -1,4 +1,4 @@
-import type { ApprovalStatus } from '../../../lib/supabase/types';
+import type { ApprovalStatus } from '../../../lib/types/types';
 
 export const TIMELINE_PRIVILEGED_ROLE_CODES = [
   'administrator',

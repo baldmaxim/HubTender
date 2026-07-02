@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listTimelineTenders } from '../../../lib/api/timeline';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
-import type { ApprovalStatus } from '../../../lib/supabase/types';
+import type { ApprovalStatus } from '../../../lib/types/types';
 
 const EXCLUDED_TENDER_NUMBERS = new Set([
   '306-TEST-V2-20260407174128',

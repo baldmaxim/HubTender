@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { message } from 'antd';
 import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
-import type { Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/types';
 import type { BoqItemWithCosts } from '../utils';
 import {
   calculateLiveCommercialAmounts,

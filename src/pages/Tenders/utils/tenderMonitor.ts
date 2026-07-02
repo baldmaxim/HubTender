@@ -4,7 +4,7 @@ import type {
   DashboardStatus,
   TenderPackageItem,
   TenderRegistryWithRelations,
-} from '../../../lib/supabase';
+} from '../../../lib/types';
 
 export type TenderMonitorTab = 'all' | DashboardStatus;
 export type TenderMonitorSortField = 'submission_date' | 'area' | 'total_cost';

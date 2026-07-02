@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { message } from 'antd';
 import { createTemplate } from '../../../lib/api/library';
-import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
+import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/types';
 import type { TemplateItemWithDetails } from './useTemplateItems';
 
 interface CostCategoryOption {

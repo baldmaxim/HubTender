@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { AuthUser, UserRole, AccessStatus } from '../lib/supabase/types';
+import type { AuthUser, UserRole, AccessStatus } from '../lib/types/types';
 import { invalidateApiCache } from '../lib/api/client';
 import { getMe } from '../lib/api/users';
 import { dropAll as dropAllPositionsCache } from '../lib/cache/clientPositionsCache';

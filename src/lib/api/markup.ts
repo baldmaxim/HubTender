@@ -7,7 +7,7 @@ import type {
   PricingDistribution,
   PricingDistributionInsert,
   TenderMarkupPercentageInsert,
-} from '../supabase';
+} from '../types';
 import { apiFetch } from './client';
 
 // ─── markup_tactics ─────────────────────────────────────────────────────────

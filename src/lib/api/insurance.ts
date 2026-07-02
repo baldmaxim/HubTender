@@ -2,7 +2,7 @@
 // Go path: GET/PUT /api/v1/tenders/:id/insurance.
 // Supabase path: direct table read/upsert on public.tender_insurance.
 
-import type { Tender } from '../supabase';
+import type { Tender } from '../types';
 import { apiFetch } from './client';
 import { fetchTenders } from './tenders';
 

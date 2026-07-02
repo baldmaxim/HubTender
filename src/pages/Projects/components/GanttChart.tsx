@@ -19,7 +19,7 @@ import {
 } from 'chart.js';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
-import type { ProjectFull, ProjectCompletion } from '../../../lib/supabase/types';
+import type { ProjectFull, ProjectCompletion } from '../../../lib/types/types';
 import { getErrorMessage } from '../../../utils/errors';
 import { AutoFitText } from '../../../components/AutoFitText/AutoFitText';
 import {

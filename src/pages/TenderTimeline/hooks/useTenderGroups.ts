@@ -5,7 +5,7 @@ import type {
   ApprovalStatus,
   TenderGroup,
   TenderGroupMemberWithUser,
-} from '../../../lib/supabase/types';
+} from '../../../lib/types/types';
 
 type GroupIterationRow = {
   id: string;

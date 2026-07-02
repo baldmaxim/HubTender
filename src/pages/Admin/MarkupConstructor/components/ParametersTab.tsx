@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, Typography, Space, Form, Input, Button, List, Tag, Divider, Modal } from 'antd';
 import { SaveOutlined, PlusOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, EditOutlined, CloseOutlined } from '@ant-design/icons';
 import type { FormInstance } from 'antd';
-import type { MarkupParameter } from '../../../../lib/supabase';
+import type { MarkupParameter } from '../../../../lib/types';
 
 const { Title, Text } = Typography;
 

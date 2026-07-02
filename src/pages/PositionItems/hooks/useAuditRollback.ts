@@ -4,7 +4,7 @@ import { apiFetch } from '../../../lib/api/client';
 import { updateBoqItemWithAudit } from '../../../lib/api/boq';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { BoqItemAudit } from '../../../types/audit';
-import type { BoqItemInsert } from '../../../lib/supabase';
+import type { BoqItemInsert } from '../../../lib/types';
 
 interface UseAuditRollbackReturn {
   rollback: (record: BoqItemAudit) => Promise<void>;

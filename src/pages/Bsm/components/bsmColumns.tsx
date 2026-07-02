@@ -1,6 +1,6 @@
 import { Tag, Input, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import type { UnitType, BoqItemType } from '../../../lib/supabase';
+import type { UnitType, BoqItemType } from '../../../lib/types';
 import type { BoqItemData } from '../types';
 import { getUnitColor, getItemTypeStyle, getMaterialTypeStyle } from '../utils/bsmStyles';
 import { formatRu, formatRu2 } from '../../../utils/format/currency';

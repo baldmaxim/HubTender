@@ -1,4 +1,4 @@
-import type { BoqItemType, CurrencyType } from '../../../lib/supabase';
+import type { BoqItemType, CurrencyType } from '../../../lib/types';
 
 /** Символы валют для отображения цены/итогов. */
 export const currencySymbols: Record<CurrencyType, string> = {

@@ -20,7 +20,7 @@ import {
   createProjectMonthlyCompletion,
   updateProjectMonthlyCompletion,
 } from '../../../../lib/api/projects';
-import type { ProjectFull, ProjectCompletion } from '../../../../lib/supabase/types';
+import type { ProjectFull, ProjectCompletion } from '../../../../lib/types/types';
 import { useIsMobile } from '../../../../hooks/useIsMobile';
 
 const { Text } = Typography;

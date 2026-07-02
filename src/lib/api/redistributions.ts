@@ -1,4 +1,4 @@
-import type { RedistributionRule } from '../supabase';
+import type { RedistributionRule } from '../types';
 import { apiFetch } from './client';
 
 export interface RedistributionRecord {

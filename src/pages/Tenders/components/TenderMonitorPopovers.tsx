@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Popover, Tag, Modal } from 'antd';
 import { EnvironmentFilled, FileTextOutlined, FolderOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../../hooks/useIsMobile';
-import type { TenderRegistryWithRelations } from '../../../lib/supabase';
+import type { TenderRegistryWithRelations } from '../../../lib/types';
 import {
   formatDate,
   getChronologyItems,

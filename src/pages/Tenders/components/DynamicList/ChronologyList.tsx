@@ -3,7 +3,7 @@ import { Form, DatePicker, Input, Button, Space, List, Select, Tag, Typography }
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { FormInstance } from 'antd';
-import type { ChronologyItem } from '../../../../lib/supabase';
+import type { ChronologyItem } from '../../../../lib/types';
 import { textareaEnterToSave } from '../../../../utils/keyboardSave';
 
 const { Text } = Typography;

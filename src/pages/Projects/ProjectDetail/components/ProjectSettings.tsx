@@ -21,7 +21,7 @@ import {
   listActiveTendersForProjectSelect,
   updateProject,
 } from '../../../../lib/api/projects';
-import type { ProjectFull, Tender, ProjectInsert } from '../../../../lib/supabase/types';
+import type { ProjectFull, Tender, ProjectInsert } from '../../../../lib/types/types';
 import { AnimatedNumber } from '../../../../components/transitions';
 
 const { Text } = Typography;

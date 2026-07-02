@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Form, Modal, message } from 'antd';
-import type { Tender, TenderMarkupPercentageInsert } from '../../../../lib/supabase';
+import type { Tender, TenderMarkupPercentageInsert } from '../../../../lib/types';
 import {
   createTender,
   adminPatchTender,

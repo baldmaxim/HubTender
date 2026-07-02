@@ -3,7 +3,7 @@ import { Modal, Form, Input, InputNumber, DatePicker, Select, message } from 'an
 import dayjs from 'dayjs';
 import { listActiveTendersForProjectSelect } from '../../../lib/api/projects';
 import { useTheme } from '../../../contexts/ThemeContext';
-import type { ProjectFull, ProjectInsert, Tender } from '../../../lib/supabase/types';
+import type { ProjectFull, ProjectInsert, Tender } from '../../../lib/types/types';
 
 interface ProjectModalProps {
   open: boolean;

@@ -1,4 +1,4 @@
-import type { ClientPosition } from '../../../lib/supabase';
+import type { ClientPosition } from '../../../lib/types';
 
 export function normalizePositionSearchValue(value: string | number | null | undefined): string {
   return String(value ?? '')

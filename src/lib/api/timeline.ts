@@ -1,6 +1,6 @@
 // Timeline helpers with Go BFF / Supabase fallback.
 // Timeline helpers — Go BFF only.
-import type { TimelineUserRef } from '../supabase/types';
+import type { TimelineUserRef } from '../types/types';
 import { apiFetch } from './client';
 
 export interface TimelineIterationInput {

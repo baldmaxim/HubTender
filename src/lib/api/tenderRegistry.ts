@@ -9,7 +9,7 @@ import type {
   TenderRegistryWithRelations,
   TenderStatus,
   ConstructionScope,
-} from '../supabase';
+} from '../types';
 import { apiFetch } from './client';
 
 export interface TenderAutocomplete {

@@ -5,7 +5,7 @@ import type {
   TenderStatus,
   ConstructionScope,
   TenderRegistryInsert,
-} from '../../../lib/supabase';
+} from '../../../lib/types';
 import {
   fetchTenderRegistryAutocomplete,
   getNextTenderRegistrySortOrder,

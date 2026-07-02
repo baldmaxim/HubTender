@@ -1,4 +1,4 @@
-import type { UnitType, BoqItemType } from '../../../lib/supabase';
+import type { UnitType, BoqItemType } from '../../../lib/types';
 
 export const getUnitColor = (unit: UnitType): string => {
   const colors: Record<UnitType, string> = {

@@ -3,7 +3,7 @@ import { App, Button, Space } from 'antd';
 import { PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { patchTenderRegistryFields } from '../../lib/api/tenderRegistry';
-import type { TenderRegistryWithRelations } from '../../lib/supabase';
+import type { TenderRegistryWithRelations } from '../../lib/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useIsMobile } from '../../hooks/useIsMobile';

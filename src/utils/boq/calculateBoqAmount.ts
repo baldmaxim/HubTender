@@ -1,4 +1,4 @@
-import type { BoqItemFull, CurrencyType } from '../../lib/supabase';
+import type { BoqItemFull, CurrencyType } from '../../lib/types';
 
 type CurrencyRates = {
   usd_rate?: number | null;

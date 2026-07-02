@@ -11,7 +11,7 @@ import {
   SwapOutlined,
 } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
-import type { Tender } from '../../../../lib/supabase';
+import type { Tender } from '../../../../lib/types';
 import { useFileParser } from './hooks/useFileParser';
 import { useVersionMatching } from './hooks/useVersionMatching';
 import { MatchStatistics } from './components/MatchStatistics';

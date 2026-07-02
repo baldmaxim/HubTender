@@ -1,6 +1,6 @@
 import { Space } from 'antd';
 import { LinkOutlined, PhoneOutlined } from '@ant-design/icons';
-import type { TenderRegistryWithRelations } from '../../../lib/supabase';
+import type { TenderRegistryWithRelations } from '../../../lib/types';
 import {
   formatArea,
   formatDate,

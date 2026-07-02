@@ -1,4 +1,4 @@
-import type { ProjectFull } from '../../../../lib/supabase/types';
+import type { ProjectFull } from '../../../../lib/types/types';
 
 // Общие типы/константы диаграммы Ганта. Не называть модуль ganttChartData.ts —
 // имя занято src/utils/excel/gantt/ganttChartData.ts (нативные Excel-графики).

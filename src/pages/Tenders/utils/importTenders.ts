@@ -3,7 +3,7 @@
 
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx';
-import type { ChronologyItem, TenderPackageItem } from '../../../lib/supabase';
+import type { ChronologyItem, TenderPackageItem } from '../../../lib/types';
 
 export type ImportRowAction = 'create' | 'update' | 'skip';
 

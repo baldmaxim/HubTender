@@ -11,7 +11,7 @@
 
 import { findBestMatches, type MatchResult } from './findBestMatches';
 import type { ParsedRow } from './calculateMatchScore';
-import type { ClientPosition } from '../../lib/supabase';
+import type { ClientPosition } from '../../lib/types';
 
 export interface MatchWorkerRequest {
   oldPositions: ClientPosition[];

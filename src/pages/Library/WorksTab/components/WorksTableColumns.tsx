@@ -1,7 +1,7 @@
 import { Button, Space, Popconfirm, Tooltip, Tag } from 'antd';
 import type { ColumnType } from 'antd/es/table';
 import { DeleteOutlined, SaveOutlined, CloseOutlined, EditOutlined } from '@ant-design/icons';
-import { WorkLibraryFull, WorkItemType, CurrencyType, UnitType } from '../../../../lib/supabase';
+import { WorkLibraryFull, WorkItemType, CurrencyType, UnitType } from '../../../../lib/types';
 
 type EditableColumn = ColumnType<WorkLibraryFull> & { editable?: boolean };
 

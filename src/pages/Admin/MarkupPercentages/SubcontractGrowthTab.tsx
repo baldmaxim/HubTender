@@ -15,7 +15,7 @@ import {
   DetailCostCategory,
   CostCategory,
   Location,
-} from '../../../lib/supabase';
+} from '../../../lib/types';
 import { getErrorMessage } from '../../../utils/errors';
 import {
   listAllDetailCostCategoriesByOrder,

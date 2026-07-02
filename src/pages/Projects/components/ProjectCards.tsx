@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Row, Col, Typography, Progress, Tag, Empty, Spin } from 'antd';
 import { useTheme } from '../../../contexts/ThemeContext';
-import type { ProjectFull } from '../../../lib/supabase/types';
+import type { ProjectFull } from '../../../lib/types/types';
 
 const { Text } = Typography;
 

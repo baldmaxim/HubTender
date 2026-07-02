@@ -1,6 +1,6 @@
 // Cost categories + detail cost categories + units (full row) — Go BFF only.
 
-import type { Tables } from '../supabase/database.types';
+import type { Tables } from '../types/database.types';
 import { apiFetch } from './client';
 
 export type CostCategoryRow = Tables<'cost_categories'>;

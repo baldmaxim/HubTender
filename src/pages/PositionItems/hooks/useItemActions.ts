@@ -9,7 +9,7 @@ import type {
   WorkLibraryFull,
   MaterialLibraryFull,
   BoqItemFull,
-} from '../../../lib/supabase';
+} from '../../../lib/types';
 import { recomputePositionTotals, updatePositionFields } from '../../../lib/api/positions';
 import {
   recomputeLinkedMaterials,

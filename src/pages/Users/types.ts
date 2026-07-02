@@ -1,4 +1,4 @@
-import type { AccessStatus } from '../../lib/supabase/types';
+import type { AccessStatus } from '../../lib/types/types';
 
 export interface PendingRequest {
   id: string;

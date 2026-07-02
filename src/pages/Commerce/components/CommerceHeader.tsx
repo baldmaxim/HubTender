@@ -8,7 +8,7 @@ import {
   ArrowLeftOutlined,
   DollarOutlined
 } from '@ant-design/icons';
-import type { Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/types';
 import type { MarkupTactic, TenderOption } from '../types';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 

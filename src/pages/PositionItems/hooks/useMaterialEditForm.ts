@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
-import type { BoqItemFull, CurrencyType, MaterialName, BoqItemType, MaterialType, DeliveryPriceType } from '../../../lib/supabase';
+import type { BoqItemFull, CurrencyType, MaterialName, BoqItemType, MaterialType, DeliveryPriceType } from '../../../lib/types';
 import type { CostCategoryOption } from '../components/editFormShared';
 
 export interface MaterialFormData {

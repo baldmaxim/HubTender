@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { message } from 'antd';
-import type { MaterialLibraryFull, MaterialName } from '../../../../lib/supabase';
+import type { MaterialLibraryFull, MaterialName } from '../../../../lib/types';
 import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import { listMaterialsLibrary } from '../../../../lib/api/library';
 import { listMaterialNames } from '../../../../lib/api/nomenclatures';

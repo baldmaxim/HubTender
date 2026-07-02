@@ -3,7 +3,7 @@ import { Form, DatePicker, Input, Button, Space, List, Typography } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { FormInstance } from 'antd';
-import type { TenderPackageItem } from '../../../../lib/supabase';
+import type { TenderPackageItem } from '../../../../lib/types';
 import { getPackageLinkHref } from '../../utils/tenderMonitor';
 
 const { Text } = Typography;

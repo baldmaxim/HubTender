@@ -3,7 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { Spin, Typography } from 'antd';
 import { LoadingOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
-import { hasPageAccess } from '../../lib/supabase/types';
+import { hasPageAccess } from '../../lib/types/types';
 
 const { Text } = Typography;
 

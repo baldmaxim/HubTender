@@ -3,7 +3,7 @@ import { Input, Button, Divider, Spin, Typography, Space, Empty } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTenderNotes } from '../../hooks/useTenderNotes';
-import { canViewAllNotes } from '../../lib/supabase/types';
+import { canViewAllNotes } from '../../lib/types/types';
 
 const { TextArea } = Input;
 const { Text } = Typography;

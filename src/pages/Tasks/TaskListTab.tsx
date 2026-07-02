@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Space, Button, Table, Typography, Switch, Modal, message } from 'antd';
 import { useRealtimeAwareLoading } from '../../lib/realtime/useRealtimeAwareLoading';
 import { PlusOutlined } from '@ant-design/icons';
-import type { UserTaskWithRelations, TaskStatus, WorkMode, WorkStatus } from '../../lib/supabase';
+import type { UserTaskWithRelations, TaskStatus, WorkMode, WorkStatus } from '../../lib/types';
 import {
   listUserTasks,
   updateUserTask,

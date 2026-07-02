@@ -3,7 +3,7 @@ import { Button, DatePicker, Input, Select, Space, Tag, Typography, message } fr
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { patchTenderRegistryFields } from '../../../lib/api/tenderRegistry';
-import type { ChronologyItem, TenderPackageItem } from '../../../lib/supabase';
+import type { ChronologyItem, TenderPackageItem } from '../../../lib/types';
 import { DATE_INPUT_FORMATS, formatDate, getPackageLinkHref } from '../utils/tenderMonitor';
 import type { TenderMonitorPalette } from '../utils/tenderMonitorTheme';
 import { inputEnterToSave, textareaEnterToSave } from '../../../utils/keyboardSave';

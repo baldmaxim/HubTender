@@ -5,7 +5,7 @@ import {
   Row, Col, message, Button, Tag,
 } from 'antd';
 import { SafetyCertificateOutlined, ArrowLeftOutlined } from '@ant-design/icons';
-import type { Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/types';
 import {
   fetchInsuranceTenders,
   loadTenderInsurance,

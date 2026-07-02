@@ -1,5 +1,5 @@
 import { Typography, Tag } from 'antd';
-import type { ClientPosition } from '../../../lib/supabase';
+import type { ClientPosition } from '../../../lib/types';
 
 const { Text } = Typography;
 

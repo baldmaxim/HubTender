@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { message } from 'antd';
-import type { LibraryFolder } from '../../../lib/supabase';
+import type { LibraryFolder } from '../../../lib/types';
 import {
   listLibraryFolders,
   createLibraryFolder,

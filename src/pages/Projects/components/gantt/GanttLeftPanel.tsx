@@ -1,7 +1,7 @@
 import React from 'react';
 import { Typography, Progress, Button } from 'antd';
 import { EyeInvisibleOutlined } from '@ant-design/icons';
-import type { ProjectFull } from '../../../../lib/supabase/types';
+import type { ProjectFull } from '../../../../lib/types/types';
 import { COLORS } from './ganttUtils';
 
 const { Text } = Typography;

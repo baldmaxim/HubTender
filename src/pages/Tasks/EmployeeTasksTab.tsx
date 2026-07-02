@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Table, Tabs, message } from 'antd';
-import type { UserTaskWithRelations, TaskStatus, WorkMode, WorkStatus } from '../../lib/supabase';
+import type { UserTaskWithRelations, TaskStatus, WorkMode, WorkStatus } from '../../lib/types';
 import { listAllTasks } from '../../lib/api/tasks';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { useRealtimeAwareLoading } from '../../lib/realtime/useRealtimeAwareLoading';

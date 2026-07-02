@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { message, Modal } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
 import { useTheme } from '../../../contexts/ThemeContext';
-import type { ProjectInsert, ProjectFull } from '../../../lib/supabase/types';
+import type { ProjectInsert, ProjectFull } from '../../../lib/types/types';
 import { createProject, updateProject, softDeleteProject } from '../../../lib/api/projects';
 
 const { confirm } = Modal;

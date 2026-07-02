@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Form, message } from 'antd';
-import type { WorkLibraryFull, WorkName, WorkItemType, UnitType } from '../../../../lib/supabase';
+import type { WorkLibraryFull, WorkName, WorkItemType, UnitType } from '../../../../lib/types';
 import {
   createWorkLibrary,
   updateWorkLibrary,

@@ -5,7 +5,7 @@
 import React from 'react';
 import { Card, Row, Col, Select, Typography, Space, Statistic, Button, Tag } from 'antd';
 import { DownloadOutlined, LoadingOutlined } from '@ant-design/icons';
-import type { Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/types';
 import type { MarkupTactic } from '../hooks';
 import { AnimatedNumber, SuccessCheck } from '../../../components/transitions';
 import { useIsMobile } from '../../../hooks/useIsMobile';

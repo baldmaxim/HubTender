@@ -6,7 +6,7 @@ import type {
   TaskStatus,
   WorkMode,
   WorkStatus,
-} from '../supabase/types/tasks';
+} from '../types/types/tasks';
 
 export interface WorkSettings {
   current_work_mode: WorkMode;

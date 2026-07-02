@@ -7,7 +7,7 @@ import type {
   ConstructionScope,
   TenderRegistryWithRelations,
   TenderStatus,
-} from '../../../lib/supabase';
+} from '../../../lib/types';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useHorizontalSwipe } from '../../../hooks/useHorizontalSwipe';

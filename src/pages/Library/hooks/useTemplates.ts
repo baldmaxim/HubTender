@@ -4,7 +4,7 @@ import { listTemplates, deleteTemplate } from '../../../lib/api/library';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import { getErrorMessage } from '../../../utils/errors';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
-import type { Template } from '../../../lib/supabase';
+import type { Template } from '../../../lib/types';
 
 export interface TemplateWithDetails extends Template {
   cost_category_name?: string;

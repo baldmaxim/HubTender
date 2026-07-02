@@ -2,7 +2,7 @@
  * Логика расчета наценок для элементов BOQ
  */
 
-import type { BoqItem, MarkupStep } from '../../lib/supabase';
+import type { BoqItem, MarkupStep } from '../../lib/types';
 import {
   getTenderPricingDistribution,
   listSubcontractGrowthExclusionsForTender,

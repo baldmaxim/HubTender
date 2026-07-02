@@ -1,5 +1,5 @@
 import { Card, Typography, Tag, Input, InputNumber, Select } from 'antd';
-import type { ClientPosition } from '../../../lib/supabase';
+import type { ClientPosition } from '../../../lib/types';
 
 const { Text, Title } = Typography;
 

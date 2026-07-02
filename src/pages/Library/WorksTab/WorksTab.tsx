@@ -5,7 +5,7 @@ import {
   FolderOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
   AppstoreOutlined, FileOutlined,
 } from '@ant-design/icons';
-import type { LibraryFolder, WorkLibraryFull } from '../../../lib/supabase';
+import type { LibraryFolder, WorkLibraryFull } from '../../../lib/types';
 import { useWorksData } from './hooks/useWorksData';
 import { useWorksActions } from './hooks/useWorksActions';
 import { WorksAddForm } from './components/WorksAddForm';

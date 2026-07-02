@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
 import { apiFetch } from '../lib/api/client';
-import type { TenderNote, TenderNoteFull } from '../lib/supabase/types';
+import type { TenderNote, TenderNoteFull } from '../lib/types/types';
 
 interface UseTenderNotesResult {
   myNote: TenderNote | null;

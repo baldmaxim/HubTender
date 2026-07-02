@@ -1,6 +1,6 @@
 import React from 'react';
 import { Form, Input, Select, InputNumber, AutoComplete } from 'antd';
-import { WorkLibraryFull, WorkName } from '../../../../lib/supabase';
+import { WorkLibraryFull, WorkName } from '../../../../lib/types';
 
 interface WorksEditableCellProps {
   editing: boolean;

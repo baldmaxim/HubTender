@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
-import type { Tender } from '../../lib/supabase';
+import type { Tender } from '../../lib/types';
 import { fetchTenders as apiFetchTenders } from '../../lib/api/tenders';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { formatNumberWithSpaces } from '../../utils/numberFormat';

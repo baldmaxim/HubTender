@@ -9,7 +9,7 @@ import type {
   TenderPackageItem,
   TenderRegistryWithRelations,
   TenderStatus,
-} from '../../lib/supabase';
+} from '../../lib/types';
 import {
   createTenderRegistry,
   getNextTenderRegistrySortOrder,

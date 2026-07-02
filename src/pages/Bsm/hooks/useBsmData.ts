@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
-import type { UnitType, BoqItemType } from '../../../lib/supabase';
+import type { UnitType, BoqItemType } from '../../../lib/types';
 import { fetchTenders as apiFetchTenders } from '../../../lib/api/tenders';
 import { listAllBoqItemsForTender } from '../../../lib/api/fi';
 import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';

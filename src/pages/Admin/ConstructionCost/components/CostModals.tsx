@@ -3,7 +3,7 @@ import { Modal, Form, Input, Select, Alert, Typography, Button } from 'antd';
 import type { FormInstance } from 'antd';
 import { TreeNode } from '../hooks/useConstructionCost.tsx';
 import { useTheme } from '../../../../contexts/ThemeContext';
-import type { Tables } from '../../../../lib/supabase/database.types';
+import type { Tables } from '../../../../lib/types/database.types';
 
 const { Paragraph } = Typography;
 

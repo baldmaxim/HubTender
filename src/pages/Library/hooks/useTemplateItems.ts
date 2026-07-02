@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { message } from 'antd';
 import { listTemplateItems, deleteTemplateItem } from '../../../lib/api/library';
 import { getErrorMessage } from '../../../utils/errors';
-import type { TemplateItem } from '../../../lib/supabase';
+import type { TemplateItem } from '../../../lib/types';
 
 export interface TemplateItemWithDetails extends TemplateItem {
   work_name?: string;

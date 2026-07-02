@@ -1,6 +1,6 @@
 import React from 'react';
 import { Empty, Input, Skeleton, Space } from 'antd';
-import type { TenderRegistryWithRelations } from '../../../lib/supabase';
+import type { TenderRegistryWithRelations } from '../../../lib/types';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useHorizontalSwipe } from '../../../hooks/useHorizontalSwipe';

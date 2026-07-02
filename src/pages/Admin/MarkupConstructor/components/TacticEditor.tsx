@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, Typography, Space, Input, Button, Tabs, Tag, App, message } from 'antd';
 import { SaveOutlined, DeleteOutlined, EditOutlined, CloseOutlined, ArrowLeftOutlined, CheckOutlined, CopyOutlined } from '@ant-design/icons';
-import type { MarkupParameter, MarkupTactic } from '../../../../lib/supabase';
+import type { MarkupParameter, MarkupTactic } from '../../../../lib/types';
 import type { TabKey } from '../types';
 
 const { Title, Text } = Typography;

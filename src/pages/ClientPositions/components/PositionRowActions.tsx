@@ -11,7 +11,7 @@ import {
   PlusOutlined,
   VerticalAlignBottomOutlined,
 } from '@ant-design/icons';
-import type { ClientPosition } from '../../../lib/supabase';
+import type { ClientPosition } from '../../../lib/types';
 
 interface PositionRowActionsProps {
   record: ClientPosition;

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, Tag, Typography, Empty, Spin, Space, Input } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
-import type { ClientPosition, Tender } from '../../../lib/supabase';
+import type { ClientPosition, Tender } from '../../../lib/types';
 import { formatRu } from '../../../utils/format/currency';
 import { useIncrementalRender } from '../../../hooks/useIncrementalRender';
 

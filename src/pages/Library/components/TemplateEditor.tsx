@@ -17,7 +17,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { TemplateItemsTable } from './TemplateItemsTable';
 import type { TemplateItemWithDetails } from '../hooks/useTemplateItems';
-import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
+import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/types';
 
 interface CostCategoryOption {
   value: string;

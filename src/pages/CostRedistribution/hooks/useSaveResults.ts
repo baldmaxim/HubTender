@@ -11,7 +11,7 @@ import {
   type RedistributionRecord as ApiRedistributionRecord,
 } from '../../../lib/api/redistributions';
 import type { RedistributionResult, SourceRule, TargetCost } from '../utils';
-import type { RedistributionRule } from '../../../lib/supabase';
+import type { RedistributionRule } from '../../../lib/types';
 import type { PositionAdjustmentRule } from '../types/positionAdjustment';
 import { markRealtimeMutation } from '../../../lib/realtime/useRealtimeRefetch';
 

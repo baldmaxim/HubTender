@@ -1,6 +1,6 @@
 // Financial Indicators page helpers with Go BFF / Supabase fallback.
 
-import type { Tender, BoqItem, MarkupTactic } from '../supabase';
+import type { Tender, BoqItem, MarkupTactic } from '../types';
 import { apiFetch } from './client';
 import { getMarkupTactic } from './markup';
 import { loadTenderInsurance, type InsuranceData } from './insurance';

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Select, AutoComplete, InputNumber, Input, message } from 'antd';
 import { CloseOutlined, SaveOutlined } from '@ant-design/icons';
-import type { BoqItemFull, CurrencyType, WorkName, BoqItemType } from '../../lib/supabase';
+import type { BoqItemFull, CurrencyType, WorkName, BoqItemType } from '../../lib/types';
 
 interface CostCategoryOption {
   value: string;

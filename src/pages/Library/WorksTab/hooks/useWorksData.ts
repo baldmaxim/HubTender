@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { message } from 'antd';
-import type { WorkLibraryFull, WorkName } from '../../../../lib/supabase';
+import type { WorkLibraryFull, WorkName } from '../../../../lib/types';
 import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import { listWorksLibrary } from '../../../../lib/api/library';
 import { listWorkNames } from '../../../../lib/api/nomenclatures';

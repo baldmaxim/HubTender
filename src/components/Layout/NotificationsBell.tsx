@@ -9,7 +9,7 @@ import {
   DeleteOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { type Notification } from '../../lib/supabase';
+import { type Notification } from '../../lib/types';
 
 const { Text } = Typography;
 

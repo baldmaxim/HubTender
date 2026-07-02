@@ -8,7 +8,7 @@ import type {
   CurrencyType,
   WorkName,
   MaterialName,
-} from '../../../lib/supabase';
+} from '../../../lib/types';
 import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {

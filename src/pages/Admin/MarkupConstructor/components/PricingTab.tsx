@@ -1,7 +1,7 @@
 import React from 'react';
 import { Typography, Space, Select, Button, Spin, Tag, Divider, Table } from 'antd';
 import { SaveOutlined, ReloadOutlined } from '@ant-design/icons';
-import type { Tender, PricingDistribution, DistributionTarget } from '../../../../lib/supabase';
+import type { Tender, PricingDistribution, DistributionTarget } from '../../../../lib/types';
 
 const { Title, Text } = Typography;
 

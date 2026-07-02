@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Form, message } from 'antd';
-import type { MaterialLibraryFull, MaterialName, ItemType, UnitType, DeliveryPriceType } from '../../../../lib/supabase';
+import type { MaterialLibraryFull, MaterialName, ItemType, UnitType, DeliveryPriceType } from '../../../../lib/types';
 import {
   createMaterialLibrary,
   updateMaterialLibrary,

@@ -9,7 +9,7 @@ import { getTendersTableColumns } from './components/TendersTableColumns';
 import { getTendersActionMenu } from './components/TendersActionMenu';
 import { TendersToolbar } from './components/TendersToolbar';
 import { cloneTenderAsNewVersion } from '../../../utils/versionTransfer/cloneTenderAsNewVersion';
-import type { Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/types';
 import './Tenders.css';
 
 const Tenders: React.FC = () => {

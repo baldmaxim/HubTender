@@ -18,7 +18,7 @@ import { TemplateFilters } from './components/TemplateFilters';
 import { createTemplateColumns, getRowClassName } from './utils/templateColumns';
 import { templateRowStyles } from './utils/templateStyles';
 import type { TemplateItemWithDetails } from './hooks/useTemplateItems';
-import type { LibraryFolder } from '../../lib/supabase';
+import type { LibraryFolder } from '../../lib/types';
 import { getErrorMessage } from '../../utils/errors';
 
 const { Text } = Typography;

@@ -2,7 +2,7 @@ import React from 'react';
 import { Col, Row, Space } from 'antd';
 import { LinkOutlined, PhoneOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../../hooks/useIsMobile';
-import type { TenderRegistryWithRelations } from '../../../lib/supabase';
+import type { TenderRegistryWithRelations } from '../../../lib/types';
 import {
   formatArea,
   formatDate,

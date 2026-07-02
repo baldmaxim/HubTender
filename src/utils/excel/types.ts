@@ -4,7 +4,7 @@ import type {
   MaterialType,
   CurrencyType,
   DeliveryPriceType
-} from '../../lib/supabase';
+} from '../../lib/types';
 
 /**
  * Интерфейс для строки Excel экспорта

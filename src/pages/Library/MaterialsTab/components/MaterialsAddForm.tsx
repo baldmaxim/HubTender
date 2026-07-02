@@ -1,7 +1,7 @@
 import React from 'react';
 import { Form, Row, Col, Select, AutoComplete, Input, InputNumber, Space, Button, Tooltip, theme } from 'antd';
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
-import { MaterialName, ItemType, UnitType, DeliveryPriceType } from '../../../../lib/supabase';
+import { MaterialName, ItemType, UnitType, DeliveryPriceType } from '../../../../lib/types';
 import type { FormInstance } from 'antd';
 
 interface MaterialsAddFormProps {

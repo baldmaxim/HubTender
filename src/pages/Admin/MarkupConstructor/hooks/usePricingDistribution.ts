@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { message } from 'antd';
-import type { PricingDistribution, PricingDistributionInsert, DistributionTarget } from '../../../../lib/supabase';
+import type { PricingDistribution, PricingDistributionInsert, DistributionTarget } from '../../../../lib/types';
 import {
   getTenderPricingDistribution,
   upsertTenderPricingDistribution,

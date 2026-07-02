@@ -4,7 +4,7 @@ import { UserOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { canManageUsers } from '../../lib/supabase/types';
+import { canManageUsers } from '../../lib/types/types';
 import {
   updateUserProfile,
   updateRoleAllowedPages,

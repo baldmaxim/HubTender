@@ -1,4 +1,4 @@
-import type { MarkupStep } from '../../../lib/supabase';
+import type { MarkupStep } from '../../../lib/types';
 import type { tryGetMarkupTactic } from '../../../lib/api/fi';
 import type { TenderMarkupPercentageRow } from '../../../lib/api/markup';
 import type { MarkupCoefficients } from '../types';

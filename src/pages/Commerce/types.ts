@@ -2,7 +2,7 @@
  * Типы для страницы коммерции
  */
 
-import type { ClientPosition, MarkupSequences, BaseCosts } from '../../lib/supabase';
+import type { ClientPosition, MarkupSequences, BaseCosts } from '../../lib/types';
 
 export interface PositionWithCommercialCost extends ClientPosition {
   commercial_total?: number;

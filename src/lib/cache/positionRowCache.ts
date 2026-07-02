@@ -5,7 +5,7 @@
 // TTL: 60 s. Storage is best-effort: any quota or parse error is swallowed
 // and treated as a cache miss so the caller falls back to a real fetch.
 
-import type { ClientPosition } from '../supabase';
+import type { ClientPosition } from '../types';
 
 const PREFIX = 'hubtender:positionRow:';
 const TTL_MS = 60 * 1000;

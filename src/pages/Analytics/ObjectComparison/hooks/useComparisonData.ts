@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
-import type { Tender } from '../../../../lib/supabase';
+import type { Tender } from '../../../../lib/types';
 import { fetchTenders as apiFetchTenders, fetchTendersByIds as apiFetchTendersByIds } from '../../../../lib/api/tenders';
 import { listAllBoqItemsForTender } from '../../../../lib/api/fi';
 import { listDetailCostCategoriesWithCategory } from '../../../../lib/api/costs';

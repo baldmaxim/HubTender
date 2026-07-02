@@ -4,7 +4,7 @@ import { getTenderById } from '../lib/api/fi';
 import { apiFetch } from '../lib/api/client';
 import { useRealtimeRefetch } from '../lib/realtime/useRealtimeRefetch';
 import { checkTenderDeadline } from '../utils/deadlineCheck';
-import type { DeadlineCheckResult, TenderDeadlineExtension } from '../lib/supabase/types';
+import type { DeadlineCheckResult, TenderDeadlineExtension } from '../lib/types/types';
 
 // Должен совпадать с ROLES_WITH_FULL_ACCESS в src/utils/deadlineCheck.ts —
 // привилегированные роли не падают в fail-closed при сетевой ошибке.

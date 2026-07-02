@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
 import type { FormInstance } from 'antd';
-import type { Tender, MarkupParameter, MarkupTactic, MarkupStep } from '../../../../lib/supabase';
+import type { Tender, MarkupParameter, MarkupTactic, MarkupStep } from '../../../../lib/types';
 import { fetchTenders as apiFetchTenders } from '../../../../lib/api/tenders';
 import {
   listMarkupTactics,

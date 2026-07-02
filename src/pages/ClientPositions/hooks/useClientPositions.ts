@@ -5,7 +5,7 @@ import {
   type ClientPosition,
   type CurrencyType,
   type DeliveryPriceType,
-} from '../../../lib/supabase';
+} from '../../../lib/types';
 import { fetchTenders as apiFetchTenders } from '../../../lib/api/tenders';
 import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 import { listAllBoqItemsForTender, getTenderById } from '../../../lib/api/fi';

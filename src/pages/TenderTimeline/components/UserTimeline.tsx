@@ -16,7 +16,7 @@ import {
   theme,
 } from 'antd';
 import { respondTenderIteration, createTenderIteration } from '../../../lib/api/timeline';
-import type { ApprovalStatus, TenderIterationWithRelations } from '../../../lib/supabase/types';
+import type { ApprovalStatus, TenderIterationWithRelations } from '../../../lib/types/types';
 import { useTenderIterations } from '../hooks/useTenderIterations';
 import type { TimelineGroupItem } from '../hooks/useTenderGroups';
 import IterationCard from './IterationCard';

@@ -5,7 +5,7 @@ import {
   FolderOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
   AppstoreOutlined, FileOutlined,
 } from '@ant-design/icons';
-import type { LibraryFolder, MaterialLibraryFull } from '../../../lib/supabase';
+import type { LibraryFolder, MaterialLibraryFull } from '../../../lib/types';
 import { useMaterialsData } from './hooks/useMaterialsData';
 import { useMaterialsActions } from './hooks/useMaterialsActions';
 import { MaterialsAddForm } from './components/MaterialsAddForm';

@@ -1,7 +1,7 @@
-import type { MarkupStep } from '../../../lib/supabase';
+import type { MarkupStep } from '../../../lib/types';
 // MarkupStep — единый тип из lib/supabase (локальный дубль удалён,
 // чтобы структуры шага не расходились).
-export type { MarkupStep } from '../../../lib/supabase';
+export type { MarkupStep } from '../../../lib/types';
 
 export type TabKey =
   | 'works'

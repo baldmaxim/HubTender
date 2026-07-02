@@ -1,6 +1,6 @@
 import React from 'react';
 import { Form, Input, Select, InputNumber, AutoComplete } from 'antd';
-import { MaterialLibraryFull, MaterialName } from '../../../../lib/supabase';
+import { MaterialLibraryFull, MaterialName } from '../../../../lib/types';
 
 interface MaterialsEditableCellProps {
   editing: boolean;

@@ -4,7 +4,7 @@ import { List, Typography, Progress, Empty, Spin, Tooltip, Divider, Grid } from 
 import { RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTheme } from '../../../contexts/ThemeContext';
-import type { ProjectFull } from '../../../lib/supabase/types';
+import type { ProjectFull } from '../../../lib/types/types';
 import type { AgreementsMap } from '../hooks/useProjectsData';
 
 const { Text } = Typography;

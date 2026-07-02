@@ -2,7 +2,7 @@
 // (Логика, которая раньше их продюсила, выполняется серверным
 // executeVersionTransfer — Go BFF; клиентские модули удалены.)
 
-import type { ClientPosition } from '../../lib/supabase';
+import type { ClientPosition } from '../../lib/types';
 
 /** Результат переноса одной дополнительной работы. */
 export interface AdditionalWorkTransfer {

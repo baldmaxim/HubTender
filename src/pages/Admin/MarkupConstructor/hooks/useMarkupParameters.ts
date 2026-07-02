@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { message } from 'antd';
 import type { FormInstance } from 'antd';
 import type { useAppProps } from 'antd/es/app/context';
-import type { MarkupParameter } from '../../../../lib/supabase';
+import type { MarkupParameter } from '../../../../lib/types';
 import {
   listActiveMarkupParameters,
   createMarkupParameter,

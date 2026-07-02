@@ -1,5 +1,5 @@
 import { Modal, message } from 'antd';
-import type { TenderRegistry, TenderRegistryWithRelations } from '../../../lib/supabase';
+import type { TenderRegistry, TenderRegistryWithRelations } from '../../../lib/types';
 import {
   archiveTenderRegistry,
   swapTenderRegistrySortOrder,

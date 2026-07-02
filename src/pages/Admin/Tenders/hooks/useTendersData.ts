@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
-import { type Tender, type HousingClassType, type ConstructionScopeType } from '../../../../lib/supabase';
+import { type Tender, type HousingClassType, type ConstructionScopeType } from '../../../../lib/types';
 import { useRealtimeTopic } from '../../../../lib/realtime/useRealtimeTopic';
 import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import { fetchTenders as apiFetchTenders } from '../../../../lib/api/tenders';

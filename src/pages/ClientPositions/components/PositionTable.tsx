@@ -15,7 +15,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import type { ClientPosition, Tender } from '../../../lib/supabase';
+import type { ClientPosition, Tender } from '../../../lib/types';
 import { PositionRowActions } from './PositionRowActions';
 import { IconSwap } from '../../../components/transitions';
 import { usePositionTabActions } from '../../../contexts/PositionTabsContext';

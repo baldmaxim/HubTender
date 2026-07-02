@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import * as XLSX from 'xlsx-js-style';
-import type { ProjectFull, ProjectCompletion } from '../../../../lib/supabase/types';
+import type { ProjectFull, ProjectCompletion } from '../../../../lib/types/types';
 import { buildGanttChartData, exportGanttCompletionWithCharts } from '../../../../utils/excel';
 import type { MonthData } from './ganttUtils';
 

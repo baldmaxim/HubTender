@@ -4,7 +4,7 @@
 
 import { useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import { message } from 'antd';
-import type { Tender, ClientPosition } from '../../../../../lib/supabase';
+import type { Tender, ClientPosition } from '../../../../../lib/types';
 import { fetchPositionsWithCosts } from '../../../../../lib/api/positions';
 import type { ParsedRow, MatchResult } from '../../../../../utils/matching';
 import { executeVersionTransfer } from '../../../../../utils/versionTransfer';

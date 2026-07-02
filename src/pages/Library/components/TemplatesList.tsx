@@ -27,7 +27,7 @@ import {
 } from '@ant-design/icons';
 import type { TemplateWithDetails } from '../hooks/useTemplates';
 import type { TemplateItemWithDetails } from '../hooks/useTemplateItems';
-import type { LibraryFolder, WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
+import type { LibraryFolder, WorkLibraryFull, MaterialLibraryFull } from '../../../lib/types';
 
 interface CostCategoryOption {
   value: string;

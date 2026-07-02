@@ -9,7 +9,7 @@
  */
 
 import { calculateStringSimilarity, calculateVolumeProximity, similarityFromNormalized } from './similarity';
-import type { ClientPosition } from '../../lib/supabase';
+import type { ClientPosition } from '../../lib/types';
 
 /**
  * Структура данных распарсенной строки из Excel

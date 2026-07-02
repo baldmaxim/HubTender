@@ -3,7 +3,7 @@ import { ReloadOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Text } = Typography;
-import type { Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/types';
 
 interface IndicatorsFiltersProps {
   tenders: Tender[];

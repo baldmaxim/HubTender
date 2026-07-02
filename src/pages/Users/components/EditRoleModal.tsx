@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal, Form, Checkbox, Alert } from 'antd';
 import type { FormInstance } from 'antd';
-import { ALL_PAGES, PAGE_LABELS, PAGES_STRUCTURE } from '../../../lib/supabase/types';
+import { ALL_PAGES, PAGE_LABELS, PAGES_STRUCTURE } from '../../../lib/types/types';
 import type { RoleRecord } from '../types';
 
 interface EditRoleModalProps {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { AutoComplete, Button } from 'antd';
 import { PlusOutlined, FileAddOutlined } from '@ant-design/icons';
-import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
+import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/types';
 
 interface AddItemFormProps {
   works: WorkLibraryFull[];

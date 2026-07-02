@@ -3,7 +3,7 @@
  * Реализует логику расчета коммерческой стоимости на основе тактик наценок
  */
 
-import type { MarkupStep, BoqItemType } from '../lib/supabase';
+import type { MarkupStep, BoqItemType } from '../lib/types';
 
 /**
  * Контекст для расчета наценок

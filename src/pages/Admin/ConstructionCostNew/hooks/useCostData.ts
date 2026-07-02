@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
-import { type Tender } from '../../../../lib/supabase';
+import { type Tender } from '../../../../lib/types';
 import { useRealtimeAwareLoading } from '../../../../lib/realtime/useRealtimeAwareLoading';
 import { fetchTenders as apiFetchTenders } from '../../../../lib/api/tenders';
 import { listDetailCostCategoriesWithCategory } from '../../../../lib/api/costs';

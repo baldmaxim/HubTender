@@ -1,7 +1,7 @@
 import { Popconfirm, Space, Tag, Tooltip, Typography } from 'antd';
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { PAGE_LABELS } from '../../../../lib/supabase/types';
+import { PAGE_LABELS } from '../../../../lib/types/types';
 import type { RoleRecord } from '../../types';
 
 const { Text } = Typography;

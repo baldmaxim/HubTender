@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { message } from 'antd';
-import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
+import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/types';
 import { listWorksLibrary, listMaterialsLibrary } from '../../../lib/api/library';
 import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
 import { getErrorMessage } from '../../../utils/errors';

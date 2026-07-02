@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import type { ChartDataset } from 'chart.js';
-import type { ProjectFull, ProjectCompletion } from '../../../../lib/supabase/types';
+import type { ProjectFull, ProjectCompletion } from '../../../../lib/types/types';
 import { COLORS, MONTH_NAMES_SHORT } from './ganttUtils';
 
 // Плагины идемпотентны — повторное extend безопасно (модуль может грузиться

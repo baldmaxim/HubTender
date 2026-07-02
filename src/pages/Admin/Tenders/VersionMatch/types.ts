@@ -2,7 +2,7 @@
  * Типы для модуля сопоставления версий тендера
  */
 
-import type { ClientPosition, Tender } from '../../../../lib/supabase';
+import type { ClientPosition, Tender } from '../../../../lib/types';
 import type { ParsedRow, MatchScoreBreakdown } from '../../../../utils/matching';
 import type { AdditionalWorkTransfer } from '../../../../utils/versionTransfer';
 

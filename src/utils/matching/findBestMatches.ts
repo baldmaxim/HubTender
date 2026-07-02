@@ -9,7 +9,7 @@ import {
   type MatchScoreBreakdown,
 } from './calculateMatchScore';
 import { calculateVolumeProximity, normalizeString } from './similarity';
-import type { ClientPosition } from '../../lib/supabase';
+import type { ClientPosition } from '../../lib/types';
 
 const POSITION_WINDOW = 80;
 const MAX_FULL_SCORE_CANDIDATES = 30;

@@ -5,7 +5,7 @@
 import { apiFetch } from './client';
 import { API_BASE_URL } from './featureFlags';
 import { getAccessToken as appAuthGetAccessToken } from '../auth/client';
-import type { BoqItem, BoqItemInsert } from '../supabase';
+import type { BoqItem, BoqItemInsert } from '../types';
 
 /**
  * Каскадно пересчитать quantity+total_amount у всех materials-детей работы.

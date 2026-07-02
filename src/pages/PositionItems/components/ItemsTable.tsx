@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import { Table, Button, Space, Tag, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EditOutlined, DeleteOutlined, LinkOutlined, UpOutlined, DownOutlined } from '@ant-design/icons';
-import type { BoqItemFull, CurrencyType } from '../../../lib/supabase';
+import type { BoqItemFull, CurrencyType } from '../../../lib/types';
 import { currencySymbols, getBoqTypeTagStyle } from './boqColors';
 import { formatRu } from '../../../utils/format/currency';
 

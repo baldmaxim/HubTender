@@ -16,7 +16,7 @@ import {
   Tabs,
 } from 'antd';
 import { SaveOutlined, ReloadOutlined, ArrowLeftOutlined } from '@ant-design/icons';
-import { Tender, TenderMarkupPercentageInsert, MarkupParameter, MarkupTactic } from '../../../lib/supabase';
+import { Tender, TenderMarkupPercentageInsert, MarkupParameter, MarkupTactic } from '../../../lib/types';
 import { fetchTenders as apiFetchTenders } from '../../../lib/api/tenders';
 import {
   listMarkupTactics,

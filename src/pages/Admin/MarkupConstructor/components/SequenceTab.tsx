@@ -1,7 +1,7 @@
 import React from 'react';
 import { Typography, Space, InputNumber, Divider, theme } from 'antd';
 import { formatNumberWithSpaces, parseNumberWithSpaces } from '../../../../utils/numberFormat';
-import type { MarkupParameter, MarkupStep } from '../../../../lib/supabase';
+import type { MarkupParameter, MarkupStep } from '../../../../lib/types';
 import type { TabKey } from '../types';
 import type { StepBuilder } from '../hooks/useStepBuilderState';
 import { calculateIntermediateResults, type GetPercent } from '../utils/sequenceCalc';

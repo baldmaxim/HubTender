@@ -1,6 +1,6 @@
 // CRUD helpers for the Nomenclatures admin pages — Go BFF only.
 
-import type { Database } from '../supabase/database.types';
+import type { Database } from '../types/database.types';
 import { apiFetch } from './client';
 
 type UnitRow = Database['public']['Tables']['units']['Row'];

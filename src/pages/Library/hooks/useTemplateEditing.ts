@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { message, Form } from 'antd';
 import { updateTemplate, addTemplateItem } from '../../../lib/api/library';
-import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/supabase';
+import type { WorkLibraryFull, MaterialLibraryFull } from '../../../lib/types';
 import type { TemplateItemWithDetails } from './useTemplateItems';
 import type { TemplateWithDetails } from './useTemplates';
 

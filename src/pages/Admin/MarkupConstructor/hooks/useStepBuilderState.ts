@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { message } from 'antd';
-import type { MarkupStep } from '../../../../lib/supabase';
+import type { MarkupStep } from '../../../../lib/types';
 import type { TabKey, ActionType, OperandType, MultiplyFormat, InputMode, OperandState } from '../types';
 import { createInitialOperandState } from '../constants';
 

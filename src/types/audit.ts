@@ -1,4 +1,4 @@
-import type { BoqItem } from '../lib/supabase/types';
+import type { BoqItem } from '../lib/types/types';
 
 /**
  * Тип операции в audit log

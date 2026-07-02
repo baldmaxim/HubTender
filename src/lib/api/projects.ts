@@ -1,7 +1,7 @@
 // Projects domain helpers — Go BFF only.
 
-import type { Tables } from '../supabase/database.types';
-import type { ProjectInsert } from '../supabase/types';
+import type { Tables } from '../types/database.types';
+import type { ProjectInsert } from '../types/types';
 import { apiFetch } from './client';
 
 export type ProjectAgreementRow = Tables<'project_additional_agreements'>;

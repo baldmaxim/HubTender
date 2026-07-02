@@ -6,7 +6,7 @@ import {
   listAllProjectAgreements,
   listProjectMonthlyCompletion,
 } from '../../../lib/api/projects';
-import type { ProjectFull, ProjectCompletion, ProjectAgreement } from '../../../lib/supabase/types';
+import type { ProjectFull, ProjectCompletion, ProjectAgreement } from '../../../lib/types/types';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 
 // Детали доп соглашений по project_id

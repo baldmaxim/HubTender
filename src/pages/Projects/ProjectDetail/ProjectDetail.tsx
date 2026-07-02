@@ -22,7 +22,7 @@ import { useIsMobile } from '../../../hooks/useIsMobile';
 import { ProjectSettings } from './components/ProjectSettings';
 import { MonthlyCompletion, type OptimisticCompletion } from './components/MonthlyCompletion';
 import { AdditionalAgreements } from './components/AdditionalAgreements';
-import type { ProjectFull, ProjectCompletion } from '../../../lib/supabase/types';
+import type { ProjectFull, ProjectCompletion } from '../../../lib/types/types';
 
 const { Title } = Typography;
 

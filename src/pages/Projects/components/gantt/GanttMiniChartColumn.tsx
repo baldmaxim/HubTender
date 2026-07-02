@@ -1,7 +1,7 @@
 import React from 'react';
 import { Typography } from 'antd';
 import { Line } from 'react-chartjs-2';
-import type { ProjectFull, ProjectCompletion } from '../../../../lib/supabase/types';
+import type { ProjectFull, ProjectCompletion } from '../../../../lib/types/types';
 import { getProjectChartData } from './projectChartData';
 import { buildSummaryChartData } from './summaryChartData';
 import { miniChartOptions } from './chartOptions';

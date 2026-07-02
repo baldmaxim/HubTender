@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { message, Modal } from 'antd';
 import { useUndoableSet } from './useUndoableSet';
-import type { ClientPosition, Tender } from '../../../lib/supabase';
+import type { ClientPosition, Tender } from '../../../lib/types';
 import {
   updatePositionsNote,
   clearPositionsBoq,

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, Tag, Typography, Empty, Space } from 'antd';
 import dayjs from 'dayjs';
-import { PAGE_LABELS } from '../../../lib/supabase/types';
+import { PAGE_LABELS } from '../../../lib/types/types';
 import type { PendingRequest, UserRecord, RoleRecord } from '../types';
 
 const { Text } = Typography;

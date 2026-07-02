@@ -4,7 +4,7 @@
 
 import { message } from 'antd';
 import * as XLSX from 'xlsx-js-style';
-import type { Tender } from '../../../lib/supabase';
+import type { Tender } from '../../../lib/types';
 import type { PositionWithCommercialCost } from '../types';
 
 export function exportCommerceToExcel(

@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { message } from 'antd';
-import type { Tender, BoqItem } from '../../../lib/supabase';
+import type { Tender, BoqItem } from '../../../lib/types';
 import type { PositionWithCommercialCost, MarkupTactic } from '../types';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';

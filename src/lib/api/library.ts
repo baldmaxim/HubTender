@@ -1,7 +1,7 @@
 // Library page helpers (works_library / materials_library / templates /
 // library_folders) — Go BFF only. Added incrementally per tab.
 
-import type { Tables } from '../supabase/database.types';
+import type { Tables } from '../types/database.types';
 import { apiFetch } from './client';
 
 export interface LibraryNameEmbed {
