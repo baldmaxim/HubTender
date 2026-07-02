@@ -6,7 +6,7 @@
 
 This directory holds the deploy-ready, Supabase-free SQL schema for the target
 **Yandex Managed Service for PostgreSQL** cluster. It is the Stage 1 output of
-[docs/yandex-migration/02_PROD_TO_YANDEX_PLAN.md](../../docs/yandex-migration/02_PROD_TO_YANDEX_PLAN.md).
+the Supabase→Yandex migration plan (history in `archive/migrations/`).
 
 ## Source of truth
 
@@ -54,8 +54,7 @@ Idempotency: `02` (enum DO-guards), `03` (`CREATE TABLE IF NOT EXISTS`), `04`
 (`CREATE OR REPLACE`), `05`/`07` (`DROP TRIGGER IF EXISTS` + `CREATE`), indexes
 (`IF NOT EXISTS`) are re-runnable. **`06` PK/UNIQUE/CHECK/FK uses plain
 `ALTER ... ADD CONSTRAINT`** (verbatim from the source migrations) and targets an
-**empty** database — guaranteed by the green
-[06_YANDEX_PREFLIGHT](../../docs/yandex-migration/06_YANDEX_PREFLIGHT.md) gate.
+**empty** database — guaranteed by the green Yandex preflight gate.
 
 ## Auth bridge (Option A)
 
@@ -65,8 +64,7 @@ Idempotency: `02` (enum DO-guards), `03` (`CREATE TABLE IF NOT EXISTS`), `04`
 resolves the acting user from the `app.user_id` / `app.current_user_id` session
 GUC set by the Go BFF — **not** Supabase GoTrue. GoTrue
 sessions/refresh-tokens are not modelled (users log in again after the auth
-cutover). See
-[04_AUTH_STRATEGY.md](../../docs/yandex-migration/04_AUTH_STRATEGY.md).
+cutover).
 
 ## How to apply (NOT in this prompt)
 
@@ -88,9 +86,5 @@ npm run prod-to-yandex:schema -- --from 03_tables.sql --to 06_indexes_constraint
 Secrets/DSN are never printed or committed. Data import (PROD → Yandex) is a
 separate later stage and is **not** performed by `01_apply_schema.mjs`.
 
-## Related docs
-
-* [00_SOURCE_OF_TRUTH.md](../../docs/yandex-migration/00_SOURCE_OF_TRUTH.md)
-* [03_SCHEMA_STRATEGY.md](../../docs/yandex-migration/03_SCHEMA_STRATEGY.md)
-* [05_CUTOVER_RULES.md](../../docs/yandex-migration/05_CUTOVER_RULES.md)
-* [07_SCHEMA_BUILD_REPORT.md](../../docs/yandex-migration/07_SCHEMA_BUILD_REPORT.md)
+Migration history and planning docs are archived under
+`archive/migrations/2026-05-db-cutover/`.
