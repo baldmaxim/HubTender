@@ -11,13 +11,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "playwright test",
-    "test:go": "cd backend && go test ./...",
-    "smoke": "node scripts/smoke/go-bff.mjs",
-    "app-auth:schema": "node scripts/app-auth/01_apply_app_auth_schema.mjs",
-    "app-auth:check-schema": "node scripts/app-auth/00_check_app_auth_schema.mjs",
-    "gen:types": "supabase gen types typescript --project-id ocauafggjrqvopxjihas > src/lib/supabase/database.types.ts",
-    "gen:schema": "supabase db dump --project-ref ocauafggjrqvopxjihas --schema public > supabase/schemas/prod.sql"
+    "test:go": "cd backend && go test ./..."
   },
   "dependencies": {
     "@ant-design/charts": "^2.6.7",
@@ -37,7 +31,6 @@
     "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.0",
     "@sentry/vite-plugin": "^5.3.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
