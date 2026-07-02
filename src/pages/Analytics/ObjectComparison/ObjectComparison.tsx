@@ -38,7 +38,7 @@ const ObjectComparison: React.FC = () => {
   } = useComparisonData();
 
   const [viewMode, setViewMode] = useState<ViewMode>('detailed');
-  const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
+  const { isPhone, isLandscapePhone, isMobile, isPhoneDevice, screens } = useIsMobile();
   const { theme: currentTheme } = useTheme();
   // На телефоне страница read-only (примечания правятся на десктопе) и в портрете
   // принудительно упрощённый вид (узкий экран).
@@ -220,105 +220,121 @@ const ObjectComparison: React.FC = () => {
         <TenderRealtimeRefresh key={id} tenderId={id} onChange={refreshComparison} />
       ))}
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        {/* Выбор тендеров */}
-        <Card>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-            {selectedTenders.map((val, idx) => {
-              const info = val ? tenders.find(t => t.id === val) || null : null;
-              return (
-                <div key={idx} style={{ flex: isPhone ? '1 1 100%' : '0 0 300px', minWidth: isPhone ? 0 : 240 }}>
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <Space align="center">
-                      <Text strong>Тендер {idx + 1}</Text>
-                      {selectedTenders.length > 2 && (
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={<CloseOutlined />}
-                          danger
-                          onClick={() => removeTender(idx)}
+        {(() => {
+          const selectionCard = (
+            <Card>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+                {selectedTenders.map((val, idx) => {
+                  const info = val ? tenders.find(t => t.id === val) || null : null;
+                  return (
+                    <div key={idx} style={{ flex: isPhone ? '1 1 100%' : '0 0 300px', minWidth: isPhone ? 0 : 240 }}>
+                      <Space direction="vertical" style={{ width: '100%' }}>
+                        <Space align="center">
+                          <Text strong>Тендер {idx + 1}</Text>
+                          {selectedTenders.length > 2 && (
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<CloseOutlined />}
+                              danger
+                              onClick={() => removeTender(idx)}
+                            />
+                          )}
+                        </Space>
+                        <Select
+                          style={{ width: '100%' }}
+                          placeholder={`Выберите тендер ${idx + 1}`}
+                          value={val}
+                          onChange={(v) => setSelectedTender(idx, v ?? null)}
+                          showSearch
+                          optionFilterProp="label"
+                          allowClear
+                          options={tenders.map(t => ({ value: t.id, label: `${t.title} (v${t.version || 1})` }))}
                         />
-                      )}
+                        {info && (
+                          <Text type="secondary" style={{ fontSize: '12px' }}>
+                            Создан: {dayjs(info.created_at).format('DD.MM.YYYY')}
+                          </Text>
+                        )}
+                      </Space>
+                    </div>
+                  );
+                })}
+                <div style={{ flex: isPhone ? '1 1 100%' : '0 0 auto', minWidth: isPhone ? 0 : 240 }}>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space align="center" style={{ visibility: 'hidden' }}>
+                      <Text strong>Тендер</Text>
                     </Space>
-                    <Select
-                      style={{ width: '100%' }}
-                      placeholder={`Выберите тендер ${idx + 1}`}
-                      value={val}
-                      onChange={(v) => setSelectedTender(idx, v ?? null)}
-                      showSearch
-                      optionFilterProp="label"
-                      allowClear
-                      options={tenders.map(t => ({ value: t.id, label: `${t.title} (v${t.version || 1})` }))}
-                    />
-                    {info && (
-                      <Text type="secondary" style={{ fontSize: '12px' }}>
-                        Создан: {dayjs(info.created_at).format('DD.MM.YYYY')}
-                      </Text>
-                    )}
+                    <Space wrap>
+                      <Button icon={<PlusOutlined />} onClick={addTender}>
+                        Добавить объект
+                      </Button>
+                      <Button
+                        type="primary"
+                        icon={<ReloadOutlined />}
+                        onClick={loadComparisonData}
+                        loading={loading}
+                        disabled={validCount < 2}
+                      >
+                        Загрузить сравнение
+                      </Button>
+                    </Space>
                   </Space>
                 </div>
-              );
-            })}
-            <div style={{ flex: isPhone ? '1 1 100%' : '0 0 auto', minWidth: isPhone ? 0 : 240 }}>
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <Space align="center" style={{ visibility: 'hidden' }}>
-                  <Text strong>Тендер</Text>
-                </Space>
-                <Space wrap>
-                  <Button icon={<PlusOutlined />} onClick={addTender}>
-                    Добавить объект
-                  </Button>
-                  <Button
-                    type="primary"
-                    icon={<ReloadOutlined />}
-                    onClick={loadComparisonData}
-                    loading={loading}
-                    disabled={validCount < 2}
-                  >
-                    Загрузить сравнение
-                  </Button>
-                </Space>
-              </Space>
-            </div>
-          </div>
-        </Card>
+              </div>
+            </Card>
+          );
 
-        {/* Общая статистика */}
-        {comparisonData.length > 0 && (
-          <Card
-            title={`Общая статистика (${costLabel.toLowerCase()} затраты)`}
-            styles={{ body: { padding: isPhone ? '8px 12px' : '8px 16px' } }}
-          >
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: isPhone ? 'space-around' : 'flex-start', gap: isPhone ? 8 : 24 }}>
-              {loadedInfos.map((info, i: number) => (
-                <div key={i} style={{ padding: isPhone ? '0 4px' : '0 12px', textAlign: 'center' }}>
-                  <Statistic
-                    title={<span style={{ whiteSpace: 'nowrap', fontSize: isPhone ? 11 : 12 }}>{`Итого: ${tenderLabel(info, `Тендер ${i + 1}`)}`}</span>}
-                    value={tenderTotals[i] || 0}
-                    precision={0}
-                    suffix="₽"
-                    valueStyle={{ fontSize: isPhone ? 16 : 18 }}
-                  />
-                </div>
-              ))}
-              {loadedCount === 2 && (
-                <div style={{ padding: isPhone ? '0 4px' : '0 12px', textAlign: 'center' }}>
-                  <Statistic
-                    title={<span style={{ whiteSpace: 'nowrap', fontSize: isPhone ? 11 : 12 }}>Разница</span>}
-                    value={diffValue}
-                    precision={0}
-                    suffix="₽"
-                    prefix={diffValue >= 0 ? '+' : ''}
-                    valueStyle={{ fontSize: isPhone ? 16 : 18, color: diffValue >= 0 ? '#52c41a' : '#ff4d4f', fontWeight: 600 }}
-                  />
-                  <Text type="secondary" style={{ fontSize: 11 }}>
-                    ({diffPercent}% {diffValue >= 0 ? 'больше' : 'меньше'})
-                  </Text>
-                </div>
-              )}
+          const statsCard = comparisonData.length > 0 ? (
+            <Card
+              title={`Общая статистика (${costLabel.toLowerCase()} затраты)`}
+              styles={{ body: { padding: isPhone ? '8px 12px' : '8px 16px' } }}
+            >
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: isPhone ? 'space-around' : 'flex-start', gap: isPhone ? 8 : 24 }}>
+                {loadedInfos.map((info, i: number) => (
+                  <div key={i} style={{ padding: isPhone ? '0 4px' : '0 12px', textAlign: 'center' }}>
+                    <Statistic
+                      title={<span style={{ whiteSpace: 'nowrap', fontSize: isPhone ? 11 : 12 }}>{`Итого: ${tenderLabel(info, `Тендер ${i + 1}`)}`}</span>}
+                      value={tenderTotals[i] || 0}
+                      precision={0}
+                      suffix="₽"
+                      valueStyle={{ fontSize: isPhone ? 16 : 18 }}
+                    />
+                  </div>
+                ))}
+                {loadedCount === 2 && (
+                  <div style={{ padding: isPhone ? '0 4px' : '0 12px', textAlign: 'center' }}>
+                    <Statistic
+                      title={<span style={{ whiteSpace: 'nowrap', fontSize: isPhone ? 11 : 12 }}>Разница</span>}
+                      value={diffValue}
+                      precision={0}
+                      suffix="₽"
+                      prefix={diffValue >= 0 ? '+' : ''}
+                      valueStyle={{ fontSize: isPhone ? 16 : 18, color: diffValue >= 0 ? '#52c41a' : '#ff4d4f', fontWeight: 600 }}
+                    />
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      ({diffPercent}% {diffValue >= 0 ? 'больше' : 'меньше'})
+                    </Text>
+                  </div>
+                )}
+              </div>
+            </Card>
+          ) : null;
+
+          const showStatsBeside = screens.lg && !isMultiTender && comparisonData.length > 0;
+
+          return showStatsBeside ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+              <div style={{ flex: '1 1 900px', minWidth: 860 }}>{selectionCard}</div>
+              <div style={{ flex: '1 1 320px', minWidth: 280 }}>{statsCard}</div>
             </div>
-          </Card>
-        )}
+          ) : (
+            <>
+              {selectionCard}
+              {statsCard}
+            </>
+          );
+        })()}
 
         {/* Таблица сравнения */}
         {loading ? (
