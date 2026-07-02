@@ -52,6 +52,7 @@ export const DEFAULT_TENDER_TEAMS = [
     sortOrder: 40,
     members: [
       'Топчий Анна Ивановна',
+      'Кальсина Алина Валерьевна',
     ],
   },
   {
