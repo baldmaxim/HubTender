@@ -2,33 +2,26 @@ import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { message } from 'antd';
 import { apiFetch } from '../../../lib/api/client';
-import {
-  listWorkNames,
-  listMaterialNames,
-  listActiveUnits,
-  createWorkName,
-  createMaterialName,
-} from '../../../lib/api/nomenclatures';
-import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
-import { fetchPositionsWithCosts, listBoqPreviewByPositions } from '../../../lib/api/positions';
-import { getTenderById } from '../../../lib/api/fi';
-import { computeLeafPositionIds } from '../../../utils/positions/leafPositions';
+import { createWorkName, createMaterialName } from '../../../lib/api/nomenclatures';
 import {
   ParsedBoqItem,
   PositionUpdateData,
   ValidationResult,
-  ClientPosition,
-  isWork,
-  isMaterial,
-  normalizeString,
-  buildNomenclatureLookupKey,
-  normalizePositionNumber,
   parseExcelData,
   validateBoqData,
   processWorkBindings,
-  calculateTotalAmount,
 } from '../utils';
+import {
+  buildPositionUpdatesPayload,
+  buildBoqItemsPayload,
+  analyzeImportMismatch,
+} from '../utils/massBoqImportPayload';
+import { buildMissingNomenclatureInserts } from '../../../utils/boq/nomenclatureImport';
+import { useMassBoqImportRefs } from './useMassBoqImportRefs';
 import { getErrorMessage } from '../../../utils/errors';
+
+// Справочники вынесены в useMassBoqImportRefs, payload-билдеры — в
+// utils/massBoqImportPayload (лимит ≤600 строк на файл).
 
 // ===========================
 // ОСНОВНОЙ ХУК
@@ -44,116 +37,33 @@ export const useMassBoqImport = () => {
   const [importStatus, setImportStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [importError, setImportError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>('');
-
-  // Справочники
-  const [workNamesMap, setWorkNamesMap] = useState<Map<string, string>>(new Map());
-  const [materialNamesMap, setMaterialNamesMap] = useState<Map<string, string>>(new Map());
-  const [costCategoriesMap, setCostCategoriesMap] = useState<Map<string, string>>(new Map());
-  const [clientPositionsMap, setClientPositionsMap] = useState<Map<string, ClientPosition>>(new Map());
-  const [leafPositionIds, setLeafPositionIds] = useState<Set<string>>(new Set());
-
-  // Единицы измерения — для маппинга
-  const [availableUnits, setAvailableUnits] = useState<{ code: string; name: string }[]>([]);
   const [unitMappings, setUnitMappings] = useState<Record<string, string>>({});
 
-  // Существующие BOQ items по позициям (для предпросмотра)
-  const [existingItemsByPosition, setExistingItemsByPosition] = useState<Map<string, { id: string; work_names?: { name?: string } | null; material_names?: { name?: string } | null; boq_item_type?: string | null; quantity?: number | null; total_amount?: number | null; client_position_id: string }[]>>(new Map());
-
-  // Курсы валют
-  const [currencyRates, setCurrencyRates] = useState({ usd: 1, eur: 1, cny: 1 });
+  const {
+    workNamesMap,
+    materialNamesMap,
+    costCategoriesMap,
+    clientPositionsMap,
+    leafPositionIds,
+    availableUnits,
+    existingItemsByPosition,
+    currencyRates,
+    loadNomenclature: loadNomenclatureRefs,
+    loadCurrencyRates,
+    loadExistingItems,
+    resetRefs,
+  } = useMassBoqImportRefs();
 
   // ===========================
   // ЗАГРУЗКА СПРАВОЧНИКОВ
   // ===========================
 
   const loadNomenclature = async (tenderId: string) => {
-    try {
-      const [
-        worksData,
-        materialsData,
-        costsRows,
-        positionsData,
-        unitsRows,
-      ] = await Promise.all([
-        listWorkNames(),
-        listMaterialNames(),
-        listDetailCostCategoriesWithCategory(),
-        fetchPositionsWithCosts(tenderId),
-        listActiveUnits(),
-      ]);
-
-      // cost_categories!inner — оставляем только dcc с привязанной категорией.
-      const costsData = costsRows.filter((c) => c.cost_categories != null);
-      const unitsResult = {
-        data: unitsRows
-          .slice()
-          .sort((a, b) => (a.code || '').localeCompare(b.code || '')),
-      };
-
-      const worksMap = new Map<string, string>();
-      worksData.forEach((w) => {
-        worksMap.set(buildNomenclatureLookupKey(w.name, w.unit), w.id);
-      });
-
-      const materialsMap = new Map<string, string>();
-      materialsData.forEach((m) => {
-        materialsMap.set(buildNomenclatureLookupKey(m.name, m.unit), m.id);
-      });
-
-      const costsMap = new Map<string, string>();
-      costsData.forEach((c) => {
-        const cc = Array.isArray(c.cost_categories) ? c.cost_categories[0] : c.cost_categories;
-        const costCategoryName = cc?.name || '';
-        costsMap.set(
-          `${normalizeString(costCategoryName)}|${normalizeString(c.name)}|${normalizeString(c.location)}`,
-          c.id
-        );
-      });
-
-      console.log('[MassBoqImport] Затраты ВИС в БД:',
-        Array.from(costsMap.keys()).filter(k => k.toLowerCase().startsWith('вис')).slice(0, 30)
-      );
-
-      const positionsMap = new Map<string, ClientPosition>();
-      positionsData.forEach((p) => {
-        const normalizedNum = normalizePositionNumber(p.position_number);
-        positionsMap.set(normalizedNum, {
-          id: p.id,
-          position_number: Number(p.position_number),
-          work_name: p.work_name ?? '',
-          hierarchy_level: p.hierarchy_level,
-          is_additional: p.is_additional,
-        });
-      });
-
-      const leafIds = computeLeafPositionIds(positionsData);
-
-      console.log('[MassBoqImport] Первые 20 позиций в БД:',
-        Array.from(positionsMap.entries()).slice(0, 20).map(([key, val]) =>
-          `${key} (raw: ${val.position_number})`
-        )
-      );
-
-      setWorkNamesMap(worksMap);
-      setMaterialNamesMap(materialsMap);
-      setCostCategoriesMap(costsMap);
-      setClientPositionsMap(positionsMap);
-      setLeafPositionIds(leafIds);
-      setAvailableUnits((unitsResult.data || []) as { code: string; name: string }[]);
+    const ok = await loadNomenclatureRefs(tenderId);
+    if (ok) {
       setUnitMappings({});
-
-      console.log('[MassBoqImport] Загружено справочников:', {
-        works: worksMap.size,
-        materials: materialsMap.size,
-        costs: costsMap.size,
-        positions: positionsMap.size,
-      });
-
-      return true;
-    } catch (error) {
-      console.error('Ошибка загрузки справочников:', error);
-      return false;
     }
+    return ok;
   };
 
   // ===========================
@@ -224,26 +134,6 @@ export const useMassBoqImport = () => {
   };
 
   // ===========================
-  // ЗАГРУЗКА КУРСОВ ВАЛЮТ
-  // ===========================
-
-  const loadCurrencyRates = async (tenderId: string): Promise<{ usd: number; eur: number; cny: number }> => {
-    const tender = await getTenderById(tenderId);
-    if (!tender) {
-      throw new Error('Не удалось загрузить курсы валют');
-    }
-
-    const rates = {
-      usd: tender.usd_rate || 1,
-      eur: tender.eur_rate || 1,
-      cny: tender.cny_rate || 1,
-    };
-
-    setCurrencyRates(rates);
-    return rates;
-  };
-
-  // ===========================
   // ВСТАВКА В БД
   // ===========================
 
@@ -259,92 +149,14 @@ export const useMassBoqImport = () => {
       setImportStatus('running');
       setImportError(null);
 
-      const positionUpdatesPayload = Array.from(positionUpdates.values())
-        .filter(posData =>
-          posData.positionId &&
-          (posData.manualVolume !== undefined || posData.manualNote !== undefined)
-        )
-        .map((posData) => {
-          const payload: Record<string, unknown> = {
-            position_id: posData.positionId,
-            position_number: posData.positionNumber,
-          };
-
-          if (posData.manualVolume !== undefined) {
-            payload.manual_volume = posData.manualVolume;
-          }
-          if (posData.manualNote !== undefined) {
-            payload.manual_note = posData.manualNote;
-          }
-
-          return payload;
-        });
+      const positionUpdatesPayload = buildPositionUpdatesPayload(positionUpdates);
 
       let rates = currencyRates;
       if (data.length > 0) {
         rates = await loadCurrencyRates(tenderId);
       }
 
-      const itemsPayload = data
-        .filter(item => item.matchedPositionId)
-        .map((item) => {
-          const payload: Record<string, unknown> = {
-            row_index: item.rowIndex,
-            client_position_id: item.matchedPositionId,
-            boq_item_type: item.boq_item_type,
-            unit_code: item.unit_code,
-            quantity: item.quantity,
-            total_amount: calculateTotalAmount(item, rates),
-          };
-
-          if (item.base_quantity !== undefined) {
-            payload.base_quantity = item.base_quantity;
-          }
-          if (item.consumption_coefficient !== undefined) {
-            payload.consumption_coefficient = item.consumption_coefficient;
-          }
-          if (item.conversion_coefficient !== undefined) {
-            payload.conversion_coefficient = item.conversion_coefficient;
-          }
-          if (item.currency_type) {
-            payload.currency_type = item.currency_type;
-          }
-          if (item.delivery_price_type) {
-            payload.delivery_price_type = item.delivery_price_type;
-          }
-          if (item.delivery_amount !== undefined) {
-            payload.delivery_amount = item.delivery_amount;
-          }
-          if (item.unit_rate !== undefined) {
-            payload.unit_rate = item.unit_rate;
-          }
-          if (item.detail_cost_category_id) {
-            payload.detail_cost_category_id = item.detail_cost_category_id;
-          }
-          if (item.quote_link) {
-            payload.quote_link = item.quote_link;
-          }
-          if (item.description) {
-            payload.description = item.description;
-          }
-
-          if (isWork(item.boq_item_type)) {
-            payload.work_name_id = item.work_name_id;
-            if (item.tempId) {
-              payload.temp_id = item.tempId;
-            }
-          }
-
-          if (isMaterial(item.boq_item_type)) {
-            payload.material_type = item.material_type;
-            payload.material_name_id = item.material_name_id;
-            if (item.parent_work_item_id) {
-              payload.parent_work_temp_id = item.parent_work_item_id;
-            }
-          }
-
-          return payload;
-        });
+      const itemsPayload = buildBoqItemsPayload(data, rates);
 
       setUploadProgress(15);
 
@@ -377,45 +189,33 @@ export const useMassBoqImport = () => {
 
       setUploadProgress(100);
 
-      // Сверка количеств: бэк атомарен и вставляет ровно то, что мы отправили,
-      // поэтому любое расхождение = тихая потеря данных. droppedItems — элементы,
-      // выброшенные фильтром matchedPositionId (не сопоставлены с позицией).
-      const expectedItems = itemsPayload.length;
-      const expectedPositions = positionUpdatesPayload.length;
-      const droppedItems = data.length - expectedItems;
+      const analysis = analyzeImportMismatch(
+        insertedItemsCount,
+        updatedPositionsCount,
+        itemsPayload.length,
+        positionUpdatesPayload.length,
+        data,
+      );
 
       console.log('[MassBoqImport] Импорт завершён:', {
         boqItems: insertedItemsCount,
-        expectedItems,
+        expectedItems: analysis.expectedItems,
         positionUpdates: updatedPositionsCount,
-        expectedPositions,
-        droppedItems,
+        expectedPositions: analysis.expectedPositions,
+        droppedItems: analysis.droppedItems,
         sessionId: importSessionId,
       });
 
-      const mismatch =
-        insertedItemsCount !== expectedItems ||
-        updatedPositionsCount !== expectedPositions ||
-        droppedItems > 0;
-
-      if (mismatch) {
-        const droppedRows = data
-          .filter(item => !item.matchedPositionId)
-          .map(item => item.rowIndex);
+      if (analysis.mismatch) {
         console.error('[MassBoqImport] Расхождение количеств при импорте:', {
-          insertedItemsCount, expectedItems,
-          updatedPositionsCount, expectedPositions,
-          droppedItems, droppedRows,
+          insertedItemsCount, expectedItems: analysis.expectedItems,
+          updatedPositionsCount, expectedPositions: analysis.expectedPositions,
+          droppedItems: analysis.droppedItems, droppedRows: analysis.droppedRows,
         });
-        const mismatchMsg =
-          `Импортировано ${insertedItemsCount} из ${expectedItems} элементов, ` +
-          `обновлено ${updatedPositionsCount} из ${expectedPositions} позиций` +
-          (droppedItems > 0 ? `; пропущено строк без позиции: ${droppedItems}` : '') +
-          ' — часть данных не загружена. Проверьте позиции.';
-        message.error(mismatchMsg, 10);
+        message.error(analysis.mismatchMsg, 10);
         // Частичная загрузка трактуется как ошибка: модалка не закрывается,
         // показываем расхождение, пользователь проверяет позиции.
-        setImportError(mismatchMsg);
+        setImportError(analysis.mismatchMsg);
         setImportStatus('error');
         return false;
       }
@@ -451,22 +251,6 @@ export const useMassBoqImport = () => {
   };
 
   // ===========================
-  // ЗАГРУЗКА СУЩЕСТВУЮЩИХ BOQ ITEMS (ПРЕДПРОСМОТР)
-  // ===========================
-
-  const loadExistingItems = async (positionIds: string[]) => {
-    if (positionIds.length === 0) return;
-    const data = await listBoqPreviewByPositions(positionIds);
-
-    const map = new Map<string, { id: string; work_names?: { name?: string } | null; material_names?: { name?: string } | null; boq_item_type?: string | null; quantity?: number | null; total_amount?: number | null; client_position_id: string }[]>();
-    data?.forEach((item) => {
-      if (!map.has(item.client_position_id)) map.set(item.client_position_id, []);
-      map.get(item.client_position_id)!.push(item as unknown as { id: string; work_names?: { name?: string } | null; material_names?: { name?: string } | null; boq_item_type?: string | null; quantity?: number | null; total_amount?: number | null; client_position_id: string });
-    });
-    setExistingItemsByPosition(map);
-  };
-
-  // ===========================
   // ДОБАВЛЕНИЕ В НОМЕНКЛАТУРУ
   // ===========================
 
@@ -481,27 +265,8 @@ export const useMassBoqImport = () => {
       const existingWorkKeys = new Set(workNamesMap.keys());
       const existingMaterialKeys = new Set(materialNamesMap.keys());
 
-      const uniqueWorksToInsert = Array.from(
-        new Map(
-          works.map((work) => [
-            buildNomenclatureLookupKey(work.name, work.unit),
-            { name: work.name, unit: work.unit },
-          ])
-        ).entries()
-      )
-        .filter(([key]) => !existingWorkKeys.has(key))
-        .map(([, value]) => value);
-
-      const uniqueMaterialsToInsert = Array.from(
-        new Map(
-          materials.map((material) => [
-            buildNomenclatureLookupKey(material.name, material.unit),
-            { name: material.name, unit: material.unit },
-          ])
-        ).entries()
-      )
-        .filter(([key]) => !existingMaterialKeys.has(key))
-        .map(([, value]) => value);
+      const uniqueWorksToInsert = buildMissingNomenclatureInserts(works, existingWorkKeys);
+      const uniqueMaterialsToInsert = buildMissingNomenclatureInserts(materials, existingMaterialKeys);
 
       if (uniqueWorksToInsert.length > 0) {
         await Promise.all(
@@ -580,7 +345,7 @@ export const useMassBoqImport = () => {
     setUploadProgress(0);
     setImportStatus('idle');
     setImportError(null);
-    setExistingItemsByPosition(new Map());
+    resetRefs();
     setFileName('');
     setUnitMappings({});
   };
