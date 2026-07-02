@@ -77,6 +77,18 @@ const CostRedistribution: React.FC = () => {
 
   const { saving, saveResults, loadSavedResults } = useSaveResults();
 
+  // "Свежие" boqItems/results для autosave без включения их в deps
+  // handleSavePositionAdjustment — иначе realtime-рефетч boqItems (см.
+  // useRedistributionData) пересоздаёт колбэк и лишний раз перезапускает
+  // autosave-таймер, даже если пользователь ничего не менял на вкладке
+  // «Между строками».
+  const boqItemsRef = useRef(boqItems);
+  const calculationResultsRef = useRef(calculationState.results);
+  useEffect(() => {
+    boqItemsRef.current = boqItems;
+    calculationResultsRef.current = calculationState.results;
+  }, [boqItems, calculationState.results]);
+
   const boqItemsByPosition = useMemo(() => {
     const map = new Map<string, typeof boqItems>();
 
@@ -303,21 +315,23 @@ const CostRedistribution: React.FC = () => {
     if (!selectedTenderId || !selectedTacticId) {
       return;
     }
+    const currentBoqItems = boqItemsRef.current;
+    const currentResults = calculationResultsRef.current;
     // Placeholder для случая «position-level без category-level»:
     // схема cost_redistribution_results требует NOT NULL boq_item_id, а JSONB-правила
     // храним на любой реальной строке тендера. Чтобы она не искажала суммы при reload,
     // передаём её реальный total_commercial_work_cost.
-    const first = boqItems[0];
+    const first = currentBoqItems[0];
     const fallbackBoqItem = first
       ? { id: first.id, total_commercial_work_cost: first.total_commercial_work_cost ?? 0 }
       : undefined;
-    if (calculationState.results.length === 0 && !fallbackBoqItem) {
+    if (currentResults.length === 0 && !fallbackBoqItem) {
       return;
     }
     const ok = await saveResults(
       selectedTenderId,
       selectedTacticId,
-      calculationState.results,
+      currentResults,
       sourceRules,
       targetCosts,
       adjustment.appliedRules,
@@ -329,8 +343,6 @@ const CostRedistribution: React.FC = () => {
   }, [
     selectedTenderId,
     selectedTacticId,
-    boqItems,
-    calculationState.results,
     sourceRules,
     targetCosts,
     adjustment.appliedRules,
