@@ -22,8 +22,7 @@
 Supabase runtime удалён целиком — нет ни `supabase.auth.*`, ни
 `supabase.from()`, ни `@supabase/supabase-js` в bundle. Соответствующие
 env-переменные (`VITE_AUTH_MODE`, `VITE_SUPABASE_URL`,
-`VITE_SUPABASE_PUBLISHABLE_KEY`) удалены (см.
-`docs/yandex-migration/43_SUPABASE_AUTH_REMOVAL_RESULT.md`).
+`VITE_SUPABASE_PUBLISHABLE_KEY`) удалены.
 
 Шаблон: `.env.production.yandex.example` или `.env.example`.
 
@@ -90,19 +89,6 @@ docker run --rm --env-file .env -p 3005:3005 hubtender-api:local
 cd backend && go build -o /tmp/hubtender ./cmd/server
 DATABASE_URL=... APP_JWT_ISSUER=... APP_JWT_PRIVATE_KEY_PATH=... CORS_ORIGINS=... /tmp/hubtender
 ```
-
-## Smoke harness
-
-```bash
-npm run smoke
-# scripts/smoke/go-bff.mjs — health, 401 unauth, JWT login,
-# /api/v1/me, references, tenders. Использует DUAL_RUN_EMAIL/PASSWORD из
-# .env для login probe.
-```
-
-Smoke выполняется против `VITE_API_URL` (по умолчанию
-`http://localhost:3005`). Для проверки против prod —
-`VITE_API_URL=https://tender.su10.ru npm run smoke`.
 
 ## Что под секретом, что нет
 

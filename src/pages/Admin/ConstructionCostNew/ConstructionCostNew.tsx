@@ -206,8 +206,16 @@ const ConstructionCostNew: React.FC = () => {
           onViewModeChange={(v) => { setViewMode(v); setViewModeTouched(true); }}
           onSearchChange={setSearchText}
           onExpandAll={() => {
-            const allKeys = filteredData.filter(row => row.is_category).map(row => row.key);
-            setExpandedRowKeys(allKeys);
+            // Рекурсивно собираем ключи всех строк с детьми (над-группа +
+            // вложенные категории + локации), иначе ВИС-категории внутри
+            // над-группы «ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ» не раскроются.
+            const collectKeys = (rows: typeof filteredData): string[] =>
+              rows.flatMap(row =>
+                row.children && row.children.length > 0
+                  ? [row.key, ...collectKeys(row.children)]
+                  : [],
+              );
+            setExpandedRowKeys(collectKeys(filteredData));
           }}
           onCollapseAll={() => setExpandedRowKeys([])}
           onExport={handleExport}
@@ -217,7 +225,7 @@ const ConstructionCostNew: React.FC = () => {
         {isLandscapePhone ? (
           <LandscapeTableOverlay
             theme={currentTheme}
-            fit="zoom"
+            fit="width"
             width={COST_TABLE_FIT_WIDTH[effectiveViewMode]}
             footer={
               <CostTotalsBar

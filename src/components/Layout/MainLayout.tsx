@@ -243,7 +243,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         trigger={null}
         collapsible
         collapsed={collapsed}
-        collapsedWidth={0}
+        collapsedWidth={screens.lg ? 80 : 0}
         className={`sidebar-${currentTheme}`}
         style={{
           background: currentTheme === 'dark' ? '#0a0a0a' : '#fff',
@@ -274,7 +274,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         >
           {collapsed ? (
             <div className="logo-collapsed">
-              <LogoIcon size={isPhone ? 32 : 80} color={currentTheme === 'dark' ? '#10b981' : '#ffffff'} />
+              <LogoIcon size={isPhone ? 32 : (screens.lg ? 36 : 80)} color={currentTheme === 'dark' ? '#10b981' : '#ffffff'} />
             </div>
           ) : (
             <div className="logo-expanded">
@@ -323,7 +323,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 999 }}
         />
       )}
-      <Layout>
+      <Layout style={{ marginLeft: screens.lg ? 80 : 0, transition: 'margin-left 0.2s' }}>
         <Header
           style={{
             // iOS safe-area (PWA на весь экран): шапка ниже Dynamic Island, кнопка меню нажимается.

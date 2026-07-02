@@ -181,8 +181,6 @@ src/pages/Admin/MarkupConstructor/backup/
 temp_*.txt
 *.bak
 backend;*
-# Архивные исторические дампы не игнорируем
-!docs/archive/temp_*.txt
 
 backups/
 

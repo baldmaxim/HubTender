@@ -19,6 +19,9 @@ export interface ComparisonRow {
   // Сейчас используется только для категорий «отделочные работы» и
   // «двери/люки/ворота» — по аналогии со страницей «Затраты на строительство».
   is_location?: boolean;
+  // Над-группа над категориями (ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ), объединяющая
+  // несколько отдельных cost_categories (ВИС / …).
+  is_super_group?: boolean;
   tenders: TenderCosts[];
   note?: string | null;
   mainCategoryName?: string;

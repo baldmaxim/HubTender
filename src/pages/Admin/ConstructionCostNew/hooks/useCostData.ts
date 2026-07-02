@@ -27,6 +27,7 @@ interface BoqItemForCost {
   client_positions: { tender_id: string } | null;
 }
 import { getErrorMessage } from '../../../../utils/errors';
+import { VIS_SUPER_GROUP_NAME, VIS_SUPER_GROUP_KEY, isVisCategory } from '../../../../utils/costGroups';
 import { useRealtimeRefetch } from '../../../../lib/realtime/useRealtimeRefetch';
 import {
   calculateLiveCommercialAmounts,
@@ -53,6 +54,7 @@ export interface CostRow {
   order_num?: number;
   is_category?: boolean;
   is_location?: boolean;  // Промежуточный уровень группировки по локализации
+  is_super_group?: boolean;  // Над-группа над категориями (ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ)
   children?: CostRow[];
   notes?: string;
 }
@@ -555,6 +557,52 @@ export const useCostData = () => {
       let rows: CostRow[] = Array.from(categoryMap.values()).sort((a, b) =>
         (a.order_num || 0) - (b.order_num || 0)
       );
+
+      // Над-группа «ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ»: оборачиваем отдельные
+      // ВИС-категории в одну синтетическую строку. is_category=true — чтобы
+      // переиспользовать ввод объёма/примечания, расчёт ₽/ед. и суммы. Общий
+      // group_key со страницей «Сравнение затрат» (см. utils/costGroups).
+      const visCategories = rows.filter(
+        (r) => r.is_category && isVisCategory(r.cost_category_name),
+      );
+      if (visCategories.length > 0) {
+        const visChildren = [...visCategories].sort(
+          (a, b) => (a.order_num || 0) - (b.order_num || 0),
+        );
+        const superGroup: CostRow = {
+          key: VIS_SUPER_GROUP_KEY,
+          cost_category_name: VIS_SUPER_GROUP_NAME,
+          detail_category_name: '',
+          location_name: '',
+          volume: 0,
+          unit: '',
+          materials_cost: 0,
+          works_cost: 0,
+          sub_materials_cost: 0,
+          sub_works_cost: 0,
+          materials_comp_cost: 0,
+          works_comp_cost: 0,
+          total_cost: 0,
+          cost_per_unit: 0,
+          is_category: true,
+          is_super_group: true,
+          children: visChildren,
+          order_num: Math.min(...visChildren.map((c) => c.order_num || 0)),
+          notes: groupNotesMap.get(VIS_SUPER_GROUP_KEY),
+        };
+        visChildren.forEach((child) => {
+          superGroup.materials_cost += child.materials_cost;
+          superGroup.works_cost += child.works_cost;
+          superGroup.sub_materials_cost += child.sub_materials_cost;
+          superGroup.sub_works_cost += child.sub_works_cost;
+          superGroup.materials_comp_cost += child.materials_comp_cost;
+          superGroup.works_comp_cost += child.works_comp_cost;
+          superGroup.total_cost += child.total_cost;
+        });
+        rows = rows.filter((r) => !visCategories.includes(r));
+        rows.push(superGroup);
+        rows.sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
+      }
 
       // Рекурсивная фильтрация нулевых затрат на всех уровнях
       const filterZeroCosts = (items: CostRow[]): CostRow[] => {

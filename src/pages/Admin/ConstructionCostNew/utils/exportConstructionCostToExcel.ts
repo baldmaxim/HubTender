@@ -205,7 +205,7 @@ const sortDetailRows = (rows: CostRow[], categoryName: string, locationName?: st
 };
 
 // Типы строк для стилизации
-type RowType = 'header' | 'subheader' | 'category' | 'location' | 'detail';
+type RowType = 'header' | 'subheader' | 'supergroup' | 'category' | 'location' | 'detail';
 
 interface ExportDataWithTypes {
   data: (string | number)[][];
@@ -290,9 +290,89 @@ function buildExportData(
   ]);
   rowTypes.push('subheader');
 
+  // Разворачиваем над-группу «ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ» в плоский список:
+  // строка над-группы + её дочерние категории (нумерация категорий сквозная).
+  const emitList: { type: 'supergroup' | 'category'; row: CostRow }[] = [];
+  filteredData.forEach((topRow) => {
+    if (topRow.is_super_group && topRow.total_cost > 0) {
+      emitList.push({ type: 'supergroup', row: topRow });
+      (topRow.children || []).forEach((child) => {
+        if (child.is_category && child.total_cost > 0) {
+          emitList.push({ type: 'category', row: child });
+        }
+      });
+    } else if (topRow.is_category && !topRow.is_super_group && topRow.total_cost > 0) {
+      emitList.push({ type: 'category', row: topRow });
+    }
+  });
+
+  // Опп. затраты по всему поддереву строки (для итоговой строки над-группы).
+  const sumOppositeSubtree = (r: CostRow): OppositeCosts => {
+    const acc: OppositeCosts = { materials: 0, works: 0, subMaterials: 0, subWorks: 0, materialsComp: 0, worksComp: 0 };
+    const walk = (node: CostRow) => {
+      if (node.detail_cost_category_id) {
+        const o = oppositeCostMap.get(node.detail_cost_category_id);
+        if (o) {
+          acc.materials += o.materials;
+          acc.works += o.works;
+          acc.subMaterials += o.subMaterials;
+          acc.subWorks += o.subWorks;
+          acc.materialsComp += o.materialsComp;
+          acc.worksComp += o.worksComp;
+        }
+      }
+      node.children?.forEach(walk);
+    };
+    walk(r);
+    return acc;
+  };
+
   let categoryIndex = 1;
 
-  filteredData.forEach((category) => {
+  emitList.forEach(({ type, row }) => {
+    if (type === 'supergroup') {
+      const superVolume = row.volume || 0;
+      const superWorks = row.works_cost + row.sub_works_cost + row.works_comp_cost;
+      const superMaterials = row.materials_cost + row.sub_materials_cost + row.materials_comp_cost;
+      const opp = sumOppositeSubtree(row);
+      const oppWorks = opp.works + opp.subWorks + opp.worksComp;
+      const oppMaterials = opp.materials + opp.subMaterials + opp.materialsComp;
+      const oppTotal = oppWorks + oppMaterials;
+      exportData.push([
+        row.cost_category_name.toUpperCase(),
+        '',
+        superVolume,
+        'м2',
+        row.works_cost,
+        row.materials_cost,
+        row.sub_works_cost,
+        row.sub_materials_cost,
+        row.works_comp_cost,
+        row.materials_comp_cost,
+        superWorks,
+        superMaterials,
+        row.total_cost,
+        superVolume ? superWorks / superVolume : '',
+        superVolume ? superMaterials / superVolume : '',
+        superVolume ? row.total_cost / superVolume : '',
+        opp.works,
+        opp.materials,
+        opp.subWorks,
+        opp.subMaterials,
+        opp.worksComp,
+        opp.materialsComp,
+        oppWorks,
+        oppMaterials,
+        oppTotal,
+        superVolume ? oppWorks / superVolume : '',
+        superVolume ? oppMaterials / superVolume : '',
+        superVolume ? oppTotal / superVolume : '',
+        areaSp ? oppTotal / areaSp : '',
+      ]);
+      rowTypes.push('supergroup');
+      return;
+    }
+    const category = row;
     if (category.is_category && category.total_cost > 0) {
       const catNum = String(categoryIndex).padStart(2, '0');
       const categoryTotalVolume = category.volume || 0;
@@ -634,6 +714,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[]): void {
   // Применение стилей к ячейкам
   const beigeHeaderFill = { fgColor: { rgb: 'F5F5DC' } };
   const yellowCategoryFill = { fgColor: { rgb: 'FFFFE0' } };
+  const greenSuperFill = { fgColor: { rgb: 'D4EDDA' } };
   const whiteFill = { fgColor: { rgb: 'FFFFFF' } };
   const thinBorder = {
     top: { style: 'thin', color: { rgb: '000000' } },
@@ -653,6 +734,8 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[]): void {
       let fill = whiteFill;
       if (rowType === 'header' || rowType === 'subheader') {
         fill = beigeHeaderFill;
+      } else if (rowType === 'supergroup') {
+        fill = greenSuperFill;
       } else if (rowType === 'category' || rowType === 'location') {
         fill = yellowCategoryFill;
       }
@@ -679,7 +762,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[]): void {
       const font: Record<string, unknown> = {};
       if (rowType === 'header' || rowType === 'subheader') {
         font.bold = true;
-      } else if (rowType === 'category' || rowType === 'location') {
+      } else if (rowType === 'supergroup' || rowType === 'category' || rowType === 'location') {
         font.bold = true;
       }
 

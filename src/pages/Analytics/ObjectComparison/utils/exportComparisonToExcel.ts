@@ -15,16 +15,17 @@ interface ExportParams {
   tenderLabels: string[];
 }
 
-type RowType = 'header' | 'subheader' | 'category' | 'location' | 'detail' | 'total';
+type RowType = 'header' | 'subheader' | 'supergroup' | 'category' | 'location' | 'detail' | 'total';
 
 // Рекурсивно разворачиваем иерархию в плоский список. Промежуточный уровень
 // «локализация» появляется только для whitelist-категорий (отделочные, двери)
-// с ≥2 разными локализациями — поэтому не у всех ветвей три уровня.
+// с ≥2 разными локализациями — поэтому не у всех ветвей три уровня. Над-группа
+// «ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ» — верхний уровень над категориями.
 function flattenRows(data: ComparisonRow[]): { row: ComparisonRow; type: RowType }[] {
   const result: { row: ComparisonRow; type: RowType }[] = [];
-  for (const mainRow of data) {
+  const emitCategory = (mainRow: ComparisonRow) => {
     result.push({ row: mainRow, type: 'category' });
-    if (!mainRow.children) continue;
+    if (!mainRow.children) return;
     for (const child of mainRow.children) {
       if (child.is_location) {
         result.push({ row: child, type: 'location' });
@@ -36,6 +37,16 @@ function flattenRows(data: ComparisonRow[]): { row: ComparisonRow; type: RowType
       } else {
         result.push({ row: child, type: 'detail' });
       }
+    }
+  };
+  for (const topRow of data) {
+    if (topRow.is_super_group) {
+      result.push({ row: topRow, type: 'supergroup' });
+      for (const cat of topRow.children || []) {
+        emitCategory(cat);
+      }
+    } else {
+      emitCategory(topRow);
     }
   }
   return result;
@@ -87,7 +98,7 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
   const flat = flattenRows(comparisonData);
   for (const { row, type } of flat) {
     const categoryLabel =
-      type === 'category'
+      type === 'supergroup' || type === 'category'
         ? row.category.toUpperCase()
         : type === 'location'
           ? `  ${row.category}`
@@ -175,6 +186,9 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
 
   const beigeHeaderFill = { fgColor: { rgb: 'F5F5DC' } };
   const yellowCategoryFill = { fgColor: { rgb: 'FFFFE0' } };
+  // Над-группа «ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ» — насыщенно-зелёный, отделяет
+  // её от жёлтых категорий и светло-зелёной строки ИТОГО.
+  const superGroupFill = { fgColor: { rgb: 'C3E6CB' } };
   // Лёгкий светло-голубой фон для уровня «локализация» — визуально отделяет
   // подкатегорию от обычных строк детализации, но не забивает категорию.
   const locationFill = { fgColor: { rgb: 'EAF5FF' } };
@@ -196,6 +210,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
 
       let fill = whiteFill;
       if (rowType === 'header' || rowType === 'subheader') fill = beigeHeaderFill;
+      else if (rowType === 'supergroup') fill = superGroupFill;
       else if (rowType === 'category') fill = yellowCategoryFill;
       else if (rowType === 'location') fill = locationFill;
       else if (rowType === 'total') fill = totalFill;
@@ -215,6 +230,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
       if (
         rowType === 'header' ||
         rowType === 'subheader' ||
+        rowType === 'supergroup' ||
         rowType === 'category' ||
         rowType === 'location' ||
         rowType === 'total'

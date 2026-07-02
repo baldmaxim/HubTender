@@ -84,7 +84,7 @@ const ObjectComparison: React.FC = () => {
           strong={record.is_main_category || record.is_location}
           italic={record.is_location}
           type={record.is_location ? 'secondary' : undefined}
-          style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}
+          style={{ whiteSpace: 'normal', wordBreak: 'break-word', ...(record.is_super_group ? { fontSize: 15 } : {}) }}
         >
           {text}
         </Text>

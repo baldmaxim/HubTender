@@ -104,8 +104,7 @@ App-auth only. Supabase Auth runtime полностью удалён.
    `kid` совпадает с `APP_JWT_KEY_ID`).
 7. Sub-claim JWT = `auth.users.id` = `public.users.id`.
 8. Password recovery — `forgot-password` / `reset-password` /
-   `change-password` через `app_auth.password_reset_tokens` + SMTP mailer
-   (см. `docs/yandex-migration/42_APP_AUTH_PASSWORD_RECOVERY_RESULT.md`).
+   `change-password` через `app_auth.password_reset_tokens` + SMTP mailer.
 
 ## Realtime
 
@@ -119,9 +118,7 @@ App-auth only. Supabase Auth runtime полностью удалён.
 
 - ❌ Supabase runtime удалён целиком — Auth + Data + SDK
   (`@supabase/supabase-js` снят из `package.json`, bundle не содержит
-  `supabase.co`, `/auth/v1/*`, `/rest/v1/*`, `GoTrueClient`). См.
-  `docs/yandex-migration/43_SUPABASE_AUTH_REMOVAL_RESULT.md` и
-  `docs/yandex-migration/44_SUPABASE_DATA_CALLS_AUDIT.md`.
+  `supabase.co`, `/auth/v1/*`, `/rest/v1/*`, `GoTrueClient`).
 - ❌ Supabase Auth JWT verify на backend — `SUPABASE_JWKS_URL`,
   `SUPABASE_JWT_ISSUER`, `AUTH_MODE` env-переменные удалены.
 - ❌ Supabase Realtime каналы — заменены WS hub Go BFF.
@@ -139,9 +136,6 @@ App-auth only. Supabase Auth runtime полностью удалён.
 ## См. также
 
 - `docs/RUNTIME_ENV.md` — переменные окружения и где они живут
-- `docs/yandex-migration/38_APP_AUTH_CUTOVER_RESULT.md` — production cutover
-- `docs/yandex-migration/43_SUPABASE_AUTH_REMOVAL_RESULT.md` — полное удаление Supabase runtime (Auth + Data + SDK)
-- `docs/yandex-migration/44_SUPABASE_DATA_CALLS_AUDIT.md` — forensic-аудит, корректирующий первоначальный неверный отчёт в doc 43
 - `archive/migrations/2026-05-db-cutover/README.md` — миграционная история
 - `CLAUDE.md` — гайд для разработки (стек, команды, паттерны)
 - `BRANDING.md` — дизайн-система

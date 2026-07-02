@@ -12,6 +12,7 @@ import {
 } from '../../../../utils/boq/liveCommercialCalculation';
 import type { CostType, ComparisonRow, TenderCosts } from '../types';
 import { getErrorMessage } from '../../../../utils/errors';
+import { VIS_SUPER_GROUP_NAME, VIS_SUPER_GROUP_KEY, isVisCategory } from '../../../../utils/costGroups';
 
 interface BoqItemForComparison {
   total_amount: number | null;
@@ -349,6 +350,38 @@ function buildHierarchy(
     if (notes) mainRow.note = notes.get(`main__${mainCat}`) || null;
     mainRow.children = children;
     result.push(mainRow);
+  }
+
+  // Над-группа «ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ»: оборачиваем отдельные
+  // ВИС-категории (ВИС / …) в одну строку. is_main_category=true — чтобы
+  // переиспользовать жирный стиль, класс строки и сохранение примечания.
+  // Объём берём из construction_cost_volumes по общему group_key (read-only,
+  // введён на «Затратах на строительство») — см. utils/costGroups.
+  const visRows = result.filter((r) => isVisCategory(r.category));
+  if (visRows.length > 0) {
+    const superRow = makeRow(`main__${VIS_SUPER_GROUP_NAME}`, VIS_SUPER_GROUP_NAME, numTenders, true);
+    superRow.is_super_group = true;
+    superRow.mainCategoryName = VIS_SUPER_GROUP_NAME;
+    superRow.children = visRows;
+    for (const child of visRows) {
+      for (let idx = 0; idx < numTenders; idx++) {
+        superRow.tenders[idx].materials += child.tenders[idx].materials;
+        superRow.tenders[idx].works += child.tenders[idx].works;
+        superRow.tenders[idx].total += child.tenders[idx].total;
+      }
+    }
+    if (volumeMapsAll) {
+      for (let idx = 0; idx < numTenders; idx++) {
+        superRow.tenders[idx].volume = volumeMapsAll[idx]?.groupMap.get(VIS_SUPER_GROUP_KEY) || 0;
+      }
+    }
+    calcPerUnit(superRow);
+    if (notes) superRow.note = notes.get(`main__${VIS_SUPER_GROUP_NAME}`) || null;
+
+    const merged = result.filter((r) => !isVisCategory(r.category));
+    merged.push(superRow);
+    merged.sort((a, b) => a.category.localeCompare(b.category, 'ru'));
+    return merged;
   }
 
   return result;

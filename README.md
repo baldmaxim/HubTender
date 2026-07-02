@@ -91,26 +91,8 @@ docker compose up --build
 
 ### База данных
 
-Работа через Supabase MCP — см. [CLAUDE.md](CLAUDE.md#критические-правила).
-`supabase/schemas/prod.sql` — единый источник истины по схеме.
-
-```bash
-npm run gen:types     # регенерит src/lib/supabase/database.types.ts
-npm run gen:schema    # обновляет supabase/schemas/prod.sql
-```
-
-### E2E-тесты
-
-```bash
-npm test               # Playwright (поднимает dev-сервер на 3001)
-```
-
-### Smoke-тесты Go BFF
-
-```bash
-node scripts/smoke/go-bff.mjs                                      # все Go read-эндпоинты
-node scripts/dual-run/positions-with-costs.mjs <tender-id>         # diff RPC vs Go
-```
+Yandex Managed PostgreSQL (Supabase удалён). Схема и миграции — в `db/yandex/`.
+`supabase/schemas/prod.sql` — исторический снимок канонической схемы.
 
 ## Конвенции
 
@@ -123,4 +105,4 @@ node scripts/dual-run/positions-with-costs.mjs <tender-id>         # diff RPC vs
 ## Стек
 
 React 18 · Vite · TypeScript · Ant Design · Go 1.23 · chi · pgx/v5 ·
-coder/websocket · Supabase (Postgres 17) · Playwright · Docker · Caddy
+coder/websocket · Yandex Managed PostgreSQL 17 · Docker · nginx
