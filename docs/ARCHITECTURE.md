@@ -74,7 +74,7 @@
 | Realtime client | `src/lib/realtime/useRealtimeTopic.ts` | подписка на WS-топики Go BFF |
 | App-auth client | `src/lib/auth/client.ts` | login/refresh/me/logout/forgot/reset/change, cross-tab Web Locks |
 | TS types (legacy namespace) | `src/lib/supabase/types.ts` + `database.types.ts` | TypeScript type definitions + access-control хелперы (`hasPageAccess`, `canManageUsers`). Supabase SDK удалён, имя папки оставлено для минимизации diff |
-| Go BFF entrypoint | `backend/cmd/server/main.go` | DI + chi router |
+| Go BFF entrypoint | `backend/cmd/server/` | main.go (bootstrap) + wire.go (DI) + routes.go (chi router) |
 | Go BFF слои | `backend/internal/{handlers,services,repository}/` | 3-layer |
 | App-auth backend | `backend/internal/auth/` | issuer + repository + handlers + JWKS |
 | Pricing/markup calc | `backend/internal/calc/` | port TS-ядра (юнит-тесты) |

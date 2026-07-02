@@ -22,7 +22,7 @@ HUBTender/
 ├── .eslintrc.cjs            ─┘
 │
 ├── backend/                 ─┐ BACKEND   Go BFF (chi + pgx + WebSocket hub)
-│   ├── cmd/server/           │           entry: backend/cmd/server/main.go
+│   ├── cmd/server/           │           entry: main.go + wire.go (DI) + routes.go
 │   ├── internal/             │           layers: handlers / services / repository
 │   │   ├── handlers/         │                    + realtime / calc / middleware
 │   │   ├── services/         │
