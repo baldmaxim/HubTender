@@ -206,7 +206,7 @@ const ObjectComparison: React.FC = () => {
   return (
     <div
       style={{
-        paddingTop: isPhoneDevice ? 12 : 24,
+        paddingTop: 0,
         paddingBottom: isPhoneDevice ? 12 : 24,
         paddingLeft: isPhoneDevice ? 4 : 24,
         paddingRight: isPhoneDevice ? 4 : 24,
@@ -221,8 +221,8 @@ const ObjectComparison: React.FC = () => {
       ))}
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         {/* Выбор тендеров */}
-        <Card title="Выбор объектов для сравнения">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
+        <Card>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
             {selectedTenders.map((val, idx) => {
               const info = val ? tenders.find(t => t.id === val) || null : null;
               return (
@@ -259,60 +259,64 @@ const ObjectComparison: React.FC = () => {
                 </div>
               );
             })}
-            <div style={{ flex: isPhone ? '1 1 100%' : '0 0 300px', minWidth: isPhone ? 0 : 240 }}>
+            <div style={{ flex: isPhone ? '1 1 100%' : '0 0 auto', minWidth: isPhone ? 0 : 240 }}>
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Space align="center" style={{ visibility: 'hidden' }}>
                   <Text strong>Тендер</Text>
                 </Space>
-                <Button block icon={<PlusOutlined />} onClick={addTender}>
-                  Добавить объект
-                </Button>
+                <Space wrap>
+                  <Button icon={<PlusOutlined />} onClick={addTender}>
+                    Добавить объект
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<ReloadOutlined />}
+                    onClick={loadComparisonData}
+                    loading={loading}
+                    disabled={validCount < 2}
+                  >
+                    Загрузить сравнение
+                  </Button>
+                </Space>
               </Space>
             </div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <Button
-              type="primary"
-              icon={<ReloadOutlined />}
-              onClick={loadComparisonData}
-              loading={loading}
-              disabled={validCount < 2}
-            >
-              Загрузить сравнение
-            </Button>
           </div>
         </Card>
 
         {/* Общая статистика */}
         {comparisonData.length > 0 && (
-          <Card title={`Общая статистика (${costLabel.toLowerCase()} затраты)`}>
-            <Row gutter={[16, 16]}>
+          <Card
+            title={`Общая статистика (${costLabel.toLowerCase()} затраты)`}
+            styles={{ body: { padding: isPhone ? '8px 12px' : '8px 16px' } }}
+          >
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: isPhone ? 'space-around' : 'flex-start', gap: isPhone ? 8 : 24 }}>
               {loadedInfos.map((info, i: number) => (
-                <Col key={i} xs={24} md={loadedCount <= 3 ? Math.floor(24 / (loadedCount + (loadedCount === 2 ? 1 : 0))) : 6}>
+                <div key={i} style={{ padding: isPhone ? '0 4px' : '0 12px', textAlign: 'center' }}>
                   <Statistic
-                    title={`Итого: ${tenderLabel(info, `Тендер ${i + 1}`)}`}
+                    title={<span style={{ whiteSpace: 'nowrap', fontSize: isPhone ? 11 : 12 }}>{`Итого: ${tenderLabel(info, `Тендер ${i + 1}`)}`}</span>}
                     value={tenderTotals[i] || 0}
                     precision={0}
                     suffix="₽"
+                    valueStyle={{ fontSize: isPhone ? 16 : 18 }}
                   />
-                </Col>
+                </div>
               ))}
               {loadedCount === 2 && (
-                <Col xs={24} md={8}>
+                <div style={{ padding: isPhone ? '0 4px' : '0 12px', textAlign: 'center' }}>
                   <Statistic
-                    title="Разница"
+                    title={<span style={{ whiteSpace: 'nowrap', fontSize: isPhone ? 11 : 12 }}>Разница</span>}
                     value={diffValue}
                     precision={0}
                     suffix="₽"
-                    valueStyle={{ color: diffValue >= 0 ? '#52c41a' : '#ff4d4f' }}
                     prefix={diffValue >= 0 ? '+' : ''}
+                    valueStyle={{ fontSize: isPhone ? 16 : 18, color: diffValue >= 0 ? '#52c41a' : '#ff4d4f', fontWeight: 600 }}
                   />
-                  <Text type="secondary">
+                  <Text type="secondary" style={{ fontSize: 11 }}>
                     ({diffPercent}% {diffValue >= 0 ? 'больше' : 'меньше'})
                   </Text>
-                </Col>
+                </div>
               )}
-            </Row>
+            </div>
           </Card>
         )}
 
@@ -327,7 +331,7 @@ const ObjectComparison: React.FC = () => {
             </div>
           </Card>
         ) : comparisonData.length > 0 ? (
-          <Card title={comparisonCardTitle} styles={{ body: { padding: isPhoneDevice ? 0 : undefined } }}>
+          <Card title={comparisonCardTitle} styles={{ body: { padding: 0 } }}>
             {useOverlay ? (
               <LandscapeTableOverlay theme={currentTheme} fit="zoom" width={scrollX}>
                 <Table
