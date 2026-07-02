@@ -125,7 +125,13 @@
       "Bash(git -c core.preloadindex=false commit -m 'Очистка/перенос: удалить осиротевшие docs \\(планы рефакторинга, отчёты yandex-миграции, архив\\), обновить .gitignore/README/CLAUDE; правки «Затрат» и «Сравнения объектов» \\(группировка затрат costGroups, экспорт\\).')",
       "Bash(git -c core.preloadindex=false log --oneline -1)",
       "PowerShell(npm run lint 2>&1 | Select-Object -Last 15; \"LINT_EXIT=$LASTEXITCODE\")",
-      "PowerShell($env:NODE_OPTIONS = \"--max-old-space-size=8192\"; npx vite build 2>&1 | Select-Object -Last 20; \"VITE_EXIT=$LASTEXITCODE\")"
+      "PowerShell($env:NODE_OPTIONS = \"--max-old-space-size=8192\"; npx vite build 2>&1 | Select-Object -Last 20; \"VITE_EXIT=$LASTEXITCODE\")",
+      "PowerShell(Remove-Item Env:NODE_OPTIONS -ErrorAction SilentlyContinue; npx vite build 2>&1 | Select-Object -First 30; \"VITE_EXIT=$LASTEXITCODE\")",
+      "Bash(echo \"=== current branch in your working dir ===\")",
+      "Bash(git -C c:/Users/Usrr/VSCode/Odintsov/HUBTender branch --show-current)",
+      "Bash(echo \"=== HEAD ===\")",
+      "Bash(git -C c:/Users/Usrr/VSCode/Odintsov/HUBTender rev-parse --short HEAD)",
+      "Bash(echo \"=== all local branches ===\")"
     ],
     "deny": [],
     "ask": [],
