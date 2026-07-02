@@ -39,7 +39,7 @@
   height: 64px;
   box-sizing: border-box;
   padding: 6px 16px;
-  margin: 0 12px;
+  margin: 12px 12px 0;
 }
 
 /* Logo collapsed state (only icon) */
@@ -50,20 +50,20 @@
   width: 100%;
 }
 
-/* Свёрнутое состояние: тот же вертикальный якорь (64px, margin-top 0), что и у
+/* Свёрнутое состояние: тот же вертикальный якорь (64px, margin-top 12px), что и у
    .logo-compact — иначе пункты меню под логотипом сдвигаются между collapsed/expanded. */
 .ant-layout-sider-collapsed .logo {
   height: 64px;
   box-sizing: border-box;
   padding: 12px 8px !important;
-  margin: 0 8px !important;
+  margin: 12px 8px 0 !important;
 }
 
 /* Телефон: узкий icon-рейл (48px) без пустых отступов */
 @media (max-width: 575px) {
   .ant-layout-sider-collapsed .logo {
     padding: 6px 2px !important;
-    margin: 0 4px !important;
+    margin: 12px 4px 0 !important;
   }
   .ant-layout-sider-collapsed .ant-menu-item,
   .ant-layout-sider-collapsed .ant-menu-submenu-title {
