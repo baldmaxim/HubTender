@@ -7,7 +7,6 @@ import { dropAll as dropAllPositionsCache } from '../lib/cache/clientPositionsCa
 import { invalidateAll as dropAllPositionRows } from '../lib/cache/positionRowCache';
 import {
   hydrate as hydrateAppAuth,
-  me as appAuthMe,
   onAuthStateChange as onAppAuthStateChange,
   signOut as appAuthSignOut,
 } from '../lib/auth/client';
@@ -53,17 +52,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
-    // /auth/me touches the BFF to refresh access_status / allowed_pages
-    // in the cached session, then we re-load the full /me payload (with
-    // role_name + role_color).
-    const u = await appAuthMe();
-    if (!u) {
+    if (!user?.id) {
       setUser(null);
       return;
     }
-    const full = await loadUserData(u.id);
+    const full = await loadUserData(user.id);
     setUser(full);
-  }, []);
+  }, [user?.id]);
 
   const signOut = useCallback(async () => {
     try {
@@ -100,17 +95,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     const { data: { subscription } } = onAppAuthStateChange((event, session) => {
-      handleSession(event, !!session, session?.user.id ?? null);
+      handleSession(event, !!session, session?.user?.id ?? null);
     });
 
     // Kick off initial hydrate (emits INITIAL_SESSION synchronously into
     // the listener above).
     hydrateAppAuth();
-
-    // Best-effort /auth/me to refresh access_status / allowed_pages in
-    // case admin made a change while the user was logged out. The emitted
-    // USER_UPDATED event will flow through the subscription.
-    appAuthMe().catch(() => undefined);
 
     return () => {
       mounted = false;

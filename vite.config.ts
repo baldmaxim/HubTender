@@ -1,36 +1,28 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
-import { sentryVitePlugin } from '@sentry/vite-plugin'
-import { VitePWA } from 'vite-plugin-pwa'
 
-// https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(async ({ mode }) => {
   const isProd = mode.startsWith('production')
   const env = loadEnv(mode, process.cwd(), '')
-  // process.env побеждает .env-файлы: scripts/build-prod.mjs пробрасывает свежий
-  // VITE_SENTRY_RELEASE из git SHA, и он должен перебить значение из .env.production.yandex.
   const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN || env.SENTRY_AUTH_TOKEN
   const sentryRelease = process.env.VITE_SENTRY_RELEASE || env.VITE_SENTRY_RELEASE
-  // Аварийный режим для слабых по RAM серверов: BUILD_NO_SOURCEMAP=1 убирает
-  // генерацию sourcemap и заливку в Sentry — снимает пик памяти в фазе
-  // `rendering chunks` (на проде ловили kernel OOM → `Killed`), ценой читаемых
-  // трейсов в Sentry. Штатный путь — оставить sourcemap и добавить swap.
   const noSourcemap = process.env.BUILD_NO_SOURCEMAP === '1'
-  // Source-map upload ON только когда явно проставлены и токен, и release-имя.
-  // Локальный `npm run build` (mode=production, .env без VITE_SENTRY_RELEASE)
-  // не льёт ничего; `npm run build:prod` (mode=production.yandex, .env.production.yandex с VITE_SENTRY_RELEASE) — льёт.
-  const enableSentryUpload = isProd && !noSourcemap && Boolean(sentryAuthToken) && Boolean(sentryRelease)
+  const enableSentryUpload =
+    isProd && !noSourcemap && Boolean(sentryAuthToken) && Boolean(sentryRelease)
 
-  return {
-    plugins: [
-      react(),
+  const plugins: PluginOption[] = [react()]
+
+  try {
+    const { VitePWA } = await import('vite-plugin-pwa')
+    plugins.push(
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['logo.svg'],
         manifest: {
-          name: 'TenderHUB — Портал управления тендерами',
+          name: 'TenderHUB - Портал управления тендерами',
           short_name: 'TenderHUB',
-          description: 'Система управления строительными тендерами, сметами и номенклатурами СУ-10.',
+          description:
+            'Система управления строительными тендерами, сметами и номенклатурами СУ-10.',
           lang: 'ru',
           theme_color: '#10b981',
           background_color: '#0a0a0a',
@@ -44,10 +36,8 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,woff,woff2}'],
-          // SPA-фолбэк офлайн, но НЕ для API/WS.
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api\//],
-          // API/аутентификация/realtime — всегда сеть, ничего не кешируем.
           runtimeCaching: [
             {
               urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
@@ -59,20 +49,32 @@ export default defineConfig(({ mode }) => {
         },
         devOptions: { enabled: false },
       }),
-      ...(enableSentryUpload
-        ? [
-            sentryVitePlugin({
-              org: 'odintsovorg',
-              project: 'hubtender-web',
-              authToken: sentryAuthToken,
-              release: sentryRelease ? { name: sentryRelease } : undefined,
-            }),
-          ]
-        : []),
-    ],
+    )
+  } catch {
+    console.warn('[vite] vite-plugin-pwa is not installed; PWA support is disabled.')
+  }
+
+  if (enableSentryUpload) {
+    try {
+      const { sentryVitePlugin } = await import('@sentry/vite-plugin')
+      plugins.push(
+        sentryVitePlugin({
+          org: 'odintsovorg',
+          project: 'hubtender-web',
+          authToken: sentryAuthToken,
+          release: sentryRelease ? { name: sentryRelease } : undefined,
+        }),
+      )
+    } catch {
+      console.warn('[vite] @sentry/vite-plugin is not installed; skipping sourcemap upload.')
+    }
+  }
+
+  return {
+    plugins,
     server: {
       port: 5185,
-      open: true
+      open: true,
     },
     esbuild: isProd
       ? { drop: ['debugger'], pure: ['console.log', 'console.debug', 'console.info'] }
@@ -84,8 +86,6 @@ export default defineConfig(({ mode }) => {
       cssCodeSplit: true,
       chunkSizeWarningLimit: 800,
       rollupOptions: {
-        // Меньше параллельных файловых операций → ниже пик RAM в фазе rendering
-        // chunks (по умолчанию 20). Защита от OOM на проде со скромной памятью.
         maxParallelFileOps: 4,
         output: {
           manualChunks: {

@@ -116,15 +116,91 @@ function makeError(message: string, status?: number, code?: AppAuthError['code']
   return err;
 }
 
+function parseUnixSecondsFromISO(value?: string): number | null {
+  if (!value) return null;
+  const unix = Math.floor(new Date(value).getTime() / 1000);
+  return Number.isFinite(unix) ? unix : null;
+}
+
+function parseJwtExp(accessToken: string): number | null {
+  try {
+    const [, payload] = accessToken.split('.');
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(atob(base64));
+    return typeof json.exp === 'number' ? json.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveAccessExpiry(payload: AuthResultPayload): number {
+  const fromISO = parseUnixSecondsFromISO(payload.expires_at);
+  if (fromISO) return fromISO;
+
+  if (typeof payload.expires_in === 'number' && payload.expires_in > 0) {
+    return Math.floor(Date.now() / 1000) + payload.expires_in;
+  }
+
+  const fromJWT = parseJwtExp(payload.access_token);
+  if (fromJWT) return fromJWT;
+
+  return Math.floor(Date.now() / 1000) + 15 * 60;
+}
+
+function resolveRefreshExpiry(payload: AuthResultPayload, accessExpiry: number): number {
+  return parseUnixSecondsFromISO(payload.refresh_expires_at) ?? accessExpiry;
+}
+
 function toAppSession(payload: AuthResultPayload): AppSession {
+  const accessExpiry = resolveAccessExpiry(payload);
   return {
     access_token: payload.access_token,
-    refresh_token: payload.refresh_token,
+    refresh_token: payload.refresh_token ?? '',
     token_type: payload.token_type,
-    expires_at: Math.floor(new Date(payload.expires_at).getTime() / 1000),
-    refresh_expires_at: Math.floor(new Date(payload.refresh_expires_at).getTime() / 1000),
-    user: payload.user,
+    expires_at: accessExpiry,
+    refresh_expires_at: resolveRefreshExpiry(payload, accessExpiry),
+    user: payload.user as AppAuthUser,
   };
+}
+
+async function fetchUserByAccessToken(accessToken: string): Promise<AppAuthUser | null> {
+  const meRes = await fetch(`${API_BASE_URL}/api/v1/me`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  }).catch(() => null);
+  if (!meRes || !meRes.ok) return null;
+
+  const payload = (await meRes.json()) as {
+    id: string;
+    email: string;
+    full_name: string;
+    role_code: string;
+    access_status: string;
+    access_enabled: boolean;
+    allowed_pages: string[] | null;
+  };
+
+  return {
+    id: payload.id,
+    email: payload.email,
+    full_name: payload.full_name,
+    role_code: payload.role_code,
+    access_status: payload.access_status,
+    access_enabled: payload.access_enabled,
+    allowed_pages: payload.allowed_pages ?? [],
+  };
+}
+
+async function toCompleteAppSession(payload: AuthResultPayload): Promise<AppSession> {
+  let user: AppAuthUser | null | undefined = payload.user;
+  if (!user?.id) {
+    user = await fetchUserByAccessToken(payload.access_token);
+  }
+  if (!user?.id) {
+    throw makeError('login response missing user payload', 500, 'unknown');
+  }
+  return toAppSession({ ...payload, user });
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +226,7 @@ export async function signInWithPassword(email: string, password: string): Promi
   }
 
   const payload = (await res.json()) as AuthResultPayload;
-  const session = toAppSession(payload);
+  const session = await toCompleteAppSession(payload);
   persist(session);
   emitAuthEvent('SIGNED_IN', session);
   return session;
@@ -339,6 +415,9 @@ export async function getAccessToken(): Promise<string | null> {
   if (s.expires_at - nowSec > REFRESH_LEEWAY_SECONDS) {
     return s.access_token;
   }
+  if (!s.refresh_token) {
+    return s.expires_at > nowSec ? s.access_token : null;
+  }
   const refreshed = await refreshSession();
   return refreshed?.access_token ?? null;
 }
@@ -376,6 +455,9 @@ export function refreshSession(): Promise<AppSession | null> {
         if (fresh.expires_at - nowSec > REFRESH_LEEWAY_SECONDS) {
           return fresh;
         }
+        if (!fresh.refresh_token) {
+          return fresh.expires_at > nowSec ? fresh : null;
+        }
         const res = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -392,7 +474,7 @@ export function refreshSession(): Promise<AppSession | null> {
           return null;
         }
         const payload = (await res.json()) as AuthResultPayload;
-        const newSession = toAppSession(payload);
+        const newSession = await toCompleteAppSession(payload);
         persist(newSession);
         emitAuthEvent('TOKEN_REFRESHED', newSession);
         broadcast({ type: 'SESSION_ROTATED', session: newSession });
@@ -449,7 +531,7 @@ export function hydrate(): AppSession | null {
 // Used by call sites that previously called supabase.auth.getUser() — those
 // callers need a quick id for createdBy / cache keys, NOT the full profile.
 export function getCurrentUserId(): string | null {
-  return ensureLoaded()?.user.id ?? null;
+  return ensureLoaded()?.user?.id ?? null;
 }
 
 // Re-export the subscription API so call sites can `import { onAuthStateChange }

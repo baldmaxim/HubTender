@@ -14,7 +14,7 @@ export interface AppAuthUser {
 
 export interface AppSession {
   access_token: string;       // RS256 JWT
-  refresh_token: string;      // opaque
+  refresh_token: string;      // opaque; may be empty on legacy local backends
   expires_at: number;         // Unix epoch seconds (UTC)
   refresh_expires_at: number; // Unix epoch seconds (UTC)
   token_type: 'Bearer';
@@ -25,11 +25,11 @@ export interface AppSession {
 export interface AuthResultPayload {
   access_token: string;
   token_type: 'Bearer';
-  expires_at: string;          // ISO 8601 UTC
-  expires_in: number;          // seconds
-  refresh_token: string;
-  refresh_expires_at: string;  // ISO 8601 UTC
-  user: AppAuthUser;
+  expires_at?: string;          // ISO 8601 UTC
+  expires_in?: number;          // seconds
+  refresh_token?: string;
+  refresh_expires_at?: string;  // ISO 8601 UTC
+  user?: AppAuthUser;
 }
 
 // Emitted via onAuthStateChange. Mirrors a subset of Supabase's auth-event
