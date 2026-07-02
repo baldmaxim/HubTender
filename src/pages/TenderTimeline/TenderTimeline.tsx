@@ -466,7 +466,7 @@ const TenderTimeline: React.FC = () => {
               { label: `В работе (${tabCounts.active})`, value: 'active' },
               { label: `В архиве (${tabCounts.archive})`, value: 'archive' },
             ]}
-            style={{ maxWidth: isPhoneDevice ? '100%' : 420 }}
+            style={{ maxWidth: isPhoneDevice ? '100%' : 420, alignSelf: isPhoneDevice ? undefined : 'flex-start' }}
           />
 
           {isPhoneDevice ? (
