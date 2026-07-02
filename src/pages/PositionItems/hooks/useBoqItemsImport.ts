@@ -13,226 +13,21 @@ import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
 import { getTenderById } from '../../../lib/api/fi';
 import { listBoqItemsFullByPosition } from '../../../lib/api/positions';
 import { getErrorMessage } from '../../../utils/errors';
-import { validateBoqRowBasics } from '../../../utils/boq/importRowValidation';
+import {
+  isWork,
+  isMaterial,
+  normalizeString,
+  buildNomenclatureLookupKey,
+  calculateTotalAmount,
+  type ImportCurrencyRates,
+} from '../../../utils/boq/importShared';
+import { buildMissingNomenclatureInserts } from '../../../utils/boq/nomenclatureImport';
+import type { ParsedBoqItem, ValidationResult, CostCategoryRecord } from '../utils/boqImportTypes';
+import { parseBoqExcelRows, processWorkBindings as processWorkBindingsUtil } from '../utils/boqImportParser';
+import { validateBoqData } from '../utils/boqImportValidation';
 
-// ===========================
-// ТИПЫ И ИНТЕРФЕЙСЫ
-// ===========================
-
-interface ParsedBoqItem {
-  rowIndex: number;
-
-  // Основные поля
-  boq_item_type: 'раб' | 'суб-раб' | 'раб-комп.' | 'мат' | 'суб-мат' | 'мат-комп.';
-  material_type?: 'основн.' | 'вспомогат.';
-
-  // Наименование (для поиска в номенклатуре)
-  nameText: string;
-  unit_code: string;
-
-  // Найденные ID из номенклатуры
-  work_name_id?: string;
-  material_name_id?: string;
-
-  // Привязка к работе
-  bindToWork: boolean;
-  parent_work_item_id?: string;
-  tempId?: string;
-
-  // Количество и коэффициенты
-  base_quantity?: number;
-  quantity?: number;
-  conversion_coefficient?: number;
-  consumption_coefficient?: number;
-
-  // Финансовые поля
-  currency_type: 'RUB' | 'USD' | 'EUR' | 'CNY';
-  delivery_price_type?: 'в цене' | 'не в цене' | 'суммой';
-  delivery_amount?: number;
-  unit_rate?: number;
-
-  // Затрата на строительство
-  costCategoryText: string;
-  detail_cost_category_id?: string;
-
-  // Дополнительно
-  quote_link?: string;
-  description?: string;
-
-  // Сортировка
-  sort_number: number;
-}
-
-interface ValidationError {
-  rowIndex: number;
-  type: 'missing_nomenclature' | 'unit_mismatch' | 'missing_cost' | 'invalid_type' | 'missing_field' | 'binding_error';
-  field: string;
-  message: string;
-  severity: 'error' | 'warning';
-}
-
-interface MissingNomenclatureGroup {
-  name: string;
-  unit: string;
-  rows: number[];
-}
-
-interface ValidationResult {
-  isValid: boolean;
-  errors: ValidationError[];
-  warnings: ValidationError[];
-  missingNomenclature: {
-    works: MissingNomenclatureGroup[];
-    materials: MissingNomenclatureGroup[];
-  };
-  unknownCosts: Array<{ text: string; rows: number[] }>;
-}
-
-interface CostCategoryRecord {
-  id: string;
-  name: string;
-  location: string;
-  cost_categories?: { name: string } | { name: string }[] | null;
-}
-
-
-// ===========================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ===========================
-
-const isWork = (type: string): boolean => {
-  return ['раб', 'суб-раб', 'раб-комп.'].includes(type);
-};
-
-const isMaterial = (type: string): boolean => {
-  return ['мат', 'суб-мат', 'мат-комп.'].includes(type);
-};
-
-const normalizeString = (str: string): string => {
-  return str.trim()
-    .replace(/\s+/g, ' ');  // Множественные пробелы -> один пробел
-  // НЕ убираем пробелы вокруг слэша, т.к. в БД категории хранятся как "ВИС / Электрические системы"
-};
-
-const normalizeForLookup = (str: string): string => {
-  return normalizeString(str).toLowerCase();
-};
-
-const buildNomenclatureLookupKey = (name: string, unit: string): string => {
-  return `${normalizeForLookup(name)}|${normalizeForLookup(unit)}`;
-};
-
-const parseNumber = (value: unknown): number | undefined => {
-  if (value === null || value === undefined || value === '') return undefined;
-  const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : Number(value);
-  return isNaN(num) ? undefined : num;
-};
-
-const parseBoolean = (value: unknown): boolean => {
-  if (!value) return false;
-  const str = String(value).toLowerCase().trim();
-  return str === 'да' || str === 'yes' || str === 'true' || str === '1';
-};
-
-// Нормализация типа материала (поддержка разных вариантов написания)
-const normalizeMaterialType = (value: string | undefined): 'основн.' | 'вспомогат.' | undefined => {
-  if (!value) return undefined;
-
-  const original = String(value).trim();
-  const normalized = original.toLowerCase()
-    .replace(/\s+/g, '')  // Убираем пробелы
-    .replace(/\.$/, '');   // Убираем точку в конце если есть
-
-  let result: 'основн.' | 'вспомогат.' | undefined = undefined;
-
-  // Основной материал
-  if (normalized === 'основной' || normalized === 'основн' || normalized === 'основ' || normalized === 'осн') {
-    result = 'основн.';
-  }
-  // Вспомогательный материал
-  else if (normalized === 'вспомогательный' || normalized === 'вспомогат' || normalized === 'вспом') {
-    result = 'вспомогат.';
-  }
-  // Если уже в нужном формате
-  else if (original === 'основн.' || original === 'вспомогат.') {
-    result = original as 'основн.' | 'вспомогат.';
-  }
-
-  if (original !== result) {
-    console.log(`[MaterialType] Нормализация: "${original}" -> "${result}"`);
-  }
-
-  return result;
-};
-
-// Нормализация типа доставки (поддержка разных вариантов написания)
-const normalizeDeliveryPriceType = (value: string | undefined): 'в цене' | 'не в цене' | 'суммой' | undefined => {
-  if (!value) return undefined;
-
-  const original = String(value).trim();
-  const normalized = original.toLowerCase()
-    .replace(/\s+/g, ' ');  // Нормализуем пробелы
-
-  let result: 'в цене' | 'не в цене' | 'суммой' | undefined = undefined;
-
-  // "в цене"
-  if (normalized === 'в цене' || normalized === 'вцене' || normalized === 'входит') {
-    result = 'в цене';
-  }
-  // "не в цене"
-  else if (normalized === 'не в цене' || normalized === 'невцене' || normalized === 'не входит' || normalized === 'невходит') {
-    result = 'не в цене';
-  }
-  // "суммой"
-  else if (normalized === 'суммой' || normalized === 'доп. стоимость' || normalized === 'доп стоимость' || normalized === 'дополнительно') {
-    result = 'суммой';
-  }
-  // Если уже в нужном формате
-  else if (original === 'в цене' || original === 'не в цене' || original === 'суммой') {
-    result = original as 'в цене' | 'не в цене' | 'суммой';
-  }
-
-  if (original !== result) {
-    console.log(`[DeliveryPriceType] Нормализация: "${original}" -> "${result}"`);
-  }
-
-  return result;
-};
-
-// Парсинг затраты на строительство: "Категория / Детальная категория / Локация"
-// ВАЖНО: Детальная категория может содержать слэши (например, "Плиты перекрытия / покрытия / разгрузочные")
-// Формат: первая часть - категория, последняя часть - локация, всё между ними - детализация
-const parseCostCategory = (text: string): { category?: string; detail?: string; location?: string } => {
-  if (!text) return {};
-
-  // Разбиваем по разделителю " / " (пробел-слэш-пробел)
-  const parts = text.split(' / ').map(p => p.trim());
-
-  if (parts.length === 1) {
-    // Только одна часть - возможно ошибка
-    return { category: parts[0] };
-  } else if (parts.length === 2) {
-    // Две части: category / detail (без location)
-    return {
-      category: parts[0],
-      detail: parts[1],
-    };
-  } else {
-    // Три или более частей:
-    // category = первая часть
-    // location = последняя часть
-    // detail = всё между ними, объединенное через " / "
-    const category = parts[0];
-    const location = parts[parts.length - 1];
-    const detail = parts.slice(1, parts.length - 1).join(' / ');
-
-    return {
-      category: category || undefined,
-      detail: detail || undefined,
-      location: location || undefined,
-    };
-  }
-};
+// Типы/парсер/валидация вынесены в ../utils/boqImport* (лимит ≤600 строк),
+// общие с mass-импортом хелперы — в src/utils/boq/importShared.ts.
 
 // ===========================
 // ОСНОВНОЙ ХУК
@@ -252,9 +47,6 @@ export const useBoqItemsImport = () => {
   const [workNamesMap, setWorkNamesMap] = useState<Map<string, string>>(new Map());
   const [materialNamesMap, setMaterialNamesMap] = useState<Map<string, string>>(new Map());
   const [costCategoriesMap, setCostCategoriesMap] = useState<Map<string, string>>(new Map());
-
-  // Курсы валют
-  const [currencyRates, setCurrencyRates] = useState({ usd: 1, eur: 1, cny: 1 });
 
   // ===========================
   // ЗАГРУЗКА СПРАВОЧНИКОВ
@@ -341,74 +133,7 @@ export const useBoqItemsImport = () => {
           // Пропускаем заголовок (первая строка)
           const rows = jsonData.slice(1);
 
-          const parsed: ParsedBoqItem[] = [];
-
-          rows.forEach((row: unknown, index: number) => {
-            if (!Array.isArray(row)) return;
-
-            // Проверяем, что строка не пустая
-            const hasData = row.some(cell => cell !== undefined && cell !== null && cell !== '');
-            if (!hasData) return;
-
-            const cells = row as unknown[];
-            const rowNum = index + 2; // +2 потому что индекс с 0 и пропустили заголовок
-
-            // Маппинг колонок согласно структуре из шаблона
-            const item: ParsedBoqItem = {
-              rowIndex: rowNum,
-
-              // Колонка 4: Тип элемента
-              boq_item_type: cells[4] ? String(cells[4]).trim() as ParsedBoqItem['boq_item_type'] : 'мат',
-
-              // Колонка 5: Тип материала (с нормализацией)
-              material_type: normalizeMaterialType(cells[5] != null ? String(cells[5]) : undefined),
-
-              // Колонка 6: Наименование
-              nameText: cells[6] ? normalizeString(String(cells[6])) : '',
-
-              // Колонка 7: Ед. изм.
-              unit_code: cells[7] ? String(cells[7]).trim() : '',
-
-              // Колонка 3: Привязка материала к работе
-              bindToWork: parseBoolean(cells[3]),
-
-              // Колонка 9: Коэфф. перевода
-              conversion_coefficient: parseNumber(cells[9]),
-
-              // Колонка 10: Коэфф. расхода
-              consumption_coefficient: parseNumber(cells[10]),
-
-              // Колонка 11: Количество (base_quantity для непривязанных материалов)
-              base_quantity: parseNumber(cells[11]),
-              quantity: parseNumber(cells[11]), // Будет пересчитано для привязанных материалов
-
-              // Колонка 12: Валюта
-              currency_type: cells[12] ? String(cells[12]).trim() as ParsedBoqItem['currency_type'] : 'RUB',
-
-              // Колонка 13: Тип доставки (с нормализацией)
-              delivery_price_type: normalizeDeliveryPriceType(cells[13] != null ? String(cells[13]) : undefined),
-
-              // Колонка 14: Стоимость доставки
-              delivery_amount: parseNumber(cells[14]),
-
-              // Колонка 15: Цена за единицу
-              unit_rate: parseNumber(cells[15]),
-
-              // Колонка 2: Затрата на строительство
-              costCategoryText: cells[2] ? String(cells[2]).trim() : '',
-
-              // Колонка 17: Ссылка на КП
-              quote_link: cells[17] ? String(cells[17]).trim() : undefined,
-
-              // Колонка 19: Примечание ГП
-              description: cells[19] ? String(cells[19]).trim() : undefined,
-
-              // Сортировка
-              sort_number: index,
-            };
-
-            parsed.push(item);
-          });
+          const parsed = parseBoqExcelRows(rows);
 
           setParsedData(parsed);
 
@@ -443,342 +168,26 @@ export const useBoqItemsImport = () => {
   };
 
   // ===========================
-  // ВАЛИДАЦИЯ
+  // ВАЛИДАЦИЯ (тонкая обёртка над чистой validateBoqData)
   // ===========================
 
   const validateParsedData = (data: ParsedBoqItem[]): ValidationResult => {
-    console.log('[BoqImport] Валидация данных:', {
-      rows: data.length,
-      workNamesMapSize: workNamesMap.size,
-      materialNamesMapSize: materialNamesMap.size,
-    });
-
-    const errors: ValidationError[] = [];
-    const warnings: ValidationError[] = [];
-    const missingWorksMap = new Map<string, MissingNomenclatureGroup>();
-    const missingMaterialsMap = new Map<string, MissingNomenclatureGroup>();
-    const unknownCostsMap = new Map<string, number[]>();
-
-    const validBoqTypes = ['раб', 'суб-раб', 'раб-комп.', 'мат', 'суб-мат', 'мат-комп.'];
-    const validMaterialTypes = ['основн.', 'вспомогат.'];
-    const validCurrencies = ['RUB', 'USD', 'EUR', 'CNY'];
-    const validDeliveryTypes = ['в цене', 'не в цене', 'суммой'];
-
-    data.forEach((item) => {
-      const row = item.rowIndex;
-
-      // 1. Проверка обязательных полей
-      if (!item.nameText) {
-        errors.push({
-          rowIndex: row,
-          type: 'missing_field',
-          field: 'nameText',
-          message: 'Отсутствует наименование',
-          severity: 'error',
-        });
-      }
-
-      if (!item.unit_code) {
-        errors.push({
-          rowIndex: row,
-          type: 'missing_field',
-          field: 'unit_code',
-          message: 'Отсутствует единица измерения',
-          severity: 'error',
-        });
-      }
-
-      // КРИТИЧЕСКОЕ: Проверка обязательной затраты на строительство
-      if (!item.costCategoryText || item.costCategoryText.trim() === '') {
-        errors.push({
-          rowIndex: row,
-          type: 'missing_field',
-          field: 'costCategoryText',
-          message: 'Отсутствует затрата на строительство (колонка 3 обязательна!)',
-          severity: 'error',
-        });
-      }
-
-      // 2. Проверка типа элемента
-      if (!validBoqTypes.includes(item.boq_item_type)) {
-        errors.push({
-          rowIndex: row,
-          type: 'invalid_type',
-          field: 'boq_item_type',
-          message: `Недопустимый тип элемента: "${item.boq_item_type}". Допустимые: ${validBoqTypes.join(', ')}`,
-          severity: 'error',
-        });
-      }
-
-      // 3. Проверка типа материала (только для материалов)
-      if (isMaterial(item.boq_item_type) && item.material_type && !validMaterialTypes.includes(item.material_type)) {
-        errors.push({
-          rowIndex: row,
-          type: 'invalid_type',
-          field: 'material_type',
-          message: `Недопустимый тип материала: "${item.material_type}". Допустимые: ${validMaterialTypes.join(', ')}`,
-          severity: 'error',
-        });
-      }
-
-      // 4. Проверка валюты
-      if (!validCurrencies.includes(item.currency_type)) {
-        errors.push({
-          rowIndex: row,
-          type: 'invalid_type',
-          field: 'currency_type',
-          message: `Недопустимая валюта: "${item.currency_type}". Допустимые: ${validCurrencies.join(', ')}`,
-          severity: 'error',
-        });
-      }
-
-      // 5. Проверка типа доставки
-      if (item.delivery_price_type && !validDeliveryTypes.includes(item.delivery_price_type)) {
-        errors.push({
-          rowIndex: row,
-          type: 'invalid_type',
-          field: 'delivery_price_type',
-          message: `Недопустимый тип доставки: "${item.delivery_price_type}". Допустимые: ${validDeliveryTypes.join(', ')}`,
-          severity: 'error',
-        });
-      }
-
-      // 5.1 Количество и коэффициенты (общие правила, см. validateBoqRowBasics)
-      validateBoqRowBasics(item).forEach((issue) => {
-        (issue.severity === 'warning' ? warnings : errors).push({
-          rowIndex: row,
-          type: 'missing_field',
-          field: issue.field,
-          message: issue.message,
-          severity: issue.severity,
-        });
-      });
-
-      // 6. КРИТИЧНО: Проверка наличия в номенклатуре
-      if (isWork(item.boq_item_type)) {
-        const key = buildNomenclatureLookupKey(item.nameText, item.unit_code);
-        const workId = workNamesMap.get(key);
-
-        if (!workId) {
-          errors.push({
-            rowIndex: row,
-            type: 'missing_nomenclature',
-            field: 'work_name',
-            message: `Работа "${item.nameText}" [${item.unit_code}] отсутствует в номенклатуре`,
-            severity: 'error',
-          });
-
-          // Группировка для отчета
-          const groupKey = `${item.nameText}|${item.unit_code}`;
-          if (!missingWorksMap.has(groupKey)) {
-            missingWorksMap.set(groupKey, { name: item.nameText, unit: item.unit_code, rows: [] });
-          }
-          missingWorksMap.get(groupKey)!.rows.push(row);
-        } else {
-          item.work_name_id = workId;
-        }
-      }
-
-      if (isMaterial(item.boq_item_type)) {
-        const key = buildNomenclatureLookupKey(item.nameText, item.unit_code);
-        const materialId = materialNamesMap.get(key);
-
-        if (!materialId) {
-          errors.push({
-            rowIndex: row,
-            type: 'missing_nomenclature',
-            field: 'material_name',
-            message: `Материал "${item.nameText}" [${item.unit_code}] отсутствует в номенклатуре`,
-            severity: 'error',
-          });
-
-          // Группировка для отчета
-          const groupKey = `${item.nameText}|${item.unit_code}`;
-          if (!missingMaterialsMap.has(groupKey)) {
-            missingMaterialsMap.set(groupKey, { name: item.nameText, unit: item.unit_code, rows: [] });
-          }
-          missingMaterialsMap.get(groupKey)!.rows.push(row);
-        } else {
-          item.material_name_id = materialId;
-        }
-      }
-
-      // 7. Проверка затраты на строительство (ОБЯЗАТЕЛЬНАЯ)
-      if (item.costCategoryText) {
-        // Сначала пробуем найти по полной строке (более надёжный способ)
-        const fullPath = normalizeString(item.costCategoryText);
-        let costId = costCategoriesMap.get(fullPath);
-
-        // Если не нашли по полной строке, пробуем парсить на части
-        let key = fullPath;
-        if (!costId) {
-          const parsed = parseCostCategory(item.costCategoryText);
-          if (parsed.category && parsed.detail && parsed.location) {
-            key = `${normalizeString(parsed.category)}|${normalizeString(parsed.detail)}|${normalizeString(parsed.location)}`;
-            costId = costCategoriesMap.get(key);
-          }
-        }
-
-        console.log(`[CostCategory] Строка ${row}:`, {
-          original: item.costCategoryText,
-          fullPath,
-          key,
-          found: !!costId,
-        });
-
-        if (!costId) {
-          errors.push({
-            rowIndex: row,
-            type: 'missing_cost',
-            field: 'detail_cost_category_id',
-            message: `Затрата "${item.costCategoryText}" не найдена в БД`,
-            severity: 'error',
-          });
-
-          if (!unknownCostsMap.has(item.costCategoryText)) {
-            unknownCostsMap.set(item.costCategoryText, []);
-          }
-          unknownCostsMap.get(item.costCategoryText)!.push(row);
-        } else {
-          item.detail_cost_category_id = costId;
-        }
-      }
-    });
-
-    const result: ValidationResult = {
-      isValid: errors.length === 0,
-      errors,
-      warnings,
-      missingNomenclature: {
-        works: Array.from(missingWorksMap.values()),
-        materials: Array.from(missingMaterialsMap.values()),
-      },
-      unknownCosts: Array.from(unknownCostsMap.entries()).map(([text, rows]) => ({ text, rows })),
-    };
-
-    console.log('[BoqImport] Результат валидации:', {
-      isValid: result.isValid,
-      errorsCount: errors.length,
-      warningsCount: warnings.length,
-      missingWorks: result.missingNomenclature.works.length,
-      missingMaterials: result.missingNomenclature.materials.length,
-    });
-
+    const result = validateBoqData(data, { workNamesMap, materialNamesMap, costCategoriesMap });
     setValidationResult(result);
     return result;
   };
 
   // ===========================
-  // ОБРАБОТКА ПРИВЯЗОК
+  // ОБРАБОТКА ПРИВЯЗОК (вынесена в ../utils/boqImportParser)
   // ===========================
 
-  const processWorkBindings = (data: ParsedBoqItem[]): ValidationError[] => {
-    const errors: ValidationError[] = [];
-    let lastWork: ParsedBoqItem | null = null;
-
-    data.forEach((item) => {
-      if (isWork(item.boq_item_type)) {
-        lastWork = item;
-        item.tempId = `work_${item.rowIndex}`;
-      } else if (item.bindToWork) {
-        if (!lastWork) {
-          errors.push({
-            rowIndex: item.rowIndex,
-            type: 'binding_error',
-            field: 'parent_work_item_id',
-            message: 'Материал с привязкой, но работа не найдена выше',
-            severity: 'error',
-          });
-        } else {
-          item.parent_work_item_id = lastWork.tempId;
-
-          // Расчет quantity: работа.quantity * коэфф.перевода * коэфф.расхода
-          const workQty = lastWork.quantity || 0;
-          const convCoef = item.conversion_coefficient || 1;
-          const consCoef = item.consumption_coefficient || 1;
-          item.quantity = workQty * convCoef * consCoef;
-        }
-      } else {
-        // Независимый материал: quantity = base_quantity (коэфф.расхода применяется при расчёте стоимости)
-        item.quantity = item.base_quantity || 0;
-      }
-    });
-
-    return errors;
-  };
+  const processWorkBindings = processWorkBindingsUtil;
 
   // ===========================
-  // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ РАСЧЕТА
+  // ЗАГРУЗКА КУРСОВ ВАЛЮТ
   // ===========================
 
-  const getCurrencyRate = (currency: string, rates?: { usd: number; eur: number; cny: number }): number => {
-    const actualRates = rates || currencyRates;
-    switch (currency) {
-      case 'USD':
-        return actualRates.usd;
-      case 'EUR':
-        return actualRates.eur;
-      case 'CNY':
-        return actualRates.cny;
-      case 'RUB':
-      default:
-        return 1;
-    }
-  };
-
-  const calculateTotalAmount = (item: ParsedBoqItem, rates?: { usd: number; eur: number; cny: number }): number => {
-    const rate = getCurrencyRate(item.currency_type || 'RUB', rates);
-    const unitRate = item.unit_rate || 0;
-    const quantity = item.quantity || 0;
-
-    // Логирование для валютных позиций
-    if (item.currency_type && item.currency_type !== 'RUB') {
-      console.log(`[TotalAmount] Расчёт для валютной позиции "${item.nameText.substring(0, 50)}...":`, {
-        currency: item.currency_type,
-        rate,
-        unitRate,
-        quantity,
-        unitRateInRub: unitRate * rate,
-      });
-    }
-
-    if (isWork(item.boq_item_type)) {
-      // Для работ: quantity × unit_rate × currency_rate (полная точность)
-      const total = quantity * unitRate * rate;
-
-      if (item.currency_type && item.currency_type !== 'RUB') {
-        console.log(`[TotalAmount] Работа - итого: ${total} ₽`);
-      }
-
-      return total;
-    } else {
-      // Для материалов: quantity × (unit_rate × currency_rate + delivery_price)
-      const unitPriceInRub = unitRate * rate;
-      let deliveryPrice = 0;
-
-      if (item.delivery_price_type === 'не в цене') {
-        // 3% от цены в рублях (полная точность)
-        deliveryPrice = unitPriceInRub * 0.03;
-      } else if (item.delivery_price_type === 'суммой') {
-        // Конкретная сумма
-        deliveryPrice = item.delivery_amount || 0;
-      }
-      // Для 'в цене' deliveryPrice остается 0
-
-      // Для непривязанных материалов применяем коэффициент расхода
-      const consumptionCoeff = !item.parent_work_item_id ? (item.consumption_coefficient || 1) : 1;
-
-      const total = quantity * consumptionCoeff * (unitPriceInRub + deliveryPrice);
-
-      if (item.currency_type && item.currency_type !== 'RUB') {
-        console.log(`[TotalAmount] Материал - итого: ${total} ₽ (доставка: ${deliveryPrice} ₽, коэфф.расхода: ${consumptionCoeff})`);
-      }
-
-      return total;
-    }
-  };
-
-  const loadCurrencyRates = async (tenderId: string): Promise<{ usd: number; eur: number; cny: number }> => {
+  const loadCurrencyRates = async (tenderId: string): Promise<ImportCurrencyRates> => {
     try {
       const tender = await getTenderById(tenderId);
       if (!tender) {
@@ -791,8 +200,6 @@ export const useBoqItemsImport = () => {
         eur: tender.eur_rate || 1,
         cny: tender.cny_rate || 1,
       };
-
-      setCurrencyRates(rates);
 
       console.log('[BoqImport] Курсы валют загружены:', rates);
 
@@ -947,27 +354,8 @@ export const useBoqItemsImport = () => {
       const existingWorkKeys = new Set(workNamesMap.keys());
       const existingMaterialKeys = new Set(materialNamesMap.keys());
 
-      const uniqueWorksToInsert = Array.from(
-        new Map(
-          works.map((work) => [
-            buildNomenclatureLookupKey(work.name, work.unit),
-            { name: work.name, unit: work.unit },
-          ])
-        ).entries()
-      )
-        .filter(([key]) => !existingWorkKeys.has(key))
-        .map(([, value]) => value);
-
-      const uniqueMaterialsToInsert = Array.from(
-        new Map(
-          materials.map((material) => [
-            buildNomenclatureLookupKey(material.name, material.unit),
-            { name: material.name, unit: material.unit },
-          ])
-        ).entries()
-      )
-        .filter(([key]) => !existingMaterialKeys.has(key))
-        .map(([, value]) => value);
+      const uniqueWorksToInsert = buildMissingNomenclatureInserts(works, existingWorkKeys);
+      const uniqueMaterialsToInsert = buildMissingNomenclatureInserts(materials, existingMaterialKeys);
 
       if (uniqueWorksToInsert.length > 0) {
         await Promise.all(
