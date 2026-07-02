@@ -13,7 +13,8 @@ import { menuItems, MOBILE_HIDDEN_KEYS } from './menuItems';
 import { CalculatorWidget } from './CalculatorWidget';
 import { NotesWidget } from './NotesWidget';
 import { NotificationsBell } from './NotificationsBell';
-import PositionsKeepAlive from './PositionsKeepAlive';
+import WorkspaceKeepAlive from './WorkspaceKeepAlive';
+import { isWorkspacePath } from './workspacePages';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -471,9 +472,10 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             overflow: 'auto',
           }}
         >
-          {/* Раздел «Позиции» рендерится через keep-alive контейнер (список + открытые
-              позиции смонтированы одновременно), остальные роуты — обычный Outlet. */}
-          {location.pathname.startsWith('/positions') ? <PositionsKeepAlive /> : <Outlet />}
+          {/* «Рабочий стол» (Позиции / Форма КП / Затраты / Элементы позиции) рендерится через
+              keep-alive контейнер (открытые страницы смонтированы одновременно), остальные роуты —
+              обычный Outlet. */}
+          {isWorkspacePath(location.pathname) ? <WorkspaceKeepAlive /> : <Outlet />}
         </Content>
       </Layout>
     </Layout>

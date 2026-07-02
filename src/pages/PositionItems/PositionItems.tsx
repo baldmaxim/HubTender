@@ -23,7 +23,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 
 interface PositionItemsProps {
-  /** Передаётся из PositionsKeepAlive (несколько экземпляров смонтированы сразу —
+  /** Передаётся из WorkspaceKeepAlive (несколько экземпляров смонтированы сразу —
    *  нельзя полагаться на useParams). Fallback на useParams для прямого роутинга. */
   positionId?: string;
 }

@@ -10,7 +10,7 @@ const truncate = (s: string, max = 20) => (s.length > max ? `${s.slice(0, max - 
 
 /**
  * Уточняет заголовок вкладки позиции, когда позиция загрузилась.
- * Регистрация вкладки выполняется в PositionsKeepAlive (на уровне роутинга),
+ * Регистрация вкладки выполняется в WorkspaceKeepAlive (на уровне роутинга),
  * поэтому здесь только setTabTitle. Навигацию не выполняет.
  */
 export function usePositionTabTitle(positionId: string | undefined, position: PositionLike | null) {
