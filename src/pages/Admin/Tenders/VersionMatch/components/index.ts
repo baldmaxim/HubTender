@@ -5,4 +5,3 @@
 export * from './MatchStatistics';
 export * from './MatchControls';
 export * from './MatchingTable';
-export * from './AdditionalWorksPanel';
