@@ -1,37 +1,7 @@
-export interface MarkupStep {
-  name?: string;
-  baseIndex: number;
-
-  action1: 'multiply' | 'divide' | 'add' | 'subtract';
-  operand1Type: 'markup' | 'step' | 'number';
-  operand1Key?: string | number;
-  operand1Index?: number;
-  operand1MultiplyFormat?: 'addOne' | 'direct';
-
-  action2?: 'multiply' | 'divide' | 'add' | 'subtract';
-  operand2Type?: 'markup' | 'step' | 'number';
-  operand2Key?: string | number;
-  operand2Index?: number;
-  operand2MultiplyFormat?: 'addOne' | 'direct';
-
-  action3?: 'multiply' | 'divide' | 'add' | 'subtract';
-  operand3Type?: 'markup' | 'step' | 'number';
-  operand3Key?: string | number;
-  operand3Index?: number;
-  operand3MultiplyFormat?: 'addOne' | 'direct';
-
-  action4?: 'multiply' | 'divide' | 'add' | 'subtract';
-  operand4Type?: 'markup' | 'step' | 'number';
-  operand4Key?: string | number;
-  operand4Index?: number;
-  operand4MultiplyFormat?: 'addOne' | 'direct';
-
-  action5?: 'multiply' | 'divide' | 'add' | 'subtract';
-  operand5Type?: 'markup' | 'step' | 'number';
-  operand5Key?: string | number;
-  operand5Index?: number;
-  operand5MultiplyFormat?: 'addOne' | 'direct';
-}
+import type { MarkupStep } from '../../../lib/supabase';
+// MarkupStep — единый тип из lib/supabase (локальный дубль удалён,
+// чтобы структуры шага не расходились).
+export type { MarkupStep } from '../../../lib/supabase';
 
 export type TabKey =
   | 'works'

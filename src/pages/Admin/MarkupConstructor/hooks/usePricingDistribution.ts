@@ -1,78 +1,149 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { message } from 'antd';
-import type { PricingDistribution, PricingDistributionInsert } from '../../../../lib/supabase';
+import type { PricingDistribution, PricingDistributionInsert, DistributionTarget } from '../../../../lib/supabase';
 import {
   getTenderPricingDistribution,
   upsertTenderPricingDistribution,
 } from '../../../../lib/api/markup';
-import { markRealtimeMutation } from '../../../../lib/realtime/useRealtimeRefetch';
+import { useRealtimeRefetch } from '../../../../lib/realtime/useRealtimeRefetch';
 
-export const usePricingDistribution = () => {
+// Настройки ценообразования (распределение затрат между КП и работами)
+// выбранного тендера + realtime-подписка. markPricingMutation живёт рядом
+// с handleSavePricingDistribution — иначе сломается подавление эха.
+export const usePricingDistribution = ({
+  selectedTenderId,
+  selectedTacticId,
+}: {
+  selectedTenderId: string | null;
+  selectedTacticId: string | null;
+}) => {
   const [pricingDistribution, setPricingDistribution] = useState<PricingDistribution | null>(null);
   const [loadingPricing, setLoadingPricing] = useState(false);
   const [savingPricing, setSavingPricing] = useState(false);
 
-  const fetchPricingDistribution = useCallback(async (tenderId: string | null) => {
-    if (!tenderId) {
-      setPricingDistribution(null);
-      return;
-    }
-
+  const fetchPricingDistribution = async (tenderId: string) => {
     setLoadingPricing(true);
     try {
       const data = await getTenderPricingDistribution(tenderId);
       setPricingDistribution(data);
     } catch (error) {
-      console.error('Error fetching pricing distribution:', error);
-      message.error('Ошибка загрузки распределения ценообразования');
+      console.error('Ошибка загрузки настроек ценообразования:', error);
+      message.error('Не удалось загрузить настройки ценообразования');
     } finally {
       setLoadingPricing(false);
     }
-  }, []);
+  };
 
-  const savePricingDistribution = useCallback(async (
-    tenderId: string,
-    distributionData: PricingDistributionInsert
+  // Native WS hub — настройки ценообразования выбранного тендера. Фильтр по
+  // таблице, чтобы прочие события tender:{id} (boq_items и т.п.) не сбрасывали
+  // форму распределения; markPricingMutation подавляет эхо своего сохранения.
+  const { markLocalMutation: markPricingMutation } = useRealtimeRefetch(
+    selectedTenderId ? `tender:${selectedTenderId}` : null,
+    () => {
+      if (selectedTenderId) void fetchPricingDistribution(selectedTenderId);
+    },
+    {
+      enabled: !!selectedTenderId,
+      shouldRefetch: (ev) => ev.table === 'tender_pricing_distribution',
+    },
+  );
+
+  // Обработка изменения настройки распределения
+  const handleDistributionChange = (
+    itemType: string,
+    targetType: 'base' | 'markup',
+    value: DistributionTarget
   ) => {
-    setSavingPricing(true);
-    try {
-      // Go-эндпоинт делает upsert по tender_id атомарно на сервере.
-      const result = await upsertTenderPricingDistribution({
-        ...distributionData,
-        tender_id: tenderId,
-      });
+    setPricingDistribution((prev) => {
+      const fieldName =
+        `${itemType}_${targetType}_target` as keyof PricingDistribution;
 
-      setPricingDistribution(result);
-      // Подавляем self-echo собственного сохранения (tender:{id} подписка ниже).
-      markRealtimeMutation(`tender:${tenderId}`);
-      message.success('Распределение ценообразования сохранено');
-      return result;
+      return {
+        ...(prev || {
+          id: '',
+          tender_id: selectedTenderId!,
+          created_at: '',
+          updated_at: '',
+        }),
+        [fieldName]: value,
+      };
+    });
+  };
+
+  // Сохранение настроек ценообразования
+  const handleSavePricingDistribution = async () => {
+    if (!selectedTenderId) {
+      message.warning('Выберите тендер');
+      return;
+    }
+
+    setSavingPricing(true);
+    markPricingMutation();
+    try {
+      const dataToSave: PricingDistributionInsert = {
+        tender_id: selectedTenderId,
+        markup_tactic_id: selectedTacticId,
+        basic_material_base_target: pricingDistribution?.basic_material_base_target || 'material',
+        basic_material_markup_target: pricingDistribution?.basic_material_markup_target || 'work',
+        auxiliary_material_base_target: pricingDistribution?.auxiliary_material_base_target || 'work',
+        auxiliary_material_markup_target: pricingDistribution?.auxiliary_material_markup_target || 'work',
+        component_material_base_target: pricingDistribution?.component_material_base_target || 'work',
+        component_material_markup_target: pricingDistribution?.component_material_markup_target || 'work',
+        subcontract_basic_material_base_target: pricingDistribution?.subcontract_basic_material_base_target || 'material',
+        subcontract_basic_material_markup_target: pricingDistribution?.subcontract_basic_material_markup_target || 'work',
+        subcontract_auxiliary_material_base_target: pricingDistribution?.subcontract_auxiliary_material_base_target || 'work',
+        subcontract_auxiliary_material_markup_target: pricingDistribution?.subcontract_auxiliary_material_markup_target || 'work',
+        work_base_target: pricingDistribution?.work_base_target || 'work',
+        work_markup_target: pricingDistribution?.work_markup_target || 'work',
+        component_work_base_target: pricingDistribution?.component_work_base_target || 'work',
+        component_work_markup_target: pricingDistribution?.component_work_markup_target || 'work',
+      };
+
+      const data = await upsertTenderPricingDistribution(dataToSave);
+      setPricingDistribution(data);
+      message.success('Настройки ценообразования успешно сохранены');
     } catch (error) {
-      console.error('Error saving pricing distribution:', error);
-      message.error('Ошибка сохранения распределения ценообразования');
-      throw error;
+      console.error('Ошибка сохранения настроек ценообразования:', error);
+      message.error('Не удалось сохранить настройки ценообразования');
     } finally {
       setSavingPricing(false);
     }
-  }, []);
+  };
 
-  const updateDistributionField = useCallback((
-    field: keyof PricingDistribution,
-    value: PricingDistribution[keyof PricingDistribution]
-  ) => {
-    setPricingDistribution(prev => {
-      if (!prev) return null;
-      return { ...prev, [field]: value };
-    });
-  }, []);
+  // Сброс к значениям по умолчанию
+  const handleResetPricingToDefaults = () => {
+    setPricingDistribution((prev) => ({
+      ...(prev || {
+        id: '',
+        tender_id: selectedTenderId!,
+        created_at: '',
+        updated_at: '',
+      }),
+      basic_material_base_target: 'material',
+      basic_material_markup_target: 'work',
+      auxiliary_material_base_target: 'work',
+      auxiliary_material_markup_target: 'work',
+      component_material_base_target: 'work',
+      component_material_markup_target: 'work',
+      subcontract_basic_material_base_target: 'material',
+      subcontract_basic_material_markup_target: 'work',
+      subcontract_auxiliary_material_base_target: 'work',
+      subcontract_auxiliary_material_markup_target: 'work',
+      work_base_target: 'work',
+      work_markup_target: 'work',
+      component_work_base_target: 'work',
+      component_work_markup_target: 'work',
+    }));
+    message.info('Настройки сброшены к значениям по умолчанию');
+  };
 
   return {
     pricingDistribution,
     loadingPricing,
     savingPricing,
-    setPricingDistribution,
     fetchPricingDistribution,
-    savePricingDistribution,
-    updateDistributionField,
+    handleDistributionChange,
+    handleSavePricingDistribution,
+    handleResetPricingToDefaults,
   };
 };

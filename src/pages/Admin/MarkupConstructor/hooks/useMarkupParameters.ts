@@ -1,181 +1,266 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { message } from 'antd';
+import type { FormInstance } from 'antd';
+import type { useAppProps } from 'antd/es/app/context';
 import type { MarkupParameter } from '../../../../lib/supabase';
 import {
   listActiveMarkupParameters,
   createMarkupParameter,
   updateMarkupParameter,
   deleteMarkupParameter,
+  setMarkupParameterOrderNum,
 } from '../../../../lib/api/markup';
 
-/**
- * Хук для работы с глобальным справочником параметров наценок
- *
- * ВАЖНО: markup_parameters - это ГЛОБАЛЬНЫЙ справочник параметров,
- * НЕ связанный с конкретными тактиками!
- * Параметры тактик хранятся в JSONB поле sequences внутри markup_tactics.
- */
-export const useMarkupParameters = () => {
+// Параметры наценок: загрузка, базовые проценты (default_value) и CRUD
+// с inline-редактированием. Перенесено из MarkupConstructor без изменений
+// логики; form-инстансы и modal приходят параметрами.
+export const useMarkupParameters = ({
+  form,
+  basePercentagesForm,
+  newParameterForm,
+  modal,
+}: {
+  form: FormInstance;
+  basePercentagesForm: FormInstance;
+  newParameterForm: FormInstance;
+  modal: useAppProps['modal'];
+}) => {
+  // Состояния для параметров наценок (загружаются из БД)
   const [markupParameters, setMarkupParameters] = useState<MarkupParameter[]>([]);
   const [loadingParameters, setLoadingParameters] = useState(false);
+
+  // Состояния для управления параметрами
+  const [isAddParameterModalOpen, setIsAddParameterModalOpen] = useState(false);
+
+  // Состояния для inline редактирования параметров
   const [editingParameterId, setEditingParameterId] = useState<string | null>(null);
   const [editingParameterLabel, setEditingParameterLabel] = useState('');
 
-  // Загрузка всех активных параметров из глобального справочника
-  const fetchParameters = useCallback(async () => {
+  // Состояния для базовых процентов
+  const [savingBasePercentages, setSavingBasePercentages] = useState(false);
+
+  const fetchMarkupParameters = async () => {
     setLoadingParameters(true);
     try {
       const data = await listActiveMarkupParameters();
-      setMarkupParameters(data || []);
+      console.log('=== Загружены параметры из БД ===');
+      setMarkupParameters(data);
+
+      const initialValues: Record<string, number> = {};
+      data.forEach((param) => {
+        initialValues[param.key] = param.default_value || 0;
+        console.log(`  ${param.label} (${param.key}): ${param.default_value}`);
+      });
+      basePercentagesForm.setFieldsValue(initialValues);
+      console.log('================================');
+
+      form.setFieldsValue(initialValues);
     } catch (error) {
-      console.error('Error fetching parameters:', error);
-      message.error('Ошибка загрузки параметров наценок');
+      console.error('Ошибка загрузки параметров наценок:', error);
+      message.error('Не удалось загрузить параметры наценок');
     } finally {
       setLoadingParameters(false);
     }
-  }, []);
+  };
 
-  // Добавление нового параметра в глобальный справочник
-  const addParameter = useCallback(async (parameterData: {
-    key: string;
-    label: string;
-    default_value?: number;
-  }) => {
+  // Сохранение базовых процентов
+  const handleSaveBasePercentages = async () => {
     try {
-      // Получаем максимальный order_num по актуальному списку с сервера
-      const existing = await listActiveMarkupParameters();
-      const maxOrder = existing.reduce((m, p) => Math.max(m, p.order_num ?? 0), 0);
+      await basePercentagesForm.validateFields();
+      const values = basePercentagesForm.getFieldsValue();
+      setSavingBasePercentages(true);
 
-      await createMarkupParameter({
-        key: parameterData.key,
-        label: parameterData.label,
-        default_value: parameterData.default_value || 0,
-        is_active: true,
-        order_num: maxOrder + 1,
+      console.log('=== Сохранение базовых процентов ===');
+      console.log('Значения формы:', values);
+
+      const updatePromises = markupParameters.map(async (param) => {
+        const newValue = values[param.key] ?? param.default_value ?? 0;
+        console.log(`  ${param.label} (${param.key}): ${param.default_value} -> ${newValue}`);
+        await updateMarkupParameter(param.id, { default_value: newValue });
       });
 
-      const refreshed = await listActiveMarkupParameters();
-      setMarkupParameters(refreshed);
+      await Promise.all(updatePromises);
 
-      message.success('Параметр наценки добавлен');
-      return refreshed.find(p => p.key === parameterData.key);
+      message.success('Базовые проценты успешно сохранены');
+
+      // Перезагружаем параметры для обновления локального состояния
+      await fetchMarkupParameters();
     } catch (error) {
-      console.error('Error adding parameter:', error);
-      message.error('Ошибка добавления параметра наценки');
-      throw error;
+      console.error('Ошибка сохранения базовых процентов:', error);
+      message.error('Не удалось сохранить базовые проценты');
+    } finally {
+      setSavingBasePercentages(false);
     }
-  }, []);
+  };
 
-  // Удаление параметра из глобального справочника
-  const deleteParameter = useCallback(async (parameterId: string) => {
+  // Сброс формы базовых процентов
+  const handleResetBasePercentages = () => {
+    const initialValues: Record<string, number> = {};
+    markupParameters.forEach((param) => {
+      initialValues[param.key] = param.default_value || 0;
+    });
+    basePercentagesForm.setFieldsValue(initialValues);
+  };
+
+  // Добавление нового параметра наценки в БД
+  const handleAddParameter = async () => {
     try {
-      await deleteMarkupParameter(parameterId);
+      const values = await newParameterForm.validateFields();
+      const { parameterKey, parameterLabel } = values;
 
-      message.success('Параметр наценки удален');
-      setMarkupParameters(prev => prev.filter(p => p.id !== parameterId));
+      // Проверяем, не существует ли уже параметр с таким ключом
+      const existing = markupParameters.find(p => p.key === parameterKey);
+      if (existing) {
+        message.error('Параметр с таким ключом уже существует');
+        return;
+      }
+
+      // Определяем следующий order_num
+      const maxOrderNum = markupParameters.length > 0
+        ? Math.max(...markupParameters.map(p => p.order_num || 0))
+        : 0;
+
+      await createMarkupParameter({
+        key: parameterKey,
+        label: parameterLabel,
+        is_active: true,
+        order_num: maxOrderNum + 1,
+      });
+
+      message.success(`Параметр "${parameterLabel}" успешно добавлен!`);
+
+      // Обновляем список параметров
+      await fetchMarkupParameters();
+
+      // Закрываем модальное окно
+      handleCloseParameterModal();
     } catch (error) {
-      console.error('Error deleting parameter:', error);
-      message.error('Ошибка удаления параметра наценки');
+      console.error('Ошибка добавления параметра:', error);
+      message.error('Не удалось добавить параметр');
     }
-  }, []);
+  };
 
-  // Обновление параметра
-  const updateParameter = useCallback(async (
-    parameterId: string,
-    updates: Partial<MarkupParameter>
-  ) => {
-    try {
-      await updateMarkupParameter(
-        parameterId,
-        updates as Partial<Pick<MarkupParameter, 'label' | 'default_value' | 'order_num' | 'is_active'>>,
-      );
+  // Начало inline редактирования параметра
+  const handleInlineEdit = (parameter: MarkupParameter) => {
+    setEditingParameterId(parameter.id);
+    setEditingParameterLabel(parameter.label);
+  };
 
-      setMarkupParameters(prev =>
-        prev.map(p => (p.id === parameterId ? { ...p, ...updates } : p))
-      );
-    } catch (error) {
-      console.error('Error updating parameter:', error);
-      message.error('Ошибка обновления параметра наценки');
-      throw error;
-    }
-  }, []);
-
-  // Изменение порядка параметров
-  const reorderParameters = useCallback(async (
-    parameterId: string,
-    direction: 'up' | 'down'
-  ) => {
-    const index = markupParameters.findIndex(p => p.id === parameterId);
-    if (index === -1) return;
-
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === markupParameters.length - 1) return;
-
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    const newParameters = [...markupParameters];
-    [newParameters[index], newParameters[newIndex]] = [
-      newParameters[newIndex],
-      newParameters[index],
-    ];
-
-    try {
-      // Обновляем order_num для обоих параметров
-      await Promise.all([
-        updateParameter(newParameters[index].id, { order_num: index + 1 }),
-        updateParameter(newParameters[newIndex].id, { order_num: newIndex + 1 }),
-      ]);
-
-      setMarkupParameters(newParameters);
-    } catch (error) {
-      console.error('Error reordering parameters:', error);
-      message.error('Ошибка изменения порядка параметров');
-    }
-  }, [markupParameters, updateParameter]);
-
-  // Начало редактирования названия параметра
-  const startEditingParameter = useCallback((parameterId: string, label: string) => {
-    setEditingParameterId(parameterId);
-    setEditingParameterLabel(label);
-  }, []);
-
-  // Отмена редактирования
-  const cancelEditingParameter = useCallback(() => {
-    setEditingParameterId(null);
-    setEditingParameterLabel('');
-  }, []);
-
-  // Сохранение отредактированного названия
-  const saveEditingParameter = useCallback(async () => {
-    if (!editingParameterId || !editingParameterLabel.trim()) {
-      message.error('Название не может быть пустым');
+  // Сохранение inline редактирования
+  const handleInlineSave = async (parameterId: string) => {
+    if (!editingParameterLabel.trim()) {
+      message.error('Название параметра не может быть пустым');
       return;
     }
 
     try {
-      await updateParameter(editingParameterId, {
-        label: editingParameterLabel.trim(),
-      });
-      message.success('Название параметра обновлено');
+      await updateMarkupParameter(parameterId, { label: editingParameterLabel });
+
+      message.success('Параметр успешно обновлен!');
+      await fetchMarkupParameters();
       setEditingParameterId(null);
       setEditingParameterLabel('');
     } catch (error) {
-      // Error already handled in updateParameter
+      console.error('Ошибка обновления параметра:', error);
+      message.error('Не удалось обновить параметр');
     }
-  }, [editingParameterId, editingParameterLabel, updateParameter]);
+  };
+
+  // Отмена inline редактирования
+  const handleInlineCancel = () => {
+    setEditingParameterId(null);
+    setEditingParameterLabel('');
+  };
+
+  // Удаление параметра наценки
+  const handleDeleteParameter = async (parameter: MarkupParameter) => {
+    modal.confirm({
+      title: 'Удаление параметра',
+      content: `Вы уверены, что хотите удалить параметр "${parameter.label}"? Это действие необратимо.`,
+      okText: 'Удалить',
+      okType: 'danger',
+      cancelText: 'Отмена',
+      onOk: async () => {
+        try {
+          await deleteMarkupParameter(parameter.id);
+          message.success(`Параметр "${parameter.label}" удален`);
+          await fetchMarkupParameters();
+        } catch (error) {
+          console.error('Ошибка удаления параметра:', error);
+          message.error('Не удалось удалить параметр');
+        }
+      }
+    });
+  };
+
+  // Изменение порядка параметра (вверх)
+  const handleMoveParameterUp = async (parameter: MarkupParameter) => {
+    const currentIndex = markupParameters.findIndex(p => p.id === parameter.id);
+    if (currentIndex === 0) return; // Уже первый
+
+    const prevParameter = markupParameters[currentIndex - 1];
+
+    try {
+      await setMarkupParameterOrderNum(parameter.id, prevParameter.order_num ?? 0);
+      await setMarkupParameterOrderNum(prevParameter.id, parameter.order_num ?? 0);
+
+      message.success('Порядок изменен');
+      await fetchMarkupParameters();
+    } catch (error) {
+      console.error('Ошибка изменения порядка:', error);
+      message.error('Не удалось изменить порядок');
+    }
+  };
+
+  // Изменение порядка параметра (вниз)
+  const handleMoveParameterDown = async (parameter: MarkupParameter) => {
+    const currentIndex = markupParameters.findIndex(p => p.id === parameter.id);
+    if (currentIndex === markupParameters.length - 1) return; // Уже последний
+
+    const nextParameter = markupParameters[currentIndex + 1];
+
+    try {
+      await setMarkupParameterOrderNum(parameter.id, nextParameter.order_num ?? 0);
+      await setMarkupParameterOrderNum(nextParameter.id, parameter.order_num ?? 0);
+
+      message.success('Порядок изменен');
+      await fetchMarkupParameters();
+    } catch (error) {
+      console.error('Ошибка изменения порядка:', error);
+      message.error('Не удалось изменить порядок');
+    }
+  };
+
+  // Закрытие модального окна добавления параметра
+  const handleCloseParameterModal = () => {
+    setIsAddParameterModalOpen(false);
+    newParameterForm.resetFields();
+  };
+
+  // Открытие модального окна добавления параметра
+  const handleOpenParameterModal = () => {
+    setIsAddParameterModalOpen(true);
+  };
 
   return {
     markupParameters,
     loadingParameters,
+    savingBasePercentages,
+    isAddParameterModalOpen,
     editingParameterId,
     editingParameterLabel,
     setEditingParameterLabel,
-    fetchParameters,
-    addParameter,
-    deleteParameter,
-    updateParameter,
-    reorderParameters,
-    startEditingParameter,
-    cancelEditingParameter,
-    saveEditingParameter,
+    fetchMarkupParameters,
+    handleSaveBasePercentages,
+    handleResetBasePercentages,
+    handleAddParameter,
+    handleInlineEdit,
+    handleInlineSave,
+    handleInlineCancel,
+    handleDeleteParameter,
+    handleMoveParameterUp,
+    handleMoveParameterDown,
+    handleOpenParameterModal,
+    handleCloseParameterModal,
   };
 };
