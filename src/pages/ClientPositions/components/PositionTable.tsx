@@ -528,6 +528,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
           </HideOnPhone>
         </Space>
       }
+      styles={{ body: { padding: 0 } }}
       style={{ marginTop: 24, position: 'sticky', top: 0, zIndex: 10 }}
     >
       <Table
