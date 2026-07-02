@@ -50,16 +50,20 @@
   width: 100%;
 }
 
-/* Уменьшаем padding для свернутого состояния, чтобы логотип был виден полностью */
+/* Свёрнутое состояние: тот же вертикальный якорь (64px, margin-top 0), что и у
+   .logo-compact — иначе пункты меню под логотипом сдвигаются между collapsed/expanded. */
 .ant-layout-sider-collapsed .logo {
+  height: 64px;
+  box-sizing: border-box;
   padding: 12px 8px !important;
+  margin: 0 8px !important;
 }
 
 /* Телефон: узкий icon-рейл (48px) без пустых отступов */
 @media (max-width: 575px) {
   .ant-layout-sider-collapsed .logo {
     padding: 6px 2px !important;
-    margin: 6px 4px !important;
+    margin: 0 4px !important;
   }
   .ant-layout-sider-collapsed .ant-menu-item,
   .ant-layout-sider-collapsed .ant-menu-submenu-title {
