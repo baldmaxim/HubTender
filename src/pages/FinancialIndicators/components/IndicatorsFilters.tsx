@@ -1,5 +1,4 @@
-import { Select, Button, Space, Typography } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { Select, Space, Typography } from 'antd';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Text } = Typography;
@@ -12,9 +11,6 @@ interface IndicatorsFiltersProps {
   loading: boolean;
   onTenderTitleChange: (title: string) => void;
   onVersionChange: (version: number) => void;
-  onRefresh: () => void;
-  /** Только просмотр — скрывает кнопку «Обновить» (Генеральный директор) */
-  readOnly?: boolean;
 }
 
 export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
@@ -24,8 +20,6 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
   loading,
   onTenderTitleChange,
   onVersionChange,
-  onRefresh,
-  readOnly,
 }) => {
   const { isPhone } = useIsMobile();
 
@@ -80,11 +74,6 @@ export const IndicatorsFilters: React.FC<IndicatorsFiltersProps> = ({
             options={getVersionsForTitle(selectedTenderTitle)}
           />
         </Space>
-      )}
-      {!readOnly && (
-        <Button icon={<ReloadOutlined />} onClick={onRefresh}>
-          Обновить
-        </Button>
       )}
     </div>
   );

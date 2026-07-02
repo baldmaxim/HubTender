@@ -8,7 +8,6 @@ import { getTenderById, approveFinancial } from '../../lib/api/fi';
 import { adminPatchTender } from '../../lib/api/tenders';
 import { getErrorMessage } from '../../utils/errors';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
-import dayjs from 'dayjs';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -385,8 +384,6 @@ const FinancialIndicators: React.FC = () => {
         loading={loading}
         onTenderTitleChange={handleTenderTitleChange}
         onVersionChange={handleVersionChange}
-        onRefresh={() => fetchFinancialIndicators(selectedTenderId)}
-        readOnly={readOnly}
       />
 
       <Card bordered={false}>
@@ -421,17 +418,6 @@ const FinancialIndicators: React.FC = () => {
               )}
             </div>
           )}
-          {selectedTenderTitle && (
-            <Title level={4} style={{ margin: '8px 0 0 0', textAlign: 'center', color: '#ff4d4f', fontSize: isPhone ? 15 : undefined }}>
-              {selectedTenderTitle}
-            </Title>
-          )}
-          <div style={{ textAlign: 'center', marginTop: 8 }}>
-            <Text type="secondary">
-              {dayjs().format('DD.MM.YYYY')}
-            </Text>
-          </div>
-
           {/* Статус согласования + кнопка (только Генеральный директор). Адаптив:
               на телефоне тег и кнопка переносятся, кнопка — во всю ширину. */}
           <div
