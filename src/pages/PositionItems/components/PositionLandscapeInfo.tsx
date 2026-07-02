@@ -30,7 +30,7 @@ const PositionLandscapeInfo: React.FC<PositionLandscapeInfoProps> = ({
     <div style={{ marginBottom: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         {position.is_additional && <Tag color="orange">ДОП</Tag>}
-        <Text strong style={{ fontSize: 16 }}>
+        <Text strong style={{ fontSize: 13 }}>
           {position.position_number}. {position.item_no ? `${position.item_no} ` : ''}{name}
         </Text>
       </div>

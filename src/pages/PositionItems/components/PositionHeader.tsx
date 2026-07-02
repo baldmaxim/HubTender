@@ -1,7 +1,7 @@
 import { Card, Typography, Tag, Input, InputNumber, Select } from 'antd';
 import type { ClientPosition } from '../../../lib/types';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface PositionHeaderProps {
   position: ClientPosition;
@@ -40,9 +40,9 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
   const titleBlock = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {position.is_additional && <Tag color="orange">ДОП</Tag>}
-      <Title level={isPhone ? 5 : 4} style={{ margin: 0 }}>
+      <Text strong style={{ margin: 0 }}>
         {position.position_number}. {position.item_no ? `${position.item_no} ` : ''}{position.work_name}
-      </Title>
+      </Text>
     </div>
   );
 
