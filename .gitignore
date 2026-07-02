@@ -168,6 +168,10 @@ dist-ssr
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
+# Playwright artifacts
+test-results/
+playwright-report/
+
 # MCP wrapper script (auto-generated)
 mcp-supabase.js
 .git-credentials
