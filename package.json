@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:backend": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-backend.ps1",
     "build": "tsc && vite build",
     "build:prod": "tsc && node scripts/build-prod.mjs",
     "typecheck": "tsc --noEmit",
