@@ -3,7 +3,8 @@ import type {
   BoqItemType,
   MaterialType,
   CurrencyType,
-  DeliveryPriceType
+  DeliveryPriceType,
+  RichRuns
 } from '../../lib/types';
 
 /**
@@ -50,6 +51,9 @@ export interface ExportRow {
   isPosition: boolean;               // Это позиция заказчика
   isLeaf: boolean;                   // Конечная позиция
   boqItemType: BoqItemType | null;   // Тип BOQ элемента
+
+  // Зачёркивание из Excel (только для строк-позиций; для round-trip в экспорт)
+  richRuns?: RichRuns | null;
 }
 
 /**

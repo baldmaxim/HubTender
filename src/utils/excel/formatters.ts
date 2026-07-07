@@ -76,6 +76,7 @@ export function createPositionRow(
     isPosition: true,
     isLeaf,
     boqItemType: null,
+    richRuns: position.rich_runs ?? null,
   };
 }
 

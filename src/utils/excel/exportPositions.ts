@@ -17,6 +17,21 @@ import {
   fourDecimalColIndices,
   nameColIndex,
 } from './styles';
+import { injectStrikeRuns, type StrikeCell } from './strikeInject';
+
+function triggerDownload(data: Uint8Array, fileName: string): void {
+  const blob = new Blob([data as unknown as BlobPart], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 async function loadClientPositions(tenderId: string): Promise<ClientPosition[]> {
   const rows = await fetchPositionsWithCosts(tenderId);
@@ -221,9 +236,12 @@ function collectExportRows(
 }
 
 /**
- * Создает рабочий лист Excel с данными и стилями
+ * Создает рабочий лист Excel с данными и стилями.
+ * Возвращает лист и список ячеек с частичным зачёркиванием (`richCells`),
+ * которые пост-обрабатываются в inline rich string (см. injectStrikeRuns).
  */
-function createWorksheet(rows: ExportRow[]) {
+function createWorksheet(rows: ExportRow[]): { ws: XLSX.WorkSheet; richCells: StrikeCell[] } {
+  const richCells: StrikeCell[] = [];
   // Заголовки колонок
   const headers = [
     'Номер позиции',
@@ -318,6 +336,31 @@ function createWorksheet(rows: ExportRow[]) {
         };
       }
 
+      // Round-trip зачёркивания из Excel — только для строк-позиций (col: 0=item_no,
+      // 6=наименование, 8=кол-во, 18=примечание заказчика). Целиком зачёркнутое
+      // (в т.ч. число) → font.strike; частичный текст → в richCells (inline rich string).
+      if (row.richRuns) {
+        const rr = row.richRuns;
+        let wholeStrike = false;
+        if (col === 8) {
+          wholeStrike = !!rr.volume_struck;
+        } else {
+          const field: 'item_no' | 'work_name' | 'client_note' | null =
+            col === 0 ? 'item_no' : col === nameColIndex ? 'work_name' : col === 18 ? 'client_note' : null;
+          if (field) {
+            const runs = rr[field];
+            if (runs && runs.length) {
+              if (runs.every((r) => r.s)) wholeStrike = true;
+              else if (runs.some((r) => r.s)) richCells.push({ ref: cellRef, runs });
+            }
+          }
+        }
+        if (wholeStrike) {
+          const s = (ws[cellRef].s || {}) as Record<string, unknown>;
+          ws[cellRef].s = { ...s, font: { ...((s.font as object) || {}), strike: true } };
+        }
+      }
+
       // Установить числовой формат для ВСЕХ числовых колонок (даже пустых)
       if (isNumeric) {
         // Колонки 7,8,9,10 (количества и коэффициенты) - 4 знака после запятой БЕЗ разделителя тысяч
@@ -352,7 +395,7 @@ function createWorksheet(rows: ExportRow[]) {
   // Заморозить первую строку (заголовки)
   ws['!freeze'] = { xSplit: 0, ySplit: 1 };
 
-  return ws;
+  return { ws, richCells };
 }
 
 /**
@@ -391,17 +434,25 @@ export async function exportPositionsToExcel(
     const rows = collectExportRows(exportPositions, boqItemsByPosition, tenderRates);
 
     // Создать рабочий лист
-    const worksheet = createWorksheet(rows);
+    const { ws: worksheet, richCells } = createWorksheet(rows);
 
     // Создать рабочую книгу
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Позиции заказчика');
+    const sheetName = 'Позиции заказчика';
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
 
     // Сформировать имя файла
     const fileName = `Расчет ПЗ_${tenderTitle}_Версия ${tenderVersion}.xlsx`;
 
-    // Экспортировать файл
-    XLSX.writeFile(workbook, fileName);
+    // Экспортировать файл. Если есть частичное зачёркивание — пост-обработка OOXML
+    // (inline rich string) через fflate, иначе обычная запись.
+    if (richCells.length > 0) {
+      const written = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+      const u8 = written instanceof Uint8Array ? written : new Uint8Array(written as ArrayBuffer);
+      triggerDownload(injectStrikeRuns(u8, sheetName, richCells), fileName);
+    } else {
+      XLSX.writeFile(workbook, fileName);
+    }
   } catch (error) {
     console.error('Ошибка экспорта в Excel:', error);
     throw error;
