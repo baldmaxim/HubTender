@@ -14,6 +14,7 @@ import { CalculatorWidget } from './CalculatorWidget';
 import { NotesWidget } from './NotesWidget';
 import { NotificationsBell } from './NotificationsBell';
 import WorkspaceKeepAlive from './WorkspaceKeepAlive';
+import HeaderTitleOrTabs from './HeaderTitleOrTabs';
 import { isWorkspacePath } from './workspacePages';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -344,10 +345,11 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: 12,
             borderBottom: currentTheme === 'light' ? '1px solid #e8e8e8' : 'none',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
             <span
               className="trigger"
               onClick={() => toggleSidebar(!collapsed)}
@@ -359,24 +361,13 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
                 iconB={<MenuUnfoldOutlined />}
               />
             </span>
-            {/* Название текущей страницы — единственное место показа (страницы больше не дублируют его) */}
-            {pageTitle && (
-              <Text
-                strong
-                style={{
-                  fontSize: 16,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  minWidth: 0,
-                }}
-              >
-                {pageTitle}
-              </Text>
-            )}
+            {/* Workspace-роуты: вкладки рабочего стола; остальные — название страницы
+                (единственное место показа, страницы его не дублируют) */}
+            <HeaderTitleOrTabs pageTitle={pageTitle} />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: isPhone ? '12px' : '24px' }}>
+          {/* gap 12 и на планшете (<992px): освобождает ширину под вкладки рабочего стола */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: isPhone || !screens.lg ? '12px' : '24px', flexShrink: 0 }}>
             {/* Заметки к тендеру — скрыты для Генерального директора и на телефонах (вкл. landscape) */}
             {!isMobile && !isLandscapePhone && !isGeneralDirector && (
               <NotesWidget
@@ -467,7 +458,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               trigger={['click']}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                {!isPhoneDevice && <span>{user?.full_name || 'Пользователь'}</span>}
+                {/* ФИО только на десктопе (lg+): на планшете экономим ширину шапки под вкладки */}
+                {screens.lg && <span>{user?.full_name || 'Пользователь'}</span>}
                 <Avatar style={{
                   backgroundColor: user?.role_color ? `var(--ant-${user.role_color}-6, #10b981)` : '#10b981'
                 }}>

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useMatch, useSearchParams } from 'react-router-dom';
-import WorkspaceTabsBar from './WorkspaceTabsBar';
 import PositionItems from '../../pages/PositionItems/PositionItems';
 import { useWorkspaceTabs } from '../../contexts/WorkspaceTabsContext';
 import { WORKSPACE_PAGES } from './workspacePages';
@@ -13,7 +12,9 @@ import { WORKSPACE_PAGES } from './workspacePages';
  * выбранный тендер), а закрытие — реально размонтирует и вычищает вкладку из sessionStorage.
  *
  * Рендерится вместо <Outlet/> для workspace-роутов (см. MainLayout + isWorkspacePath), поэтому
- * route-элементы этих путей не монтируются повторно.
+ * route-элементы этих путей не монтируются повторно. Сама панель вкладок (WorkspaceTabsBar)
+ * рендерится в шапке MainLayout (HeaderTitleOrTabs), а не здесь; здесь остаётся deep-link
+ * регистрация вкладок, от которой панель в шапке зависит.
  */
 const WorkspaceKeepAlive: React.FC = () => {
   const location = useLocation();
@@ -46,7 +47,6 @@ const WorkspaceKeepAlive: React.FC = () => {
 
   return (
     <>
-      <WorkspaceTabsBar />
       {tabs.map((tab) => {
         const isActive = tab.key === (currentPositionId ?? location.pathname);
         if (tab.kind === 'page') {

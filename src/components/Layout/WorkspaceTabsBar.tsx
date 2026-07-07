@@ -1,20 +1,26 @@
 import React, { useMemo } from 'react';
-import { Tabs } from 'antd';
+import { ConfigProvider, Tabs, theme } from 'antd';
 import type { TabsProps } from 'antd';
 import { useNavigate, useMatch, useLocation } from 'react-router-dom';
 import { useWorkspaceTabs, type WorkspaceTab } from '../../contexts/WorkspaceTabsContext';
 import { WORKSPACE_PAGES } from './workspacePages';
+import { PAGE_LABELS } from '../../lib/types/types';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * Панель вкладок «рабочего стола»: по вкладке на каждую открытую страницу-якорь
- * («Позиции» / «Форма КП» / «Затраты») + по вкладке на каждую открытую позицию — все
- * закрываемые, симметрично. activeKey выводится ИЗ URL (источник истины). Рендерится
- * только на workspace-роутах (см. MainLayout).
+ * + по вкладке на каждую открытую позицию — все закрываемые, симметрично.
+ * activeKey выводится ИЗ URL (источник истины). Рендерится в ШАПКЕ MainLayout
+ * (через HeaderTitleOrTabs) на workspace-роутах — вместо названия страницы.
+ * Подписи page-вкладок берутся из PAGE_LABELS в рендере (а не из хранимого title),
+ * поэтому протухшие записи sessionStorage не влияют на отображение.
  */
 const WorkspaceTabsBar: React.FC = () => {
   const { tabs, closeTab } = useWorkspaceTabs();
   const navigate = useNavigate();
   const location = useLocation();
+  const { theme: currentTheme } = useTheme();
+  const { token } = theme.useToken();
   const match = useMatch('/positions/:positionId/items');
   const currentPositionId = match?.params.positionId;
 
@@ -33,7 +39,11 @@ const WorkspaceTabsBar: React.FC = () => {
 
   const activeKey = currentPositionId ?? location.pathname;
 
-  const items: TabsProps['items'] = ordered.map((t) => ({ key: t.key, label: t.title, closable: true }));
+  const items: TabsProps['items'] = ordered.map((t) => ({
+    key: t.key,
+    label: t.kind === 'page' ? (PAGE_LABELS[t.key] ?? t.title) : t.title,
+    closable: true,
+  }));
 
   const onChange = (key: string) => {
     const tab = tabs.find((t) => t.key === key);
@@ -56,16 +66,38 @@ const WorkspaceTabsBar: React.FC = () => {
   };
 
   return (
-    <Tabs
-      type="editable-card"
-      hideAdd
-      size="small"
-      activeKey={activeKey}
-      items={items}
-      onChange={onChange}
-      onEdit={onEdit}
-      tabBarStyle={{ marginBottom: 8, paddingLeft: 8, paddingRight: 8 }}
-    />
+    <div className={`header-workspace-tabs header-workspace-tabs-${currentTheme}`}>
+      <ConfigProvider
+        theme={{
+          components: {
+            Tabs: {
+              // Текст вкладок — цвет заголовка страницы (белый в dark), а не зелёный colorPrimary.
+              itemSelectedColor: token.colorText,
+              itemHoverColor: token.colorText,
+              itemActiveColor: token.colorText,
+              itemColor: token.colorTextSecondary,
+              cardBg: 'transparent',
+              // НЕ переопределять здесь colorBgContainer: токен утекает в «…»-дропдаун
+              // скрытых вкладок (портал в body получает hashId nested-темы) и делает его
+              // прозрачным. Подложка активной вкладки — в MainLayout.css.
+              horizontalMargin: '0',
+              titleFontSizeSM: 16,
+              cardGutter: 4,
+            },
+          },
+        }}
+      >
+        <Tabs
+          type="editable-card"
+          hideAdd
+          size="small"
+          activeKey={activeKey}
+          items={items}
+          onChange={onChange}
+          onEdit={onEdit}
+        />
+      </ConfigProvider>
+    </div>
   );
 };
 
