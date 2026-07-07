@@ -211,11 +211,14 @@ const ClientPositions: React.FC = () => {
     return sum;
   }, [isFilterActive, selectedPositionIds, showAllPositions, totalSum, positionCounts]);
 
-  // Высота tbody: viewport - nav(64) - cardHeader(56) - cardBodyPadding(48) - thead(40) - небольшой запас(8)
-  // Card sticky — тулбар уходит при скролле, Card остаётся
+  // Card sticky (top:0): чтобы панель фильтра/импорта доходила до верха при скролле, высота
+  // <Card> должна быть ≥ области скролла. tbody целим в «залипшее» состояние: viewport -
+  // appHeader(64) - шапка карточки(~48, занижена: при переносе кнопок реальная выше →
+  // таблица не короче нужного, панель гарантированно доходит до верха) - thead(40).
+  // padding тела карточки = 0 (styles.body.padding:0), таб-бар вкладок при скролле уезжает.
   useEffect(() => {
     const update = () => {
-      setTableScrollY(Math.max(300, window.innerHeight - 64 - 56 - 48 - 40 - 8));
+      setTableScrollY(Math.max(300, window.innerHeight - 64 - 48 - 40));
     };
     update();
     window.addEventListener('resize', update);

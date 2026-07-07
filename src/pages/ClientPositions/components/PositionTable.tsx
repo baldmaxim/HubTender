@@ -5,7 +5,6 @@ import {
   DownloadOutlined,
   DeleteOutlined,
   ClearOutlined,
-  FileTextOutlined,
   FileAddOutlined,
   FilterOutlined,
   UploadOutlined,
@@ -425,15 +424,11 @@ export const PositionTable: React.FC<PositionTableProps> = ({
     <Card
       bordered={false}
       title={
-        <Space>
-          <FileTextOutlined />
-          <span>Позиции заказчика</span>
-          {isFilterActive && (
-            <Tag color="blue">
-              Показано {filterSelectedCount} из {totalPositionsCount}
-            </Tag>
-          )}
-        </Space>
+        isFilterActive ? (
+          <Tag color="blue">
+            Показано {filterSelectedCount} из {totalPositionsCount}
+          </Tag>
+        ) : undefined
       }
       extra={
         <Space>
