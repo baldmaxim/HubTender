@@ -365,7 +365,6 @@ const CostTable: React.FC<CostTableProps> = ({
         }
         .supergroup-row > td {
           background-color: ${theme === 'dark' ? '#3a3a2a' : '#f5f5dc'} !important;
-          font-weight: 700;
         }
         .supergroup-row:hover > td {
           background-color: ${theme === 'dark' ? '#4a4a3a' : '#ede9d0'} !important;
