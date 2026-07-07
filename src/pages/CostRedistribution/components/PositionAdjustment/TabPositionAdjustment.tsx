@@ -57,7 +57,6 @@ function TabPositionAdjustmentImpl({
     appliedRules,
     appliedDeltas,
     previewDeltas,
-    previewErrors,
     setMode,
     setAmount,
     setSourceIds,
@@ -149,7 +148,6 @@ function TabPositionAdjustmentImpl({
       <AdjustmentControls
         mode={draft.mode}
         amount={draft.amount}
-        errors={previewErrors}
         hasApplied={appliedRules.length > 0}
         onModeChange={setMode}
         onAmountChange={setAmount}

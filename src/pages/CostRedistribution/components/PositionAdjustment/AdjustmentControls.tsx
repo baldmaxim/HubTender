@@ -1,16 +1,12 @@
-import { Alert, Button, InputNumber, Radio, Space, Typography } from 'antd';
+import { Button, InputNumber, Radio, Space, Typography } from 'antd';
 import type { RadioChangeEvent } from 'antd';
-import type {
-  PositionAdjustmentMode,
-  PositionAdjustmentValidationError,
-} from '../../types/positionAdjustment';
+import type { PositionAdjustmentMode } from '../../types/positionAdjustment';
 
 const { Text } = Typography;
 
 interface AdjustmentControlsProps {
   mode: PositionAdjustmentMode;
   amount: number;
-  errors: PositionAdjustmentValidationError[];
   hasApplied: boolean;
   onModeChange: (mode: PositionAdjustmentMode) => void;
   onAmountChange: (amount: number) => void;
@@ -21,7 +17,6 @@ interface AdjustmentControlsProps {
 export function AdjustmentControls({
   mode,
   amount,
-  errors,
   hasApplied,
   onModeChange,
   onAmountChange,
@@ -75,21 +70,6 @@ export function AdjustmentControls({
           Сбросить
         </Button>
       </Space>
-
-      {errors.length > 0 && (
-        <Alert
-          type="warning"
-          showIcon
-          message="Правило не применено"
-          description={
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              {errors.map((error) => (
-                <li key={error.code}>{error.message}</li>
-              ))}
-            </ul>
-          }
-        />
-      )}
     </Space>
   );
 }

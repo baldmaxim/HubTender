@@ -71,11 +71,11 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
   return (
     <Card
       style={{ marginBottom: isPhone ? 8 : 16 }}
-      styles={{ body: { padding: isPhone ? '6px 12px' : 24 } }}
+      styles={{ body: { padding: isPhone ? '6px 12px' : '12px 24px' } }}
     >
       <Space direction="vertical" style={{ width: '100%' }} size={isPhone ? 8 : 'middle'}>
-        {/* Пустую верхнюю строку на телефоне не рендерим — иначе зазор над фильтром. */}
-        {(!isPhoneDevice || saving || savedRecently) && (
+        {/* Строку-статус рендерим только при реальном сохранении — иначе пустой зазор над фильтром. */}
+        {(saving || savedRecently) && (
           <Space align="center" size="middle">
             {saving && (
               <Tag icon={<LoadingOutlined />} color="processing">
