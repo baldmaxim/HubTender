@@ -76,7 +76,7 @@ function PositionsBlockImpl({
       title: '№',
       dataIndex: 'position_number',
       key: 'position_number',
-      width: 60,
+      width: 48,
       align: 'center',
     },
     {
@@ -140,6 +140,7 @@ function PositionsBlockImpl({
   ], []);
 
   const rowSelection = {
+    columnWidth: 40,
     selectedRowKeys: Array.from(selectedIds),
     onSelect: (record: BlockRow, selected: boolean) => {
       const ids = collectSectionDescendants(clientPositions, record.position_id);
