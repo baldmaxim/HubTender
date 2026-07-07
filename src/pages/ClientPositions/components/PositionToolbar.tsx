@@ -5,10 +5,8 @@ import {
   FileTextOutlined,
   QuestionCircleOutlined,
   FolderOutlined,
-  DashboardOutlined,
 } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
-import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Text } = Typography;
@@ -42,7 +40,6 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
   onTenderTitleChange,
   onVersionChange,
 }) => {
-  const navigate = useNavigate();
   const { isPhoneDevice, isPhone } = useIsMobile();
 
   const txt: React.CSSProperties = { color: currentTheme === 'dark' ? '#fff' : '#000' };
@@ -104,40 +101,8 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
 
   return (
     <>
-      {/* Верхняя шапка с названием тендера и кнопками (десктоп: на телефоне нечего показывать без кнопки «Назад к выбору») */}
-      {selectedTender && !isPhoneDevice && (
-        <div style={{
-          padding: isPhoneDevice ? '12px 16px' : '12px 32px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: isPhoneDevice ? 'flex-start' : 'center',
-          flexDirection: isPhoneDevice ? 'column' : 'row',
-          gap: isPhoneDevice ? 8 : 0,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <FileTextOutlined style={{ fontSize: 32, color: 'white' }} />
-            <div>
-              <Text style={{ fontSize: 22, fontWeight: 600, margin: 0, color: 'white', display: 'block' }}>
-                {selectedTender.title}
-              </Text>
-              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14 }}>
-                Заказчик: {selectedTender.client_name}
-              </Text>
-            </div>
-          </div>
-          <Space>
-            <Button
-              icon={<DashboardOutlined />}
-              onClick={() => navigate('/dashboard')}
-            >
-              К дашборду
-            </Button>
-          </Space>
-        </div>
-      )}
-
       {/* Блок с фильтрами и информацией о тендере */}
-      <div style={{ padding: '16px', display: 'flex', gap: '8px', flexDirection: isPhoneDevice ? 'column' : 'row' }}>
+      <div style={{ padding: '8px 16px 16px 16px', display: 'flex', gap: '8px', flexDirection: isPhoneDevice ? 'column' : 'row' }}>
         {/* Левый и средний блоки объединены */}
         <Card
           bordered={false}
