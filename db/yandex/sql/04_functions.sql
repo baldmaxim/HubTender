@@ -498,6 +498,8 @@ declare
   v_parent_links_restored integer := 0;
   v_cost_volumes_copied integer := 0;
   v_insurance_rows_copied integer := 0;
+  v_pricing_distribution_copied integer := 0;
+  v_markup_percentage_copied integer := 0;
   v_additional_works_copied integer := 0;
   v_additional_works_skipped integer := 0;
   v_rows_affected integer := 0;
@@ -1173,6 +1175,39 @@ begin
 
   get diagnostics v_insurance_rows_copied = row_count;
 
+  insert into public.tender_pricing_distribution (
+    tender_id, markup_tactic_id,
+    basic_material_base_target, basic_material_markup_target,
+    auxiliary_material_base_target, auxiliary_material_markup_target,
+    work_base_target, work_markup_target,
+    subcontract_basic_material_base_target, subcontract_basic_material_markup_target,
+    subcontract_auxiliary_material_base_target, subcontract_auxiliary_material_markup_target,
+    component_material_base_target, component_material_markup_target,
+    component_work_base_target, component_work_markup_target
+  )
+  select
+    v_new_tender.id, markup_tactic_id,
+    basic_material_base_target, basic_material_markup_target,
+    auxiliary_material_base_target, auxiliary_material_markup_target,
+    work_base_target, work_markup_target,
+    subcontract_basic_material_base_target, subcontract_basic_material_markup_target,
+    subcontract_auxiliary_material_base_target, subcontract_auxiliary_material_markup_target,
+    component_material_base_target, component_material_markup_target,
+    component_work_base_target, component_work_markup_target
+  from public.tender_pricing_distribution
+  where tender_id = p_source_tender_id
+  on conflict (tender_id, markup_tactic_id) do nothing;
+
+  get diagnostics v_pricing_distribution_copied = row_count;
+
+  insert into public.tender_markup_percentage (tender_id, markup_parameter_id, value)
+  select v_new_tender.id, markup_parameter_id, value
+  from public.tender_markup_percentage
+  where tender_id = p_source_tender_id
+  on conflict (tender_id, markup_parameter_id) do nothing;
+
+  get diagnostics v_markup_percentage_copied = row_count;
+
   return jsonb_build_object(
     'tenderId', v_new_tender.id,
     'version', v_new_version,
@@ -1182,6 +1217,8 @@ begin
     'parentLinksRestored', v_parent_links_restored,
     'costVolumesCopied', v_cost_volumes_copied,
     'insuranceRowsCopied', v_insurance_rows_copied,
+    'pricingDistributionCopied', v_pricing_distribution_copied,
+    'markupPercentageCopied', v_markup_percentage_copied,
     'additionalWorksCopied', v_additional_works_copied,
     'additionalWorksSkipped', v_additional_works_skipped
   );
