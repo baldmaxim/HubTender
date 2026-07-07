@@ -39,15 +39,6 @@ export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, curren
       ? Math.max(0, Math.min(100, ((totalDays - daysRemaining) / totalDays) * 100))
       : 0;
 
-  const getProgressColor = (progress: number): string => {
-    if (isExpired) return '#c62828';
-    const normalizedProgress = progress / 100;
-    const r = Math.round(20 + (198 - 20) * normalizedProgress);
-    const g = Math.round(184 + (40 - 184) * normalizedProgress);
-    const b = Math.round(166 + (40 - 166) * normalizedProgress);
-    return `rgb(${r}, ${g}, ${b})`;
-  };
-
   const percentage = Math.round(progress);
 
   return (
@@ -65,7 +56,7 @@ export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, curren
         top: 0,
         height: '100%',
         width: `${progress}%`,
-        background: getProgressColor(progress),
+        background: '#c62828',
         transition: 'all 0.5s ease',
       }} />
       <div style={{
