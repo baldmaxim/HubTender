@@ -2,6 +2,7 @@
 // Routes to GET /api/v1/tenders/:id/positions/with-costs (which ports the
 // public.get_positions_with_costs RPC) when VITE_API_POSITIONS_ENABLED=true.
 import { apiFetch } from './client';
+import type { RichRuns } from '../types/types/boq';
 
 // Exported type — consumers usually redefine it inline; this is the authoritative shape.
 export interface PositionWithCostsRow {
@@ -28,6 +29,7 @@ export interface PositionWithCostsRow {
   total_commercial_work_per_unit: number | null;
   created_at: string;
   updated_at: string;
+  rich_runs: RichRuns | null;
   base_total: number | null;
   commercial_total: number | null;
   material_cost_total: number | null;
@@ -113,6 +115,7 @@ export interface BulkPositionInsert {
   hierarchy_level?: number | null;
   is_additional?: boolean | null;
   parent_position_id?: string | null;
+  rich_runs?: RichRuns | null;
 }
 
 export async function bulkInsertPositions(

@@ -1,4 +1,5 @@
 import { apiFetch } from '../../lib/api/client';
+import type { RichRuns } from '../../lib/types/types/boq';
 
 export interface VersionTransferNewPositionPayload {
   row_index: number;
@@ -8,6 +9,7 @@ export interface VersionTransferNewPositionPayload {
   unit_code: string | null;
   volume: number | null;
   client_note: string | null;
+  rich_runs?: RichRuns | null;
 }
 
 export interface VersionTransferMatchPayload {
@@ -30,6 +32,8 @@ export interface ExecuteVersionTransferResult {
   parentLinksRestored: number;
   costVolumesCopied: number;
   insuranceRowsCopied: number;
+  pricingDistributionCopied: number;
+  markupPercentageCopied: number;
   additionalWorksCopied: number;
   additionalWorksSkipped: number;
 }
@@ -77,6 +81,8 @@ export async function executeVersionTransfer({
     parentLinksRestored: result.parentLinksRestored ?? 0,
     costVolumesCopied: result.costVolumesCopied ?? 0,
     insuranceRowsCopied: result.insuranceRowsCopied ?? 0,
+    pricingDistributionCopied: result.pricingDistributionCopied ?? 0,
+    markupPercentageCopied: result.markupPercentageCopied ?? 0,
     additionalWorksCopied: result.additionalWorksCopied ?? 0,
     additionalWorksSkipped: result.additionalWorksSkipped ?? 0,
   };

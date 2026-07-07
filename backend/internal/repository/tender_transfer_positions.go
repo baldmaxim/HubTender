@@ -27,6 +27,7 @@ func insertNewPositions(
 	unitCodes := make([]*string, len(positions))
 	volumes := make([]*float64, len(positions))
 	clientNotes := make([]*string, len(positions))
+	richRuns := make([]*string, len(positions))
 
 	for i, p := range positions {
 		rowIndexes[i] = p.RowIndex
@@ -38,26 +39,30 @@ func insertNewPositions(
 		unitCodes[i] = p.UnitCode
 		volumes[i] = p.Volume
 		clientNotes[i] = p.ClientNote
+		if s := jsonbOrNil(p.RichRuns); s != nil {
+			str := string(p.RichRuns)
+			richRuns[i] = &str
+		}
 	}
 
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO public.client_positions (
 			tender_id, position_number, item_no, work_name,
 			unit_code, volume, client_note, hierarchy_level,
-			is_additional, parent_position_id, manual_volume, manual_note
+			is_additional, parent_position_id, manual_volume, manual_note, rich_runs
 		)
 		SELECT
 			$1::uuid, inp.row_index + 1, NULLIF(inp.item_no, ''), inp.work_name,
 			u.code, inp.volume, NULLIF(inp.client_note, ''), inp.hierarchy_level,
-			false, NULL, NULL, NULL
+			false, NULL, NULL, NULL, NULLIF(inp.rich_runs, '')::jsonb
 		FROM UNNEST(
 			$2::integer[], $3::text[], $4::integer[], $5::text[],
-			$6::text[], $7::numeric[], $8::text[]
-		) AS inp(row_index, item_no, hierarchy_level, work_name, unit_code, volume, client_note)
+			$6::text[], $7::numeric[], $8::text[], $9::text[]
+		) AS inp(row_index, item_no, hierarchy_level, work_name, unit_code, volume, client_note, rich_runs)
 		LEFT JOIN public.units u ON u.code = inp.unit_code
 		ORDER BY inp.row_index
 	`, newTenderID,
-		rowIndexes, itemNos, hierarchyLevels, workNames, unitCodes, volumes, clientNotes,
+		rowIndexes, itemNos, hierarchyLevels, workNames, unitCodes, volumes, clientNotes, richRuns,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("transferRepo: insert positions: %w", err)

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -33,6 +34,7 @@ type PositionWithCostsRow struct {
 	TotalCommercialWork         *float64  `json:"total_commercial_work"`
 	TotalCommercialMaterialPerUnit *float64 `json:"total_commercial_material_per_unit"`
 	TotalCommercialWorkPerUnit  *float64  `json:"total_commercial_work_per_unit"`
+	RichRuns                    json.RawMessage `json:"rich_runs"`
 	CreatedAt                   time.Time `json:"created_at"`
 	UpdatedAt                   time.Time `json:"updated_at"`
 	BaseTotal                   float64   `json:"base_total"`
@@ -82,6 +84,7 @@ func (r *PositionCostsRepo) GetPositionsWithCosts(
 		    cp.total_commercial_work,
 		    cp.total_commercial_material_per_unit,
 		    cp.total_commercial_work_per_unit,
+		    cp.rich_runs,
 		    COALESCE(cp.created_at, NOW()),
 		    COALESCE(cp.updated_at, NOW()),
 		    COALESCE(SUM(b.total_amount), 0)                                                      AS base_total,
@@ -107,7 +110,7 @@ func (r *PositionCostsRepo) GetPositionsWithCosts(
 		    cp.total_material, cp.total_works, cp.material_cost_per_unit, cp.work_cost_per_unit,
 		    cp.total_commercial_material, cp.total_commercial_work,
 		    cp.total_commercial_material_per_unit, cp.total_commercial_work_per_unit,
-		    cp.created_at, cp.updated_at
+		    cp.rich_runs, cp.created_at, cp.updated_at
 		ORDER BY cp.position_number, cp.id
 	`
 
@@ -129,6 +132,7 @@ func (r *PositionCostsRepo) GetPositionsWithCosts(
 			&row.MaterialCostPerUnit, &row.WorkCostPerUnit,
 			&row.TotalCommercialMaterial, &row.TotalCommercialWork,
 			&row.TotalCommercialMaterialPerUnit, &row.TotalCommercialWorkPerUnit,
+			&row.RichRuns,
 			&row.CreatedAt, &row.UpdatedAt,
 			&row.BaseTotal, &row.CommercialTotal,
 			&row.MaterialCostTotal, &row.WorkCostTotal,

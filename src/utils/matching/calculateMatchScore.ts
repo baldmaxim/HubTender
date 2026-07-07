@@ -10,6 +10,7 @@
 
 import { calculateStringSimilarity, calculateVolumeProximity, similarityFromNormalized } from './similarity';
 import type { ClientPosition } from '../../lib/types';
+import type { RichRuns } from '../../lib/types/types/boq';
 
 /**
  * Структура данных распарсенной строки из Excel
@@ -21,6 +22,7 @@ export interface ParsedRow {
   unit_code: string;
   volume: number | null;
   client_note: string;
+  rich_runs?: RichRuns; // зачёркивание из Excel (для отображения)
 }
 
 /**

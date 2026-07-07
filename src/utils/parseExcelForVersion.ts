@@ -13,6 +13,7 @@
 import * as XLSX from 'xlsx';
 import type { ParsedRow } from './matching';
 import { getErrorMessage } from './errors';
+import { extractStrikeByRow } from './excel/strikeExtract';
 
 export interface ParseExcelResult {
   positions: ParsedRow[];
@@ -65,6 +66,9 @@ export async function parseExcelForVersion(
     const jsonData = XLSX.utils.sheet_to_json<unknown[]>(firstSheet, { header: 1 });
     const rows = skipFirstRow ? jsonData.slice(1) : jsonData;
 
+    // Зачёркивание из Excel. Ключ Map — 0-based индекс строки листа.
+    const strikeMap = extractStrikeByRow(data);
+
     rows.forEach((row: unknown, index: number) => {
       if (!Array.isArray(row) || row.length === 0) {
         return;
@@ -78,6 +82,7 @@ export async function parseExcelForVersion(
       const rowNumber = skipFirstRow ? index + 2 : index + 1;
 
       try {
+        const rich = strikeMap.get(skipFirstRow ? index + 1 : index);
         const parsedRow: ParsedRow = {
           item_no: hasCellValue(cells[0]) ? String(cells[0]).trim() : '',
           hierarchy_level: hasCellValue(cells[1]) ? Number(cells[1]) : 0,
@@ -85,6 +90,7 @@ export async function parseExcelForVersion(
           unit_code: hasCellValue(cells[3]) ? String(cells[3]).trim() : '',
           volume: parseNullableNumber(cells[4]),
           client_note: hasCellValue(cells[5]) ? String(cells[5]).trim() : '',
+          ...(rich ? { rich_runs: rich } : {}),
         };
 
         if (!parsedRow.work_name) {

@@ -113,6 +113,22 @@ export interface Notification extends NotificationInsert {
 // Типы для таблицы client_positions (позиции заказчика)
 // =============================================
 
+// Зачёркивание, извлечённое из Excel при импорте (только для отображения).
+// Текстовые поля — массив ранов (частичное зачёркивание), volume — булев флаг
+// (число зачёркнуто целиком либо нет). Хранится в client_positions.rich_runs (jsonb),
+// заполняется только при наличии зачёркивания.
+export interface StrikeRun {
+  t: string; // текст фрагмента
+  s: boolean; // зачёркнут ли фрагмент
+}
+
+export interface RichRuns {
+  work_name?: StrikeRun[];
+  item_no?: StrikeRun[];
+  client_note?: StrikeRun[];
+  volume_struck?: boolean;
+}
+
 export interface ClientPositionInsert {
   tender_id: string;
   position_number: number;
@@ -134,6 +150,7 @@ export interface ClientPositionInsert {
   total_commercial_work?: number;
   total_commercial_material_per_unit?: number;
   total_commercial_work_per_unit?: number;
+  rich_runs?: RichRuns | null;
 }
 
 export interface ClientPosition extends ClientPositionInsert {

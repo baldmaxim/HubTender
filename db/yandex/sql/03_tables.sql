@@ -266,6 +266,7 @@ CREATE TABLE IF NOT EXISTS public.client_positions (
     total_commercial_work numeric DEFAULT 0,
     total_commercial_material_per_unit numeric DEFAULT 0,
     total_commercial_work_per_unit numeric DEFAULT 0,
+    rich_runs jsonb,
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now()
 );

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -14,13 +15,14 @@ import (
 
 // NewPositionInput describes one row of the incoming position list.
 type NewPositionInput struct {
-	RowIndex       int      `json:"row_index"`
-	ItemNo         *string  `json:"item_no"`
-	UnitCode       *string  `json:"unit_code"`
-	ClientNote     *string  `json:"client_note"`
-	WorkName       string   `json:"work_name"`
-	Volume         *float64 `json:"volume"`
-	HierarchyLevel *int     `json:"hierarchy_level"`
+	RowIndex       int             `json:"row_index"`
+	ItemNo         *string         `json:"item_no"`
+	UnitCode       *string         `json:"unit_code"`
+	ClientNote     *string         `json:"client_note"`
+	WorkName       string          `json:"work_name"`
+	Volume         *float64        `json:"volume"`
+	HierarchyLevel *int            `json:"hierarchy_level"`
+	RichRuns       json.RawMessage `json:"rich_runs"` // зачёркивание из Excel; NULL если нет
 }
 
 // MatchInput pairs an old client_position.id with the new row_index it maps to.
@@ -49,6 +51,8 @@ type TransferResult struct {
 	CostVolumesCopied            int `json:"costVolumesCopied"`
 	InsuranceRowsCopied          int `json:"insuranceRowsCopied"`
 	SubcontractExclusionsCopied  int `json:"subcontractExclusionsCopied"`
+	PricingDistributionCopied    int `json:"pricingDistributionCopied"`
+	MarkupPercentageCopied       int `json:"markupPercentageCopied"`
 	AdditionalWorksCopied        int `json:"additionalWorksCopied"`
 	AdditionalWorksSkipped       int `json:"additionalWorksSkipped"`
 	UserFiltersTransferred       int `json:"userFiltersTransferred"`
@@ -232,6 +236,49 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		return nil, fmt.Errorf("transferRepo: copy subcontract growth exclusions: %w", err)
 	}
 
+	// Step 13b': Copy tender_pricing_distribution (распределение наценки по столбцам
+	// материалов/работ). Мирроринг clone_tender_as_new_version — паритет с «Дублировать».
+	pricingDistTag, err := tx.Exec(ctx, `
+		INSERT INTO public.tender_pricing_distribution (
+			tender_id, markup_tactic_id,
+			basic_material_base_target, basic_material_markup_target,
+			auxiliary_material_base_target, auxiliary_material_markup_target,
+			work_base_target, work_markup_target,
+			subcontract_basic_material_base_target, subcontract_basic_material_markup_target,
+			subcontract_auxiliary_material_base_target, subcontract_auxiliary_material_markup_target,
+			component_material_base_target, component_material_markup_target,
+			component_work_base_target, component_work_markup_target
+		)
+		SELECT
+			$1::uuid, markup_tactic_id,
+			basic_material_base_target, basic_material_markup_target,
+			auxiliary_material_base_target, auxiliary_material_markup_target,
+			work_base_target, work_markup_target,
+			subcontract_basic_material_base_target, subcontract_basic_material_markup_target,
+			subcontract_auxiliary_material_base_target, subcontract_auxiliary_material_markup_target,
+			component_material_base_target, component_material_markup_target,
+			component_work_base_target, component_work_markup_target
+		FROM public.tender_pricing_distribution
+		WHERE tender_id = $2::uuid
+		ON CONFLICT (tender_id, markup_tactic_id) DO NOTHING
+	`, newTenderID, in.SourceTenderID)
+	if err != nil {
+		return nil, fmt.Errorf("transferRepo: copy pricing distribution: %w", err)
+	}
+
+	// Step 13b'': Copy tender_markup_percentage (значения процентов наценок со страницы
+	// «Проценты наценок»). Должно лечь до Step 13c, чтобы grand total учёл наценки.
+	markupPctTag, err := tx.Exec(ctx, `
+		INSERT INTO public.tender_markup_percentage (tender_id, markup_parameter_id, value)
+		SELECT $1::uuid, markup_parameter_id, value
+		FROM public.tender_markup_percentage
+		WHERE tender_id = $2::uuid
+		ON CONFLICT (tender_id, markup_parameter_id) DO NOTHING
+	`, newTenderID, in.SourceTenderID)
+	if err != nil {
+		return nil, fmt.Errorf("transferRepo: copy markup percentages: %w", err)
+	}
+
 	// Step 13d: Carry every user's saved position filter onto the new version.
 	// oldToNew maps matched normal positions (incl. section headers); the helper
 	// re-expands selected sections over the new structure so rows added to a
@@ -265,6 +312,8 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		CostVolumesCopied:           int(costVolumesTag.RowsAffected()),
 		InsuranceRowsCopied:         int(insuranceTag.RowsAffected()),
 		SubcontractExclusionsCopied: int(subcontractExclusionsTag.RowsAffected()),
+		PricingDistributionCopied:   int(pricingDistTag.RowsAffected()),
+		MarkupPercentageCopied:      int(markupPctTag.RowsAffected()),
 		AdditionalWorksCopied:       addCopied,
 		AdditionalWorksSkipped:      addSkipped,
 		UserFiltersTransferred:      filtersTransferred,

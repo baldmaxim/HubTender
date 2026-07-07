@@ -38,13 +38,14 @@ func NewTenderTransferHandler(svc transferServicer) *TenderTransferHandler {
 
 // transferNewPositionReq mirrors NewPositionInput for JSON decoding + validation.
 type transferNewPositionReq struct {
-	RowIndex       int      `json:"row_index"       validate:"gte=0"`
-	ItemNo         *string  `json:"item_no"`
-	UnitCode       *string  `json:"unit_code"`
-	ClientNote     *string  `json:"client_note"`
-	WorkName       string   `json:"work_name"       validate:"required,min=1"`
-	Volume         *float64 `json:"volume"`
-	HierarchyLevel *int     `json:"hierarchy_level"`
+	RowIndex       int             `json:"row_index"       validate:"gte=0"`
+	ItemNo         *string         `json:"item_no"`
+	UnitCode       *string         `json:"unit_code"`
+	ClientNote     *string         `json:"client_note"`
+	WorkName       string          `json:"work_name"       validate:"required,min=1"`
+	Volume         *float64        `json:"volume"`
+	HierarchyLevel *int            `json:"hierarchy_level"`
+	RichRuns       json.RawMessage `json:"rich_runs"`
 }
 
 // transferMatchReq mirrors MatchInput for JSON decoding + validation.
@@ -104,6 +105,7 @@ func (h *TenderTransferHandler) Transfer(w http.ResponseWriter, r *http.Request)
 			WorkName:       p.WorkName,
 			Volume:         p.Volume,
 			HierarchyLevel: p.HierarchyLevel,
+			RichRuns:       p.RichRuns,
 		}
 	}
 

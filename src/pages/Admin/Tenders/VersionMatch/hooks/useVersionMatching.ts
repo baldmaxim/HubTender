@@ -286,6 +286,7 @@ export function useVersionMatching({
           unit_code: position.unit_code || null,
           volume: position.volume ?? null,
           client_note: position.client_note || null,
+          rich_runs: position.rich_runs ?? null,
         })),
         matches: transferMappings.map(mapping => ({
           old_position_id: mapping.oldPositionId,

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -211,18 +212,28 @@ func (r *PositionRepo) CreatePosition(ctx context.Context, in CreatePositionInpu
 	return p, nil
 }
 
+// jsonbOrNil returns nil for an empty or literal-"null" JSON payload so the
+// column is written as SQL NULL rather than jsonb 'null'.
+func jsonbOrNil(raw json.RawMessage) any {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	return raw
+}
+
 // BulkPositionInsert is one row of the BOQ upload (initial tender positions).
 type BulkPositionInsert struct {
-	TenderID         string   `json:"tender_id"`
-	PositionNumber   float64  `json:"position_number"`
-	WorkName         string   `json:"work_name"`
-	UnitCode         *string  `json:"unit_code"`
-	Volume           *float64 `json:"volume"`
-	ClientNote       *string  `json:"client_note"`
-	ItemNo           *string  `json:"item_no"`
-	HierarchyLevel   *int     `json:"hierarchy_level"`
-	IsAdditional     *bool    `json:"is_additional"`
-	ParentPositionID *string  `json:"parent_position_id"`
+	TenderID         string          `json:"tender_id"`
+	PositionNumber   float64         `json:"position_number"`
+	WorkName         string          `json:"work_name"`
+	UnitCode         *string         `json:"unit_code"`
+	Volume           *float64        `json:"volume"`
+	ClientNote       *string         `json:"client_note"`
+	ItemNo           *string         `json:"item_no"`
+	HierarchyLevel   *int            `json:"hierarchy_level"`
+	IsAdditional     *bool           `json:"is_additional"`
+	ParentPositionID *string         `json:"parent_position_id"`
+	RichRuns         json.RawMessage `json:"rich_runs"` // зачёркивание из Excel; NULL если нет
 }
 
 // BulkInsertPositions atomically inserts every input row. Defaults for the
@@ -240,15 +251,16 @@ func (r *PositionRepo) BulkInsertPositions(ctx context.Context, rows []BulkPosit
 	const q = `
 		INSERT INTO public.client_positions
 			(tender_id, position_number, work_name, unit_code, volume,
-			 client_note, item_no, hierarchy_level, is_additional, parent_position_id)
+			 client_note, item_no, hierarchy_level, is_additional, parent_position_id,
+			 rich_runs)
 		VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, COALESCE($8, 0),
-		        COALESCE($9, false), $10::uuid)
+		        COALESCE($9, false), $10::uuid, $11::jsonb)
 	`
 	for _, row := range rows {
 		if _, err := tx.Exec(ctx, q,
 			row.TenderID, row.PositionNumber, row.WorkName, row.UnitCode, row.Volume,
 			row.ClientNote, row.ItemNo, row.HierarchyLevel,
-			row.IsAdditional, row.ParentPositionID,
+			row.IsAdditional, row.ParentPositionID, jsonbOrNil(row.RichRuns),
 		); err != nil {
 			return 0, fmt.Errorf("positionRepo.BulkInsertPositions: insert: %w", err)
 		}

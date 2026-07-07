@@ -7,6 +7,8 @@ import {
   bulkInsertPositions,
   type BulkPositionInsert,
 } from '../../../../lib/api/positions';
+import { extractStrikeByRow } from '../../../../utils/excel/strikeExtract';
+import type { RichRuns } from '../../../../lib/types/types/boq';
 
 export interface ParsedRow {
   item_no: string;
@@ -15,6 +17,7 @@ export interface ParsedRow {
   unit_code: string;
   volume: number;
   client_note: string;
+  rich_runs?: RichRuns;
 }
 
 export interface ValidationResult {
@@ -124,27 +127,34 @@ export const useBoqUpload = () => {
 
     reader.onload = (e) => {
       try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const data = e.target?.result as ArrayBuffer;
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        // Зачёркивание из Excel (частичное в тексте + целиком в кол-ве).
+        // Ключ Map — 0-based индекс строки листа (совпадает с индексом в jsonData).
+        const strikeMap = extractStrikeByRow(data);
 
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json<unknown[]>(firstSheet, { header: 1 });
 
         const rows = jsonData.slice(1);
 
-        const parsed: ParsedRow[] = rows
-          .filter((row: unknown) => Array.isArray(row) && row.length > 0 && row.some(cell => cell !== undefined && cell !== ''))
-          .map((row: unknown) => {
-            const cells = row as unknown[];
-            return {
-              item_no: cells[0] ? String(cells[0]).trim() : '',
-              hierarchy_level: cells[1] ? Number(cells[1]) : 0,
-              work_name: cells[2] ? String(cells[2]).trim() : '',
-              unit_code: cells[3] ? String(cells[3]).trim() : '',
-              volume: cells[4] ? Number(cells[4]) : 0,
-              client_note: cells[5] ? String(cells[5]).trim() : '',
-            };
+        // Итерируем с сохранением исходного индекса строки, чтобы сопоставить strike.
+        const parsed: ParsedRow[] = [];
+        rows.forEach((row: unknown, i: number) => {
+          if (!(Array.isArray(row) && row.length > 0 && row.some(cell => cell !== undefined && cell !== ''))) return;
+          const cells = row as unknown[];
+          const rich = strikeMap.get(i + 1); // rows[i] === jsonData[i+1]
+          parsed.push({
+            item_no: cells[0] ? String(cells[0]).trim() : '',
+            hierarchy_level: cells[1] ? Number(cells[1]) : 0,
+            work_name: cells[2] ? String(cells[2]).trim() : '',
+            unit_code: cells[3] ? String(cells[3]).trim() : '',
+            volume: cells[4] ? Number(cells[4]) : 0,
+            client_note: cells[5] ? String(cells[5]).trim() : '',
+            ...(rich ? { rich_runs: rich } : {}),
           });
+        });
 
         setParsedData(parsed);
 
@@ -170,7 +180,7 @@ export const useBoqUpload = () => {
       }
     };
 
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
     return false;
   };
 
@@ -239,6 +249,7 @@ export const useBoqUpload = () => {
           item_no: row.item_no || null,
           hierarchy_level: row.hierarchy_level || 0,
           is_additional: false,
+          rich_runs: row.rich_runs ?? null,
         };
       });
 

@@ -4,6 +4,7 @@ import { SearchOutlined } from '@ant-design/icons';
 import type { ClientPosition, Tender } from '../../../lib/types';
 import { formatRu } from '../../../utils/format/currency';
 import { useIncrementalRender } from '../../../hooks/useIncrementalRender';
+import { renderStrikeRuns, renderStruck } from '../../../components/RichText/StrikeText';
 
 const { Text } = Typography;
 
@@ -78,7 +79,7 @@ export const PositionCardList: React.FC<PositionCardListProps> = ({
                     <Tag color="orange" style={{ marginRight: 6 }}>ДОП</Tag>
                   ) : (
                     record.item_no && (
-                      <Text strong style={{ color: sectionColor, marginRight: 6 }}>{record.item_no}</Text>
+                      <Text strong style={{ color: sectionColor, marginRight: 6 }}>{renderStrikeRuns(record.rich_runs?.item_no, record.item_no)}</Text>
                     )
                   )}
                   <Text
@@ -89,14 +90,14 @@ export const PositionCardList: React.FC<PositionCardListProps> = ({
                       wordBreak: 'break-word',
                     }}
                   >
-                    {record.work_name}
+                    {renderStrikeRuns(record.rich_runs?.work_name, record.work_name)}
                   </Text>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: 12 }}>
                   <div>
                     <Text type="secondary">Кол-во (заказчик): </Text>
-                    <Text strong>{record.volume != null ? record.volume.toFixed(2) : '—'}</Text>
+                    <Text strong>{record.volume != null ? renderStruck(record.rich_runs?.volume_struck, record.volume.toFixed(2)) : '—'}</Text>
                     {record.unit_code ? ` ${record.unit_code}` : ''}
                   </div>
                   {isLeaf && (
@@ -111,7 +112,7 @@ export const PositionCardList: React.FC<PositionCardListProps> = ({
                 {record.client_note && (
                   <div style={{ fontSize: 12, marginTop: 4 }}>
                     <Text type="secondary">Прим. заказчика: </Text>
-                    <Text italic>{record.client_note}</Text>
+                    <Text italic>{renderStrikeRuns(record.rich_runs?.client_note, record.client_note)}</Text>
                   </div>
                 )}
                 {record.manual_note && (

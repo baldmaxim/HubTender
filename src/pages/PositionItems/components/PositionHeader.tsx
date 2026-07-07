@@ -1,5 +1,6 @@
 import { Card, Typography, Tag, Input, InputNumber, Select } from 'antd';
 import type { ClientPosition } from '../../../lib/types';
+import { renderStrikeRuns, renderStruck } from '../../../components/RichText/StrikeText';
 
 const { Text } = Typography;
 
@@ -41,7 +42,7 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {position.is_additional && <Tag color="orange">ДОП</Tag>}
       <Text strong style={{ margin: 0 }}>
-        {position.position_number}. {position.item_no ? `${position.item_no} ` : ''}{position.work_name}
+        {position.position_number}. {position.item_no ? <>{renderStrikeRuns(position.rich_runs?.item_no, position.item_no)} </> : ''}{renderStrikeRuns(position.rich_runs?.work_name, position.work_name)}
       </Text>
     </div>
   );
@@ -54,7 +55,7 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {!position.is_additional && (
             <Text type="secondary">
-              Кол-во заказчика: <Text strong>{position.volume?.toFixed(2) || '-'}</Text>
+              Кол-во заказчика: <Text strong>{position.volume != null ? renderStruck(position.rich_runs?.volume_struck, position.volume.toFixed(2)) : '-'}</Text>
               {position.unit_code && <> &nbsp;Ед. изм.: <Text strong>{position.unit_code}</Text></>}
             </Text>
           )}
@@ -65,7 +66,7 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
           )}
           {position.client_note && (
             <Text type="secondary">
-              Примечание заказчика: <Text strong>{position.client_note}</Text>
+              Примечание заказчика: <Text strong>{renderStrikeRuns(position.rich_runs?.client_note, position.client_note)}</Text>
             </Text>
           )}
           <Text type="secondary">
@@ -92,12 +93,12 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
           {!position.is_additional && (
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
               <Text type="secondary">
-                Кол-во заказчика: <Text strong>{position.volume?.toFixed(2) || '-'}</Text>
+                Кол-во заказчика: <Text strong>{position.volume != null ? renderStruck(position.rich_runs?.volume_struck, position.volume.toFixed(2)) : '-'}</Text>
                 {position.unit_code && <> &nbsp;Ед. изм.: <Text strong>{position.unit_code}</Text></>}
               </Text>
               {position.client_note && (
                 <Text type="secondary">
-                  Примечание заказчика: <Text strong>{position.client_note}</Text>
+                  Примечание заказчика: <Text strong>{renderStrikeRuns(position.rich_runs?.client_note, position.client_note)}</Text>
                 </Text>
               )}
             </div>

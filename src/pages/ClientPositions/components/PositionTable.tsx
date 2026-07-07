@@ -17,6 +17,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { ClientPosition, Tender } from '../../../lib/types';
 import { PositionRowActions } from './PositionRowActions';
+import { renderStrikeRuns, renderStruck } from '../../../components/RichText/StrikeText';
 import { IconSwap } from '../../../components/transitions';
 import { useWorkspaceTabActions } from '../../../contexts/WorkspaceTabsContext';
 import { HideOnPhone } from '../../../components/responsive/HideOnPhone';
@@ -209,7 +210,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
                   </Text>
                 )
               )}
-              <Text style={{ textDecoration: 'underline' }}>{record.work_name}</Text>
+              <Text style={{ textDecoration: 'underline' }}>{renderStrikeRuns(record.rich_runs?.work_name, record.work_name)}</Text>
             </div>
           );
         }
@@ -221,11 +222,11 @@ export const PositionTable: React.FC<PositionTableProps> = ({
             ) : (
               record.item_no && (
                 <Text strong style={{ color: sectionColor, marginRight: 8 }}>
-                  {record.item_no}
+                  {renderStrikeRuns(record.rich_runs?.item_no, record.item_no)}
                 </Text>
               )
             )}
-            <Text style={{ fontWeight: 700, fontFamily: 'Georgia, "Times New Roman", serif' }}>{record.work_name}</Text>
+            <Text style={{ fontWeight: 700, fontFamily: 'Georgia, "Times New Roman", serif' }}>{renderStrikeRuns(record.rich_runs?.work_name, record.work_name)}</Text>
           </div>
         );
       },
@@ -239,7 +240,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
           {record.volume && (
             <div>
               <Text type="secondary">Кол-во: </Text>
-              <Text strong>{record.volume.toFixed(2)}</Text>
+              <Text strong>{renderStruck(record.rich_runs?.volume_struck, record.volume.toFixed(2))}</Text>
             </div>
           )}
           {record.unit_code && (
@@ -257,7 +258,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
                 overlayInnerStyle={{ color: currentTheme === 'dark' ? '#e5e7eb' : '#111827', maxWidth: 360 }}
               >
                 <div style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', cursor: 'default', fontStyle: 'italic' }}>
-                  {record.client_note}
+                  {renderStrikeRuns(record.rich_runs?.client_note, record.client_note)}
                 </div>
               </Tooltip>
             </div>

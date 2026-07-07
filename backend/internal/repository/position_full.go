@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -40,6 +41,7 @@ type PositionWithTenderRow struct {
 	TotalCommercialWork             *float64   `json:"total_commercial_work"`
 	TotalCommercialMaterialPerUnit  *float64   `json:"total_commercial_material_per_unit"`
 	TotalCommercialWorkPerUnit      *float64   `json:"total_commercial_work_per_unit"`
+	RichRuns                        json.RawMessage `json:"rich_runs"`
 	CreatedAt                       time.Time  `json:"created_at"`
 	UpdatedAt                       time.Time  `json:"updated_at"`
 	Tenders                         *PositionTenderRates `json:"tenders"`
@@ -56,6 +58,7 @@ func (r *PositionRepo) GetPositionWithTender(ctx context.Context, id string) (*P
 		       cp.material_cost_per_unit, cp.work_cost_per_unit,
 		       cp.total_commercial_material, cp.total_commercial_work,
 		       cp.total_commercial_material_per_unit, cp.total_commercial_work_per_unit,
+		       cp.rich_runs,
 		       cp.created_at, cp.updated_at,
 		       t.usd_rate, t.eur_rate, t.cny_rate
 		FROM public.client_positions cp
@@ -73,6 +76,7 @@ func (r *PositionRepo) GetPositionWithTender(ctx context.Context, id string) (*P
 		&p.MaterialCostPerUnit, &p.WorkCostPerUnit,
 		&p.TotalCommercialMaterial, &p.TotalCommercialWork,
 		&p.TotalCommercialMaterialPerUnit, &p.TotalCommercialWorkPerUnit,
+		&p.RichRuns,
 		&p.CreatedAt, &p.UpdatedAt,
 		&usd, &eur, &cny,
 	); err != nil {
