@@ -159,9 +159,6 @@ const ObjectComparison: React.FC = () => {
 
   // Stats for 2-tender diff
   const diffValue = loadedCount === 2 ? (tenderTotals[1] || 0) - (tenderTotals[0] || 0) : 0;
-  const diffPercent = (tenderTotals[0] || 0) > 0
-    ? ((diffValue / tenderTotals[0]) * 100).toFixed(2)
-    : '0';
 
   const tenderLabelsForExport = loadedInfos.map((info, i: number) => tenderLabel(info, `Тендер ${i + 1}`));
 
@@ -227,7 +224,7 @@ const ObjectComparison: React.FC = () => {
                 {selectedTenders.map((val, idx) => {
                   const info = val ? tenders.find(t => t.id === val) || null : null;
                   return (
-                    <div key={idx} style={{ flex: isPhone ? '1 1 100%' : '0 0 300px', minWidth: isPhone ? 0 : 240 }}>
+                    <div key={idx} style={{ flex: isPhone ? '1 1 100%' : '0 0 210px', minWidth: isPhone ? 0 : 168 }}>
                       <Space direction="vertical" style={{ width: '100%' }}>
                         <Space align="center">
                           <Text strong>Тендер {idx + 1}</Text>
@@ -288,9 +285,10 @@ const ObjectComparison: React.FC = () => {
           const statsCard = comparisonData.length > 0 ? (
             <Card
               title={`Общая статистика (${costLabel.toLowerCase()} затраты)`}
-              styles={{ body: { padding: isPhone ? '8px 12px' : '8px 16px' } }}
+              style={{ height: '100%' }}
+              styles={{ body: { padding: isPhone ? '8px 12px' : '8px 16px', display: 'flex', alignItems: 'center', minHeight: isPhone ? undefined : 72 } }}
             >
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: isPhone ? 'space-around' : 'flex-start', gap: isPhone ? 8 : 24 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: isPhone ? 'space-around' : 'flex-start', gap: isPhone ? 8 : 24, width: '100%' }}>
                 {loadedInfos.map((info, i: number) => (
                   <div key={i} style={{ padding: isPhone ? '0 4px' : '0 12px', textAlign: 'center' }}>
                     <Statistic
@@ -312,9 +310,6 @@ const ObjectComparison: React.FC = () => {
                       prefix={diffValue >= 0 ? '+' : ''}
                       valueStyle={{ fontSize: isPhone ? 16 : 18, color: diffValue >= 0 ? '#52c41a' : '#ff4d4f', fontWeight: 600 }}
                     />
-                    <Text type="secondary" style={{ fontSize: 11 }}>
-                      ({diffPercent}% {diffValue >= 0 ? 'больше' : 'меньше'})
-                    </Text>
                   </div>
                 )}
               </div>
@@ -324,8 +319,8 @@ const ObjectComparison: React.FC = () => {
           const showStatsBeside = screens.lg && !isMultiTender && comparisonData.length > 0;
 
           return showStatsBeside ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
-              <div style={{ flex: '1 1 900px', minWidth: 860 }}>{selectionCard}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'stretch' }}>
+              <div style={{ flex: '0 1 auto', minWidth: 0 }}>{selectionCard}</div>
               <div style={{ flex: '1 1 320px', minWidth: 280 }}>{statsCard}</div>
             </div>
           ) : (
