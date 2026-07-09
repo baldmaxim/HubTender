@@ -3,10 +3,12 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
@@ -163,7 +165,11 @@ func (h *PositionHandler) GetPositionWithTender(w http.ResponseWriter, r *http.R
 	}
 	p, err := h.svc.GetPositionWithTender(r.Context(), id)
 	if err != nil {
-		apierr.InternalFromErr(w, r, err, "failed to load position")
+		if errors.Is(err, pgx.ErrNoRows) {
+			apierr.NotFound("position not found").Render(w)
+			return
+		}
+		apierr.InternalFromErr(w, r, err, "failed to load position", "position_id", id)
 		return
 	}
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: p})

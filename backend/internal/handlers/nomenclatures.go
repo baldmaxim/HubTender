@@ -196,6 +196,9 @@ func (h *NomenclaturesHandler) CreateMaterialName(w http.ResponseWriter, r *http
 		apierr.BadRequest("invalid JSON body").Render(w)
 		return
 	}
+	if !h.unitExistsOr400(w, r, in.Unit) {
+		return
+	}
 	if err := h.svc.CreateMaterialName(r.Context(), in); err != nil {
 		if p := apierr.ProblemFromPgErr(err, map[string]string{
 			"material_names_unit_fkey": "Указанная единица измерения не существует",
@@ -269,10 +272,33 @@ func (h *NomenclaturesHandler) DeleteMaterialNamesIn(w http.ResponseWriter, r *h
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// unitExistsOr400 pre-validates that the unit code exists in the units
+// reference before an insert/update, returning a clear 400 instead of a
+// foreign-key 23503. Empty unit is left to DB NOT NULL / FK handling.
+// Returns false if a response was already written.
+func (h *NomenclaturesHandler) unitExistsOr400(w http.ResponseWriter, r *http.Request, unit string) bool {
+	if unit == "" {
+		return true
+	}
+	exists, err := h.svc.UnitExists(r.Context(), unit)
+	if err != nil {
+		apierr.InternalFromErr(w, r, err, "failed to validate unit", "unit", unit)
+		return false
+	}
+	if !exists {
+		apierr.BadRequest("Указанная единица измерения не существует").Render(w)
+		return false
+	}
+	return true
+}
+
 func (h *NomenclaturesHandler) CreateWorkName(w http.ResponseWriter, r *http.Request) {
 	var in repository.NameInput
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if !h.unitExistsOr400(w, r, in.Unit) {
 		return
 	}
 	if err := h.svc.CreateWorkName(r.Context(), in); err != nil {

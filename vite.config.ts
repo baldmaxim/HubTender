@@ -17,6 +17,7 @@ export default defineConfig(async ({ mode }) => {
     plugins.push(
       VitePWA({
         registerType: 'autoUpdate',
+        injectRegister: false,
         includeAssets: ['logo.svg'],
         manifest: {
           name: 'TenderHUB - Портал управления тендерами',

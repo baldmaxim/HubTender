@@ -22,6 +22,10 @@ type CaptureContext = {
   extra?: Record<string, unknown>
 }
 
+type SentryEvent = {
+  exception?: { values?: Array<{ value?: string }> }
+}
+
 let sentryModulePromise: Promise<SentryModule | null> | null = null
 const sentryImportId = '@sentry/react'
 
@@ -86,6 +90,14 @@ export function initSentry(): void {
       dsn,
       environment,
       release: import.meta.env.VITE_SENTRY_RELEASE as string | undefined,
+      beforeSend(event: SentryEvent): SentryEvent | null {
+        const msg = event?.exception?.values?.[0]?.value ?? ''
+        // Транзиентные сбои регистрации service worker — не actionable, гасим.
+        if (/Failed to register a ServiceWorker|ServiceWorker.*sw\.js/i.test(msg)) {
+          return null
+        }
+        return event
+      },
       tracesSampleRate: import.meta.env.PROD ? 0.1 : 0,
       replaysSessionSampleRate: 0,
       replaysOnErrorSampleRate: import.meta.env.PROD ? 1 : 0,
