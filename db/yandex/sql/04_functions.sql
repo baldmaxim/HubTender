@@ -352,39 +352,42 @@ BEGIN
 END;
 $function$;
 
+-- RETIRED (этап 0.1.2.2c): fail-closed tombstone. Раньше эта RPC напрямую
+-- писала commercial_markup / total_commercial_material_cost /
+-- total_commercial_work_cost по произвольным item id (SECURITY DEFINER, без
+-- проверки тендера) — DB-level обход серверного расчётного контура.
+-- Имя и сигнатура сохранены на переходный период ради внешних stale callers:
+-- любой вызов (включая NULL / пустой массив / валидный старый payload) всегда
+-- завершается SQLSTATE 0A000 COMMERCIAL_COST_WRITE_RETIRED до чтения p_rows.
+-- Единственный разрешённый writer — внутренний серверный
+-- PersistCalculatedCommercialCosts (CommercialRecalcService, Go BFF).
+-- НЕ STRICT (CALLED ON NULL INPUT) — иначе NULL вернул бы NULL, минуя ошибку.
+-- SECURITY INVOKER — прав владельца не наследует.
 CREATE OR REPLACE FUNCTION public.bulk_update_boq_items_commercial_costs(p_rows jsonb)
  RETURNS integer
  LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
+ SECURITY INVOKER
+ CALLED ON NULL INPUT
+   SET search_path = public, pg_temp
 AS $function$
-DECLARE
-  v_count integer;
-  v_tender_id uuid;
 BEGIN
-  UPDATE boq_items bi
-  SET
-    commercial_markup              = (r.value->>'commercial_markup')::numeric,
-    total_commercial_material_cost = (r.value->>'total_commercial_material_cost')::numeric,
-    total_commercial_work_cost     = (r.value->>'total_commercial_work_cost')::numeric,
-    updated_at                     = now()
-  FROM jsonb_array_elements(p_rows) AS r(value)
-  WHERE bi.id = (r.value->>'id')::uuid;
-
-  GET DIAGNOSTICS v_count = ROW_COUNT;
-
-  -- Пересчитываем grand total один раз для каждого затронутого тендера
-  FOR v_tender_id IN
-    SELECT DISTINCT bi.tender_id
-    FROM boq_items bi
-    JOIN jsonb_array_elements(p_rows) AS r(value) ON bi.id = (r.value->>'id')::uuid
-  LOOP
-    PERFORM public.recalculate_tender_grand_total(v_tender_id);
-  END LOOP;
-
-  RETURN v_count;
+  RAISE EXCEPTION 'COMMERCIAL_COST_WRITE_RETIRED'
+    USING ERRCODE = '0A000',
+          DETAIL  = 'Коммерческие стоимости рассчитываются только серверным расчётным контуром '
+                    '(CommercialRecalcService → PersistCalculatedCommercialCosts). '
+                    'Legacy RPC выведена из эксплуатации (этап 0.1.2.2c).',
+          HINT    = 'Не вызывайте эту функцию: она сохранена только как fail-closed tombstone.';
 END;
 $function$;
+
+REVOKE ALL PRIVILEGES
+  ON FUNCTION public.bulk_update_boq_items_commercial_costs(jsonb)
+  FROM PUBLIC;
+
+COMMENT ON FUNCTION public.bulk_update_boq_items_commercial_costs(jsonb) IS
+  'RETIRED (2026-07, этап 0.1.2.2c): fail-closed tombstone, всегда SQLSTATE 0A000 '
+  'COMMERCIAL_COST_WRITE_RETIRED. Никогда не изменяет boq_items. '
+  'Единственный writer commercial-полей — серверный PersistCalculatedCommercialCosts.';
 
 -- Fixed in PROD: stale `role` column -> role_code with English codes.
 CREATE OR REPLACE FUNCTION public.check_user_page_access(user_id uuid, page_url text)

@@ -195,9 +195,9 @@ const price = row.total_amount; // сервер посчитал и вернул
 4. **Импорт BOQ** доверяет `total_amount` клиента (`import_boq.go`, mass/single import). →
    **этап 0.2**.
 5. ~~**`PATCH /items/bulk-commercial`** — сырой client-write commercial~~ → ✅ **закрыто в 0.1.2.2**
-   (endpoint retired, 410; см. раздел «Коммерческие стоимости» ниже). **Но остаётся**
-   латентный DB-level bypass: SQL-функция `public.bulk_update_boq_items_commercial_costs`
-   **не удалена** — снимать в отдельном DB-подэтапе.
+   (endpoint retired, 410; см. раздел «Коммерческие стоимости» ниже).
+   ~~Латентный DB-level bypass `public.bulk_update_boq_items_commercial_costs`~~ →
+   ✅ **закрыто в 0.1.2.2c**: функция превращена в fail-closed tombstone (см. §7d).
 6. **Superseded SQL RPC** (`insert/update_boq_item_with_audit`, `get_positions_with_costs`,
    `execute_version_transfer`, `bulk_*`) всё ещё в БД → латентный bypass. → снять в этапе БД.
 7. **Дублированный type→bucket сплит** `SUM(total_amount) FILTER (type IN …)` в
@@ -237,11 +237,12 @@ const price = row.total_amount; // сервер посчитал и вернул
    успешного commit.
    Невалидный рассчитанный результат → `InvalidCommercialCalculationResultError{ItemID,
    Field, Reason}` (это баг расчёта, а не ввод клиента — клиент до writer'а не доходит).
-6. **Латентный DB bypass остаётся:** SQL-функция
-   `public.bulk_update_boq_items_commercial_costs(p_rows jsonb)` **всё ещё существует**
-   в `db/yandex/sql/04_functions.sql`. Она не удалена, миграции не применялись, grants из
-   репозитория не видны (**UNKNOWN**), приложение её не вызывает. Пока функция есть,
-   **нельзя утверждать, что DB-level bypass закрыт** — это отдельный DB-подэтап.
+6. ~~**Латентный DB bypass:** SQL-функция
+   `public.bulk_update_boq_items_commercial_costs(p_rows jsonb)`~~ → ✅ **закрыто в
+   0.1.2.2c**: baseline и incremental migration превращают её в fail-closed tombstone
+   (SQLSTATE 0A000 `COMMERCIAL_COST_WRITE_RETIRED`), EXECUTE отозван у PUBLIC и всех
+   обнаруженных non-owner grantees. Runtime ACL production до применения миграции —
+   **UNKNOWN**; проверяется verification query из миграции (см. §7d).
 7. **Остаётся на 0.1.3:** серверный recalc меняет `updated_at` (риск ETag-конфликтов) и
    не защищён от stale-write при двух конкурентных пересчётах. В этом этапе сознательно
    не решалось.
@@ -347,9 +348,64 @@ const price = row.total_amount; // сервер посчитал и вернул
 если rollback снова начнёт писать derived-колонки из snapshot, вернёт
 `jsonb_populate_record`, свою формулу, FX-фолбэк 1 или клиентский snapshot).
 
-Остаётся в backlog (вне 0.1.2.2b): вывод legacy SQL RPC commercial writer,
-frontend redistribution, `updated_at`/ETag после серверных recalc, конкурентные
-stale-recalc, calculation versioning (`calculation_run` для точного replay).
+Остаётся в backlog (вне 0.1.2.2b): ~~вывод legacy SQL RPC commercial writer~~
+(✅ закрыто в 0.1.2.2c, см. §7d), frontend redistribution, `updated_at`/ETag
+после серверных recalc, конкурентные stale-recalc, calculation versioning
+(`calculation_run` для точного replay).
+
+## 7d. Legacy SQL RPC commercial writer — retired (этап 0.1.2.2c)
+
+`public.bulk_update_boq_items_commercial_costs(p_rows jsonb)` **retired**:
+последний DB-level путь записи `commercial_markup` /
+`total_commercial_material_cost` / `total_commercial_work_cost` мимо серверного
+расчётного контура закрыт.
+
+1. **Tombstone, не DROP.** Имя и сигнатура сохранены на переходный период ради
+   внешних stale callers: любой вызов — включая `NULL`, `[]`, `{}`, валидный
+   старый payload, чужие/несуществующие id — всегда завершается
+   **SQLSTATE 0A000, message `COMMERCIAL_COST_WRITE_RETIRED`** до чтения
+   `p_rows`. Никакой mutation, никакого «0 = успех», никакого silent no-op.
+2. **NULL не обходит tombstone:** функция объявлена `CALLED ON NULL INPUT`
+   (НЕ `STRICT`) — иначе PostgreSQL вернул бы `NULL` без выполнения тела.
+   Также `SECURITY INVOKER` (прав владельца не наследует, в отличие от старого
+   `SECURITY DEFINER`-writer'а) и фиксированный `search_path`. Вызов даже
+   owner-ролью падает — корректность не зависит от grants.
+3. **Два уровня схемы:** baseline `db/yandex/sql/04_functions.sql` (fresh
+   install сразу создаёт tombstone) и идемпотентная транзакционная миграция
+   `db/yandex/incremental/2026_07_retire_bulk_update_commercial_costs.sql`
+   (для существующих установок; повторное применение безопасно; данные
+   boq_items не трогает).
+4. **ACL:** `REVOKE ALL … FROM PUBLIC` (закрывает и implicit default EXECUTE)
+   + динамический отзыв EXECUTE у всех обнаруженных non-owner grantees из
+   `proacl` (не полагаясь на известные имена ролей). Runtime ACL production —
+   проверять verification query в конце миграции (не выполнялась в 0.1.2.2c).
+5. **Единственный активный production writer** commercial-полей —
+   `repository.PersistCalculatedCommercialCosts(Tx)`, вызываемый только
+   внутренним `CommercialRecalcService` (и transaction-aware
+   `MaterializeCommercialForTenderTx`). Retirement RPC его не затрагивает
+   (writer пишет прямым SQL, не через RPC).
+6. **Generated type** `bulk_update_boq_items_commercial_costs` в
+   `src/lib/types/database.types.ts` может оставаться до полного DROP функции —
+   это отражение фактической сигнатуры в БД, а **не разрешение на вызов**.
+   Production-код её не вызывает; регресс ловит
+   `scripts/checks/noCommercialSqlRpc.check.mjs`.
+7. **Deployment order:** сначала application code (endpoint 410, callers
+   отсутствуют, internal writer отделён — уже в проде с 0.1.2.2), затем SQL
+   retirement migration. При rolling deployment старый внешний caller после
+   миграции получает явную ошибку, но не может изменить данные. Если
+   application откатят на старую версию — RPC остаётся retired, и старый
+   caller падает fail-closed: **это намеренное безопасное поведение**.
+   Down migration, возвращающая unsafe writer, запрещена; допустим только
+   DROP tombstone (тоже fail-closed).
+8. **Точный DROP tombstone** — позднее, после подтверждения отсутствия внешних
+   stale callers по логам production.
+
+Статус direct-table privileges: клиентских DB-ролей (anon/authenticated) на
+Yandex нет — фронт ходит только через Go BFF; runtime-роль бэкенда создаётся
+оператором (см. `08_permissions.sql`, no-op) и является trusted server role
+internal writer'а, поэтому column-level REVOKE для неё не применяется.
+Фактический production ACL таблицы — **UNKNOWN** до выполнения verification
+query; пункт добавлен в deployment checklist миграции.
 
 ## 8. Что сделано в 0.1.2 (только безопасное)
 
