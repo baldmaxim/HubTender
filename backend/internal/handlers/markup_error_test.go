@@ -52,6 +52,73 @@ func TestRenderInvalidSequence_IgnoresOtherErrors(t *testing.T) {
 	}
 }
 
+// Stage 0.1.2.2a.1: copy / version-transfer domain errors must reach the handler as
+// 400s through the full repository → service %w chain, using the SHARED RFC 7807
+// renderers — never a generic 500.
+func TestTransferChain_InvalidBoqParent_RFC7807(t *testing.T) {
+	inner := &repository.InvalidBoqParentError{
+		ItemID:         "boq-2",
+		ParentItemID:   "boq-1",
+		Reason:         repository.BoqParentNotWorkItem,
+		ParentItemType: "мат",
+	}
+	// Exactly how repository → service wrap it.
+	repoErr := fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", inner)
+	svcErr := fmt.Errorf("transferService.ExecuteVersionTransfer: %w", repoErr)
+
+	w := httptest.NewRecorder()
+	if !renderInvalidBoqParent(w, svcErr) {
+		t.Fatal("wrapped InvalidBoqParentError must be recognised through the chain")
+	}
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400 (not a 500)", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/problem+json" {
+		t.Fatalf("content-type = %q", ct)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("body not JSON: %v", err)
+	}
+	if body["code"] != "INVALID_BOQ_PARENT" ||
+		body["itemId"] != "boq-2" ||
+		body["parentItemId"] != "boq-1" ||
+		body["reason"] != "PARENT_NOT_WORK_ITEM" ||
+		body["parentItemType"] != "мат" {
+		t.Fatalf("unexpected problem body: %v", body)
+	}
+}
+
+// The transfer's missing-FX error must also arrive as 400 MISSING_FX_RATE.
+func TestTransferChain_MissingFXRate_RFC7807(t *testing.T) {
+	inner := &calc.MissingFXRateError{Currency: "USD"}
+	repoErr := fmt.Errorf("transferRepo.ExecuteVersionTransfer: recomputeBoqTotalAmountsTx: item x: %w", inner)
+	svcErr := fmt.Errorf("transferService.ExecuteVersionTransfer: %w", repoErr)
+
+	w := httptest.NewRecorder()
+	if !renderMissingFXRate(w, svcErr) {
+		t.Fatal("wrapped MissingFXRateError must be recognised through the transfer chain")
+	}
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("body not JSON: %v", err)
+	}
+	if body["code"] != "MISSING_FX_RATE" || body["currency"] != "USD" {
+		t.Fatalf("unexpected problem body: %v", body)
+	}
+}
+
+func TestRenderInvalidBoqParent_IgnoresOtherErrors(t *testing.T) {
+	w := httptest.NewRecorder()
+	if renderInvalidBoqParent(w, fmt.Errorf("some db error")) {
+		t.Fatal("must not handle unrelated errors")
+	}
+}
+
 // Stage 0.1.2.1a: an invalid template parent link must surface as RFC 7807 400
 // INVALID_TEMPLATE_PARENT (with the offending row/parent/reason), not a 500.
 func TestRenderInvalidTemplateParent_RFC7807(t *testing.T) {

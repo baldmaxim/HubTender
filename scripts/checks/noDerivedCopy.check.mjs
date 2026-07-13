@@ -19,10 +19,20 @@ import { join } from 'node:path';
 
 const ROOT = new URL('../../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 
-// Production copy/transfer sources (no _test.go).
+// Production copy/transfer sources, plus the transaction-aware helpers created for
+// them (no _test.go, no docs).
+//
+// NOTE: reading a calculated column is legitimate (the authoritative recompute in
+// boq_derived.go must SELECT the current row, and ComputeCommercialRows diffs
+// against the stored values). What is forbidden is carrying a SOURCE row's
+// calculated value into a TARGET row — hence the rules below target
+// source-prefixed reads and INSERT column lists, not any mention of the columns.
 const FILES = [
   'backend/internal/repository/boq_copy.go',
   'backend/internal/repository/tender_transfer_boq.go',
+  'backend/internal/repository/tender_transfer.go',
+  'backend/internal/repository/tender_transfer_additional.go',
+  'backend/internal/repository/boq_derived.go',
 ];
 
 const DERIVED = [
