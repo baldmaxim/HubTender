@@ -98,6 +98,21 @@ func InvalidMarkupSequence(issues any) *ProblemExtra {
 	}
 }
 
+// Gone returns a 410 Problem for a retired endpoint. `code` is the stable,
+// machine-readable identifier clients can branch on (e.g.
+// COMMERCIAL_COST_WRITE_RETIRED).
+func Gone(detail, code string) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusGone),
+			Title:  "Gone",
+			Status: http.StatusGone,
+			Detail: detail,
+		},
+		Extras: map[string]any{"code": code},
+	}
+}
+
 // InvalidTemplateParent returns a 400 Problem for a template row whose parent
 // link does not resolve to a really-inserted WORK item. The extension members
 // point the client at the exact template row / parent / reason.
@@ -180,6 +195,8 @@ func problemTypeURI(status int) string {
 		return "https://httpstatuses.io/404"
 	case http.StatusConflict:
 		return "https://httpstatuses.io/409"
+	case http.StatusGone:
+		return "https://httpstatuses.io/410"
 	case http.StatusPreconditionFailed:
 		return "https://httpstatuses.io/412"
 	case http.StatusPreconditionRequired:

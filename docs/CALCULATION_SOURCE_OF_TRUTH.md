@@ -112,7 +112,7 @@ const price = row.total_amount; // сервер посчитал и вернул
 | `commercial_recalc.go RecalcTender` | commercial split | ✅ да | LOW | эталон |
 | `template_insert.go` | total_amount | ✅ **да** (0.1.2.1) | LOW | **исправлено** — legacy-формула удалена |
 | `import_boq.go BulkImport` | total_amount **от клиента** | ❌ нет | **HIGH** | **этап 0.2 (импорт)** |
-| `boq_bulk.go BulkUpdateCommercial` | commercial от клиента | ❌ нет | HIGH (by-design) | endpoint-escape-hatch — **backlog** |
+| `commercial_write.go PersistCalculatedCommercialCosts` | запись **рассчитанных** commercial (внутренний писатель) | ✅ да (пишет результат calc) | LOW | **0.1.2.2** — единственный writer, привязан к одному tender |
 | `redistribution.go SaveResults` | redistribution от клиента | ❌ нет | **HIGH** | **backlog** (см. §7) |
 | `tender_recalc.go RecalculateTenderGrandTotal` | Σcommercial + insurance, ROUND(,2) | ❌ нет | MED | дубль с SQL — **backlog** |
 | `position_costs.go GetPositionsWithCosts` | base/commercial/markup% (read-only) | ❌ нет | MED (read-only) | display-агрегат |
@@ -194,14 +194,61 @@ const price = row.total_amount; // сервер посчитал и вернул
    `calc.CalculateBoqItemTotalAmount`, effective parent определяется до INSERT, FX блокирует.
 4. **Импорт BOQ** доверяет `total_amount` клиента (`import_boq.go`, mass/single import). →
    **этап 0.2**.
-5. **`bulk_update_boq_items_commercial` / `PATCH /items/bulk-commercial`** — сырой write
-   commercial без проверки против `calc`. Фронт больше не вызывает; endpoint остаётся. →
-   валидировать против `calc` или закрыть.
+5. ~~**`PATCH /items/bulk-commercial`** — сырой client-write commercial~~ → ✅ **закрыто в 0.1.2.2**
+   (endpoint retired, 410; см. раздел «Коммерческие стоимости» ниже). **Но остаётся**
+   латентный DB-level bypass: SQL-функция `public.bulk_update_boq_items_commercial_costs`
+   **не удалена** — снимать в отдельном DB-подэтапе.
 6. **Superseded SQL RPC** (`insert/update_boq_item_with_audit`, `get_positions_with_costs`,
    `execute_version_transfer`, `bulk_*`) всё ещё в БД → латентный bypass. → снять в этапе БД.
 7. **Дублированный type→bucket сплит** `SUM(total_amount) FILTER (type IN …)` в
    `position_recompute.go`, `template_insert.go`, `boq_copy.go` и 2 SQL-функциях. →
    централизовать (в `calc` есть `IsWorkBoqType`/`IsMaterialBoqType`).
+
+## 7a. Коммерческие стоимости — только серверная запись (этап 0.1.2.2)
+
+`commercial_markup`, `total_commercial_material_cost`, `total_commercial_work_cost` —
+это **результаты расчёта**, а не пользовательский ввод.
+
+1. **`PATCH /api/v1/items/bulk-commercial` ВЫВЕДЕН ИЗ ЭКСПЛУАТАЦИИ.** Route намеренно
+   остаётся зарегистрированным как tombstone и **всегда** отвечает:
+   `410 Gone`, `application/problem+json`, `code: COMMERCIAL_COST_WRITE_RETIRED`.
+   Он не читает body, не валидирует, не зовёт service/repository, ничего не мутирует,
+   не сбрасывает кэш и не запускает recalc — одинаково для корректного, пустого и
+   битого JSON.
+2. **Клиенты не могут сохранять эти поля.** Client-DTO `BulkCommercialRow` и метод
+   `BulkUpdateCommercial` удалены из handler/service/repository. Интерфейс
+   `bulkBoqServicer` больше **физически не содержит** commercial-writer, поэтому
+   handler не способен мутировать эти колонки даже по ошибке.
+3. **Единственный production-писатель** — внутренний
+   `BulkBoqRepo.PersistCalculatedCommercialCosts`, вызываемый **только**
+   `CommercialRecalcService` после `calc.CalculateBoqItemCost`. Строка результата —
+   `CalculatedCommercialCostRow`: **без json- и validate-тегов**, «server-generated,
+   must never be populated from an HTTP request» (закреплено тестом через reflect).
+4. **Writer привязан к одному тендеру.** Контракт:
+   `PersistCalculatedCommercialCosts(ctx, tenderID, rows)`. SQL обновляет строки при
+   `bi.id = u.id AND bi.tender_id = $tenderID` — чужой тендер невозможно задеть, какие
+   бы ID ни передали (а не «собрать затронутые тендеры постфактум»).
+5. **Exact-set + атомарность.** До мутации набор валидируется (непустой и уникальный ID,
+   конечные числа, без NaN/±Inf, неотрицательные суммы; верхнего предела нет). После
+   UPDATE обязана выполняться `RowsAffected == len(rows)`; иначе —
+   `CommercialResultSetMismatchError{TenderID, Expected, Updated}` и **rollback всей
+   транзакции**: ни частичного набора, ни частично обновлённого grand total. Grand total
+   пересчитывается **один раз** в той же транзакции. Кэш чистится **только** после
+   успешного commit.
+   Невалидный рассчитанный результат → `InvalidCommercialCalculationResultError{ItemID,
+   Field, Reason}` (это баг расчёта, а не ввод клиента — клиент до writer'а не доходит).
+6. **Латентный DB bypass остаётся:** SQL-функция
+   `public.bulk_update_boq_items_commercial_costs(p_rows jsonb)` **всё ещё существует**
+   в `db/yandex/sql/04_functions.sql`. Она не удалена, миграции не применялись, grants из
+   репозитория не видны (**UNKNOWN**), приложение её не вызывает. Пока функция есть,
+   **нельзя утверждать, что DB-level bypass закрыт** — это отдельный DB-подэтап.
+7. **Остаётся на 0.1.3:** серверный recalc меняет `updated_at` (риск ETag-конфликтов) и
+   не защищён от stale-write при двух конкурентных пересчётах. В этом этапе сознательно
+   не решалось.
+
+Защита от возврата фронтового писателя: `scripts/checks/noCommercialWrite.check.mjs`
+(падает, если в `src/` появится вызов retired-endpoint, хелпер `bulkUpdateCommercial`
+или commercial-поле внутри тела запроса).
 
 ## 8. Что сделано в 0.1.2 (только безопасное)
 

@@ -1,7 +1,14 @@
 // BOQ items helpers (Go BFF).
-// Коммерческая материализация (bulkUpdateCommercial → PATCH /items/bulk-commercial)
-// удалена с фронта: пересчёт коммерческих стоимостей выполняется авторитетно на
-// сервере (Go BFF авто-пересчёт по изменению входных данных).
+//
+// Коммерческие стоимости (commercial_markup / total_commercial_material_cost /
+// total_commercial_work_cost) — это РЕЗУЛЬТАТЫ серверного расчёта. Клиент не может
+// их сохранять: endpoint PATCH /api/v1/items/bulk-commercial ВЫВЕДЕН ИЗ
+// ЭКСПЛУАТАЦИИ (этап 0.1.2.2) и всегда отвечает 410 Gone с кодом
+// COMMERCIAL_COST_WRITE_RETIRED. Единственный писатель — внутренний серверный
+// CommercialRecalcService (backend/internal/calc → PersistCalculatedCommercialCosts).
+// Не восстанавливать здесь bulkUpdateCommercial: это ловит
+// scripts/checks/noCommercialWrite.check.mjs.
+// Читать и отображать сохранённые значения — можно.
 import { apiFetch } from './client';
 import { API_BASE_URL } from './featureFlags';
 import { getAccessToken as appAuthGetAccessToken } from '../auth/client';

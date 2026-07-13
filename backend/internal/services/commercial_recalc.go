@@ -26,8 +26,20 @@ const recalcEpsilon = 1e-6
 type CommercialRecalcService struct {
 	fi     *repository.FIRepo
 	markup *repository.MarkupRepo
-	bulk   *repository.BulkBoqRepo
+	bulk   calculatedCommercialWriter
 	cache  *cache.InMem
+}
+
+// calculatedCommercialWriter is the ONLY way commercial costs reach the DB.
+// It is deliberately narrow and tender-scoped: a caller must name the tender it
+// calculated, and the writer refuses to touch any other tender's rows.
+// *repository.BulkBoqRepo satisfies it. No client-facing handler can reach it.
+type calculatedCommercialWriter interface {
+	PersistCalculatedCommercialCosts(
+		ctx context.Context,
+		tenderID string,
+		rows []repository.CalculatedCommercialCostRow,
+	) (int, error)
 }
 
 // NewCommercialRecalcService wires the repos the recalc reads/writes through.
@@ -96,7 +108,8 @@ func (s *CommercialRecalcService) RecalcTender(ctx context.Context, tenderID str
 	// coeffCache is per-recalc (mirrors resetTypeCoefficientsCache at the start of
 	// applyTacticToTender) — never shared between concurrent tender recalcs.
 	coeffCache := map[string]float64{}
-	var changed []repository.BulkCommercialRow
+	// Server-generated calculation results — produced ONLY here, from calc.
+	var changed []repository.CalculatedCommercialCostRow
 
 	for _, it := range items {
 		base := recalcF(it.TotalAmount) // applyTacticToTender uses the stored total_amount
@@ -116,7 +129,7 @@ func (s *CommercialRecalcService) RecalcTender(ctx context.Context, tenderID str
 			continue // unchanged → no write (keeps WS/cache churn down, breaks any echo)
 		}
 
-		changed = append(changed, repository.BulkCommercialRow{
+		changed = append(changed, repository.CalculatedCommercialCostRow{
 			ID:                          it.ID,
 			CommercialMarkup:            res.MarkupCoefficient,
 			TotalCommercialMaterialCost: res.MaterialCost,
@@ -124,17 +137,36 @@ func (s *CommercialRecalcService) RecalcTender(ctx context.Context, tenderID str
 		})
 	}
 
+	return s.persistCalculated(ctx, tenderID, changed)
+}
+
+// persistCalculated writes the calculated result set for ONE tender and, only on
+// success, evicts that tender's cache.
+//
+// Invariants (unit-tested):
+//   - exactly ONE writer call per batch (never per row);
+//   - the writer is always told which tender was calculated;
+//   - an empty result set is a no-op (no write, no cache churn);
+//   - on ANY writer error (e.g. exact-set mismatch) nothing was persisted, so the
+//     cache is deliberately NOT invalidated and no success is reported.
+func (s *CommercialRecalcService) persistCalculated(
+	ctx context.Context,
+	tenderID string,
+	changed []repository.CalculatedCommercialCostRow,
+) error {
 	if len(changed) == 0 {
 		return nil
 	}
 
-	if _, _, err := s.bulk.BulkUpdateCommercial(ctx, changed); err != nil {
-		return fmt.Errorf("commercialRecalc: bulk write: %w", err)
+	// ONE writer call for the whole batch, explicitly scoped to THIS tender. The
+	// writer validates the result set, refuses to touch other tenders' rows, and
+	// rolls back atomically if the updated set != the calculated set (grand total
+	// included — it is recomputed once inside that same tx).
+	if _, err := s.bulk.PersistCalculatedCommercialCosts(ctx, tenderID, changed); err != nil {
+		return fmt.Errorf("commercialRecalc: persist calculated commercial costs: %w", err)
 	}
 
-	// The write changed grand_total (tender overview) and per-position commercial
-	// sums (positions with-costs); evict those cache entries so the next read is
-	// fresh. cached_grand_total itself was recomputed inside the bulk tx.
+	// Only AFTER a successful commit: evict THIS tender's derived caches.
 	s.cache.Delete("tender:overview:" + tenderID)
 	s.cache.Delete("positions:with_costs:" + tenderID)
 

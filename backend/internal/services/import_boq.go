@@ -34,8 +34,9 @@ func (s *ImportBoqService) WithRecalcQueue(q Enqueuer) *ImportBoqService {
 }
 
 // BulkImport delegates to the repository and, on success, evicts
-// tender:overview:<tenderID> and positions:with_costs:<tenderID> from cache,
-// matching the pattern used by BulkBoqService.BulkUpdateCommercial.
+// tender:overview:<tenderID> and positions:with_costs:<tenderID> from cache
+// (evict-only-after-successful-commit, the same rule the commercial recalc
+// writer follows).
 func (s *ImportBoqService) BulkImport(
 	ctx context.Context,
 	in repository.ImportInput,

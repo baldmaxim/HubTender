@@ -8,13 +8,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/su10/hubtender/backend/internal/middleware"
-	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
 
 // bulkBoqServicer is the interface BulkBoqHandler depends on.
+//
+// Stage 0.1.2.2: there is deliberately NO commercial-cost write method here. The
+// handler physically cannot reach a commercial writer, so the retired endpoint
+// cannot mutate anything even by accident.
 type bulkBoqServicer interface {
-	BulkUpdateCommercial(ctx context.Context, rows []repository.BulkCommercialRow) (int, error)
 	SetQuoteLinkByName(ctx context.Context, tenderID, field, value string, quoteLink *string, changedBy string) (int, error)
 	SetQuoteLinkByIDs(ctx context.Context, ids []string, quoteLink *string, changedBy string) (int, error)
 }
@@ -30,37 +32,34 @@ func NewBulkBoqHandler(svc bulkBoqServicer) *BulkBoqHandler {
 	return &BulkBoqHandler{svc: svc, validate: validator.New()}
 }
 
-// bulkCommercialReq is the request body for PATCH /api/v1/items/bulk-commercial.
-type bulkCommercialReq struct {
-	Rows []repository.BulkCommercialRow `json:"rows" validate:"required,min=1,dive"`
-}
-
-// bulkCommercialResp is the response body.
+// bulkCommercialResp is the response body of the quote-link endpoints.
 type bulkCommercialResp struct {
 	Updated int `json:"updated"`
 }
 
-// BulkUpdateCommercial handles PATCH /api/v1/items/bulk-commercial.
-// Intentionally skips If-Match (bulk path, matches original RPC behaviour).
-// No audit entries are written (matches original RPC behaviour).
-func (h *BulkBoqHandler) BulkUpdateCommercial(w http.ResponseWriter, r *http.Request) {
-	var req bulkCommercialReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apierr.BadRequest("invalid JSON body").Render(w)
-		return
-	}
-	if err := h.validate.Struct(req); err != nil {
-		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
-		return
-	}
-
-	count, err := h.svc.BulkUpdateCommercial(r.Context(), req.Rows)
-	if err != nil {
-		apierr.InternalFromErr(w, r, err, "failed to bulk-update commercial costs")
-		return
-	}
-
-	renderJSON(w, r, http.StatusOK, bulkCommercialResp{Updated: count})
+// RetiredBulkCommercial is the TOMBSTONE for PATCH /api/v1/items/bulk-commercial.
+//
+// The endpoint used to accept commercial_markup / total_commercial_material_cost /
+// total_commercial_work_cost straight from a client and write them to boq_items.
+// Those three columns are CALCULATION RESULTS: they may only be produced by the
+// authoritative kernel (backend/internal/calc) and persisted by the internal,
+// tender-scoped CommercialRecalcService. A public write contract for them is
+// architecturally invalid, so the route is retired rather than validated.
+//
+// It ALWAYS answers 410 Gone and, by construction:
+//   - never decodes or validates the request body (valid, invalid and empty
+//     bodies are answered identically);
+//   - never calls a service or repository;
+//   - performs no mutation, no cache invalidation and no recalc;
+//   - can never return 200 for any payload.
+//
+// The route stays registered on purpose — a silent 404 would look like a routing
+// bug rather than a deliberate retirement.
+func (h *BulkBoqHandler) RetiredBulkCommercial(w http.ResponseWriter, _ *http.Request) {
+	apierr.Gone(
+		"Коммерческие стоимости рассчитываются сервером и не принимаются от клиента.",
+		"COMMERCIAL_COST_WRITE_RETIRED",
+	).Render(w)
 }
 
 type quoteLinkByNameReq struct {

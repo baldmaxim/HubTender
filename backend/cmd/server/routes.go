@@ -122,7 +122,10 @@ func newRouter(
 
 		// Slice 3a: ported RPCs.
 		r.Get("/api/v1/tenders/{id}/positions/with-costs", d.positionCostsH.GetPositionsWithCosts)
-		r.Patch("/api/v1/items/bulk-commercial", d.bulkBoqH.BulkUpdateCommercial)
+		// RETIRED (stage 0.1.2.2): commercial costs are calculation results and are
+		// never accepted from a client. Kept registered as an explicit tombstone —
+		// always 410 COMMERCIAL_COST_WRITE_RETIRED, never a mutation, never a 404.
+		r.Patch("/api/v1/items/bulk-commercial", d.bulkBoqH.RetiredBulkCommercial)
 		r.Patch("/api/v1/tenders/{id}/boq/quote-link", d.bulkBoqH.SetQuoteLinkByName)
 		r.Patch("/api/v1/boq/quote-link-by-ids", d.bulkBoqH.SetQuoteLinkByIDs)
 		r.Post("/api/v1/timeline/groups/{id}/quality", d.timelineH.SetGroupQuality)
