@@ -34,7 +34,7 @@
 - `repository/template_insert.go` `InsertTemplateItems` → то же (**0.1.2.1**).
 - `services/commercial_recalc.go` `RecalcTender` → `calc.CalculateBoqItemCost`.
 
-### Вставка шаблона (этап 0.1.2.1)
+### Вставка шаблона (этапы 0.1.2.1 / 0.1.2.1a)
 
 - Библиотека шаблона хранит **только исходные параметры** (unit_rate, currency,
   delivery, consumption, conv_coeff) — она **никогда** не хранит и не поставляет
@@ -43,9 +43,33 @@
   правила, что и у обычного `CreateBoqItem` (consumption, delivery-матрица, FX).
 - Отсутствующий/нулевой валютный курс **блокирует всю вставку** (`MissingFXRateError`
   → RFC 7807 400 `MISSING_FX_RATE`). FX-фолбэка `1.0` больше нет.
+- **Дочерний материал может ссылаться только на work item.** Родитель проверяется по
+  канону `calc.IsWorkBoqType` (раб / суб-раб / раб-комп.).
+- **Заданная, но невалидная parent-ссылка блокирует вставку** —
+  `InvalidTemplateParentError` → RFC 7807 400 `INVALID_TEMPLATE_PARENT`.
+  Причины: `PARENT_NOT_FOUND`, `PARENT_NOT_WORK_ITEM`, `SELF_PARENT_REFERENCE`
+  (`PARENT_NOT_INSERTED` зарезервирована: сейчас набор вставки == все строки шаблона).
+- **Invalid parent никогда не превращается молча в standalone** — иначе к строке
+  применился бы consumption_coefficient, и деньги «тихо» разошлись бы, скрыв
+  повреждённый шаблон.
+- **Planning выполняется до persistence**: сначала (read-only) валидируются все
+  parent-ссылки, нормализуются строки и считается calc-сумма каждой; только после
+  этого начинаются INSERT/UPDATE. Ни одной mutation-запроса до прохождения проверок.
 - Операция **атомарна**: ошибка любой строки откатывает транзакцию — не остаётся ни
-  строк, ни audit-записей, totals не меняются, recalc/cache не трогаются.
+  строк, ни audit-записей, totals не меняются, recalc/cache не трогаются
+  (покрыто unit-тестом side-effects в `services`).
 - Курсы валют читаются **один раз** на всю операцию (без N+1).
+
+**Runtime-проверка отката** выполняется PostgreSQL integration-тестом при настроенной
+тестовой БД (без неё тест честно SKIP-ается, не PASS):
+
+```bash
+HUBTENDER_TEST_DATABASE_URL='postgres://<user>:<pass>@<host>:<port>/<db>_test?sslmode=disable' \
+  go test ./internal/repository/ -run TemplateInsertIntegration -v
+```
+
+Тест отказывается работать, если имя БД в DSN не содержит `test` (защита от
+случайного запуска по production). Реальные креды в документацию не добавляются.
 
 ## 2. Что запрещено
 

@@ -62,3 +62,88 @@ func (f tmplAmountFields) amountInput() calc.BoqItemAmountInput {
 func templateItemTotalAmount(f tmplAmountFields, rates calc.CurrencyRates) (float64, error) {
 	return calc.CalculateBoqItemTotalAmount(f.amountInput(), rates)
 }
+
+// templateRowPlan is one fully-normalized, priced row produced by the PLANNING
+// phase. Every row is planned (and every parent link validated) BEFORE the first
+// INSERT, so a bad template never causes a partial write.
+type templateRowPlan struct {
+	IsWork         bool
+	ItemType       string
+	Currency       string
+	UnitRate       float64
+	Quantity       float64
+	UnitCode       *string
+	MatType        *string
+	DPT            *string
+	WorkNameID     *string
+	MaterialNameID *string
+	BaseQty        *float64
+	ConsCoef       *float64
+	ConvCoef       *float64
+	DeliveryAmount float64
+	TotalAmount    float64
+
+	// ParentIdx is the index of the effective parent inside the insertion set,
+	// or -1 for a standalone row. Already validated by resolveTemplateParent.
+	ParentIdx int
+}
+
+// planTemplateRow normalizes one template row into the EXACT values that will be
+// persisted and prices it through the authoritative calc kernel. Pure — no DB
+// access — so the whole batch can be validated and priced before any mutation.
+func planTemplateRow(
+	t tmplItemRow,
+	parentIdx int,
+	manualVolume *float64,
+	rates calc.CurrencyRates,
+) (templateRowPlan, error) {
+	isWork := t.Kind == "work"
+
+	p := templateRowPlan{IsWork: isWork, ParentIdx: parentIdx}
+
+	if isWork {
+		p.ItemType = strOrEmpty(t.WItemType)
+		p.Currency = strOr(t.WCur, "RUB")
+		p.UnitRate = orZero(t.WUnitRate)
+		p.UnitCode = t.WUnit
+		p.WorkNameID = t.WNameID
+	} else {
+		p.ItemType = strOrEmpty(t.MItemType)
+		p.Currency = strOr(t.MCur, "RUB")
+		p.UnitRate = orZero(t.MUnitRate)
+		p.UnitCode = t.MUnit
+		p.MaterialNameID = t.MNameID
+		p.MatType = t.MMatType
+		p.DPT = t.MDPT
+		one := 1.0
+		p.BaseQty = &one
+		cc := orOne(t.MConsCoef)
+		p.ConsCoef = &cc
+		p.DeliveryAmount = orZero(t.MDelivAmt)
+	}
+
+	p.Quantity = 1.0
+	if !isWork && t.ConvCoeff != nil && *t.ConvCoeff != 0 {
+		p.Quantity = *t.ConvCoeff * orOne(manualVolume)
+		p.ConvCoef = t.ConvCoeff
+	}
+
+	// Money is derived ONLY by the authoritative kernel, from exactly the values
+	// this row will persist. Delivery, consumption and FX rules all live in calc.
+	total, err := templateItemTotalAmount(tmplAmountFields{
+		ItemType:           p.ItemType,
+		Currency:           p.Currency,
+		Quantity:           p.Quantity,
+		UnitRate:           p.UnitRate,
+		DeliveryPriceType:  strOrEmpty(p.DPT),
+		DeliveryAmount:     p.DeliveryAmount,
+		ConsumptionCoeff:   p.ConsCoef,
+		HasEffectiveParent: parentIdx >= 0,
+	}, rates)
+	if err != nil {
+		return templateRowPlan{}, err
+	}
+	p.TotalAmount = total
+
+	return p, nil
+}

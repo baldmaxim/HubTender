@@ -98,6 +98,31 @@ func InvalidMarkupSequence(issues any) *ProblemExtra {
 	}
 }
 
+// InvalidTemplateParent returns a 400 Problem for a template row whose parent
+// link does not resolve to a really-inserted WORK item. The extension members
+// point the client at the exact template row / parent / reason.
+// parentItemType is omitted when unknown.
+func InvalidTemplateParent(templateItemID, parentTemplateItemID, reason, parentItemType string) *ProblemExtra {
+	extras := map[string]any{
+		"code":                 "INVALID_TEMPLATE_PARENT",
+		"templateItemId":       templateItemID,
+		"parentTemplateItemId": parentTemplateItemID,
+		"reason":               reason,
+	}
+	if parentItemType != "" {
+		extras["parentItemType"] = parentItemType
+	}
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusBadRequest),
+			Title:  "Bad Request",
+			Status: http.StatusBadRequest,
+			Detail: "Некорректная ссылка на родительскую работу в шаблоне.",
+		},
+		Extras: extras,
+	}
+}
+
 // MissingFXRate returns a 400 Problem for a blocking missing currency-rate
 // condition. The machine-readable "code" and "currency" extension members let
 // the frontend surface a precise message ("Не задан курс USD …") instead of a

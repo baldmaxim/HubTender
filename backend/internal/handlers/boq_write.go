@@ -28,6 +28,24 @@ func renderMissingFXRate(w http.ResponseWriter, err error) bool {
 	return false
 }
 
+// renderInvalidTemplateParent maps a blocking repository.InvalidTemplateParentError
+// to an RFC 7807 400 (code INVALID_TEMPLATE_PARENT + the offending template row,
+// parent and reason). Returns true when it handled the error so the caller stops
+// before falling through to a generic 500.
+func renderInvalidTemplateParent(w http.ResponseWriter, err error) bool {
+	var pe *repository.InvalidTemplateParentError
+	if errors.As(err, &pe) {
+		apierr.InvalidTemplateParent(
+			pe.TemplateItemID,
+			pe.ParentTemplateItemID,
+			string(pe.Reason),
+			pe.ParentItemType,
+		).Render(w)
+		return true
+	}
+	return false
+}
+
 // boqWriteServicer extends boqServicer with write methods.
 type boqWriteServicer interface {
 	boqServicer
@@ -322,9 +340,13 @@ func (h *BoqWriteHandler) InsertTemplate(w http.ResponseWriter, r *http.Request)
 
 	res, err := h.svc.InsertTemplateItems(r.Context(), templateID, req.ClientPositionID, authUser.ID)
 	if err != nil {
-		// Missing FX rate is a blocking domain error, not a 500 — reuse the shared
-		// RFC 7807 renderer from stage 0.1.1 (code MISSING_FX_RATE + currency).
+		// Blocking domain errors are 400s, not 500s — reuse the shared RFC 7807
+		// renderers (MISSING_FX_RATE from 0.1.1, INVALID_TEMPLATE_PARENT from
+		// 0.1.2.1a). errors.As unwraps the repository → service %w chain.
 		if renderMissingFXRate(w, err) {
+			return
+		}
+		if renderInvalidTemplateParent(w, err) {
 			return
 		}
 		switch {

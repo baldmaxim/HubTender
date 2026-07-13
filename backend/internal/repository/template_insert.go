@@ -96,6 +96,15 @@ func orZero(p *float64) float64 {
 // restoring parent_work_item_id links, recomputing position totals, and
 // writing INSERT/UPDATE audit rows — all in one transaction.
 //
+// The operation runs in two phases: PLANNING (read-only — validate every parent
+// link, normalize every row and price it via calc) and PERSISTENCE (insert, link,
+// audit, totals). Nothing is written until the whole batch validates.
+//
+// A row counts as a CHILD only when its parent_work_item_id will really point at
+// an inserted WORK row. A declared-but-invalid parent (missing / non-work / self)
+// is a blocking InvalidTemplateParentError — never silently downgraded to a
+// standalone material, which would change the money and hide a corrupt template.
+//
 // total_amount is derived EXCLUSIVELY by calc.CalculateBoqItemTotalAmount — the
 // same authoritative kernel and the same rules as CreateBoqItem (consumption
 // coefficient, delivery matrix, and blocking MissingFXRateError on a missing or
@@ -188,22 +197,26 @@ func (r *BoqRepo) InsertTemplateItems(
 	}
 	rates := calc.CurrencyRates{USDRate: usd, EURRate: eur, CNYRate: cny}
 
-	// 4b. Resolve effective parents BEFORE computing money. A row is treated as
-	// a child (consumption forced to 1 by calc) iff its parent link will really
-	// be restored in step 7 — the condition below mirrors step 7 exactly, so
-	// calc's view can never disagree with the row's final persisted state.
+	// ─── PHASE 1 — PLANNING (read-only; no INSERT/UPDATE happens below this
+	// point until every row is validated and priced). Any error here returns
+	// before the first mutation.
+
+	// 4b. Validate every parent link against the ACTUAL insertion set and resolve
+	// each row's effective parent. A row counts as a child only when its
+	// parent_work_item_id will really point at an inserted WORK row; a declared
+	// but unresolvable/non-work/self link is a blocking InvalidTemplateParentError
+	// (never a silent standalone).
 	idxByTID := make(map[string]int, len(items))
 	for i, t := range items {
 		idxByTID[t.ID] = i
 	}
-	hasEffectiveParent := make([]bool, len(items))
-	for i, t := range items {
-		if t.ParentTID == nil {
-			continue
+	parentIdx := make([]int, len(items))
+	for i := range items {
+		pIdx, perr := resolveTemplateParent(i, items, idxByTID)
+		if perr != nil {
+			return nil, fmt.Errorf("boqRepo.InsertTemplateItems: item #%d: %w", i+1, perr)
 		}
-		if _, ok := idxByTID[*t.ParentTID]; ok {
-			hasEffectiveParent[i] = true
-		}
+		parentIdx[i] = pIdx
 	}
 
 	// 5. Current max sort_number for the position.
@@ -228,10 +241,12 @@ func (r *BoqRepo) InsertTemplateItems(
 	newIDs := make([]string, len(items))
 	worksCount, materialsCount := 0, 0
 
-	// 6. Insert every item with a temporary NULL parent_work_item_id.
+	// 5b. Plan + price EVERY row before touching the DB. A library-link problem,
+	// an invalid parent or a missing FX rate aborts here — before the first
+	// INSERT — so a bad template can never produce a partial write.
+	plans := make([]templateRowPlan, len(items))
 	for i, t := range items {
-		isWork := t.Kind == "work"
-		if isWork {
+		if t.Kind == "work" {
 			worksCount++
 			if !t.HasWL {
 				return nil, fmt.Errorf("%w (#%d)", ErrTemplateItemNoLib, i+1)
@@ -243,65 +258,21 @@ func (r *BoqRepo) InsertTemplateItems(
 			}
 		}
 
-		var (
-			itemType, currency string
-			unitRate           float64
-			unitCode           *string
-			matType, dpt       *string
-			workNameID         *string
-			materialNameID     *string
-			baseQty            *float64
-			consCoef           *float64
-			convCoef           *float64
-			deliveryAmount     float64
-		)
-
-		if isWork {
-			itemType = strOrEmpty(t.WItemType)
-			currency = strOr(t.WCur, "RUB")
-			unitRate = orZero(t.WUnitRate)
-			unitCode = t.WUnit
-			workNameID = t.WNameID
-		} else {
-			itemType = strOrEmpty(t.MItemType)
-			currency = strOr(t.MCur, "RUB")
-			unitRate = orZero(t.MUnitRate)
-			unitCode = t.MUnit
-			materialNameID = t.MNameID
-			matType = t.MMatType
-			dpt = t.MDPT
-			one := 1.0
-			baseQty = &one
-			cc := orOne(t.MConsCoef)
-			consCoef = &cc
-			deliveryAmount = orZero(t.MDelivAmt)
+		p, planErr := planTemplateRow(t, parentIdx[i], manualVolume, rates)
+		if planErr != nil {
+			// Fail-closed: nothing has been written yet. %w keeps MissingFXRateError
+			// findable by errors.As all the way up to the handler.
+			return nil, fmt.Errorf("boqRepo.InsertTemplateItems: item #%d: %w", i+1, planErr)
 		}
+		plans[i] = p
+	}
 
-		quantity := 1.0
-		if !isWork && t.ConvCoeff != nil && *t.ConvCoeff != 0 {
-			quantity = *t.ConvCoeff * orOne(manualVolume)
-			convCoef = t.ConvCoeff
-		}
+	// ─── PHASE 2 — PERSISTENCE. Every row is validated and priced; from here on
+	// only mechanical writes happen. Any failure still rolls the whole tx back.
 
-		// Money is derived ONLY by the authoritative kernel, from exactly the
-		// values this row will persist. Delivery, consumption and FX rules all
-		// live in calc — there is no local formula here any more.
-		totalAmount, calcErr := templateItemTotalAmount(tmplAmountFields{
-			ItemType:           itemType,
-			Currency:           currency,
-			Quantity:           quantity,
-			UnitRate:           unitRate,
-			DeliveryPriceType:  strOrEmpty(dpt),
-			DeliveryAmount:     deliveryAmount,
-			ConsumptionCoeff:   consCoef,
-			HasEffectiveParent: hasEffectiveParent[i],
-		}, rates)
-		if calcErr != nil {
-			// Fail-closed: abort the whole template insert. The deferred
-			// tx.Rollback discards every row/audit already written. %w keeps
-			// MissingFXRateError findable by errors.As up to the handler.
-			return nil, fmt.Errorf("boqRepo.InsertTemplateItems: item #%d: %w", i+1, calcErr)
-		}
+	// 6. Insert every item with a temporary NULL parent_work_item_id.
+	for i, t := range items {
+		p := plans[i]
 
 		dcc := tmplDCC
 		if t.DCC != nil && *t.DCC != "" {
@@ -309,11 +280,11 @@ func (r *BoqRepo) InsertTemplateItems(
 		}
 
 		row := tx.QueryRow(ctx, insQ,
-			clientPositionID, posTenderID, maxSort+i+1, itemType, matType,
-			workNameID, materialNameID, unitCode, quantity, baseQty,
-			consCoef, convCoef, currency, unitRate,
-			totalAmount, dcc, t.Note,
-			dpt, deliveryAmount,
+			clientPositionID, posTenderID, maxSort+i+1, p.ItemType, p.MatType,
+			p.WorkNameID, p.MaterialNameID, p.UnitCode, p.Quantity, p.BaseQty,
+			p.ConsCoef, p.ConvCoef, p.Currency, p.UnitRate,
+			p.TotalAmount, dcc, t.Note,
+			p.DPT, p.DeliveryAmount,
 		)
 		item, scanErr := scanBoqItemRow(row)
 		if scanErr != nil {
@@ -327,15 +298,13 @@ func (r *BoqRepo) InsertTemplateItems(
 		}
 	}
 
-	// 7. Restore parent_work_item_id links using template-array indices.
-	// idxByTID / hasEffectiveParent were built in step 4b; the condition below is
-	// the SAME one calc was given, so the persisted parent state matches exactly.
-	for i, t := range items {
-		if t.ParentTID == nil {
-			continue
-		}
-		pIdx, ok := idxByTID[*t.ParentTID]
-		if !ok {
+	// 7. Restore parent_work_item_id links from the VALIDATED plan. parentIdx was
+	// resolved in phase 1 and is exactly what calc was told, so the persisted
+	// parent state can never disagree with the priced state. Every non-negative
+	// parentIdx is guaranteed to point at an inserted WORK row.
+	for i := range items {
+		pIdx := plans[i].ParentIdx
+		if pIdx < 0 {
 			continue
 		}
 		childID, parentID := newIDs[i], newIDs[pIdx]
