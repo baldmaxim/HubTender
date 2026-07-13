@@ -13,7 +13,7 @@ import (
 
 // boqAuditRollbackServicer is the interface the handler depends on.
 type boqAuditRollbackServicer interface {
-	RollbackDeleted(ctx context.Context, auditID, changedBy string) (string, error)
+	Rollback(ctx context.Context, auditID, changedBy string) (*repository.BoqAuditRollbackResult, error)
 	ListByPosition(ctx context.Context, f repository.BoqAuditListFilter) ([]repository.BoqAuditRow, error)
 }
 
@@ -27,12 +27,38 @@ func NewBoqAuditRollbackHandler(svc boqAuditRollbackServicer) *BoqAuditRollbackH
 	return &BoqAuditRollbackHandler{svc: svc}
 }
 
+// renderBoqAuditRollbackError maps the typed rollback domain errors to their
+// RFC 7807 responses. Returns true when it handled the error (errors.As
+// unwraps the repository → service %w chain). Never leaks another tender's
+// data on a target mismatch.
+func renderBoqAuditRollbackError(w http.ResponseWriter, err error) bool {
+	var snapErr *repository.InvalidBoqAuditSnapshotError
+	if errors.As(err, &snapErr) {
+		apierr.InvalidBoqAuditSnapshot(snapErr.AuditID, snapErr.Field, string(snapErr.Reason)).Render(w)
+		return true
+	}
+	var tmErr *repository.BoqAuditTargetMismatchError
+	if errors.As(err, &tmErr) {
+		apierr.BoqAuditTargetMismatch(tmErr.AuditID).Render(w)
+		return true
+	}
+	var unsupErr *repository.UnsupportedBoqAuditRollbackError
+	if errors.As(err, &unsupErr) {
+		apierr.UnsupportedBoqAuditRollback(unsupErr.AuditID, unsupErr.Operation).Render(w)
+		return true
+	}
+	return false
+}
+
 // Rollback handles POST /api/v1/boq-audit/{auditId}/rollback.
 //
-// Restores a DELETE'd BOQ item from the given audit record. Errors:
-//   - 404 — audit record not found
-//   - 400 — not a DELETE record / no old_data
-//   - 409 — id already exists / position or tender deleted
+// The request carries ONLY the audit id — the server loads the snapshot from
+// boq_items_audit itself; a client-provided snapshot/patch is not part of the
+// contract and any request body is ignored. Errors:
+//   - 404 — audit record / target item not found
+//   - 400 — INVALID_BOQ_AUDIT_SNAPSHOT / UNSUPPORTED_BOQ_AUDIT_ROLLBACK /
+//     MISSING_FX_RATE / INVALID_BOQ_PARENT
+//   - 409 — BOQ_AUDIT_TARGET_MISMATCH / id already exists / position deleted
 //   - 500 — unexpected DB error
 func (h *BoqAuditRollbackHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 	authUser := middleware.UserFromContext(r.Context())
@@ -46,8 +72,20 @@ func (h *BoqAuditRollbackHandler) Rollback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	newID, err := h.svc.RollbackDeleted(r.Context(), auditID, authUser.ID)
+	res, err := h.svc.Rollback(r.Context(), auditID, authUser.ID)
 	if err != nil {
+		// Blocking domain errors are 400/409s, not 500s — the shared renderers
+		// (MISSING_FX_RATE from 0.1.1, INVALID_BOQ_PARENT from 0.1.2.1a) plus the
+		// rollback-specific ones from 0.1.2.2b.
+		if renderBoqAuditRollbackError(w, err) {
+			return
+		}
+		if renderMissingFXRate(w, err) {
+			return
+		}
+		if renderInvalidBoqParent(w, err) {
+			return
+		}
 		var rbErr *repository.ErrAuditRollback
 		if errors.As(err, &rbErr) {
 			switch rbErr.HTTPStatus {
@@ -66,7 +104,7 @@ func (h *BoqAuditRollbackHandler) Rollback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: map[string]string{"id": newID}})
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: res})
 }
 
 // strOrNil returns a *string from a query param: nil if empty.

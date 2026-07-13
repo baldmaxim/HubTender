@@ -162,6 +162,65 @@ func InvalidTemplateParent(templateItemID, parentTemplateItemID, reason, parentI
 	}
 }
 
+// InvalidBoqAuditSnapshot returns a 400 Problem for an audit snapshot that
+// cannot be safely interpreted for a rollback (missing/typed/enum/relation
+// issues). Nothing was restored.
+func InvalidBoqAuditSnapshot(auditID, field, reason string) *ProblemExtra {
+	extras := map[string]any{
+		"code":    "INVALID_BOQ_AUDIT_SNAPSHOT",
+		"auditId": auditID,
+		"reason":  reason,
+	}
+	if field != "" {
+		extras["field"] = field
+	}
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusBadRequest),
+			Title:  "Bad Request",
+			Status: http.StatusBadRequest,
+			Detail: "Снимок аудита не может быть безопасно восстановлен. Откат не выполнен.",
+		},
+		Extras: extras,
+	}
+}
+
+// BoqAuditTargetMismatch returns a 409 Problem when the audit record does not
+// belong to the item/tender the rollback would mutate. Deliberately carries only
+// the audit id — no data of the other tender leaks into the response.
+func BoqAuditTargetMismatch(auditID string) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusConflict),
+			Title:  "Conflict",
+			Status: http.StatusConflict,
+			Detail: "Запись аудита не относится к этому элементу или тендеру. Откат не выполнен.",
+		},
+		Extras: map[string]any{
+			"code":    "BOQ_AUDIT_TARGET_MISMATCH",
+			"auditId": auditID,
+		},
+	}
+}
+
+// UnsupportedBoqAuditRollback returns a 400 Problem for an audit operation type
+// that has no rollback semantics (e.g. INSERT undo).
+func UnsupportedBoqAuditRollback(auditID, operation string) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusBadRequest),
+			Title:  "Bad Request",
+			Status: http.StatusBadRequest,
+			Detail: "Откат для операции аудита «" + operation + "» не поддерживается.",
+		},
+		Extras: map[string]any{
+			"code":      "UNSUPPORTED_BOQ_AUDIT_ROLLBACK",
+			"auditId":   auditID,
+			"operation": operation,
+		},
+	}
+}
+
 // MissingFXRate returns a 400 Problem for a blocking missing currency-rate
 // condition. The machine-readable "code" and "currency" extension members let
 // the frontend surface a precise message ("Не задан курс USD …") instead of a

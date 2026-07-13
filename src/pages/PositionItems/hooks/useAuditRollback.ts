@@ -1,23 +1,31 @@
 import { useState } from 'react';
 import { message } from 'antd';
 import { apiFetch } from '../../../lib/api/client';
-import { updateBoqItemWithAudit } from '../../../lib/api/boq';
-import { useAuth } from '../../../contexts/AuthContext';
 import type { BoqItemAudit } from '../../../types/audit';
-import type { BoqItemInsert } from '../../../lib/types';
 
 interface UseAuditRollbackReturn {
   rollback: (record: BoqItemAudit) => Promise<void>;
   rolling: boolean;
 }
 
+// Тело RFC 7807 problem+json от Go BFF (code — машиночитаемый идентификатор).
+interface ProblemBody {
+  detail?: string;
+  title?: string;
+  code?: string;
+}
+
 /**
- * Хук для восстановления BOQ item к предыдущей версии из audit log
+ * Хук для восстановления BOQ item к предыдущей версии из audit log.
  *
- * @returns Функция rollback и состояние загрузки
+ * Этап 0.1.2.2b: клиент передаёт ТОЛЬКО audit id. Сервер сам перечитывает
+ * old_data из boq_items_audit, восстанавливает исключительно пользовательские
+ * входы (explicit allowlist) и в той же транзакции пересчитывает total_amount,
+ * итоги позиции, commercial-стоимости и grand total по ТЕКУЩИМ курсам и
+ * конфигурации тендера. Snapshot (old_data/total_amount/commercial) с клиента
+ * не отправляется никогда.
  */
 export function useAuditRollback(): UseAuditRollbackReturn {
-  const { user } = useAuth();
   const [rolling, setRolling] = useState(false);
 
   const rollback = async (record: BoqItemAudit) => {
@@ -29,33 +37,22 @@ export function useAuditRollback(): UseAuditRollbackReturn {
     setRolling(true);
 
     try {
-      if (record.operation_type === 'DELETE') {
-        // Сервер по audit.id перечитывает old_data и реинсертит boq_item с
-        // исходным id (parent_work_item_id-ссылки уцелеют) в одной операции;
-        // boq_items-триггер логирует это как новый INSERT-audit.
-        try {
-          await apiFetch(
-            `/api/v1/boq-audit/${encodeURIComponent(record.id)}/rollback`,
-            { method: 'POST' },
-          );
-        } catch (e) {
-          const body = (e as { body?: { detail?: string; title?: string } }).body;
-          throw new Error(
-            body?.detail || body?.title ||
-              (e instanceof Error ? e.message : 'Ошибка восстановления'),
-          );
-        }
-      } else {
-        const rollbackData = Object.fromEntries(
-          Object.entries(record.old_data).filter(([k]) => !['id', 'created_at', 'updated_at'].includes(k))
+      try {
+        await apiFetch(
+          `/api/v1/boq-audit/${encodeURIComponent(record.id)}/rollback`,
+          { method: 'POST' },
         );
-        await updateBoqItemWithAudit(
-          user?.id,
-          record.boq_item_id,
-          rollbackData as Partial<BoqItemInsert>
+      } catch (e) {
+        const body = (e as { body?: ProblemBody }).body;
+        const codeSuffix = body?.code ? ` [${body.code}]` : '';
+        throw new Error(
+          (body?.detail || body?.title ||
+            (e instanceof Error ? e.message : 'Ошибка восстановления')) + codeSuffix,
         );
       }
 
+      // Успех показываем только после ответа backend (rollback + пересчёт
+      // закоммичены атомарно на сервере).
       message.success('Версия успешно восстановлена');
 
       setTimeout(() => {

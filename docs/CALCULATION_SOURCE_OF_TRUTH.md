@@ -292,6 +292,65 @@ const price = row.total_amount; // сервер посчитал и вернул
 Защита от регресса: `scripts/checks/noDerivedCopy.check.mjs` (падает, если copy/transfer
 снова начнут селектить/вставлять derived-колонки, заведут свою формулу или FX-фолбэк 1).
 
+## 7c. Audit rollback — авторитетный пересчёт (этап 0.1.2.2b)
+
+`boq_audit_rollback.go` больше не реинсертит весь `old_data` через
+`jsonb_populate_record`, а UPDATE-rollback больше не идёт клиентским snapshot'ом
+через PATCH.
+
+1. **Семантика:** audit rollback = «восстановить пользовательские входы из
+   исторической записи и пересчитать результат с текущими курсами, текущей
+   конфигурацией тендера и текущей версией расчётного движка». Это НЕ
+   исторический calculation replay: точное воспроизведение старого финансового
+   результата потребует `calculation_run`, snapshot входов/конфигурации, FX
+   snapshot и версию движка — отдельный будущий этап.
+2. **Единственный источник snapshot — сервер.** Команда клиента несёт только
+   audit id (`POST /api/v1/boq-audit/{auditId}/rollback`, тело игнорируется);
+   сервер сам читает `old_data` из `boq_items_audit`. `before_data`/`after_data`
+   /произвольный patch от клиента не принимаются.
+3. **Explicit allowlist** (`boqAuditInputAllowlist`): восстанавливаются только
+   перечисленные входы (тип, количества, коэффициенты, расценка, валюта,
+   delivery, номенклатура, категория затрат, parent, sort, описание/ссылки).
+   Derived (класс B: `total_amount`, `commercial_markup`,
+   `total_commercial_*`) непредставимы в плане восстановления. Identity (класс
+   C: `id`, `tender_id`, `client_position_id`, timestamps, `import_session_id`)
+   верифицируются, но не применяются слепо; неизвестный JSON-ключ никогда не
+   попадает в SQL. Динамический SET из ключей snapshot запрещён.
+4. **Операции:** UPDATE — восстановить входы существующей строки (позиция и
+   тендер не меняются); DELETE — реинсерт с исходным id (контракт сохранения
+   parent-ссылок), только входы, derived-колонок нет в INSERT-списке; INSERT
+   undo — не поддерживается (`UNSUPPORTED_BOQ_AUDIT_ROLLBACK`).
+5. **Ownership:** audit ↔ item ↔ tender проверяются
+   (`BOQ_AUDIT_TARGET_MISMATCH`, 409, без утечки данных чужого тендера);
+   cross-tender move через rollback невозможен.
+6. **Parent integrity** — тот же инвариант, что у Template Insert / Copy /
+   Transfer: parent существует, в том же тендере и позиции, является работой,
+   не сам элемент. Невалидный исторический parent → блокирующая
+   `InvalidBoqParentError`; фолбэка parent=NULL нет.
+7. **Legacy snapshots** (полная форма `to_jsonb(OLD.*)` триггера и форма
+   `boqRowJSON` Go-писателя) парсятся строго: неверный тип/enum/uuid →
+   `INVALID_BOQ_AUDIT_SNAPSHOT` (400), отсутствие обязательного входа → typed
+   error; отсутствующее optional-поле получает канонический default текущей
+   модели, а не 0/RUB/«мат». FX=1 не подставляется.
+8. **Одна транзакция.** Порядок: план/валидация → применение входов →
+   `RecomputeBoqTotalAmountsTx` (текущие FX, fail-closed `MISSING_FX_RATE`) →
+   итоги позиции → `MaterializeCommercialForTenderTx` (текущая
+   тактика/проценты/distribution) → `recalculate_tender_grand_total` ровно один
+   раз → новая audit-запись о самом rollback (старая запись immutable; поля
+   rollback_of в схеме нет — связь не персистится, миграции не добавлялись) →
+   commit. При любой ошибке — полный rollback: строка, итоги, commercial,
+   grand total и кэш не меняются, success не возвращается.
+9. **Async queue — не источник корректности**; кэш инвалидируется только после
+   успешного commit.
+
+Защита от регресса: `scripts/checks/noDerivedAuditRollback.check.mjs` (падает,
+если rollback снова начнёт писать derived-колонки из snapshot, вернёт
+`jsonb_populate_record`, свою формулу, FX-фолбэк 1 или клиентский snapshot).
+
+Остаётся в backlog (вне 0.1.2.2b): вывод legacy SQL RPC commercial writer,
+frontend redistribution, `updated_at`/ETag после серверных recalc, конкурентные
+stale-recalc, calculation versioning (`calculation_run` для точного replay).
+
 ## 8. Что сделано в 0.1.2 (только безопасное)
 
 - Исправлен вводящий в заблуждение комментарий `boq_amount.go` («trigger-computed» → app-computed).

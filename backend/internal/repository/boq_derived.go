@@ -23,6 +23,12 @@ const (
 	BoqParentNotWorkItem BoqParentReason = "PARENT_NOT_WORK_ITEM"
 	// BoqSelfParentReference — the row references itself as its own parent.
 	BoqSelfParentReference BoqParentReason = "SELF_PARENT_REFERENCE"
+	// BoqParentNotFound — a restored parent reference (audit rollback) points at
+	// a row that no longer exists.
+	BoqParentNotFound BoqParentReason = "PARENT_NOT_FOUND"
+	// BoqParentNotInScope — the referenced parent exists but lives in another
+	// tender or client position; restoring the link would cross scopes.
+	BoqParentNotInScope BoqParentReason = "PARENT_NOT_IN_SCOPE"
 )
 
 // InvalidBoqParentError is a blocking domain error: a copied/transferred row
