@@ -1,4 +1,8 @@
-import type { BoqItemFull, Tender } from '../../lib/types';
+// UI preview only. Authoritative calculation is performed by backend/internal/calc
+// (calc.CalculateBoqItemCost). This computes live commercial amounts for display
+// and never persists — the Go BFF materialises commercial costs server-side.
+// See docs/CALCULATION_SOURCE_OF_TRUTH.md.
+import type { BoqItemFull, Tender, CurrencyType } from '../../lib/types';
 import { getMarkupTactic } from '../../lib/api/markup';
 import { getTenderById } from '../../lib/api/fi';
 import {
@@ -8,7 +12,7 @@ import {
   loadSubcontractGrowthExclusions,
   resetTypeCoefficientsCache,
 } from '../../services/markupTacticService';
-import { calculateBoqItemTotalAmount } from './calculateBoqAmount';
+import { totalAmountFX } from './currencyGuard';
 
 type TenderRates = Pick<Tender, 'usd_rate' | 'eur_rate' | 'cny_rate'>;
 type CalculationTactic = Parameters<typeof calculateBoqItemCost>[1];
@@ -85,17 +89,52 @@ export function resetLiveCommercialCalculationCache(): void {
   resetTypeCoefficientsCache();
 }
 
+/**
+ * Fail-closed результат live-расчёта: при отсутствующем курсе валюты все суммы
+ * = null, `unavailable=true`, а `missingCurrencies` перечисляет валюты. Верхний
+ * уровень ОБЯЗАН проверить `unavailable` и не использовать 0/устаревшее
+ * total_amount как актуальный live-результат.
+ */
+export type LiveCommercialAmounts =
+  | {
+      unavailable: false;
+      missingCurrencies: never[];
+      baseAmount: number;
+      materialCost: number;
+      workCost: number;
+      commercialTotal: number;
+      markupCoefficient: number;
+    }
+  | {
+      unavailable: true;
+      missingCurrencies: CurrencyType[];
+      baseAmount: null;
+      materialCost: null;
+      workCost: null;
+      commercialTotal: null;
+      markupCoefficient: null;
+    };
+
 export function calculateLiveCommercialAmounts(
   item: LiveCommercialBoqItem,
   context: LiveCommercialCalculationContext
-): {
-  baseAmount: number;
-  materialCost: number;
-  workCost: number;
-  commercialTotal: number;
-  markupCoefficient: number;
-} {
-  const baseAmount = calculateBoqItemTotalAmount(item, context.tenderRates);
+): LiveCommercialAmounts {
+  // Fail-closed: нет курса → расчёт недоступен. НЕ подставляем 0 и НЕ используем
+  // сохранённое total_amount как live-результат. Бэкенд — окончательный блокер.
+  const base = totalAmountFX(item, context.tenderRates);
+  if (base.value === null) {
+    return {
+      unavailable: true,
+      missingCurrencies: base.missingCurrencies,
+      baseAmount: null,
+      materialCost: null,
+      workCost: null,
+      commercialTotal: null,
+      markupCoefficient: null,
+    };
+  }
+
+  const baseAmount = base.value;
   const liveCommercialCosts = context.tactic
     ? calculateBoqItemCost(
         {
@@ -114,6 +153,8 @@ export function calculateLiveCommercialAmounts(
   const commercialTotal = materialCost + workCost;
 
   return {
+    unavailable: false,
+    missingCurrencies: [],
     baseAmount,
     materialCost,
     workCost,

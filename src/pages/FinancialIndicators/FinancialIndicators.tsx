@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, Drawer, Space, Popconfirm, message } from 'antd';
+import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, Drawer, Space, Popconfirm, message, Alert } from 'antd';
+import { formatFXUnavailable } from '../../utils/boq/currencyGuard';
 import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -59,6 +60,7 @@ const FinancialIndicators: React.FC = () => {
     customerTotal,
     isVatInConstructor,
     vatCoefficient,
+    fxMissing,
     loadTenders,
     fetchFinancialIndicators,
   } = useFinancialData();
@@ -329,6 +331,7 @@ const FinancialIndicators: React.FC = () => {
       isPhoneDevice={isPhoneDevice}
       onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
       readOnly={readOnly}
+      fxMissing={fxMissing}
     />
   );
 
@@ -348,6 +351,7 @@ const FinancialIndicators: React.FC = () => {
       isPhoneDevice={isPhoneDevice}
       onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
       readOnly={readOnly}
+      fxMissing={fxMissing}
       fitToScreen
     />
   );
@@ -362,6 +366,10 @@ const FinancialIndicators: React.FC = () => {
         onTenderTitleChange={handleTenderTitleChange}
         onVersionChange={handleVersionChange}
       />
+
+      {fxMissing.length > 0 && (
+        <Alert type="error" showIcon message={formatFXUnavailable(fxMissing)} style={{ marginBottom: 12 }} />
+      )}
 
       <Card bordered={false}>
         <div style={{ marginBottom: 24 }}>

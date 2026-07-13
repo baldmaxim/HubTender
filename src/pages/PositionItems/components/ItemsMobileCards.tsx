@@ -10,7 +10,7 @@ const { Text } = Typography;
 
 interface ItemsMobileCardsProps {
   items: BoqItemFull[];
-  totalSum: number;
+  totalSum: number | null;
 }
 
 const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
@@ -94,7 +94,7 @@ const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({ items, totalSum }) 
       {hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
 
       <div style={{ textAlign: 'right', fontSize: 16, fontWeight: 'bold', padding: '4px 8px' }}>
-        Итого: <span style={{ color: '#10b981' }}>{formatRu(Math.round(totalSum))}</span>
+        Итого: <span style={{ color: '#10b981' }}>{totalSum == null ? '—' : formatRu(Math.round(totalSum))}</span>
       </div>
     </Space>
   );

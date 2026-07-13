@@ -1,3 +1,6 @@
+// UI display only — aggregates per-position sums for the results grid.
+// Authoritative money math is backend/internal/calc.
+// See docs/CALCULATION_SOURCE_OF_TRUTH.md.
 import type { ClientPosition } from '../hooks';
 import type { RedistributionResult } from './calculateDistribution';
 import type { ResultRow } from '../components/Results/ResultsTableColumns';

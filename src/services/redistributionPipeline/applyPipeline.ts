@@ -1,3 +1,5 @@
+// UI preview / display only (Commerce / FinancialIndicators / Excel). Authoritative
+// money math is backend/internal/calc. See docs/CALCULATION_SOURCE_OF_TRUTH.md.
 import { smartRoundResults } from '../../pages/CostRedistribution/utils/smartRounding';
 import type { ResultRow } from '../../pages/CostRedistribution/components/Results/ResultsTableColumns';
 

@@ -20,10 +20,11 @@ func TestCalculateBoqItemTotalAmount(t *testing.T) {
 	usdTender := CurrencyRates{USDRate: f(90), EURRate: f(100), CNYRate: f(12)}
 
 	tests := []struct {
-		name  string
-		in    BoqItemAmountInput
-		rates CurrencyRates
-		want  float64
+		name    string
+		in      BoqItemAmountInput
+		rates   CurrencyRates
+		want    float64
+		wantErr bool // missing FX rate → blocking error, not a zero amount
 	}{
 		// ─── Work types (раб / суб-раб / раб-комп.) ─────────────────────────
 		{
@@ -41,11 +42,11 @@ func TestCalculateBoqItemTotalAmount(t *testing.T) {
 			rates: usdTender, want: 18000, // 2 * 100 * 90
 		},
 		{
-			name: "rab-komp missing rate → 0 (TS `|| 0`)",
+			name: "rab-komp missing CNY rate → blocking error (never a zero amount)",
 			in: BoqItemAmountInput{
 				BoqItemType: BoqRabKomp, Quantity: f(5), UnitRate: f(10), CurrencyType: CurrencyCNY,
 			},
-			rates: CurrencyRates{}, want: 0,
+			rates: CurrencyRates{}, wantErr: true,
 		},
 
 		// ─── Material types — delivery "в цене" (no add-on) ─────────────────
@@ -134,7 +135,16 @@ func TestCalculateBoqItemTotalAmount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CalculateBoqItemTotalAmount(tt.in, tt.rates)
+			got, err := CalculateBoqItemTotalAmount(tt.in, tt.rates)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected MissingFXRateError, got amount %v, nil", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
 			if !almostEqual(got, tt.want) {
 				t.Errorf("CalculateBoqItemTotalAmount = %v, want %v", got, tt.want)
 			}

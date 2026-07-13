@@ -1,3 +1,6 @@
+// UI preview only. Authoritative calculation is performed by backend/internal/calc
+// (calc.CalculateMarkupResult / calc.ValidateMarkupSequence). Keep 1:1 with Go.
+// See docs/CALCULATION_SOURCE_OF_TRUTH.md.
 /**
  * Модуль калькулятора наценок
  * Реализует логику расчета коммерческой стоимости на основе тактик наценок
@@ -93,7 +96,8 @@ export function calculateMarkupResult(context: CalculationContext): CalculationR
         step.operand1MultiplyFormat,
         markupParameters,
         stepResults,
-        baseAmount
+        baseAmount,
+        step.action1
       );
       stepResult = applyOperation(stepResult, step.action1, operand1);
 
@@ -106,7 +110,8 @@ export function calculateMarkupResult(context: CalculationContext): CalculationR
           step.operand2MultiplyFormat,
           markupParameters,
           stepResults,
-          baseAmount
+          baseAmount,
+          step.action2
         );
         stepResult = applyOperation(stepResult, step.action2, operand2);
       }
@@ -120,7 +125,8 @@ export function calculateMarkupResult(context: CalculationContext): CalculationR
           step.operand3MultiplyFormat,
           markupParameters,
           stepResults,
-          baseAmount
+          baseAmount,
+          step.action3
         );
         stepResult = applyOperation(stepResult, step.action3, operand3);
       }
@@ -134,7 +140,8 @@ export function calculateMarkupResult(context: CalculationContext): CalculationR
           step.operand4MultiplyFormat,
           markupParameters,
           stepResults,
-          baseAmount
+          baseAmount,
+          step.action4
         );
         stepResult = applyOperation(stepResult, step.action4, operand4);
       }
@@ -148,7 +155,8 @@ export function calculateMarkupResult(context: CalculationContext): CalculationR
           step.operand5MultiplyFormat,
           markupParameters,
           stepResults,
-          baseAmount
+          baseAmount,
+          step.action5
         );
         stepResult = applyOperation(stepResult, step.action5, operand5);
       }
@@ -215,7 +223,8 @@ function getOperandValue(
   multiplyFormat?: 'addOne' | 'direct',
   markupParameters?: Map<string, number>,
   stepResults?: number[],
-  baseAmount?: number
+  baseAmount?: number,
+  operation?: OperationType
 ): number {
   if (!operandType) {
     throw new Error('Не указан тип операнда');
@@ -237,10 +246,18 @@ function getOperandValue(
       if (multiplyFormat === 'addOne') {
         // Формат (1 + %): например, 10% становится 1.1
         return 1 + markupValue / 100;
-      } else {
+      }
+      if (multiplyFormat === 'direct') {
         // Прямое значение: например, 10% становится 0.1
         return markupValue / 100;
       }
+      // P0: незаданный формат для multiply+markup трактуем как addOne
+      // (раньше тихо был 'direct' → база ×0.1). Немультипликативные markup-операнды
+      // сохраняют прежнюю семантику «голого» процента.
+      if (operation === 'multiply') {
+        return 1 + markupValue / 100;
+      }
+      return markupValue / 100;
     }
 
     case 'step': {
@@ -346,6 +363,20 @@ export function validateMarkupSequence(sequence: MarkupStep[]): string[] {
     }
     if (step.operand5Type === 'step' && (step.operand5Index === undefined || step.operand5Index >= i)) {
       errors.push(`Шаг ${stepNum}: недопустимый operand5Index для типа 'step'`);
+    }
+
+    // P0: operandNMultiplyFormat обязателен для multiply + markup.
+    const slots: Array<[number, OperationType | undefined, string | undefined, string | undefined]> = [
+      [1, step.action1, step.operand1Type, step.operand1MultiplyFormat],
+      [2, step.action2, step.operand2Type, step.operand2MultiplyFormat],
+      [3, step.action3, step.operand3Type, step.operand3MultiplyFormat],
+      [4, step.action4, step.operand4Type, step.operand4MultiplyFormat],
+      [5, step.action5, step.operand5Type, step.operand5MultiplyFormat],
+    ];
+    for (const [n, action, type, fmt] of slots) {
+      if (action === 'multiply' && type === 'markup' && !fmt) {
+        errors.push(`Шаг ${stepNum}: не задан operand${n}MultiplyFormat для multiply+markup`);
+      }
     }
   }
 

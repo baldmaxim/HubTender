@@ -3,6 +3,8 @@ import { Table, Typography, Tooltip, Button, InputNumber, message } from 'antd';
 import { DownloadOutlined, EditOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { IndicatorRow } from '../hooks/useFinancialData';
+import type { CurrencyType } from '../../../lib/types';
+import { formatFXUnavailable } from '../../../utils/boq/currencyGuard';
 import { exportFinancialIndicatorsToExcel } from '../utils/exportToExcel';
 import { adminPatchTender } from '../../../lib/api/tenders';
 import { getErrorMessage } from '../../../utils/errors';
@@ -30,6 +32,8 @@ interface IndicatorsTableProps {
   readOnly?: boolean;
   /** Вписать таблицу целиком (для ландшафт-оверлея): убирает внутренний горизонтальный скролл */
   fitToScreen?: boolean;
+  /** Валюты без курса: экспорт заблокирован, чтобы не выгрузить частичные значения */
+  fxMissing?: CurrencyType[];
 }
 
 export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
@@ -46,6 +50,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
   onAreaUpdated,
   readOnly,
   fitToScreen,
+  fxMissing,
 }) => {
   const [editingSp, setEditingSp] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
@@ -53,6 +58,11 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
   const [tempCustomerValue, setTempCustomerValue] = useState<number>(customerTotal);
 
   const handleExport = () => {
+    // Fail-closed: нет курса → не выгружаем частичные/пустые значения.
+    if (fxMissing && fxMissing.length > 0) {
+      message.error(formatFXUnavailable(fxMissing));
+      return;
+    }
     exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion);
   };
 

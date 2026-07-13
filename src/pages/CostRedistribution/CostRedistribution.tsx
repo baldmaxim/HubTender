@@ -3,7 +3,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Tabs, message } from 'antd';
+import { Tabs, message, Alert } from 'antd';
+import { formatFXUnavailable } from '../../utils/boq/currencyGuard';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
 import { loadTenderInsurance } from '../../lib/api/insurance';
@@ -51,6 +52,7 @@ const CostRedistribution: React.FC = () => {
     handleTacticChange,
     boqItems,
     clientPositions,
+    fxMissing,
   } = useRedistributionData();
 
   const { categories, detailCategories } = useCostCategories();
@@ -296,6 +298,10 @@ const CostRedistribution: React.FC = () => {
     if (!selectedTenderId) {
       return;
     }
+    if (fxMissing.length > 0) {
+      message.error(formatFXUnavailable(fxMissing));
+      return;
+    }
 
     const selectedTender = tenders.find((t) => t.id === selectedTenderId);
 
@@ -309,7 +315,7 @@ const CostRedistribution: React.FC = () => {
         tenderTitle: `${selectedTender.title} (v${selectedTender.version})`,
       });
     });
-  }, [selectedTenderId, tenders, preparedResults]);
+  }, [selectedTenderId, tenders, preparedResults, fxMissing]);
 
   const handleSavePositionAdjustment = useCallback(async () => {
     if (!selectedTenderId || !selectedTacticId) {
@@ -446,6 +452,9 @@ const CostRedistribution: React.FC = () => {
 
   return (
     <div style={{ padding: '0 8px' }}>
+      {fxMissing.length > 0 && (
+        <Alert type="error" showIcon message={formatFXUnavailable(fxMissing)} style={{ marginBottom: 12 }} />
+      )}
       <RedistributionHeader
         tenders={tenders}
         selectedTenderId={selectedTenderId}

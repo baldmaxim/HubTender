@@ -1,4 +1,5 @@
-import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
+import { totalAmountFX, dedupeCurrencies, type FXResult } from '../../../utils/boq/currencyGuard';
+import type { CurrencyType } from '../../../lib/types';
 import type {
   getTenderById,
   listSubcontractGrowthExclusions,
@@ -11,14 +12,17 @@ type SubcontractExclusions = Awaited<ReturnType<typeof listSubcontractGrowthExcl
 
 /**
  * Агрегация прямых затрат по BOQ-элементам тендера (с учётом исключений
- * категорий для роста субподряда). Перенесено из useFinancialCalculations
- * без изменений логики; console.log — намеренный кросс-чек с Commerce.
+ * категорий для роста субподряда).
+ *
+ * Fail-closed: если хотя бы у одного элемента отсутствует курс валюты, весь
+ * итог тендера недоступен (value=null) с перечнем валют — частичная сумма НЕ
+ * возвращается (нельзя пропустить ошибочную строку и сложить остальные).
  */
 export const aggregateDirectCosts = (
   boqItems: BoqItemWithPosition[] | null | undefined,
   tender: TenderFI,
   exclusions: SubcontractExclusions,
-): DirectCostTotals => {
+): FXResult<DirectCostTotals> => {
   const excludedWorksCategories = new Set(
     exclusions?.filter(e => e.exclusion_type === 'works').map(e => e.detail_cost_category_id) || []
   );
@@ -40,8 +44,16 @@ export const aggregateDirectCosts = (
   let totalCommercialMaterial = 0;
   let totalCommercialWork = 0;
 
+  const missing: CurrencyType[] = [];
+
   boqItems?.forEach(item => {
-    const baseCost = calculateBoqItemTotalAmount(item, tender);
+    // Fail-closed: нет курса → помечаем весь итог недоступным, не суммируем частично.
+    const baseCostFX = totalAmountFX(item, tender);
+    if (baseCostFX.value === null) {
+      missing.push(...baseCostFX.missingCurrencies);
+      return;
+    }
+    const baseCost = baseCostFX.value;
     // Добавляем коммерческие стоимости
     totalCommercialMaterial += item.total_commercial_material_cost || 0;
     totalCommercialWork += item.total_commercial_work_cost || 0;
@@ -82,6 +94,11 @@ export const aggregateDirectCosts = (
     }
   });
 
+  // Fail-closed: хотя бы одна строка без курса → весь итог тендера не рассчитан.
+  if (missing.length > 0) {
+    return { value: null, missingCurrencies: dedupeCurrencies(missing) };
+  }
+
   console.log('=== BOQ Items Stats (FINANCIAL INDICATORS) ===');
   console.log('Total BOQ items:', boqItems?.length || 0);
   console.log('--- БАЗОВЫЕ СУММЫ ПО ТИПАМ (total_amount) ---');
@@ -99,15 +116,18 @@ export const aggregateDirectCosts = (
   console.log('=======================');
 
   return {
-    subcontractWorks,
-    subcontractMaterials,
-    subcontractWorksForGrowth,
-    subcontractMaterialsForGrowth,
-    works,
-    materials,
-    materialsComp,
-    worksComp,
-    totalCommercialMaterial,
-    totalCommercialWork,
+    value: {
+      subcontractWorks,
+      subcontractMaterials,
+      subcontractWorksForGrowth,
+      subcontractMaterialsForGrowth,
+      works,
+      materials,
+      materialsComp,
+      worksComp,
+      totalCommercialMaterial,
+      totalCommercialWork,
+    },
+    missingCurrencies: [],
   };
 };

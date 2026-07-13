@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Tabs, App } from 'antd';
+import { Form, Tabs, App, Alert } from 'antd';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import type { TabKey } from './types';
 import { useTactics } from './hooks/useTactics';
@@ -100,6 +100,22 @@ const MarkupConstructor: React.FC = () => {
                   />
                 ) : (
                   // Редактор схемы наценок
+                  <>
+                  {tacticsState.sequenceErrors.length > 0 && (
+                    <Alert
+                      type="error"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message="Нельзя сохранить: исправьте последовательность наценок"
+                      description={
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {tacticsState.sequenceErrors.map((e, i) => (
+                            <li key={i}>{e}</li>
+                          ))}
+                        </ul>
+                      }
+                    />
+                  )}
                   <TacticEditor
                     tactics={tacticsState.tactics}
                     currentTacticId={tacticsState.currentTacticId}
@@ -119,6 +135,7 @@ const MarkupConstructor: React.FC = () => {
                     setActiveTab={setActiveTab}
                     renderSequenceTab={renderSequenceTab}
                   />
+                  </>
                 )}
               </div>
             ),

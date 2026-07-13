@@ -1,0 +1,74 @@
+{
+  "_note": "P0 regression fixtures. amount_cases exercise CalculateBoqItemTotalAmount (FX blocking-error). coeff_cases exercise the markup engine (multiplyFormat default + base_costs isolation). See regression_fx_p0_test.go and regression_markup_p0_test.go.",
+
+  "amount_cases": [
+    {
+      "name": "rub_no_rate_ok",
+      "in": { "boqItemType": "раб", "quantity": 10, "unitRate": 5, "currencyType": "RUB" },
+      "rates": {},
+      "wantAmount": 50,
+      "wantErrCurrency": ""
+    },
+    {
+      "name": "usd_missing_rate_error",
+      "in": { "boqItemType": "суб-раб", "quantity": 2, "unitRate": 100, "currencyType": "USD" },
+      "rates": {},
+      "wantErrCurrency": "USD"
+    },
+    {
+      "name": "eur_missing_rate_error",
+      "in": { "boqItemType": "раб", "quantity": 3, "unitRate": 50, "currencyType": "EUR" },
+      "rates": {},
+      "wantErrCurrency": "EUR"
+    },
+    {
+      "name": "cny_missing_rate_error",
+      "in": { "boqItemType": "раб-комп.", "quantity": 5, "unitRate": 10, "currencyType": "CNY" },
+      "rates": {},
+      "wantErrCurrency": "CNY"
+    },
+    {
+      "name": "usd_zero_rate_error",
+      "in": { "boqItemType": "раб", "quantity": 1, "unitRate": 100, "currencyType": "USD" },
+      "rates": { "usdRate": 0 },
+      "wantErrCurrency": "USD"
+    },
+    {
+      "name": "usd_with_rate_ok",
+      "in": { "boqItemType": "суб-раб", "quantity": 2, "unitRate": 100, "currencyType": "USD" },
+      "rates": { "usdRate": 90 },
+      "wantAmount": 18000,
+      "wantErrCurrency": ""
+    },
+    {
+      "name": "material_usd_missing_rate_error",
+      "in": { "boqItemType": "мат", "quantity": 4, "unitRate": 25, "currencyType": "USD", "deliveryPriceType": "в цене", "consumptionCoefficient": 1 },
+      "rates": {},
+      "wantErrCurrency": "USD"
+    }
+  ],
+
+  "coeff_cases": [
+    {
+      "name": "multiply_markup_missing_format_defaults_addOne",
+      "itemType": "раб",
+      "baseAmount": 100,
+      "params": { "m": 10 },
+      "sequence": [
+        { "name": "markup", "baseIndex": -1, "action1": "multiply", "operand1Type": "markup", "operand1Key": "m" }
+      ],
+      "wantCommercial": 110
+    },
+    {
+      "name": "base_costs_do_not_change_coefficient",
+      "itemType": "раб",
+      "baseAmount": 100,
+      "params": { "m": 10 },
+      "baseCosts": { "раб": 5 },
+      "sequence": [
+        { "name": "markup", "baseIndex": -1, "action1": "multiply", "operand1Type": "markup", "operand1Key": "m", "operand1MultiplyFormat": "addOne" }
+      ],
+      "assertBaseCostsIgnored": true
+    }
+  ]
+}

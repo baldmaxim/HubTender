@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
-import type { Tender } from '../../../../lib/types';
+import type { Tender, CurrencyType } from '../../../../lib/types';
+import { dedupeCurrencies, formatFXUnavailable } from '../../../../utils/boq/currencyGuard';
 import { fetchTenders as apiFetchTenders, fetchTendersByIds as apiFetchTendersByIds } from '../../../../lib/api/tenders';
 import { listAllBoqItemsForTender } from '../../../../lib/api/fi';
 import { listDetailCostCategoriesWithCategory } from '../../../../lib/api/costs';
@@ -80,7 +81,9 @@ async function fetchVolumes(tenderId: string): Promise<{ detailMap: Map<string, 
 // типу/исключению/НДС (без tenderId), поэтому конкурентный расчёт тендеров с
 // разными тактиками привёл бы к загрязнению. Сброс в начале каждого тендера +
 // последовательный вызов гарантируют корректность.
-async function fetchBoqItems(tenderId: string): Promise<BoqItemForComparison[]> {
+async function fetchBoqItems(
+  tenderId: string,
+): Promise<{ items: BoqItemForComparison[]; missingCurrencies: CurrencyType[] }> {
   // Go BFF: boq-items-flat для тендера + справочник детальных категорий
   // (с присоединённой родительской категорией) + контекст для live-расчёта
   // коммерческих стоимостей. Соединяем по detail_cost_category_id. Сохраняем
@@ -108,6 +111,7 @@ async function fetchBoqItems(tenderId: string): Promise<BoqItemForComparison[]> 
   resetLiveCommercialCalculationCache();
 
   const out: BoqItemForComparison[] = [];
+  const missing: CurrencyType[] = [];
   for (const i of items) {
     const detailId = i.detail_cost_category_id ?? null;
     if (!detailId) continue;
@@ -120,6 +124,12 @@ async function fetchBoqItems(tenderId: string): Promise<BoqItemForComparison[]> 
       i as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0],
       calcContext,
     );
+    // Fail-closed: нет курса → элемент недоступен; валюту фиксируем, весь тендер
+    // будет помечен как «не рассчитан» (см. runLoad).
+    if (live.unavailable) {
+      missing.push(...live.missingCurrencies);
+      continue;
+    }
     out.push({
       total_amount: i.total_amount ?? null,
       boq_item_type: i.boq_item_type ?? null,
@@ -130,7 +140,7 @@ async function fetchBoqItems(tenderId: string): Promise<BoqItemForComparison[]> 
       client_positions: { tender_id: tenderId },
     });
   }
-  return out;
+  return { items: out, missingCurrencies: dedupeCurrencies(missing) };
 }
 
 type NotesMap = Map<string, string>;
@@ -400,6 +410,8 @@ export function useComparisonData() {
   const [notesMap, setNotesMap] = useState<NotesMap>(new Map());
   // Тендеры, по которым реально загружено сравнение (на них вешаем realtime).
   const [loadedTenderIds, setLoadedTenderIds] = useState<string[]>([]);
+  // Fail-closed: валюты без курса → сравнение недоступно, показываем Alert.
+  const [fxMissing, setFxMissing] = useState<CurrencyType[]>([]);
 
   useEffect(() => {
     fetchTendersData();
@@ -448,9 +460,24 @@ export function useComparisonData() {
       // Последовательно по тендерам — общий module-level кэш коэффициентов в
       // calculateBoqItemCost не допускает конкурентного расчёта (см. fetchBoqItems).
       const itemsAll: BoqItemForComparison[][] = [];
+      const missing: CurrencyType[] = [];
       for (const id of validTenders) {
-        itemsAll.push(await fetchBoqItems(id));
+        const res = await fetchBoqItems(id);
+        itemsAll.push(res.items);
+        missing.push(...res.missingCurrencies);
       }
+
+      // Fail-closed: хотя бы у одного тендера нет курса → сравнение недоступно.
+      if (missing.length > 0) {
+        const deduped = dedupeCurrencies(missing);
+        setFxMissing(deduped);
+        setRawItemsAll(null);
+        setComparisonData([]);
+        if (!silent) message.error(formatFXUnavailable(deduped));
+        return;
+      }
+      setFxMissing([]);
+
       const volsAll = await Promise.all(validTenders.map(id => fetchVolumes(id)));
 
       const tendersById = new Map(tendersResult.map(t => [t.id, t]));
@@ -552,5 +579,6 @@ export function useComparisonData() {
     refreshComparison,
     tenderTotals,
     saveNote,
+    fxMissing,
   };
 }

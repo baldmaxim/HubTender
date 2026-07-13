@@ -1,5 +1,6 @@
 import { useState, useMemo, memo } from 'react';
-import { Card, Tabs } from 'antd';
+import { Card, Tabs, Alert } from 'antd';
+import { missingFXMessage } from '../../utils/boq/currencyGuard';
 import { useParams } from 'react-router-dom';
 import WorkEditForm from './WorkEditForm';
 import MaterialEditForm from './MaterialEditForm';
@@ -83,6 +84,19 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
   // На телефоне (любая ориентация) страница — только для просмотра
   const readOnly = isReadOnlyByDeadline || isMobile || isLandscapePhone;
 
+  // Единый Alert об отсутствующем курсе валюты (P0). Бэкенд — окончательный блокер.
+  const fxWarning = useMemo(
+    () =>
+      loading
+        ? null
+        : missingFXMessage(items, {
+            usd_rate: currencyRates.usd,
+            eur_rate: currencyRates.eur,
+            cny_rate: currencyRates.cny,
+          }),
+    [loading, items, currencyRates],
+  );
+
   const {
     handleAddWork,
     handleAddMaterial,
@@ -118,8 +132,13 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
       setIsBulkDeleting,
     });
 
-  const totalSum = useMemo(
-    () => items.reduce((sum, item) => sum + (item.total_amount || 0), 0),
+  // Fail-closed: если хотя бы у одной строки нет курса (total_amount == null) —
+  // итог позиции не рассчитан (null → «—»), а не частичная сумма.
+  const totalSum = useMemo<number | null>(
+    () =>
+      items.some((item) => item.total_amount == null)
+        ? null
+        : items.reduce((sum, item) => sum + (item.total_amount || 0), 0),
     [items],
   );
 
@@ -231,6 +250,14 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
 
   return (
     <div style={{ padding: '0 8px' }}>
+      {fxWarning && (
+        <Alert
+          type="error"
+          showIcon
+          message={fxWarning}
+          style={{ marginBottom: 12 }}
+        />
+      )}
       <PositionHeader
         position={position}
         gpVolume={gpVolume}

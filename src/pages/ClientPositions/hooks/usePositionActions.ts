@@ -10,6 +10,7 @@ import {
 } from '../../../lib/api/positions';
 import { copyBoqItems } from '../../../utils/copyBoqItems';
 import { exportPositionsToExcel } from '../../../utils/excel';
+import { MissingFXExportError } from '../../../utils/boq/currencyGuard';
 import { pluralize } from '../../../utils/pluralize';
 import { getErrorMessage } from '../../../utils/errors';
 import { collectSectionDescendants } from '../../../utils/positions/collectSectionDescendants';
@@ -167,6 +168,11 @@ export const usePositionActions = (
     } catch (error) {
       console.error('Ошибка экспорта:', error);
       hideLoading();
+      // Fail-closed FX: понятное одиночное сообщение, файл не создан.
+      if (error instanceof MissingFXExportError) {
+        message.error(error.message);
+        return;
+      }
       message.error('Ошибка экспорта: ' + getErrorMessage(error));
     }
   };

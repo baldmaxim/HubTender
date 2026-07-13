@@ -80,6 +80,43 @@ func PreconditionRequired(detail string) *Problem {
 	return New(http.StatusPreconditionRequired, "Precondition Required", detail)
 }
 
+// InvalidMarkupSequence returns a 400 Problem for a markup tactic whose
+// sequences failed validation. `issues` is serialised as an RFC 7807 extension
+// member so the frontend can point at the exact category/step/operand/field.
+func InvalidMarkupSequence(issues any) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusBadRequest),
+			Title:  "Bad Request",
+			Status: http.StatusBadRequest,
+			Detail: "Некорректная последовательность наценок: не задан формат умножения для multiply+markup",
+		},
+		Extras: map[string]any{
+			"code":   "INVALID_MARKUP_SEQUENCE",
+			"issues": issues,
+		},
+	}
+}
+
+// MissingFXRate returns a 400 Problem for a blocking missing currency-rate
+// condition. The machine-readable "code" and "currency" extension members let
+// the frontend surface a precise message ("Не задан курс USD …") instead of a
+// silently-zero amount.
+func MissingFXRate(currency string) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusBadRequest),
+			Title:  "Bad Request",
+			Status: http.StatusBadRequest,
+			Detail: "Не задан курс валюты " + currency + " для тендера. Расчёт заблокирован.",
+		},
+		Extras: map[string]any{
+			"code":     "MISSING_FX_RATE",
+			"currency": currency,
+		},
+	}
+}
+
 // ProblemExtra extends Problem with arbitrary extra fields serialised into
 // the same JSON object (RFC 7807 §3.2 extension members).
 type ProblemExtra struct {

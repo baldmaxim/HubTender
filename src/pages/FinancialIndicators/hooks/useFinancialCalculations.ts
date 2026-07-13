@@ -12,6 +12,7 @@ import { listTenderMarkupPercentages } from '../../../lib/api/markup';
 import { createSystemNotification } from '../../../lib/api/notifications';
 import { getErrorMessage } from '../../../utils/errors';
 import { computeInsuranceTotal } from '../../../services/redistributionPipeline';
+import type { CurrencyType } from '../../../lib/types';
 import type { IndicatorRow } from '../types';
 import { aggregateDirectCosts } from '../utils/aggregateDirectCosts';
 import { extractSequenceParams, resolveMarkupCoefficients } from '../utils/markupCoefficients';
@@ -41,6 +42,8 @@ export const useFinancialCalculations = () => {
   const [customerTotal, setCustomerTotal] = useState<number>(0);
   const [isVatInConstructor, setIsVatInConstructor] = useState<boolean>(false);
   const [vatCoefficient, setVatCoefficient] = useState<number>(0);
+  // Fail-closed: валюты без курса → показатели не рассчитываются, Alert/«—».
+  const [fxMissing, setFxMissing] = useState<CurrencyType[]>([]);
 
   const fetchFinancialIndicators = useCallback(async (selectedTenderId: string | null) => {
     if (!selectedTenderId) return;
@@ -103,7 +106,18 @@ export const useFinancialCalculations = () => {
       }
 
       // Агрегация прямых затрат по типам BOQ-элементов
-      const totals = aggregateDirectCosts(boqItems, tender, exclusions);
+      const totalsResult = aggregateDirectCosts(boqItems, tender, exclusions);
+
+      // Fail-closed: нет курса → не считаем показатели, показываем «—»/Alert.
+      if (totalsResult.value === null) {
+        setFxMissing(totalsResult.missingCurrencies);
+        setData([]);
+        setSpTotal(0);
+        setCustomerTotal(0);
+        return;
+      }
+      setFxMissing([]);
+      const totals = totalsResult.value;
 
       const areaSp = tender?.area_sp || 0;
       const areaClient = tender?.area_client || 0;
@@ -141,6 +155,7 @@ export const useFinancialCalculations = () => {
     loading,
     isVatInConstructor,
     vatCoefficient,
+    fxMissing,
     fetchFinancialIndicators,
   };
 };

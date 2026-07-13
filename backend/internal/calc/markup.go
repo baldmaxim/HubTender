@@ -181,7 +181,7 @@ func runStep(step MarkupStep, baseAmount float64, stepResults []float64, params 
 				continue
 			}
 		}
-		v, err := getOperandValue(o.operand, params, stepResults, baseAmount)
+		v, err := getOperandValue(o.action, o.operand, params, stepResults, baseAmount)
 		if err != nil {
 			return 0, err
 		}
@@ -204,7 +204,7 @@ func getBaseValue(baseIndex int, baseAmount float64, stepResults []float64) (flo
 	return 0, fmt.Errorf("Недопустимый baseIndex: %d. Доступно шагов: %d", baseIndex, len(stepResults))
 }
 
-func getOperandValue(op Operand, params map[string]float64, stepResults []float64, baseAmount float64) (float64, error) {
+func getOperandValue(action MarkupOperation, op Operand, params map[string]float64, stepResults []float64, baseAmount float64) (float64, error) {
 	switch op.Type {
 	case OperandMarkup:
 		if op.Key == nil {
@@ -215,10 +215,20 @@ func getOperandValue(op Operand, params map[string]float64, stepResults []float6
 		if !ok {
 			return 0, fmt.Errorf("Параметр наценки %q не найден", key)
 		}
-		if op.MultiplyFormat == MultiplyAddOne {
-			return 1 + v/100, nil
+		switch op.MultiplyFormat {
+		case MultiplyAddOne:
+			return 1 + v/100, nil // 10% → 1.1
+		case MultiplyDirect:
+			return v / 100, nil // 10% → 0.1 (explicit)
+		default:
+			// P0: an unset format on a multiply+markup operand defaults to addOne
+			// (was silently "direct" → base ×0.1). Non-multiply markup operands
+			// keep the legacy bare-percentage semantics.
+			if action == OpMultiply {
+				return 1 + v/100, nil
+			}
+			return v / 100, nil
 		}
-		return v / 100, nil
 
 	case OperandStep:
 		if !op.IndexSet {
@@ -305,18 +315,22 @@ func ValidateMarkupSequence(seq []MarkupStep) []string {
 			errs = append(errs, fmt.Sprintf("Шаг %d: отсутствует обязательная первая операция", stepNum))
 		}
 
-		check := func(n int, operand Operand) {
+		check := func(n int, action MarkupOperation, operand Operand) {
 			if operand.Type == OperandStep {
 				if !operand.IndexSet || operand.Index >= i {
 					errs = append(errs, fmt.Sprintf("Шаг %d: недопустимый operand%dIndex для типа 'step'", stepNum, n))
 				}
 			}
+			// P0: operandNMultiplyFormat is obligatory for multiply+markup.
+			if action == OpMultiply && operand.Type == OperandMarkup && operand.MultiplyFormat == "" {
+				errs = append(errs, fmt.Sprintf("Шаг %d: не задан operand%dMultiplyFormat для multiply+markup", stepNum, n))
+			}
 		}
-		check(1, step.Operand1)
-		check(2, step.Operand2)
-		check(3, step.Operand3)
-		check(4, step.Operand4)
-		check(5, step.Operand5)
+		check(1, step.Action1, step.Operand1)
+		check(2, step.Action2, step.Operand2)
+		check(3, step.Action3, step.Operand3)
+		check(4, step.Action4, step.Operand4)
+		check(5, step.Action5, step.Operand5)
 	}
 	return errs
 }

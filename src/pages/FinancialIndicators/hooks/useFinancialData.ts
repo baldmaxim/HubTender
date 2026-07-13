@@ -17,6 +17,7 @@ export const useFinancialData = () => {
     loading: calculationsLoading,
     isVatInConstructor,
     vatCoefficient,
+    fxMissing,
     fetchFinancialIndicators,
   } = useFinancialCalculations();
 
@@ -28,6 +29,7 @@ export const useFinancialData = () => {
     customerTotal,
     isVatInConstructor,
     vatCoefficient,
+    fxMissing,
     loadTenders,
     fetchFinancialIndicators,
   };

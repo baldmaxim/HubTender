@@ -66,12 +66,9 @@ func (s *CommercialRecalcService) RecalcTender(ctx context.Context, tenderID str
 		return nil
 	}
 
-	baseCosts := map[string]float64{}
-	if len(tactic.BaseCosts) > 0 {
-		// base_costs is an optional override; ignore a malformed blob rather than
-		// failing the whole recalc (matches the TS `tactic.base_costs?.[...]`).
-		_ = json.Unmarshal(tactic.BaseCosts, &baseCosts)
-	}
+	// base_costs (MarkupConstructor preview) is intentionally NOT read here (P0):
+	// it must never enter the production coefficient. calc.CalculateBoqItemCost
+	// ignores the arg; we pass nil to make that explicit.
 
 	pctRows, err := s.markup.ListTenderMarkupPercentages(ctx, tenderID)
 	if err != nil {
@@ -108,7 +105,7 @@ func (s *CommercialRecalcService) RecalcTender(ctx context.Context, tenderID str
 			MaterialType:         recalcStr(it.MaterialType),
 			DetailCostCategoryID: recalcStr(it.DetailCostCategoryID),
 			TotalAmount:          base,
-		}, sequences, baseCosts, params, dist, excl, coeffCache)
+		}, sequences, nil, params, dist, excl, coeffCache)
 		if !ok {
 			// No sequence for this item type → applyTacticToTender skips it.
 			continue

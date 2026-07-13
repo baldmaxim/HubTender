@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { calculateBoqItemTotalAmount } from '../../../../utils/boq/calculateBoqAmount';
+import { totalAmountFX } from '../../../../utils/boq/currencyGuard';
 import {
   calculateLiveCommercialAmounts,
   loadLiveCommercialCalculationContext,
@@ -101,6 +101,16 @@ export const useBreakdownData = ({
         return;
       }
 
+      // Fail-closed: хотя бы у одного элемента нет курса → детализация недоступна
+      // (не показываем частичную разбивку). Общий Alert — на уровне страницы.
+      const bdUnavailable = boqItems.some(
+        (item) => totalAmountFX(item as unknown as Parameters<typeof totalAmountFX>[0], tenderRates).value === null,
+      );
+      if (bdUnavailable) {
+        setBreakdownData([]);
+        return;
+      }
+
       const categoryMap = new Map<string, CategoryBreakdown>();
 
       boqItems.forEach(item => {
@@ -108,7 +118,9 @@ export const useBreakdownData = ({
         const categoryObj = detailCategory?.cost_categories || null;
 
         const vatMultiplier = (isVatInConstructor && vatCoefficient > 0) ? (1 + vatCoefficient / 100) : 1;
-        const amount = calculateBoqItemTotalAmount(item as unknown as Parameters<typeof calculateBoqItemTotalAmount>[0], tenderRates) * vatMultiplier;
+        const baseFX = totalAmountFX(item as unknown as Parameters<typeof totalAmountFX>[0], tenderRates);
+        if (baseFX.value === null) return;
+        const amount = baseFX.value * vatMultiplier;
         const isWork = item.boq_item_type === 'раб' || item.boq_item_type === 'суб-раб' || item.boq_item_type === 'раб-комп.';
 
         // Для строки 4 (запас на сдачу) группируем по виду затрат
@@ -244,20 +256,36 @@ export const useBreakdownData = ({
       const boqRows = (await listBoqItemsFullByTender(selectedTenderId)) as unknown as Array<{
         detail_cost_category_id: string | null;
       }>;
-      boqRows.forEach((rawItem) => {
-        const item = rawItem as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0];
+      // Fail-closed: любой элемент без курса → справочные цены недоступны, не
+      // копим частичные суммы (оставляем нули → «—» в справке).
+      const refUnavailable = boqRows.some((rawItem) => {
         const categoryName = rawItem.detail_cost_category_id
           ? detailToCategoryName.get(rawItem.detail_cost_category_id) || ''
           : '';
-        if (!targetCategories.has(categoryName)) return;
-
-        const { commercialTotal, baseAmount } = calculateLiveCommercialAmounts(item, calculationContext);
-        commercialCostByCategory.set(
-          categoryName,
-          (commercialCostByCategory.get(categoryName) || 0) + commercialTotal,
-        );
-        baseCostByCategory.set(categoryName, (baseCostByCategory.get(categoryName) || 0) + baseAmount);
+        if (!targetCategories.has(categoryName)) return false;
+        return calculateLiveCommercialAmounts(
+          rawItem as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0],
+          calculationContext,
+        ).unavailable;
       });
+
+      if (!refUnavailable) {
+        boqRows.forEach((rawItem) => {
+          const item = rawItem as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0];
+          const categoryName = rawItem.detail_cost_category_id
+            ? detailToCategoryName.get(rawItem.detail_cost_category_id) || ''
+            : '';
+          if (!targetCategories.has(categoryName)) return;
+
+          const live = calculateLiveCommercialAmounts(item, calculationContext);
+          if (live.unavailable) return;
+          commercialCostByCategory.set(
+            categoryName,
+            (commercialCostByCategory.get(categoryName) || 0) + live.commercialTotal,
+          );
+          baseCostByCategory.set(categoryName, (baseCostByCategory.get(categoryName) || 0) + live.baseAmount);
+        });
+      }
 
       // 4. Рассчитываем цену за единицу КП
       // Используем коммерческие стоимости, если они заполнены, иначе базовые

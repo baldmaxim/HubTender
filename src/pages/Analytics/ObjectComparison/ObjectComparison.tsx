@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Card, Typography, Select, Table, Space, Statistic, Row, Col, Button, Spin, Segmented } from 'antd';
+import { Card, Typography, Select, Table, Space, Statistic, Row, Col, Button, Spin, Segmented, Alert } from 'antd';
+import { formatFXUnavailable } from '../../../utils/boq/currencyGuard';
 import { BarChartOutlined, ReloadOutlined, DownloadOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -35,6 +36,7 @@ const ObjectComparison: React.FC = () => {
     refreshComparison,
     tenderTotals,
     saveNote,
+    fxMissing,
   } = useComparisonData();
 
   const [viewMode, setViewMode] = useState<ViewMode>('detailed');
@@ -216,6 +218,9 @@ const ObjectComparison: React.FC = () => {
       {loadedTenderIds.map((id) => (
         <TenderRealtimeRefresh key={id} tenderId={id} onChange={refreshComparison} />
       ))}
+      {fxMissing.length > 0 && (
+        <Alert type="error" showIcon message={formatFXUnavailable(fxMissing)} style={{ marginBottom: 12 }} />
+      )}
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         {(() => {
           const selectionCard = (

@@ -123,7 +123,13 @@ func (r *BoqRepo) RecomputeLinkedMaterialsForWork(
 		// Recompute total via the shared calc using the new quantity.
 		amtIn := boqAmountInputFromRow(c)
 		amtIn.Quantity = &newQty
-		newTotal := calc.CalculateBoqItemTotalAmount(amtIn, rates)
+		newTotal, err := calc.CalculateBoqItemTotalAmount(amtIn, rates)
+		if err != nil {
+			// Blocking: a missing FX rate must fail the whole recompute. The
+			// deferred tx.Rollback preserves existing correct values — no
+			// partial/zero write. Error propagates to the caller's logger.
+			return 0, fmt.Errorf("boqRepo.RecomputeLinkedMaterialsForWork: %w", err)
+		}
 
 		oldJSON, _ := boqRowJSON(c)
 		newItem, err := scanBoqItemRow(tx.QueryRow(ctx, updQ, newQty, newTotal, c.ID))

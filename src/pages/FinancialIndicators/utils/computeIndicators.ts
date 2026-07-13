@@ -1,3 +1,6 @@
+// UI display / Excel-export only — the FinancialIndicators grand-total cascade is
+// rendered and exported, never POSTed/persisted. Authoritative money math is
+// backend/internal/calc. See docs/CALCULATION_SOURCE_OF_TRUTH.md.
 import type { DirectCostTotals, MarkupCoefficients, FinancialCalcResult } from '../types';
 
 /**

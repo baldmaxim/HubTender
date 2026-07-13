@@ -1,8 +1,5 @@
 import type { BoqItemFull, ExportRow, BoqItemType, ClientPosition } from './types';
-import {
-  calculateBoqItemTotalAmount,
-  calculateDeliveryUnitCost,
-} from '../boq/calculateBoqAmount';
+import { safeTotalAmount, safeDeliveryUnitCost } from '../boq/currencyGuard';
 
 /**
  * Проверяет является ли тип элемента работой
@@ -97,7 +94,7 @@ export function createBoqItemRow(
     : item.material_names?.unit || '';
 
   const deliveryCost = item.delivery_price_type
-    ? calculateDeliveryUnitCost(item, currencyRates) || null
+    ? safeDeliveryUnitCost(item, currencyRates) || null
     : null;
 
   return {
@@ -116,7 +113,7 @@ export function createBoqItemRow(
     deliveryType: item.delivery_price_type || '',
     deliveryCost,
     unitPrice: item.unit_rate || null,
-    totalAmount: calculateBoqItemTotalAmount(item, currencyRates) || null,
+    totalAmount: safeTotalAmount(item, currencyRates) || null,
     materialLinkedToWork: isMaterialType(item.boq_item_type)
       ? (item.parent_work_item_id ? 'да' : 'нет')
       : '',

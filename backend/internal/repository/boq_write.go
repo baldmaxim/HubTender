@@ -282,7 +282,10 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 	if in.DeliveryPriceType != nil {
 		calcIn.DeliveryPriceType = *in.DeliveryPriceType
 	}
-	totalAmount := calc.CalculateBoqItemTotalAmount(calcIn, rates)
+	totalAmount, err := calc.CalculateBoqItemTotalAmount(calcIn, rates)
+	if err != nil {
+		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
+	}
 
 	// NOTE: public.boq_items in the live Yandex schema has no `created_by`
 	// column — see db/yandex/sql/03_tables.sql. The authoring user is recorded

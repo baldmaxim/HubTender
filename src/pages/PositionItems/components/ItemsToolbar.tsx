@@ -23,7 +23,7 @@ interface ItemsToolbarProps {
   onClearAll: () => void;
   itemsCount: number;
   disabled: boolean;
-  totalSum: number;
+  totalSum: number | null;
 }
 
 /** Тулбар карточки «Элементы позиции» (десктоп/планшет). На телефоне не рендерится. */
@@ -100,7 +100,7 @@ const ItemsToolbar: React.FC<ItemsToolbarProps> = ({
         </>
       )}
       <div style={{ fontSize: 16, fontWeight: 'bold' }}>
-        Итого: <span style={{ color: '#10b981' }}>{Math.round(totalSum).toLocaleString('ru-RU')}</span>
+        Итого: <span style={{ color: '#10b981' }}>{totalSum == null ? '—' : Math.round(totalSum).toLocaleString('ru-RU')}</span>
       </div>
     </div>
   </div>

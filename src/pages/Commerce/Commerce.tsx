@@ -2,8 +2,9 @@
  * Страница "Коммерция" - отображение коммерческих стоимостей позиций заказчика
  */
 
-import { Card, Spin, Empty } from 'antd';
-import { useEffect, useRef } from 'react';
+import { Card, Spin, Empty, Alert, message } from 'antd';
+import { useEffect, useRef, useMemo } from 'react';
+import { missingFXMessage } from '../../utils/boq/currencyGuard';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { buildPositionTabPath } from '../../lib/cache/workspaceTabsStorage';
@@ -37,6 +38,7 @@ export default function Commerce() {
     selectedVersion,
     setSelectedVersion,
     positions,
+    boqItems,
     markupTactics,
     selectedTacticId,
     tacticChanged,
@@ -134,8 +136,33 @@ export default function Commerce() {
   // Обработка экспорта в Excel
   const handleExportToExcel = () => {
     const selectedTender = tenders.find(t => t.id === selectedTenderId);
+    // Fail-closed: нет курса → не выгружаем частичные значения.
+    const fxMsg = selectedTender
+      ? missingFXMessage(boqItems ?? [], {
+          usd_rate: selectedTender.usd_rate,
+          eur_rate: selectedTender.eur_rate,
+          cny_rate: selectedTender.cny_rate,
+        })
+      : null;
+    if (fxMsg) {
+      message.error(fxMsg);
+      return;
+    }
     exportCommerceToExcel(positions, selectedTender, insuranceTotal);
   };
+
+  // Единый Alert об отсутствующем курсе валюты (P0): считаем по загруженным
+  // boq_items текущего тендера. Бэкенд остаётся окончательным блокером.
+  const fxWarning = useMemo(() => {
+    if (loading || !boqItems) return null;
+    const tender = tenders.find(t => t.id === selectedTenderId);
+    if (!tender) return null;
+    return missingFXMessage(boqItems, {
+      usd_rate: tender.usd_rate,
+      eur_rate: tender.eur_rate,
+      cny_rate: tender.cny_rate,
+    });
+  }, [loading, boqItems, tenders, selectedTenderId]);
 
   // Навигация к позиции — открываем внутренней вкладкой приложения (keep-alive), «Форма КП»
   // остаётся смонтированной вкладкой и сохраняет состояние.
@@ -186,6 +213,9 @@ export default function Commerce() {
         />
       }
     >
+      {fxWarning && (
+        <Alert type="error" showIcon message={fxWarning} style={{ marginBottom: 12 }} />
+      )}
       {selectedTenderId ? (
         <Spin spinning={loading || calculating}>
           {isPhone ? (

@@ -1,3 +1,11 @@
+// ⚠️ WARNING — NOT preview-only. This frontend calculation currently PERSISTS to
+// the DB: its output (original_work_cost / deducted_amount / added_amount /
+// final_work_cost) is POSTed to /api/v1/redistributions/save and upserted WITHOUT
+// server-side recompute. A backend port already exists
+// (backend/internal/calc/redistribution.go) but is unused on the save path — this
+// is a KNOWN divergence from the source of truth, scheduled for a dedicated
+// server-side migration stage. Do NOT extend this as an authoritative calculator.
+// See docs/CALCULATION_SOURCE_OF_TRUTH.md.
 /**
  * Утилита для расчета перераспределения стоимости работ между затратами
  */

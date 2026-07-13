@@ -118,7 +118,10 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItem
 		if err != nil {
 			return nil, fmt.Errorf("boqRepo.UpdateBoqItem: %w", err)
 		}
-		newTotal := calc.CalculateBoqItemTotalAmount(boqAmountInputFromRow(newItem), rates)
+		newTotal, err := calc.CalculateBoqItemTotalAmount(boqAmountInputFromRow(newItem), rates)
+		if err != nil {
+			return nil, fmt.Errorf("boqRepo.UpdateBoqItem: %w", err)
+		}
 		if newItem.TotalAmount == nil || *newItem.TotalAmount != newTotal {
 			const totQ = "UPDATE public.boq_items SET total_amount = $1 WHERE id = $2 RETURNING " + boqScanCols
 			newItem, err = scanBoqItemRow(tx.QueryRow(ctx, totQ, newTotal, id))

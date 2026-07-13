@@ -1,3 +1,6 @@
+// UI display only — rounds unit prices to 2 dp for presentation. NOT the money
+// source of truth; the authoritative 5-RUB kernel is backend/internal/calc
+// (RoundTo5 / CompensateError). See docs/CALCULATION_SOURCE_OF_TRUTH.md.
 /**
  * Округление цен за единицу до 2 знаков после запятой
  */

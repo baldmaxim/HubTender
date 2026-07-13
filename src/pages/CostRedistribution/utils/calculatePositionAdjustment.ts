@@ -1,3 +1,7 @@
+// UI preview only — computes per-position transfer deltas for display. Only the
+// rule params (mode/amount/ids) persist; the deltas are recomputed on load and
+// never stored as money. Authoritative math: backend/internal/calc.
+// See docs/CALCULATION_SOURCE_OF_TRUTH.md.
 import type {
   PositionAdjustmentRule,
   PositionAdjustmentValidationError,

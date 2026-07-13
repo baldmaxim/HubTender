@@ -266,10 +266,14 @@ type BoqItemCostResult struct {
 // (replaces the TS module-level typeCoefficientsCache) so parallel tender recalcs
 // never share mutable state. ok=false mirrors the TS `null` return when the item
 // type has no sequence in the tactic.
+//
+// Deprecated param: baseCosts is IGNORED (P0). MarkupConstructor preview
+// base_costs must never affect the production coefficient. Kept in the signature
+// only to avoid churning callers; pass nil.
 func CalculateBoqItemCost(
 	item BoqItemForCost,
 	sequences map[string][]SequenceStep,
-	baseCosts map[string]float64,
+	baseCosts map[string]float64, //nolint:revive // deprecated, ignored (see doc)
 	params map[string]float64,
 	distribution *PricingDistribution,
 	exclusions *SubcontractExclusions,
@@ -296,11 +300,10 @@ func CalculateBoqItemCost(
 
 	coeff, cached := coeffCache[cacheKey]
 	if !cached {
-		var bc *float64
-		if v, exists := baseCosts[item.BoqItemType]; exists {
-			bc = &v
-		}
-		coeff = calculateTypeCoefficient(seqNoVAT, params, bc)
+		// base_costs is a MarkupConstructor preview value and must NOT enter the
+		// production coefficient (P0). Always compute from base = 1; the
+		// deprecated baseCosts param is intentionally ignored.
+		coeff = calculateTypeCoefficient(seqNoVAT, params, nil)
 		coeffCache[cacheKey] = coeff
 	}
 

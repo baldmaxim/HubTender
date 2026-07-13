@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { Typography, Select, Card } from 'antd';
+import { Typography, Select, Card, Alert, message } from 'antd';
+import { formatFXUnavailable } from '../../../utils/boq/currencyGuard';
 import { useCostData } from './hooks/useCostData';
 import CostFilters from './components/CostFilters';
 import CostTable from './components/CostTable';
@@ -44,6 +45,7 @@ const ConstructionCostNew: React.FC = () => {
     selectedVersion,
     loading,
     data,
+    fxMissing,
     costType,
     setCostType,
     setSelectedTenderId,
@@ -66,6 +68,10 @@ const ConstructionCostNew: React.FC = () => {
   // Обработчик экспорта
   const handleExport = () => {
     if (!selectedTenderId || !selectedTenderTitle) return;
+    if (fxMissing.length > 0) {
+      message.error(formatFXUnavailable(fxMissing));
+      return;
+    }
 
     exportConstructionCostToExcel({
       selectedTenderId,
@@ -134,6 +140,9 @@ const ConstructionCostNew: React.FC = () => {
 
   return (
     <div style={{ margin: isPhone ? '-16px 0' : '-16px', padding: isPhone ? 8 : 24, height: isPhoneDevice ? 'auto' : 'calc(100vh - 64px)' }}>
+      {fxMissing.length > 0 && (
+        <Alert type="error" showIcon message={formatFXUnavailable(fxMissing)} style={{ marginBottom: 12 }} />
+      )}
       {!isPhoneDevice && (
         <div style={{ marginBottom: 16, display: 'flex', alignItems: 'baseline', gap: 16 }}>
           {selectedTender?.area_sp && (

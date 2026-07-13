@@ -5,7 +5,23 @@ import {
   createPositionRow,
   createBoqItemRow,
 } from './formatters';
-import { calculateBoqItemTotalAmount } from '../boq/calculateBoqAmount';
+import { safeTotalAmount, getMissingFXRates, MissingFXExportError } from '../boq/currencyGuard';
+
+// Сумма позиции: если у любого элемента нет курса валюты — вся сумма «не
+// рассчитана» (null → красная подсветка/«—» в Excel), а не тихий 0.
+// (Экспорт целиком блокируется пред-проверкой ниже; sumOrNull — вторая линия.)
+const sumOrNull = (
+  items: Parameters<typeof safeTotalAmount>[0][],
+  rates: Parameters<typeof safeTotalAmount>[1],
+): number | null => {
+  let sum = 0;
+  for (const item of items) {
+    const v = safeTotalAmount(item, rates);
+    if (v === null) return null;
+    sum += v;
+  }
+  return sum;
+};
 import { fetchPositionsWithCosts, listBoqItemsFullByTender } from '../../lib/api/positions';
 import { getTenderById } from '../../lib/api/fi';
 import {
@@ -188,7 +204,7 @@ function collectExportRows(
     // - Если нет BOQ items И это ЛИСТОВАЯ позиция → null (красная подсветка в Excel)
     // - Если нет BOQ items И это РАЗДЕЛ → агрегированные поля position
     const finalTotal = hasBOQItems
-      ? boqItems.reduce((sum, item) => sum + calculateBoqItemTotalAmount(item, tenderRates), 0)
+      ? sumOrNull(boqItems, tenderRates)
       : isLeaf
         ? null  // Листовая позиция без BOQ items → null для красной подсветки
         : (position.total_material || 0) + (position.total_works || 0);  // Раздел → агрегированная сумма
@@ -216,7 +232,7 @@ function collectExportRows(
       // Рассчитать реальную сумму из BOQ items для ДОП работы
       const dopBoqItems = boqItemsByPosition.get(dopWork.id) || [];
       const dopActualTotal = dopBoqItems.length > 0
-        ? dopBoqItems.reduce((sum, item) => sum + calculateBoqItemTotalAmount(item, tenderRates), 0)
+        ? sumOrNull(dopBoqItems, tenderRates)
         : null;
 
       // Добавить строку ДОП работы с реальной суммой
@@ -428,6 +444,14 @@ export async function exportPositionsToExcel(
 
     if (exportPositions.length === 0) {
       throw new Error('Нет позиций для экспорта');
+    }
+
+    // Fail-closed: если хотя бы у одной строки нет курса валюты — расчёт неполон,
+    // НЕ создаём файл, бросаем типизированную ошибку с перечнем валют.
+    const allItems = Array.from(boqItemsByPosition.values()).flat();
+    const missingFX = getMissingFXRates(allItems, tenderRates);
+    if (missingFX.length > 0) {
+      throw new MissingFXExportError(missingFX);
     }
 
     // Собрать все строки для экспорта (БЕЗ дополнительных запросов к БД)

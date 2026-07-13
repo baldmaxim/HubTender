@@ -4,10 +4,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { message } from 'antd';
-import type { Tender, BoqItem } from '../../../lib/types';
+import type { Tender, BoqItem, CurrencyType } from '../../../lib/types';
 import type { PositionWithCommercialCost, MarkupTactic } from '../types';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
-import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
+import { totalAmountFX, dedupeCurrencies } from '../../../utils/boq/currencyGuard';
 import {
   calculateBoqItemCost,
   loadMarkupParameters,
@@ -70,6 +70,7 @@ type AggregatedPositionLoadResult = {
   positions: PositionWithCommercialCost[];
   referenceTotal: number;
   boqItems: CommerceBoqItem[] | null;
+  missingCurrencies: CurrencyType[];
 };
 
 type PositionAccumulator = {
@@ -104,9 +105,16 @@ function buildPositionsFromBoqItems(
   // (когда snapshot не содержит строки на boq_item) КП использовал бы
   // stored DB-значения, а CR — свежий live-calc, и итоги расходились.
   const enrichedBoqItems: CommerceBoqItem[] = [];
+  const missing: CurrencyType[] = [];
 
   for (const item of boqItems) {
-    const itemBase = calculateBoqItemTotalAmount(item, context.tenderRates);
+    // Fail-closed: нет курса → НЕ используем сохранённое как live-результат.
+    const baseFX = totalAmountFX(item, context.tenderRates);
+    if (baseFX.value === null) {
+      missing.push(...baseFX.missingCurrencies);
+      continue;
+    }
+    const itemBase = baseFX.value;
     const liveCommercialCosts = context.tactic
       ? calculateBoqItemCost(
           {
@@ -147,6 +155,17 @@ function buildPositionsFromBoqItems(
     totalsByPosition.set(item.client_position_id, currentTotals);
   }
 
+  // Fail-closed: хотя бы одна строка без курса → позиции/итоги тендера не
+  // рассчитаны. Возвращаем исходные boqItems (с валютой) для экранного Alert.
+  if (missing.length > 0) {
+    return {
+      positions: [],
+      referenceTotal: 0,
+      boqItems,
+      missingCurrencies: dedupeCurrencies(missing),
+    };
+  }
+
   const positions = clientPositions.map((position) => {
     const totals = totalsByPosition.get(position.id);
     const baseTotal = totals?.baseTotal || 0;
@@ -167,6 +186,7 @@ function buildPositionsFromBoqItems(
     positions: applyLeafFlags(positions),
     referenceTotal,
     boqItems: enrichedBoqItems,
+    missingCurrencies: [],
   };
 }
 

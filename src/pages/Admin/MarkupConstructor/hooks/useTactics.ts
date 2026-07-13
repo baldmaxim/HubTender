@@ -15,6 +15,7 @@ import {
   setTenderMarkupTacticId,
   listTenderMarkupPercentages,
 } from '../../../../lib/api/markup';
+import { validateMarkupSequence } from '../../../../utils/markupCalculator';
 import type { TabKey } from '../types';
 import { INITIAL_MARKUP_SEQUENCES, INITIAL_BASE_COSTS } from '../constants';
 import { convertSequencesFromDb, convertBaseCostsFromDb, convertSequencesToDb, convertBaseCostsToDb } from '../utils/keyMapping';
@@ -57,6 +58,10 @@ export const useTactics = ({
 
   // Базовая стоимость для каждой вкладки
   const [baseCosts, setBaseCosts] = useState<Record<TabKey, number>>({ ...INITIAL_BASE_COSTS });
+
+  // Ошибки валидации последовательности (multiplyFormat для multiply+markup).
+  // Показываются одним Alert; при непустом списке сохранение блокируется.
+  const [sequenceErrors, setSequenceErrors] = useState<string[]>([]);
 
   // Загрузка существующей тактики из Supabase
   const fetchTacticFromSupabase = async (tenderId?: string) => {
@@ -331,6 +336,20 @@ export const useTactics = ({
 
   // Сохранение тактики наценок
   const handleSaveTactic = async () => {
+    // Pre-validate перед POST/PATCH: operandNMultiplyFormat обязателен для
+    // multiply+markup. При ошибке НЕ отправляем запрос и показываем список.
+    const errs: string[] = [];
+    (Object.entries(markupSequences) as [TabKey, MarkupStep[]][]).forEach(([tab, steps]) => {
+      if (!Array.isArray(steps)) return;
+      validateMarkupSequence(steps).forEach((e) => errs.push(`[${tab}] ${e}`));
+    });
+    if (errs.length > 0) {
+      setSequenceErrors(errs);
+      message.error('Нельзя сохранить: не задан формат умножения (1 + % / %) для multiply+markup');
+      return;
+    }
+    setSequenceErrors([]);
+
     try {
       console.log('Сохранение тактики:', { markupSequences, baseCosts });
 
@@ -525,6 +544,7 @@ export const useTactics = ({
     setMarkupSequences,
     baseCosts,
     setBaseCosts,
+    sequenceErrors,
     fetchTenders,
     fetchTactics,
     handleTenderChange,

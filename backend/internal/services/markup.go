@@ -2,11 +2,34 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/su10/hubtender/backend/internal/cache"
+	"github.com/su10/hubtender/backend/internal/calc"
 	"github.com/su10/hubtender/backend/internal/repository"
 )
+
+// validateTacticSequences parses the flat JSONB sequences blob and enforces the
+// markup-sequence rules BEFORE any repository write. Returns a blocking
+// *calc.InvalidMarkupSequenceError when invalid (mapped to RFC 7807 400 by the
+// handler). Empty/absent sequences validate trivially.
+func validateTacticSequences(raw json.RawMessage) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	var seqs map[string][]calc.SequenceStep
+	if err := json.Unmarshal(raw, &seqs); err != nil {
+		return &calc.InvalidMarkupSequenceError{Issues: []calc.SequenceIssue{{
+			Field:   "sequences",
+			Message: "не удалось разобрать sequences JSON: " + err.Error(),
+		}}}
+	}
+	if issues := calc.ValidateSequences(seqs); len(issues) > 0 {
+		return &calc.InvalidMarkupSequenceError{Issues: issues}
+	}
+	return nil
+}
 
 // MarkupService wraps the markup repo with cache invalidation. Tactic /
 // percentage / pricing changes affect tender overview totals so we drop the
@@ -48,6 +71,10 @@ func (s *MarkupService) FindGlobalTacticByName(ctx context.Context, name string)
 	return s.repo.FindGlobalTacticByName(ctx, name)
 }
 func (s *MarkupService) CreateTactic(ctx context.Context, in repository.MarkupTacticInput) (*repository.MarkupTacticRow, error) {
+	// Validate BEFORE the repository write — invalid sequences must not persist.
+	if err := validateTacticSequences(in.Sequences); err != nil {
+		return nil, err
+	}
 	row, err := s.repo.CreateTactic(ctx, in)
 	if err != nil {
 		return nil, fmt.Errorf("markupService.CreateTactic: %w", err)
@@ -55,6 +82,10 @@ func (s *MarkupService) CreateTactic(ctx context.Context, in repository.MarkupTa
 	return row, nil
 }
 func (s *MarkupService) UpdateTactic(ctx context.Context, id string, p repository.MarkupTacticPatch) error {
+	// Validate only when the PATCH actually carries sequences; block before write.
+	if err := validateTacticSequences(p.Sequences); err != nil {
+		return err
+	}
 	if err := s.repo.UpdateTactic(ctx, id, p); err != nil {
 		return fmt.Errorf("markupService.UpdateTactic: %w", err)
 	}

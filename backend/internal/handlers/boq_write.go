@@ -9,10 +9,24 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5"
+	"github.com/su10/hubtender/backend/internal/calc"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
+
+// renderMissingFXRate maps a blocking calc.MissingFXRateError to an RFC 7807
+// 400 (code MISSING_FX_RATE). Returns true when it handled the error so the
+// caller must stop. Prevents a foreign-currency item from being persisted with
+// a silently-zero amount.
+func renderMissingFXRate(w http.ResponseWriter, err error) bool {
+	var fx *calc.MissingFXRateError
+	if errors.As(err, &fx) {
+		apierr.MissingFXRate(fx.Currency).Render(w)
+		return true
+	}
+	return false
+}
 
 // boqWriteServicer extends boqServicer with write methods.
 type boqWriteServicer interface {
@@ -135,6 +149,9 @@ func (h *BoqWriteHandler) CreateBoqItem(w http.ResponseWriter, r *http.Request) 
 
 	item, err := h.svc.CreateBoqItem(r.Context(), in)
 	if err != nil {
+		if renderMissingFXRate(w, err) {
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to create BOQ item", "tender_id", tenderID, "position_id", posID)
 		return
 	}
@@ -214,6 +231,9 @@ func (h *BoqWriteHandler) UpdateBoqItem(w http.ResponseWriter, r *http.Request) 
 
 	updated, err := h.svc.UpdateBoqItem(r.Context(), itemID, in)
 	if err != nil {
+		if renderMissingFXRate(w, err) {
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to update BOQ item", "item_id", itemID)
 		return
 	}
@@ -302,6 +322,11 @@ func (h *BoqWriteHandler) InsertTemplate(w http.ResponseWriter, r *http.Request)
 
 	res, err := h.svc.InsertTemplateItems(r.Context(), templateID, req.ClientPositionID, authUser.ID)
 	if err != nil {
+		// Missing FX rate is a blocking domain error, not a 500 — reuse the shared
+		// RFC 7807 renderer from stage 0.1.1 (code MISSING_FX_RATE + currency).
+		if renderMissingFXRate(w, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, repository.ErrTemplateNotFound),
 			errors.Is(err, repository.ErrPositionNotFound):
@@ -336,6 +361,9 @@ func (h *BoqWriteHandler) RecomputeLinkedMaterials(w http.ResponseWriter, r *htt
 	if err != nil {
 		if errors.Is(err, repository.ErrWorkNotFound) {
 			apierr.NotFound(err.Error()).Render(w)
+			return
+		}
+		if renderMissingFXRate(w, err) {
 			return
 		}
 		apierr.InternalFromErr(w, r, err, "failed to recompute linked materials", "work_id", workID)

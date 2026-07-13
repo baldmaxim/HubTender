@@ -26,7 +26,7 @@ import {
   listActiveUnits,
 } from '../../../lib/api/nomenclatures';
 import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
-import { calculateBoqItemTotalAmount } from '../../../utils/boq/calculateBoqAmount';
+import { safeTotalAmount } from '../../../utils/boq/currencyGuard';
 import { getErrorMessage } from '../../../utils/errors';
 import { getRow as getCachedPositionRow } from '../../../lib/cache/positionRowCache';
 
@@ -260,7 +260,9 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
           parent_work_name: item.parent_work?.work_names?.name,
           detail_cost_category_full: detailCostCategoryFull,
           unit_rate: effectiveUnitRate,
-          total_amount: calculateBoqItemTotalAmount(
+          // Fail-closed: нет курса → total_amount = null («—»), НЕ сохранённое и НЕ 0.
+          // Экран показывает единый Alert (fxWarning). Бэкенд — окончательный блокер.
+          total_amount: safeTotalAmount(
             { ...(item as unknown as BoqItemFull), unit_rate: effectiveUnitRate },
             { usd_rate: rates.usd, eur_rate: rates.eur, cny_rate: rates.cny },
           ),

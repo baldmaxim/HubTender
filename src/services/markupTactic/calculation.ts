@@ -1,3 +1,7 @@
+// UI preview only. Authoritative calculation is performed by backend/internal/calc
+// (calc.CalculateBoqItemCost + ApplyPricingDistribution). The commercial
+// materialisation write path was removed; the Go BFF recomputes on the server.
+// See docs/CALCULATION_SOURCE_OF_TRUTH.md.
 /**
  * Логика расчета наценок для элементов BOQ
  */
@@ -438,6 +442,7 @@ function filterVATFromSequence(
 export function calculateTypeCoefficient(
   sequence: MarkupStep[],
   markupParameters: Map<string, number>,
+  /** @deprecated P0: preview base_cost конструктора; в production не передавать. */
   baseCost?: number
 ): number {
   if (!sequence || sequence.length === 0) {
@@ -510,10 +515,11 @@ export function calculateBoqItemCost(
     if (typeCoefficientsCache.has(cacheKey)) {
       coefficientWithoutVAT = typeCoefficientsCache.get(cacheKey)!;
     } else {
+      // P0: base_costs (preview-значение MarkupConstructor) НЕ должно влиять на
+      // рабочий коэффициент — третий аргумент намеренно не передаём.
       coefficientWithoutVAT = calculateTypeCoefficient(
         sequenceWithoutVAT,
-        markupParameters,
-        tactic.base_costs?.[item.boq_item_type]
+        markupParameters
       );
       typeCoefficientsCache.set(cacheKey, coefficientWithoutVAT);
     }

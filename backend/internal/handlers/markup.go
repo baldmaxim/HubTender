@@ -3,13 +3,27 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/su10/hubtender/backend/internal/calc"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
+
+// renderInvalidSequence maps a blocking calc.InvalidMarkupSequenceError to an
+// RFC 7807 400 (code INVALID_MARKUP_SEQUENCE + structured issues). Returns true
+// when handled so the caller stops before a generic 500.
+func renderInvalidSequence(w http.ResponseWriter, err error) bool {
+	var inv *calc.InvalidMarkupSequenceError
+	if errors.As(err, &inv) {
+		apierr.InvalidMarkupSequence(inv.Issues).Render(w)
+		return true
+	}
+	return false
+}
 
 // markupServicer is the interface MarkupHandler depends on.
 type markupServicer interface {
@@ -102,6 +116,9 @@ func (h *MarkupHandler) CreateTactic(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := h.svc.CreateTactic(r.Context(), in)
 	if err != nil {
+		if renderInvalidSequence(w, err) {
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to create tactic")
 		return
 	}
@@ -120,6 +137,9 @@ func (h *MarkupHandler) UpdateTactic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.UpdateTactic(r.Context(), id, p); err != nil {
+		if renderInvalidSequence(w, err) {
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to update tactic")
 		return
 	}

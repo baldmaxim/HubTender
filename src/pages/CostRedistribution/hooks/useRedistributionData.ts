@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { message } from 'antd';
 import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
-import type { Tender } from '../../../lib/types';
+import type { Tender, CurrencyType } from '../../../lib/types';
 import type { BoqItemWithCosts } from '../utils';
+import { dedupeCurrencies } from '../../../utils/boq/currencyGuard';
 import {
   calculateLiveCommercialAmounts,
   loadLiveCommercialCalculationContext,
@@ -57,6 +58,8 @@ export function useRedistributionData() {
   const [selectedTacticId, setSelectedTacticId] = useState<string | undefined>();
   const [boqItems, setBoqItems] = useState<BoqItemWithCosts[]>([]);
   const [clientPositions, setClientPositions] = useState<ClientPosition[]>([]);
+  // Fail-closed: валюты без курса → перераспределение недоступно, показываем Alert.
+  const [fxMissing, setFxMissing] = useState<CurrencyType[]>([]);
 
   useEffect(() => {
     void loadTenders();
@@ -144,16 +147,21 @@ export function useRedistributionData() {
       // между ними; для ≤CHUNK элементов проход один — без накладных расходов.
       const CHUNK = 500;
       const allBoqItems: RedistributionBoqItem[] = [];
+      const missing: CurrencyType[] = [];
       for (let i = 0; i < raw.length; i += CHUNK) {
         for (const item of raw.slice(i, i + CHUNK)) {
-          const { materialCost, workCost } = calculateLiveCommercialAmounts(
+          const live = calculateLiveCommercialAmounts(
             item as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0],
             calculationContext,
           );
+          if (live.unavailable) {
+            missing.push(...live.missingCurrencies);
+            continue;
+          }
           allBoqItems.push({
             ...item,
-            total_commercial_material_cost: materialCost,
-            total_commercial_work_cost: workCost,
+            total_commercial_material_cost: live.materialCost,
+            total_commercial_work_cost: live.workCost,
           });
         }
         if (i + CHUNK < raw.length) {
@@ -161,6 +169,13 @@ export function useRedistributionData() {
         }
       }
 
+      // Fail-closed: нет курса → не показываем частичное перераспределение.
+      if (missing.length > 0) {
+        setFxMissing(dedupeCurrencies(missing));
+        setBoqItems([]);
+        return;
+      }
+      setFxMissing([]);
       setBoqItems(allBoqItems);
     } catch (error) {
       console.error('Ошибка загрузки BOQ элементов:', error);
@@ -194,6 +209,7 @@ export function useRedistributionData() {
     handleTacticChange,
     boqItems,
     clientPositions,
+    fxMissing,
     loadBoqItems,
   };
 }

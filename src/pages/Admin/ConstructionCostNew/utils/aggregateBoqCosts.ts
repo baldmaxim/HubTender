@@ -2,6 +2,8 @@ import {
   calculateLiveCommercialAmounts,
   type loadLiveCommercialCalculationContext,
 } from '../../../../utils/boq/liveCommercialCalculation';
+import { dedupeCurrencies, type FXResult } from '../../../../utils/boq/currencyGuard';
+import type { CurrencyType } from '../../../../lib/types';
 import type { BoqItemForCost, CostSums } from '../types';
 
 type LiveCalculationContext = Awaited<ReturnType<typeof loadLiveCommercialCalculationContext>>;
@@ -9,14 +11,18 @@ type LiveCalculationContext = Awaited<ReturnType<typeof loadLiveCommercialCalcul
 /**
  * Агрегирует BOQ-элементы тендера в суммы затрат по detail_cost_category_id
  * (элементы без категории попадают в ключ 'uncategorized').
- * Чистая функция — перенесена из fetchConstructionCosts без изменений логики.
+ *
+ * Fail-closed: если хотя бы у одного элемента отсутствует курс валюты, весь
+ * результат недоступен (value=null) с перечнем валют — частичные суммы не
+ * возвращаются.
  */
 export const aggregateBoqCosts = (
   boqItems: BoqItemForCost[] | null | undefined,
   costType: 'base' | 'commercial',
   calculationContext: LiveCalculationContext,
-): Map<string, CostSums> => {
+): FXResult<Map<string, CostSums>> => {
   const costMap = new Map<string, CostSums>();
+  const missing: CurrencyType[] = [];
 
   (boqItems || []).forEach((item) => {
     const catId = item.detail_cost_category_id || 'uncategorized';
@@ -27,6 +33,11 @@ export const aggregateBoqCosts = (
 
     const costs = costMap.get(catId)!;
     const liveAmounts = calculateLiveCommercialAmounts(item as unknown as Parameters<typeof calculateLiveCommercialAmounts>[0], calculationContext);
+
+    if (liveAmounts.unavailable) {
+      missing.push(...liveAmounts.missingCurrencies);
+      return;
+    }
 
     if (costType === 'base') {
       const amount = liveAmounts.baseAmount;
@@ -85,5 +96,8 @@ export const aggregateBoqCosts = (
     }
   });
 
-  return costMap;
+  if (missing.length > 0) {
+    return { value: null, missingCurrencies: dedupeCurrencies(missing) };
+  }
+  return { value: costMap, missingCurrencies: [] };
 };

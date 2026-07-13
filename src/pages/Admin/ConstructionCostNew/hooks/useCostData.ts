@@ -10,6 +10,7 @@ import {
   upsertConstructionCostVolume,
 } from '../../../../lib/api/constructionCostVolumes';
 import { getErrorMessage } from '../../../../utils/errors';
+import type { CurrencyType } from '../../../../lib/types';
 import { useRealtimeRefetch } from '../../../../lib/realtime/useRealtimeRefetch';
 import {
   loadLiveCommercialCalculationContext,
@@ -32,6 +33,8 @@ export const useCostData = () => {
   const [data, setData] = useState<CostRow[]>([]);
   const [costType, setCostType] = useState<'base' | 'commercial'>('base');
   const [, setGroupVolumes] = useState<Map<string, number>>(new Map());
+  // Fail-closed: валюты без курса → расчёт затрат недоступен, показываем Alert/«—».
+  const [fxMissing, setFxMissing] = useState<CurrencyType[]>([]);
 
   // Архивные тендеры отображаются в фильтре для всех пользователей
   const shouldFilterArchived = false;
@@ -138,11 +141,19 @@ export const useCostData = () => {
 
       const boqItems = (await listBoqItemsFullByTender(selectedTenderId)) as unknown as BoqItemForCost[];
 
-      const costMap = aggregateBoqCosts(boqItems, costType, calculationContext);
+      const costMapResult = aggregateBoqCosts(boqItems, costType, calculationContext);
+
+      // Fail-closed: нет курса → не строим частичные строки, показываем «—»/Alert.
+      if (costMapResult.value === null) {
+        setFxMissing(costMapResult.missingCurrencies);
+        setData([]);
+        return;
+      }
+      setFxMissing([]);
 
       const rows = buildCostRows({
         categories,
-        costMap,
+        costMap: costMapResult.value,
         volumeMap,
         notesMap,
         groupVolumesMap,
@@ -274,6 +285,7 @@ export const useCostData = () => {
     selectedVersion,
     loading,
     data,
+    fxMissing,
     costType,
     setCostType,
     setSelectedTenderId,

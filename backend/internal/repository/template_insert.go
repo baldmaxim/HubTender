@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/su10/hubtender/backend/internal/calc"
 )
 
 // Sentinel errors returned by InsertTemplateItems for client-meaningful
@@ -93,9 +94,15 @@ func orZero(p *float64) float64 {
 
 // InsertTemplateItems inserts every item of a template into a client position,
 // restoring parent_work_item_id links, recomputing position totals, and
-// writing INSERT/UPDATE audit rows — all in one transaction. total_amount uses
-// the legacy template formula (NOT calc.CalculateBoqItemTotalAmount) to keep
-// behaviour identical to the TypeScript implementation it replaces.
+// writing INSERT/UPDATE audit rows — all in one transaction.
+//
+// total_amount is derived EXCLUSIVELY by calc.CalculateBoqItemTotalAmount — the
+// same authoritative kernel and the same rules as CreateBoqItem (consumption
+// coefficient, delivery matrix, and blocking MissingFXRateError on a missing or
+// non-positive FX rate). The template library stores only the source inputs; it
+// never stores or supplies a money total. Currency rates are loaded ONCE for the
+// whole operation (no per-row query). Any calc error aborts the whole insert and
+// rolls the transaction back — no partial rows, no audit, no totals update.
 //
 // NOTE: Yandex public.boq_items has no created_by column (the audit actor is
 // boq_items_audit.changed_by), so it is intentionally absent from the INSERT.
@@ -169,7 +176,9 @@ func (r *BoqRepo) InsertTemplateItems(
 		return nil, fmt.Errorf("boqRepo.InsertTemplateItems: position: %w", err)
 	}
 
-	// 4. Tender currency rates.
+	// 4. Tender currency rates — loaded ONCE for the whole operation (no N+1).
+	// Passed verbatim to calc, which BLOCKS on a missing/non-positive foreign
+	// rate (MissingFXRateError). There is deliberately no FX fallback to 1.0.
 	var usd, eur, cny *float64
 	if err := tx.QueryRow(ctx,
 		`SELECT usd_rate, eur_rate, cny_rate FROM public.tenders WHERE id = $1`,
@@ -177,16 +186,23 @@ func (r *BoqRepo) InsertTemplateItems(
 	).Scan(&usd, &eur, &cny); err != nil {
 		return nil, fmt.Errorf("boqRepo.InsertTemplateItems: rates: %w", err)
 	}
-	curRate := func(cur string) float64 {
-		switch cur {
-		case "USD":
-			return orOne(usd)
-		case "EUR":
-			return orOne(eur)
-		case "CNY":
-			return orOne(cny)
-		default:
-			return 1
+	rates := calc.CurrencyRates{USDRate: usd, EURRate: eur, CNYRate: cny}
+
+	// 4b. Resolve effective parents BEFORE computing money. A row is treated as
+	// a child (consumption forced to 1 by calc) iff its parent link will really
+	// be restored in step 7 — the condition below mirrors step 7 exactly, so
+	// calc's view can never disagree with the row's final persisted state.
+	idxByTID := make(map[string]int, len(items))
+	for i, t := range items {
+		idxByTID[t.ID] = i
+	}
+	hasEffectiveParent := make([]bool, len(items))
+	for i, t := range items {
+		if t.ParentTID == nil {
+			continue
+		}
+		if _, ok := idxByTID[*t.ParentTID]; ok {
+			hasEffectiveParent[i] = true
 		}
 	}
 
@@ -238,7 +254,6 @@ func (r *BoqRepo) InsertTemplateItems(
 			consCoef           *float64
 			convCoef           *float64
 			deliveryAmount     float64
-			deliveryPrice      float64
 		)
 
 		if isWork {
@@ -262,24 +277,31 @@ func (r *BoqRepo) InsertTemplateItems(
 			deliveryAmount = orZero(t.MDelivAmt)
 		}
 
-		cRate := curRate(currency)
-
 		quantity := 1.0
 		if !isWork && t.ConvCoeff != nil && *t.ConvCoeff != 0 {
 			quantity = *t.ConvCoeff * orOne(manualVolume)
 			convCoef = t.ConvCoeff
 		}
 
-		if !isWork {
-			switch {
-			case dpt != nil && *dpt == "не в цене":
-				deliveryPrice = unitRate * cRate * 0.03
-			case dpt != nil && *dpt == "суммой" && deliveryAmount != 0:
-				deliveryPrice = deliveryAmount
-			}
+		// Money is derived ONLY by the authoritative kernel, from exactly the
+		// values this row will persist. Delivery, consumption and FX rules all
+		// live in calc — there is no local formula here any more.
+		totalAmount, calcErr := templateItemTotalAmount(tmplAmountFields{
+			ItemType:           itemType,
+			Currency:           currency,
+			Quantity:           quantity,
+			UnitRate:           unitRate,
+			DeliveryPriceType:  strOrEmpty(dpt),
+			DeliveryAmount:     deliveryAmount,
+			ConsumptionCoeff:   consCoef,
+			HasEffectiveParent: hasEffectiveParent[i],
+		}, rates)
+		if calcErr != nil {
+			// Fail-closed: abort the whole template insert. The deferred
+			// tx.Rollback discards every row/audit already written. %w keeps
+			// MissingFXRateError findable by errors.As up to the handler.
+			return nil, fmt.Errorf("boqRepo.InsertTemplateItems: item #%d: %w", i+1, calcErr)
 		}
-
-		totalAmount := quantity * (unitRate*cRate + deliveryPrice)
 
 		dcc := tmplDCC
 		if t.DCC != nil && *t.DCC != "" {
@@ -306,10 +328,8 @@ func (r *BoqRepo) InsertTemplateItems(
 	}
 
 	// 7. Restore parent_work_item_id links using template-array indices.
-	idxByTID := make(map[string]int, len(items))
-	for i, t := range items {
-		idxByTID[t.ID] = i
-	}
+	// idxByTID / hasEffectiveParent were built in step 4b; the condition below is
+	// the SAME one calc was given, so the persisted parent state matches exactly.
 	for i, t := range items {
 		if t.ParentTID == nil {
 			continue
