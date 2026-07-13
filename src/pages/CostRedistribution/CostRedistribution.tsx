@@ -79,18 +79,6 @@ const CostRedistribution: React.FC = () => {
 
   const { saving, saveResults, loadSavedResults } = useSaveResults();
 
-  // "Свежие" boqItems/results для autosave без включения их в deps
-  // handleSavePositionAdjustment — иначе realtime-рефетч boqItems (см.
-  // useRedistributionData) пересоздаёт колбэк и лишний раз перезапускает
-  // autosave-таймер, даже если пользователь ничего не менял на вкладке
-  // «Между строками».
-  const boqItemsRef = useRef(boqItems);
-  const calculationResultsRef = useRef(calculationState.results);
-  useEffect(() => {
-    boqItemsRef.current = boqItems;
-    calculationResultsRef.current = calculationState.results;
-  }, [boqItems, calculationState.results]);
-
   const boqItemsByPosition = useMemo(() => {
     const map = new Map<string, typeof boqItems>();
 
@@ -181,19 +169,29 @@ const CostRedistribution: React.FC = () => {
         const savedData = await loadSavedResults(selectedTenderId, selectedTacticId);
 
         if (savedData && savedData.results.length > 0) {
+          const isServerSnapshot = savedData.status === 'calculated';
 
-          // Восстановить результаты
-          const results = savedData.results.map(item => ({
-            boq_item_id: item.boq_item_id,
-            original_work_cost: item.original_work_cost,
-            deducted_amount: item.deducted_amount,
-            added_amount: item.added_amount,
-            final_work_cost: item.final_work_cost,
-          }));
-          setResults(results);
+          if (isServerSnapshot) {
+            // Server-authoritative снимок — результаты можно применять.
+            const results = savedData.results.map(item => ({
+              boq_item_id: item.boq_item_id,
+              original_work_cost: item.original_work_cost,
+              deducted_amount: item.deducted_amount,
+              added_amount: item.added_amount,
+              final_work_cost: item.final_work_cost,
+            }));
+            setResults(results);
+          } else {
+            // Legacy снимок (создан клиентским расчётом до 0.1.2.3a): значения
+            // НЕ применяем как авторитетные — восстанавливаем только правила.
+            clearResults();
+            message.warning(
+              'Сохранённый расчёт создан старой версией и требует пересчёта — выполните «Рассчитать» заново',
+            );
+          }
 
-          // Восстановить rules и targets из первой записи (все имеют одинаковые правила)
-          const redistributionRules = savedData.redistributionRules;
+          // Восстановить rules и targets (безопасно разобранные правила)
+          const redistributionRules = savedData.redistribution_rules;
           if (redistributionRules) {
             if (redistributionRules.deductions) {
               setRules(redistributionRules.deductions);
@@ -219,9 +217,13 @@ const CostRedistribution: React.FC = () => {
             adjustment.reset();
           }
 
-          // Переключить на вкладку результатов
-          setActiveTab('results');
-          message.success('Загружены сохраненные результаты');
+          // Переключить на вкладку результатов только для server-снимка
+          if (isServerSnapshot) {
+            setActiveTab('results');
+            message.success('Загружены сохраненные результаты');
+          } else {
+            setActiveTab('setup');
+          }
         } else {
           // Очистить при отсутствии данных
           clearRules();
@@ -253,6 +255,7 @@ const CostRedistribution: React.FC = () => {
     }
 
     try {
+      // Локальный расчёт — только preview/быстрая валидация формы.
       const calculationResult = calculate();
       if (!calculationResult) {
         return;
@@ -262,16 +265,16 @@ const CostRedistribution: React.FC = () => {
       // старое правило к новой базе (source/target могут уже не соответствовать).
       adjustment.reset();
 
+      // Сервер — источник истины: сохраняются только правила, все результаты
+      // считает backend. Успех объявляется ТОЛЬКО по ответу сервера, и
+      // локальный preview заменяется серверными results.
+      const saved = await saveResults(selectedTenderId, selectedTacticId, sourceRules, targetCosts, []);
+      if (!saved) {
+        // Save отклонён backend'ом — preview не считается сохранённым.
+        return;
+      }
+      setResults(saved.results);
       setActiveTab('results');
-
-      void saveResults(
-        selectedTenderId,
-        selectedTacticId,
-        calculationResult.results,
-        sourceRules,
-        targetCosts,
-        []
-      );
     } catch (error) {
       console.error('Ошибка при переходе к результатам:', error);
       message.error('Не удалось выполнить расчет и сохранение');
@@ -283,6 +286,7 @@ const CostRedistribution: React.FC = () => {
     calculate,
     adjustment,
     saveResults,
+    setResults,
     sourceRules,
     targetCosts,
   ]);
@@ -321,29 +325,22 @@ const CostRedistribution: React.FC = () => {
     if (!selectedTenderId || !selectedTacticId) {
       return;
     }
-    const currentBoqItems = boqItemsRef.current;
-    const currentResults = calculationResultsRef.current;
-    // Placeholder для случая «position-level без category-level»:
-    // схема cost_redistribution_results требует NOT NULL boq_item_id, а JSONB-правила
-    // храним на любой реальной строке тендера. Чтобы она не искажала суммы при reload,
-    // передаём её реальный total_commercial_work_cost.
-    const first = currentBoqItems[0];
-    const fallbackBoqItem = first
-      ? { id: first.id, total_commercial_work_cost: first.total_commercial_work_cost ?? 0 }
-      : undefined;
-    if (currentResults.length === 0 && !fallbackBoqItem) {
+    // Rules-only команда: никаких results/placeholder/boqItems с клиента.
+    // Position-only конфигурация (category-правила пусты) поддерживается
+    // сервером нативно — он сам создаёт no-op category-результат.
+    if (sourceRules.length === 0 && targetCosts.length === 0 && adjustment.appliedRules.length === 0) {
       return;
     }
-    const ok = await saveResults(
+    const saved = await saveResults(
       selectedTenderId,
       selectedTacticId,
-      currentResults,
       sourceRules,
       targetCosts,
       adjustment.appliedRules,
-      fallbackBoqItem
     );
-    if (ok) {
+    if (saved) {
+      // Серверные результаты заменяют локальный preview.
+      setResults(saved.results);
       setSavedRecently(true);
     }
   }, [
@@ -353,6 +350,7 @@ const CostRedistribution: React.FC = () => {
     targetCosts,
     adjustment.appliedRules,
     saveResults,
+    setResults,
   ]);
 
   // Сохранение position-level правил с дебаунсом и mutex'ом.

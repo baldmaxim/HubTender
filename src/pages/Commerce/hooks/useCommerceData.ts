@@ -383,6 +383,17 @@ export function useCommerceData() {
       }
       if (cancelled) return;
 
+      // Этап 0.1.2.3a: legacy снимок (создан клиентским расчётом, без server
+      // marker'а) НЕ применяется как авторитетный — Commerce работает на live
+      // calc, пока пользователь не выполнит новый серверный save на странице
+      // «Перераспределение Затрат».
+      if (snapshot && snapshot.results.length > 0 && snapshot.status !== 'calculated') {
+        console.warn(
+          'Снимок перераспределения создан старой версией и требует пересчёта — Commerce использует live-calc',
+        );
+        snapshot = null;
+      }
+
       if (!snapshot || snapshot.results.length === 0) {
         // Снимка нет — сбросить пометки, чтобы Commerce работал на live calc.
         setPositions((prev) =>

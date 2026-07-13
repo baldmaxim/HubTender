@@ -2,21 +2,20 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/su10/hubtender/backend/internal/cache"
+	"github.com/su10/hubtender/backend/internal/calc"
 	"github.com/su10/hubtender/backend/internal/repository"
 )
 
 type redistributionRepoer interface {
-	SaveResults(
+	SaveAuthoritative(
 		ctx context.Context,
 		tenderID, tacticID string,
-		records []repository.RedistributionRecord,
-		rulesJSON json.RawMessage,
+		rules calc.RedistributionRulesInput,
 		createdBy string,
-	) (int, error)
+	) (*repository.RedistributionSaveOutput, error)
 	LoadResults(ctx context.Context, tenderID, tacticID string) (*repository.RedistributionLoad, error)
 }
 
@@ -31,30 +30,31 @@ func NewRedistributionService(repo *repository.RedistributionRepo, c *cache.InMe
 	return &RedistributionService{repo: repo, cache: c}
 }
 
-// SaveResults persists the redistribution snapshot for (tenderID, tacticID)
-// atomically and invalidates caches that depend on redistributed work costs.
-// pg_notify triggers on cost_redistribution_results already broadcast
-// tender:<id> to WebSocket subscribers — no manual publish required.
-func (s *RedistributionService) SaveResults(
+// Save recalculates and persists the redistribution snapshot server-side (the
+// client contributes ONLY rules) and invalidates caches that depend on
+// redistributed work costs — only AFTER the repository committed. On any error
+// there are NO side effects. pg_notify triggers on cost_redistribution_results
+// already broadcast tender:<id> to WebSocket subscribers.
+func (s *RedistributionService) Save(
 	ctx context.Context,
 	tenderID, tacticID string,
-	records []repository.RedistributionRecord,
-	rulesJSON json.RawMessage,
+	rules calc.RedistributionRulesInput,
 	createdBy string,
-) (int, error) {
-	count, err := s.repo.SaveResults(ctx, tenderID, tacticID, records, rulesJSON, createdBy)
+) (*repository.RedistributionSaveOutput, error) {
+	out, err := s.repo.SaveAuthoritative(ctx, tenderID, tacticID, rules, createdBy)
 	if err != nil {
-		return 0, fmt.Errorf("redistributionService.SaveResults: %w", err)
+		return nil, fmt.Errorf("redistributionService.Save: %w", err)
 	}
 
 	s.cache.Delete("tender:overview:" + tenderID)
 	s.cache.Delete("positions:with_costs:" + tenderID)
+	s.cache.DeleteByPrefix(tenderListKeyPrefix) // grand total may have changed
 
-	return count, nil
+	return out, nil
 }
 
 // LoadResults returns the saved redistribution snapshot for (tenderID,
-// tacticID). Read-only — no caching (the loader runs once per page open).
+// tacticID) with its status. Read-only — no caching.
 func (s *RedistributionService) LoadResults(
 	ctx context.Context,
 	tenderID, tacticID string,

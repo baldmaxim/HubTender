@@ -1,29 +1,33 @@
 /**
- * Хук для сохранения результатов перераспределения в базу данных
+ * Хук сохранения перераспределения (этап 0.1.2.3a: server-authoritative).
+ *
+ * Клиент отправляет ТОЛЬКО правила; все per-BOQ результаты рассчитывает и
+ * сохраняет backend (одна транзакция: материализация commercial → расчёт →
+ * инварианты → атомарная запись полного набора). Ответ сервера — единственный
+ * источник подтверждённых результатов: caller обязан заменить локальный
+ * preview на response.results. Никаких records / fallbackBoqItem /
+ * changedResults-фильтрации / createdBy с клиента больше нет.
  */
 
 import { useState, useCallback } from 'react';
 import { message } from 'antd';
-import { getCurrentUserId as appAuthGetCurrentUserId } from '../../../lib/auth/client';
 import {
   saveRedistributionResults,
   loadRedistributionResults,
-  type RedistributionRecord as ApiRedistributionRecord,
+  type SavedRedistribution,
+  type LoadedRedistribution,
 } from '../../../lib/api/redistributions';
-import type { RedistributionResult, SourceRule, TargetCost } from '../utils';
+import type { SourceRule, TargetCost } from '../utils';
 import type { RedistributionRule } from '../../../lib/types';
 import type { PositionAdjustmentRule } from '../types/positionAdjustment';
 import { markRealtimeMutation } from '../../../lib/realtime/useRealtimeRefetch';
 
-interface LoadedRedistributionResults {
-  results: Array<{
-    boq_item_id: string;
-    original_work_cost: number;
-    deducted_amount: number;
-    added_amount: number;
-    final_work_cost: number;
-  }>;
-  redistributionRules: RedistributionRule | null;
+// Тело RFC 7807 problem+json от Go BFF.
+interface ProblemBody {
+  detail?: string;
+  title?: string;
+  code?: string;
+  issues?: Array<{ field?: string; code?: string; message?: string }>;
 }
 
 export function useSaveResults() {
@@ -33,52 +37,17 @@ export function useSaveResults() {
     async (
       tenderId: string,
       tacticId: string,
-      results: RedistributionResult[],
       sourceRules: SourceRule[],
       targetCosts: TargetCost[],
       positionAdjustments: PositionAdjustmentRule[] = [],
-      fallbackBoqItem?: { id: string; total_commercial_work_cost: number }
-    ): Promise<boolean> => {
+    ): Promise<SavedRedistribution | null> => {
       if (!tenderId || !tacticId) {
         message.error('Не выбран тендер или тактика наценок');
-        return false;
-      }
-
-      if (results.length === 0 && !fallbackBoqItem) {
-        message.error('Нет результатов для сохранения');
-        return false;
+        return null;
       }
 
       setSaving(true);
       try {
-        const userId = appAuthGetCurrentUserId();
-
-        const changedResults = results.filter((result) =>
-          Math.abs(result.deducted_amount) > 0.000001 || Math.abs(result.added_amount) > 0.000001
-        );
-        const placeholderFromBoqItem = fallbackBoqItem
-          ? ({
-              boq_item_id: fallbackBoqItem.id,
-              original_work_cost: fallbackBoqItem.total_commercial_work_cost,
-              deducted_amount: 0,
-              added_amount: 0,
-              final_work_cost: fallbackBoqItem.total_commercial_work_cost,
-            } satisfies RedistributionResult)
-          : null;
-        const resultsToPersist =
-          changedResults.length > 0
-            ? changedResults
-            : results.length > 0
-              ? results.slice(0, 1)
-              : placeholderFromBoqItem
-                ? [placeholderFromBoqItem]
-                : [];
-
-        if (resultsToPersist.length === 0) {
-          message.error('Нет результатов для сохранения');
-          return false;
-        }
-
         const rules: RedistributionRule = {
           deductions: sourceRules.map((rule) => ({
             level: rule.level,
@@ -108,61 +77,48 @@ export function useSaveResults() {
             : {}),
         };
 
-        const records: ApiRedistributionRecord[] = resultsToPersist.map((result) => ({
-          boq_item_id: result.boq_item_id,
-          original_work_cost: result.original_work_cost,
-          deducted_amount: result.deducted_amount,
-          added_amount: result.added_amount,
-          final_work_cost: result.final_work_cost,
-        }));
-
-        await saveRedistributionResults({
-          tenderId,
-          tacticId,
-          records,
-          rules,
-          createdBy: userId,
-        });
+        const saved = await saveRedistributionResults({ tenderId, tacticId, rules });
 
         // Подавляем self-echo: запись породит NOTIFY → WS-эхо в той же вкладке.
         markRealtimeMutation(`tender:${tenderId}`);
 
         message.success('Результаты перераспределения сохранены');
-        return true;
+        return saved;
       } catch (error) {
         console.error('Ошибка сохранения результатов:', error);
-        message.error('Не удалось сохранить результаты');
-        return false;
+        const body = (error as { body?: ProblemBody }).body;
+        const firstIssue = body?.issues?.[0];
+        const detail =
+          firstIssue?.message ||
+          body?.detail ||
+          (error instanceof Error ? error.message : '');
+        message.error(
+          detail ? `Не удалось сохранить результаты: ${detail}` : 'Не удалось сохранить результаты',
+        );
+        // Backend отказал → локальный preview НЕ считается сохранённым; caller
+        // оставляет предыдущий подтверждённый снимок / состояние «не сохранено».
+        return null;
       } finally {
         setSaving(false);
       }
     },
-    []
+    [],
   );
 
   const loadSavedResults = useCallback(
-    async (tenderId: string, tacticId: string): Promise<LoadedRedistributionResults | null> => {
+    async (tenderId: string, tacticId: string): Promise<LoadedRedistribution | null> => {
       if (!tenderId || !tacticId) {
         return null;
       }
 
       try {
-        // Go отдаёт всё одним запросом (без 1000-строчной пагинации) +
-        // rules из единственной holder-строки. null, если результатов нет.
-        const loaded = await loadRedistributionResults(tenderId, tacticId);
-        if (!loaded) {
-          return null;
-        }
-        return {
-          results: loaded.results,
-          redistributionRules: loaded.redistribution_rules,
-        };
+        return await loadRedistributionResults(tenderId, tacticId);
       } catch (error) {
         console.error('Ошибка загрузки сохраненных результатов:', error);
         return null;
       }
     },
-    []
+    [],
   );
 
   return {

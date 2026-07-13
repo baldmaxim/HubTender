@@ -1,10 +1,10 @@
-// ⚠️ WARNING — NOT preview-only. This frontend calculation currently PERSISTS to
-// the DB: its output (original_work_cost / deducted_amount / added_amount /
-// final_work_cost) is POSTed to /api/v1/redistributions/save and upserted WITHOUT
-// server-side recompute. A backend port already exists
-// (backend/internal/calc/redistribution.go) but is unused on the save path — this
-// is a KNOWN divergence from the source of truth, scheduled for a dedicated
-// server-side migration stage. Do NOT extend this as an authoritative calculator.
+// UI preview only.
+// Persisted redistribution results are calculated by backend/internal/calc
+// (stage 0.1.2.3a): POST /api/v1/redistributions/save accepts ONLY rules and
+// recomputes every per-BOQ value server-side; the server response always wins
+// over this preview. Kept 1:1 with the Go engine — parity is enforced by the
+// golden fixtures (scripts/checks/redistributionParity.check.mjs ↔
+// backend/internal/calc/redistribution_golden_test.go).
 // See docs/CALCULATION_SOURCE_OF_TRUTH.md.
 /**
  * Утилита для расчета перераспределения стоимости работ между затратами

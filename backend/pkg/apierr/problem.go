@@ -221,6 +221,73 @@ func UnsupportedBoqAuditRollback(auditID, operation string) *ProblemExtra {
 	}
 }
 
+// InvalidRedistributionRules returns a 400 Problem for a redistribution rules
+// command that failed server-side validation. `issues` points at the exact
+// fields (deductions[0].percentage, position_adjustments[1].amount, …).
+func InvalidRedistributionRules(issues any) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusBadRequest),
+			Title:  "Bad Request",
+			Status: http.StatusBadRequest,
+			Detail: "Правила перераспределения не прошли серверную валидацию. Ничего не сохранено.",
+		},
+		Extras: map[string]any{
+			"code":   "INVALID_REDISTRIBUTION_RULES",
+			"issues": issues,
+		},
+	}
+}
+
+// RedistributionTacticMismatch returns a 409 Problem: redistribution can be
+// saved only for the tender's ACTIVE markup tactic.
+func RedistributionTacticMismatch(requested, active string) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusConflict),
+			Title:  "Conflict",
+			Status: http.StatusConflict,
+			Detail: "Перераспределение можно сохранить только для активной тактики наценок тендера.",
+		},
+		Extras: map[string]any{
+			"code":            "REDISTRIBUTION_TACTIC_MISMATCH",
+			"requestedTactic": requested,
+			"activeTactic":    active,
+		},
+	}
+}
+
+// RedistributionUnbalanced returns a 409 Problem: the calculated snapshot does
+// not balance and is never persisted.
+func RedistributionUnbalanced(totalDeducted, totalAdded float64) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusConflict),
+			Title:  "Conflict",
+			Status: http.StatusConflict,
+			Detail: "Расчёт перераспределения не сбалансирован (вычтено ≠ добавлено). Результат не сохранён.",
+		},
+		Extras: map[string]any{
+			"code":          "REDISTRIBUTION_UNBALANCED",
+			"totalDeducted": totalDeducted,
+			"totalAdded":    totalAdded,
+		},
+	}
+}
+
+// RedistributionNoBoqItems returns a 400 Problem: the tender has no BOQ items.
+func RedistributionNoBoqItems() *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusBadRequest),
+			Title:  "Bad Request",
+			Status: http.StatusBadRequest,
+			Detail: "В тендере нет BOQ-элементов — перераспределять нечего.",
+		},
+		Extras: map[string]any{"code": "REDISTRIBUTION_NO_BOQ_ITEMS"},
+	}
+}
+
 // MissingFXRate returns a 400 Problem for a blocking missing currency-rate
 // condition. The machine-readable "code" and "currency" extension members let
 // the frontend surface a precise message ("Не задан курс USD …") instead of a

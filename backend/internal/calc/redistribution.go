@@ -21,6 +21,11 @@ type SourceRule struct {
 	CategoryName         string
 	Percentage           float64 // 0-100
 	Level                RuleLevel
+	// BoqItemTypes optionally narrows the rule to specific BOQ item types
+	// (раб / суб-раб / …). Empty/nil = all types (legacy rules). Mirrors the
+	// TS SourceRule.boq_item_types filter — absence of this field in Go was a
+	// real Go↔TS drift caught by the stage 0.1.2.3a golden fixtures.
+	BoqItemTypes []string
 }
 
 // TargetCost — one line of the "куда добавляем" list.
@@ -33,11 +38,11 @@ type TargetCost struct {
 
 // BoqItemWithCosts is the subset of boq_items needed for redistribution.
 type BoqItemWithCosts struct {
-	ID                         string
-	ClientPositionID           string
-	DetailCostCategoryID       *string // nil when not categorised
-	BoqItemType                string
-	TotalCommercialWorkCost    float64
+	ID                          string
+	ClientPositionID            string
+	DetailCostCategoryID        *string // nil when not categorised
+	BoqItemType                 string
+	TotalCommercialWorkCost     float64
 	TotalCommercialMaterialCost float64
 }
 
@@ -93,6 +98,21 @@ func CalculateDeductions(
 					itemsInCategory = append(itemsInCategory, item)
 				}
 			}
+		}
+
+		// Optional BOQ-type filter (mirrors TS): empty/nil = all types.
+		if len(rule.BoqItemTypes) > 0 {
+			allowed := make(map[string]bool, len(rule.BoqItemTypes))
+			for _, tp := range rule.BoqItemTypes {
+				allowed[tp] = true
+			}
+			filtered := itemsInCategory[:0]
+			for _, item := range itemsInCategory {
+				if allowed[item.BoqItemType] {
+					filtered = append(filtered, item)
+				}
+			}
+			itemsInCategory = filtered
 		}
 
 		if len(itemsInCategory) == 0 {

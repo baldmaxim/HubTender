@@ -183,10 +183,11 @@ const price = row.total_amount; // сервер посчитал и вернул
 Ничего из этого не удалялось/не переносилось в 0.1.2 (гарантия «постепенно, без
 удаления старых функций и без изменения БД»):
 
-1. **Redistribution пишется с фронта.** `cost_redistribution_results` заполняется
-   клиентской математикой (`calculateDistribution.ts`) без серверного пересчёта, хотя
-   `calc/redistribution.go` готов. → перенести расчёт в BFF, пересчитывать/валидировать
-   при сохранении.
+1. ~~**Redistribution пишется с фронта.**~~ → ✅ **category-level закрыто в 0.1.2.3a**
+   (см. §7e): save принимает только правила, per-BOQ результаты считает
+   `backend/internal/calc`, SQL RPC `save_redistribution_results` — tombstone.
+   **Остаётся на 0.1.2.3b:** финальный position-level pipeline (`buildResultRows`,
+   smart rounding, insurance-распределение, Commerce/FI/Excel prepared rows).
 2. **Grand total + insurance — два экземпляра** (Go `tender_recalc.go` ⇄ SQL
    `recalculate_tender_grand_total`), формула не в `calc/`. → вынести insurance/Σcommercial
    в `calc/`, оставить один владелец; SQL-триггер — снять в этапе работы с БД.
@@ -406,6 +407,74 @@ Yandex нет — фронт ходит только через Go BFF; runtime-
 internal writer'а, поэтому column-level REVOKE для неё не применяется.
 Фактический production ACL таблицы — **UNKNOWN** до выполнения verification
 query; пункт добавлен в deployment checklist миграции.
+
+## 7e. Redistribution save — server-authoritative (этап 0.1.2.3a)
+
+`POST /api/v1/redistributions/save` больше **не принимает** рассчитанные
+клиентом значения.
+
+1. **Клиент сохраняет только правила** (`tender_id`, `markup_tactic_id`,
+   `rules{deductions, targets, position_adjustments}`). Поля `records` /
+   `original_work_cost` / `deducted_amount` / `added_amount` /
+   `final_work_cost` / `created_by` отсутствуют в request DTO; legacy-поле
+   `records` старого клиента молча отбрасывается декодером (rolling
+   compatibility) и не может попасть ни в расчёт, ни в repository, ни в БД.
+   Actor — только из auth context.
+2. **Category-level результаты считает `backend/internal/calc`**
+   (`CalculateRedistribution`; Go↔TS parity закреплена golden-фикстурами
+   `calc/testdata/redistribution_cases.json` ↔
+   `scripts/checks/redistributionParity.check.mjs`; найденный drift —
+   отсутствие `boq_item_types`-фильтра в Go — исправлен).
+3. **Commercial base синхронно материализуется сервером до redistribution**
+   (`MaterializeCommercialForTenderTx`) в той же транзакции; stale-поля
+   не используются; `MissingFXRateError` откатывает всё.
+4. **Save разрешён только для активной тактики тендера**
+   (`tenders.markup_tactic_id`); иначе 409 `REDISTRIBUTION_TACTIC_MISMATCH`.
+5. **Одна транзакция:** tender/tactic → typed rules validation (DB-confirmed
+   ID, канонические имена, effective BOQ-scopes, дубликаты/overlap) →
+   materialization → полный BOQ тендера (ORDER BY id) → calc → инварианты
+   (final=orig−ded+add, ≥0, конечность, exact set, детерминированный порядок,
+   баланс — несбалансированный результат **не сохраняется**, 409
+   `REDISTRIBUTION_UNBALANCED`) → position_adjustments на server-generated базе
+   → канонический rules JSON → **атомарный batched replace** (DELETE + один
+   UNNEST-INSERT, никаких per-row Exec; exact-set count) → grand total ровно
+   один раз → commit. Кэш — только после commit; async queue не источник
+   корректности.
+6. **Persisted set — полный server-generated:** все BOQ тендера; boq_item_id
+   из request не принимается; client placeholder (`fallbackBoqItem`) удалён —
+   position-only конфигурация даёт server-generated no-op category-результат.
+   Composite FK `(tender_id, boq_item_id) → boq_items` — в backlog DB
+   integrity; scope гарантирует writer.
+7. **Legacy snapshots не авторитетны:** новый save пишет в rules
+   `schema_version=2`, `calculation_source="server"`; GET возвращает
+   `status: calculated | requires_recalculation | empty`. Legacy snapshot →
+   `requires_recalculation`: CR-страница восстанавливает только правила и
+   показывает «Сохранённый расчёт создан старой версией и требует пересчёта»,
+   Commerce/FI/exports его не применяют (live calc до нового server save).
+   Legacy-строки не удаляются и не перемаркируются без фактического пересчёта.
+8. **Position adjustment rules валидируются сервером** (mode/amount/IDs
+   текущего тендера/пересечения/последовательная валидация на меняющейся базе;
+   `calc.ValidatePositionAdjustments`); server-calculated position deltas
+   возвращаются в ответе как diagnostics для 0.1.2.3b, но деньгами не
+   персистятся.
+9. **SQL RPC `save_redistribution_results` retired** — fail-closed tombstone
+   (SQLSTATE 0A000 `REDISTRIBUTION_RESULT_WRITE_RETIRED`, CALLED ON NULL
+   INPUT, SECURITY INVOKER, REVOKE PUBLIC + non-owner grants): baseline
+   `04_functions.sql` + идемпотентная миграция
+   `2026_07_retire_save_redistribution_results.sql` (+ verification query).
+   Production ACL — **UNKNOWN** до deployment verification.
+10. **TS `calculateDistribution.ts` — UI preview only**; ответ сервера всегда
+    побеждает preview; при ошибке backend preview не объявляется сохранённым.
+
+**НЕ закрыто в 0.1.2.3a (остаётся на 0.1.2.3b):** финальное position-level
+отображение (`buildResultRows`), smart rounding, распределение insurance,
+prepared rows Commerce/FI/Excel — весь redistribution-pipeline ещё **не**
+полностью серверный.
+
+Защита от регресса: `scripts/checks/noClientRedistributionResults.check.mjs`
+(клиентские records/financial-поля в save, financial request DTO, tombstone
+обеих схем, production callers RPC) +
+`scripts/checks/redistributionParity.check.mjs` (Go↔TS parity).
 
 ## 8. Что сделано в 0.1.2 (только безопасное)
 

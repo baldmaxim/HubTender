@@ -1810,10 +1810,16 @@ BEGIN
 END;
 $function$;
 
--- Atomic replace of cost_redistribution_results for (tender, tactic).
--- Source: supabase/migrations/00000000000014_fn_save_redistribution_results.sql.
--- The Supabase `GRANT EXECUTE ... TO authenticated` is intentionally NOT ported
--- (no Supabase roles on Yandex — Go BFF connects as the runtime DB role).
+-- RETIRED (этап 0.1.2.3a): fail-closed tombstone. Раньше эта RPC сохраняла
+-- client-calculated p_records (original/deducted/added/final) напрямую в
+-- cost_redistribution_results — DB-level обход серверного расчёта. Теперь
+-- redistribution-результаты рассчитывает и пишет ТОЛЬКО Go BFF
+-- (RedistributionRepo.SaveAuthoritative → backend/internal/calc).
+-- Имя и сигнатура сохранены на переходный период ради внешних stale callers:
+-- любой вызов (включая NULL / пустой массив / валидный старый payload) всегда
+-- завершается SQLSTATE 0A000 REDISTRIBUTION_RESULT_WRITE_RETIRED до чтения
+-- p_records. НЕ STRICT (CALLED ON NULL INPUT) — иначе NULL вернул бы NULL,
+-- минуя ошибку. SECURITY INVOKER, фиксированный search_path.
 CREATE OR REPLACE FUNCTION public.save_redistribution_results(
   p_tender_id        uuid,
   p_markup_tactic_id uuid,
@@ -1823,63 +1829,26 @@ CREATE OR REPLACE FUNCTION public.save_redistribution_results(
 ) RETURNS integer
 LANGUAGE plpgsql
 SECURITY INVOKER
-SET search_path = public
+CALLED ON NULL INPUT
+SET search_path = public, pg_temp
 AS $$
-DECLARE
-  v_holder uuid;
-  v_count  integer;
 BEGIN
-  IF jsonb_array_length(p_records) = 0 THEN
-    RETURN 0;
-  END IF;
-
-  -- Holder — строка с минимальным boq_item_id (детерминированный выбор).
-  SELECT (elem->>'boq_item_id')::uuid
-    INTO v_holder
-    FROM jsonb_array_elements(p_records) elem
-   ORDER BY (elem->>'boq_item_id')::uuid
-   LIMIT 1;
-
-  UPDATE public.cost_redistribution_results
-     SET redistribution_rules = NULL
-   WHERE tender_id        = p_tender_id
-     AND markup_tactic_id = p_markup_tactic_id
-     AND redistribution_rules IS NOT NULL;
-
-  DELETE FROM public.cost_redistribution_results
-   WHERE tender_id        = p_tender_id
-     AND markup_tactic_id = p_markup_tactic_id
-     AND boq_item_id <> ALL (
-           SELECT (elem->>'boq_item_id')::uuid
-             FROM jsonb_array_elements(p_records) elem
-         );
-
-  INSERT INTO public.cost_redistribution_results (
-    tender_id, markup_tactic_id, boq_item_id,
-    original_work_cost, deducted_amount, added_amount, final_work_cost,
-    redistribution_rules, created_by
-  )
-  SELECT p_tender_id,
-         p_markup_tactic_id,
-         (elem->>'boq_item_id')::uuid,
-         NULLIF(elem->>'original_work_cost','')::numeric,
-         COALESCE(NULLIF(elem->>'deducted_amount','')::numeric, 0),
-         COALESCE(NULLIF(elem->>'added_amount','')::numeric, 0),
-         NULLIF(elem->>'final_work_cost','')::numeric,
-         CASE WHEN (elem->>'boq_item_id')::uuid = v_holder THEN p_rules ELSE NULL END,
-         p_created_by
-    FROM jsonb_array_elements(p_records) elem
-  ON CONFLICT (tender_id, markup_tactic_id, boq_item_id) DO UPDATE SET
-    original_work_cost   = EXCLUDED.original_work_cost,
-    deducted_amount      = EXCLUDED.deducted_amount,
-    added_amount         = EXCLUDED.added_amount,
-    final_work_cost      = EXCLUDED.final_work_cost,
-    redistribution_rules = EXCLUDED.redistribution_rules,
-    updated_at           = NOW();
-
-  GET DIAGNOSTICS v_count = ROW_COUNT;
-  RETURN v_count;
+  RAISE EXCEPTION 'REDISTRIBUTION_RESULT_WRITE_RETIRED'
+    USING ERRCODE = '0A000',
+          DETAIL  = 'Результаты перераспределения рассчитывает и сохраняет только серверный '
+                    'расчётный контур (Go BFF, backend/internal/calc). '
+                    'Legacy RPC выведена из эксплуатации (этап 0.1.2.3a).',
+          HINT    = 'Не вызывайте эту функцию: она сохранена только как fail-closed tombstone.';
 END$$;
+
+REVOKE ALL PRIVILEGES
+  ON FUNCTION public.save_redistribution_results(uuid, uuid, jsonb, jsonb, uuid)
+  FROM PUBLIC;
+
+COMMENT ON FUNCTION public.save_redistribution_results(uuid, uuid, jsonb, jsonb, uuid) IS
+  'RETIRED (2026-07, этап 0.1.2.3a): fail-closed tombstone, всегда SQLSTATE 0A000 '
+  'REDISTRIBUTION_RESULT_WRITE_RETIRED. Никогда не изменяет cost_redistribution_results. '
+  'Единственный writer — серверный RedistributionRepo.SaveAuthoritative (Go BFF).';
 
 -- ---------------------------------------------------------------------------
 -- clone_tender_as_new_version
