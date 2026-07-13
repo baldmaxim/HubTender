@@ -112,7 +112,10 @@ func buildDeps(
 	// items, markup config, currency rates); the queue debounces per tender and
 	// runs an authoritative server-side recalc (calc.CalculateBoqItemCost) that
 	// materializes boq_items commercial costs + tenders.cached_grand_total.
-	recalcSvc := services.NewCommercialRecalcService(fiRepo, markupRepo, bulkBoqRepo, inMemCache)
+	// The commercial calculation itself lives in repository.CommercialRepo so the
+	// SAME implementation can run inside copy / version-transfer transactions.
+	commercialRepo := repository.NewCommercialRepo(pool)
+	recalcSvc := services.NewCommercialRecalcService(commercialRepo, bulkBoqRepo, inMemCache)
 	recalcQueue := services.NewRecalcQueue(rootCtx, recalcSvc, 1500*time.Millisecond, 4, logger)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)

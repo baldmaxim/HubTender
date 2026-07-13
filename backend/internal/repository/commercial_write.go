@@ -144,6 +144,46 @@ func (r *BulkBoqRepo) PersistCalculatedCommercialCosts(
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	updated, err := PersistCalculatedCommercialCostsTx(ctx, tx, tenderID, rows)
+	if err != nil {
+		return 0, err
+	}
+
+	// Recompute this tender's grand total ONCE, in the same tx.
+	if err := RecalculateTenderGrandTotal(ctx, tx, tenderID); err != nil {
+		return 0, fmt.Errorf("bulkBoqRepo.PersistCalculatedCommercialCosts: grand total: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("bulkBoqRepo.PersistCalculatedCommercialCosts: commit: %w", err)
+	}
+
+	return updated, nil
+}
+
+// PersistCalculatedCommercialCostsTx is the transaction-aware core of the
+// commercial writer: same validation, same tender-scoping, same exact-set check —
+// but it neither opens a transaction nor recomputes the grand total. The owner of
+// the transaction (copy / version transfer) does that once, for the tenders it
+// actually changed.
+//
+// Server-generated calculation result — never reachable from an HTTP request.
+func PersistCalculatedCommercialCostsTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	tenderID string,
+	rows []CalculatedCommercialCostRow,
+) (int, error) {
+	if tenderID == "" {
+		return 0, &InvalidCommercialCalculationResultError{Field: "tender_id", Reason: "пустой идентификатор тендера"}
+	}
+	if len(rows) == 0 {
+		return 0, nil
+	}
+	if err := validateCalculatedCommercialRows(rows); err != nil {
+		return 0, fmt.Errorf("persistCalculatedCommercialCostsTx: %w", err)
+	}
+
 	ids := make([]string, len(rows))
 	markups := make([]float64, len(rows))
 	matCosts := make([]float64, len(rows))
@@ -182,17 +222,8 @@ func (r *BulkBoqRepo) PersistCalculatedCommercialCosts(
 	// 3. Exact-set check: every calculated row must have landed. Anything else
 	// (unknown id, concurrent delete, foreign tender) aborts the whole batch.
 	if updated != len(ids) {
-		return 0, fmt.Errorf("bulkBoqRepo.PersistCalculatedCommercialCosts: %w",
+		return 0, fmt.Errorf("persistCalculatedCommercialCostsTx: %w",
 			&CommercialResultSetMismatchError{TenderID: tenderID, Expected: len(ids), Updated: updated})
-	}
-
-	// 4. Recompute this tender's grand total ONCE, in the same tx.
-	if err := RecalculateTenderGrandTotal(ctx, tx, tenderID); err != nil {
-		return 0, fmt.Errorf("bulkBoqRepo.PersistCalculatedCommercialCosts: grand total: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("bulkBoqRepo.PersistCalculatedCommercialCosts: commit: %w", err)
 	}
 
 	return updated, nil

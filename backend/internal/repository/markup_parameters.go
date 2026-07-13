@@ -107,15 +107,21 @@ func (r *MarkupRepo) SetParameterOrderNum(ctx context.Context, id string, orderN
 // ─── tender_markup_percentage ──────────────────────────────────────────────
 
 type TenderMarkupPctRow struct {
-	ID                string                 `json:"id"`
-	TenderID          string                 `json:"tender_id"`
-	MarkupParameterID string                 `json:"markup_parameter_id"`
-	Value             float64                `json:"value"`
-	MarkupParameter   *MarkupParameterRow    `json:"markup_parameter,omitempty"`
+	ID                string              `json:"id"`
+	TenderID          string              `json:"tender_id"`
+	MarkupParameterID string              `json:"markup_parameter_id"`
+	Value             float64             `json:"value"`
+	MarkupParameter   *MarkupParameterRow `json:"markup_parameter,omitempty"`
 }
 
 func (r *MarkupRepo) ListTenderMarkupPercentages(ctx context.Context, tenderID string) ([]TenderMarkupPctRow, error) {
-	rows, err := r.pool.Query(ctx, `
+	return listTenderMarkupPercentagesQ(ctx, r.pool, tenderID)
+}
+
+// listTenderMarkupPercentagesQ loads markup percentages through any Querier
+// (pool OR an open tx). Single source of the SQL.
+func listTenderMarkupPercentagesQ(ctx context.Context, q Querier, tenderID string) ([]TenderMarkupPctRow, error) {
+	rows, err := q.Query(ctx, `
 		SELECT tmp.id::text, tmp.tender_id::text, tmp.markup_parameter_id::text, tmp.value,
 		       mp.id::text, mp.key, COALESCE(mp.label, ''),
 		       COALESCE(mp.is_active, true), mp.order_num, mp.default_value,

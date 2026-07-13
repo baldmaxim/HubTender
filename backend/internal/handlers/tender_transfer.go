@@ -126,6 +126,15 @@ func (h *TenderTransferHandler) Transfer(w http.ResponseWriter, r *http.Request)
 
 	result, err := h.svc.ExecuteVersionTransfer(r.Context(), in)
 	if err != nil {
+		// Blocking domain errors are 400s, not 500s: the transfer recomputes
+		// total_amount with the TARGET tender's FX rates and remaps parent links,
+		// so a missing rate or an unresolvable parent aborts and rolls it back.
+		if renderMissingFXRate(w, err) {
+			return
+		}
+		if renderInvalidBoqParent(w, err) {
+			return
+		}
 		var transferErr *repository.ErrVersionTransfer
 		if errors.As(err, &transferErr) {
 			switch transferErr.HTTPStatus {

@@ -28,13 +28,13 @@ func NewMarkupRepo(pool *pgxpool.Pool) *MarkupRepo {
 // ─── markup_tactics ─────────────────────────────────────────────────────────
 
 type MarkupTacticRow struct {
-	ID         string          `json:"id"`
-	Name       string          `json:"name"`
-	IsGlobal   bool            `json:"is_global"`
-	Sequences  json.RawMessage `json:"sequences"`
-	BaseCosts  json.RawMessage `json:"base_costs"`
-	CreatedAt  *string         `json:"created_at,omitempty"`
-	UpdatedAt  *string         `json:"updated_at,omitempty"`
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	IsGlobal  bool            `json:"is_global"`
+	Sequences json.RawMessage `json:"sequences"`
+	BaseCosts json.RawMessage `json:"base_costs"`
+	CreatedAt *string         `json:"created_at,omitempty"`
+	UpdatedAt *string         `json:"updated_at,omitempty"`
 }
 
 const markupTacticSelect = `
@@ -77,7 +77,13 @@ func (r *MarkupRepo) ListTactics(ctx context.Context) ([]MarkupTacticRow, error)
 }
 
 func (r *MarkupRepo) GetTactic(ctx context.Context, id string) (*MarkupTacticRow, error) {
-	row, err := scanMarkupTactic(r.pool.QueryRow(ctx, markupTacticSelect+" WHERE id = $1", id))
+	return getTacticQ(ctx, r.pool, id)
+}
+
+// getTacticQ loads a tactic through any Querier (pool OR an open tx), so the
+// in-transaction commercial recalc can read it. Single source of the SQL.
+func getTacticQ(ctx context.Context, q Querier, id string) (*MarkupTacticRow, error) {
+	row, err := scanMarkupTactic(q.QueryRow(ctx, markupTacticSelect+" WHERE id = $1", id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

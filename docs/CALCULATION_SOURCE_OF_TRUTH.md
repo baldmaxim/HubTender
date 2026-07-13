@@ -116,7 +116,7 @@ const price = row.total_amount; // сервер посчитал и вернул
 | `redistribution.go SaveResults` | redistribution от клиента | ❌ нет | **HIGH** | **backlog** (см. §7) |
 | `tender_recalc.go RecalculateTenderGrandTotal` | Σcommercial + insurance, ROUND(,2) | ❌ нет | MED | дубль с SQL — **backlog** |
 | `position_costs.go GetPositionsWithCosts` | base/commercial/markup% (read-only) | ❌ нет | MED (read-only) | display-агрегат |
-| `boq_copy.go`, `tender_transfer_boq.go` | verbatim-копия money | N/A | LOW | копия, ок |
+| `boq_copy.go`, `tender_transfer_boq.go` | копируют **только исходные данные**; derived пересчитываются | ✅ да (**0.1.2.2a**) | LOW | **исправлено** |
 | `cbr/client.go round2` | FX rate = value/nominal, 2dp | ❌ (ingestion) | LOW | контракт 2dp |
 
 ### 4b. TypeScript frontend
@@ -249,6 +249,48 @@ const price = row.total_amount; // сервер посчитал и вернул
 Защита от возврата фронтового писателя: `scripts/checks/noCommercialWrite.check.mjs`
 (падает, если в `src/` появится вызов retired-endpoint, хелпер `bulkUpdateCommercial`
 или commercial-поле внутри тела запроса).
+
+## 7b. Copy / Version transfer — авторитетный пересчёт (этап 0.1.2.2a)
+
+`boq_copy.go` и `tender_transfer_boq.go` больше **не переносят** рассчитанные суммы
+исходной строки.
+
+1. **Копируются только исходные данные (класс A):** `boq_item_type`, `quantity`,
+   `unit_rate`, `currency_type`, `consumption/conversion_coefficient`, delivery-поля,
+   номенклатура, `unit_code`, `description`, `quote_link`, `detail_cost_category_id`.
+   Вычисляемые (класс B) — `total_amount`, `commercial_markup`,
+   `total_commercial_material_cost`, `total_commercial_work_cost` — **отсутствуют и в
+   SELECT, и в списке колонок INSERT**. Плейсхолдеры из source не используются: колонки
+   nullable, остаются NULL внутри незакоммиченной транзакции до авторитетного расчёта.
+2. **`total_amount` всегда пересчитывается по FX ЦЕЛЕВОГО тендера** через
+   `calc.CalculateBoqItemTotalAmount` (`RecomputeBoqTotalAmountsTx`). Курсы читаются
+   **один раз** на операцию; один bulk-UPDATE. Нет FX-фолбэка 1.0, нет 0 при ошибке,
+   нет собственной формулы в repository. Это верно и для same-tender copy — чтобы не
+   размножать устаревший source-итог.
+3. **Commercial всегда пересчитываются по конфигурации ЦЕЛЕВОГО тендера** (markup-тактика,
+   проценты, pricing distribution, исключения) — `MaterializeCommercialForTenderTx` →
+   то же ядро `ComputeCommercialRows` (`calc.CalculateBoqItemCost`) → тот же внутренний
+   писатель `PersistCalculatedCommercialCostsTx`. Формула не дублируется.
+4. **Source calculated values никогда не авторитетны для target.**
+5. **Parent remap до определения effective parent:** ссылки валидируются против реально
+   копируемого набора (`ResolveCopiedParents`); родитель обязан быть **work item**.
+   Неразрешимая / non-work / self ссылка → блокирующая `InvalidBoqParentError`
+   (RFC 7807 400 `INVALID_BOQ_PARENT`), а не молчаливый standalone/dangling. Source
+   parent UUID никогда не попадает в целевой тендер. `total_amount` считается уже
+   **после** восстановления связей, поэтому «effective parent в calc == persisted parent».
+6. **Одна транзакция.** Порядок: read source → validate parents → insert (без derived) →
+   remap parents → recompute `total_amount` → position totals → commercial → grand total
+   (**ровно один раз** на реально изменённый тендер) → commit. Операция **не возвращает
+   success до завершения авторитетного расчёта**.
+7. **Async queue — не источник корректности.** Кэш инвалидируется только после успешного
+   commit и только для затронутого тендера (он известен из операции, а не выводится из
+   обновлённых строк). При ошибке кэш не чистится и recalc не ставится в очередь как
+   компенсация.
+8. **Затронутые тендеры:** copy — same-tender (один тендер); version transfer — создаёт
+   **новый** тендер-версию, source **не изменяется** (это copy, не move) и не пересчитывается.
+
+Защита от регресса: `scripts/checks/noDerivedCopy.check.mjs` (падает, если copy/transfer
+снова начнут селектить/вставлять derived-колонки, заведут свою формулу или FX-фолбэк 1).
 
 ## 8. Что сделано в 0.1.2 (только безопасное)
 

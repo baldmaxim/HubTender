@@ -42,20 +42,20 @@ type TransferInput struct {
 // TransferResult mirrors the JSONB returned by execute_version_transfer.
 // JSON field names are verbatim from the SQL function spec.
 type TransferResult struct {
-	TenderID               string `json:"tenderId"`
-	Version                int    `json:"version"`
-	PositionsInserted      int    `json:"positionsInserted"`
-	ManualTransferred      int    `json:"manualTransferred"`
-	BoqItemsCopied         int    `json:"boqItemsCopied"`
-	ParentLinksRestored    int    `json:"parentLinksRestored"`
-	CostVolumesCopied            int `json:"costVolumesCopied"`
-	InsuranceRowsCopied          int `json:"insuranceRowsCopied"`
-	SubcontractExclusionsCopied  int `json:"subcontractExclusionsCopied"`
-	PricingDistributionCopied    int `json:"pricingDistributionCopied"`
-	MarkupPercentageCopied       int `json:"markupPercentageCopied"`
-	AdditionalWorksCopied        int `json:"additionalWorksCopied"`
-	AdditionalWorksSkipped       int `json:"additionalWorksSkipped"`
-	UserFiltersTransferred       int `json:"userFiltersTransferred"`
+	TenderID                    string `json:"tenderId"`
+	Version                     int    `json:"version"`
+	PositionsInserted           int    `json:"positionsInserted"`
+	ManualTransferred           int    `json:"manualTransferred"`
+	BoqItemsCopied              int    `json:"boqItemsCopied"`
+	ParentLinksRestored         int    `json:"parentLinksRestored"`
+	CostVolumesCopied           int    `json:"costVolumesCopied"`
+	InsuranceRowsCopied         int    `json:"insuranceRowsCopied"`
+	SubcontractExclusionsCopied int    `json:"subcontractExclusionsCopied"`
+	PricingDistributionCopied   int    `json:"pricingDistributionCopied"`
+	MarkupPercentageCopied      int    `json:"markupPercentageCopied"`
+	AdditionalWorksCopied       int    `json:"additionalWorksCopied"`
+	AdditionalWorksSkipped      int    `json:"additionalWorksSkipped"`
+	UserFiltersTransferred      int    `json:"userFiltersTransferred"`
 }
 
 // ErrVersionTransfer is a typed error carrying an HTTP status so the handler
@@ -137,21 +137,39 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		return nil, err
 	}
 
-	// Step 9: Copy BOQ items for matched positions.
+	// Step 9: Copy BOQ items for matched positions. oldItemTypes accumulates
+	// old_item_id → boq_item_type so parent links can be validated (a parent must
+	// be a WORK item) without an extra query.
+	oldItemTypes := make(map[string]string)
 	boqItemsCopied, parentLinksRestored, oldItemIDToNew, err :=
-		copyMatchedBoqItems(ctx, tx, newTenderID, oldToNew)
+		copyMatchedBoqItems(ctx, tx, newTenderID, oldToNew, oldItemTypes)
 	if err != nil {
 		return nil, err
 	}
 
 	// Step 10: Copy additional positions — see tender_transfer_additional.go.
 	addCopied, addSkipped, addBoqCopied, addParentRestored, err :=
-		copyAdditionalPositions(ctx, tx, in.SourceTenderID, newTenderID, oldToNew, oldItemIDToNew)
+		copyAdditionalPositions(ctx, tx, in.SourceTenderID, newTenderID, oldToNew, oldItemIDToNew, oldItemTypes)
 	if err != nil {
 		return nil, err
 	}
 	boqItemsCopied += addBoqCopied
 	parentLinksRestored += addParentRestored
+
+	// Step 10b (stage 0.1.2.2a): AUTHORITATIVE total_amount for every copied row.
+	// The copy carried ONLY source inputs — total_amount/commercial_* were never
+	// selected. Here each new row's total_amount is recomputed by
+	// calc.CalculateBoqItemTotalAmount from its PERSISTED inputs and the TARGET
+	// tender's FX rates (parent links are already restored, so calc sees the same
+	// effective parent the row keeps). Rates are read ONCE; one bulk UPDATE.
+	// Fail-closed: a missing target FX rate aborts and rolls the whole transfer back.
+	newItemIDs := make([]string, 0, len(oldItemIDToNew))
+	for _, newID := range oldItemIDToNew {
+		newItemIDs = append(newItemIDs, newID)
+	}
+	if err := RecomputeBoqTotalAmountsTx(ctx, tx, newTenderID, newItemIDs); err != nil {
+		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
+	}
 
 	// Step 11: Update total_material / total_works for all new positions.
 	if _, err := tx.Exec(ctx, `
@@ -288,9 +306,19 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		return nil, err
 	}
 
-	// Step 13c: Recompute cached_grand_total once — the per-row trigger was
-	// skipped via app.skip_grand_total. Runs unconditionally so the value is
-	// correct regardless of which copy paths executed.
+	// Step 13b-bis (stage 0.1.2.2a): AUTHORITATIVE commercial values for the NEW
+	// tender. Nothing commercial was copied from the source. They are computed by
+	// the server (calc.CalculateBoqItemCost) from the TARGET tender's own
+	// configuration — markup tactic, percentages, pricing distribution, exclusions —
+	// and written through the internal writer, inside THIS transaction. The async
+	// recalc queue is not the source of correctness.
+	if err := MaterializeCommercialForTenderTx(ctx, tx, newTenderID); err != nil {
+		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
+	}
+
+	// Step 13c: Recompute cached_grand_total once for the ONE tender this operation
+	// created — the per-row trigger was skipped via app.skip_grand_total. The source
+	// tender is not modified (this is a copy, not a move), so it is not recomputed.
 	if _, err := tx.Exec(ctx,
 		`SELECT public.recalculate_tender_grand_total($1::uuid)`, newTenderID,
 	); err != nil {

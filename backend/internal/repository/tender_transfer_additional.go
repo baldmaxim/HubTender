@@ -39,6 +39,7 @@ func copyAdditionalPositions(
 	newTenderID string,
 	oldToNew map[string]string,
 	oldItemIDToNew map[string]string,
+	oldItemTypes map[string]string,
 ) (int, int, int, int, error) {
 	copied := 0
 	skipped := 0
@@ -114,7 +115,7 @@ func copyAdditionalPositions(
 	// Step 11 in ExecuteVersionTransfer recomputes totals for every position in
 	// the new tender (additional included) in a single statement afterwards.
 	bc, pl, err := copyAdditionalBoqItemsBatched(
-		ctx, tx, newTenderID, addPosPairs, oldItemIDToNew,
+		ctx, tx, newTenderID, addPosPairs, oldItemIDToNew, oldItemTypes,
 	)
 	if err != nil {
 		return 0, 0, 0, 0, err
@@ -246,6 +247,7 @@ func copyAdditionalBoqItemsBatched(
 	newTenderID string,
 	addPosPairs []addPosPair,
 	oldItemIDToNew map[string]string,
+	oldItemTypes map[string]string,
 ) (int, int, error) {
 	if len(addPosPairs) == 0 {
 		return 0, 0, nil
@@ -258,12 +260,12 @@ func copyAdditionalBoqItemsBatched(
 		newPosIDs[i] = p.newPosID
 	}
 
-	mapped, err := bulkCopyBoqItems(ctx, tx, newTenderID, oldPosIDs, newPosIDs, oldItemIDToNew)
+	mapped, err := bulkCopyBoqItems(ctx, tx, newTenderID, oldPosIDs, newPosIDs, oldItemIDToNew, oldItemTypes)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	parentLinksRestored, err := restoreParentLinks(ctx, tx, mapped, oldItemIDToNew)
+	parentLinksRestored, err := restoreParentLinks(ctx, tx, mapped, oldItemIDToNew, oldItemTypes)
 	if err != nil {
 		return 0, 0, err
 	}

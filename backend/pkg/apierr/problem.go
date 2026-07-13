@@ -113,6 +113,30 @@ func Gone(detail, code string) *ProblemExtra {
 	}
 }
 
+// InvalidBoqParent returns a 400 Problem for a copied / transferred BOQ row whose
+// parent link cannot be remapped to a copied WORK row in the target.
+// parentItemType is omitted when unknown.
+func InvalidBoqParent(itemID, parentItemID, reason, parentItemType string) *ProblemExtra {
+	extras := map[string]any{
+		"code":         "INVALID_BOQ_PARENT",
+		"itemId":       itemID,
+		"parentItemId": parentItemID,
+		"reason":       reason,
+	}
+	if parentItemType != "" {
+		extras["parentItemType"] = parentItemType
+	}
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusBadRequest),
+			Title:  "Bad Request",
+			Status: http.StatusBadRequest,
+			Detail: "Некорректная ссылка на родительскую работу при копировании/переносе BOQ.",
+		},
+		Extras: extras,
+	}
+}
+
 // InvalidTemplateParent returns a 400 Problem for a template row whose parent
 // link does not resolve to a really-inserted WORK item. The extension members
 // point the client at the exact template row / parent / reason.

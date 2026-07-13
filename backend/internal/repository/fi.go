@@ -32,27 +32,27 @@ func NewFIRepo(pool *pgxpool.Pool) *FIRepo {
 // frontend gets undefined for `tender.area` and falls back to its existing
 // `tender.area ? ... : '-'` UI branches.
 type FITenderRow struct {
-	ID                 string   `json:"id"`
-	Title              string   `json:"title"`
-	TenderNumber       *string  `json:"tender_number,omitempty"`
-	ClientName         *string  `json:"client_name,omitempty"`
-	Version            *int     `json:"version,omitempty"`
-	IsArchived         *bool    `json:"is_archived,omitempty"`
-	USDRate            *float64 `json:"usd_rate,omitempty"`
-	EURRate            *float64 `json:"eur_rate,omitempty"`
-	CNYRate            *float64 `json:"cny_rate,omitempty"`
-	MarkupTacticID     *string  `json:"markup_tactic_id,omitempty"`
-	CachedGrandTotal   *float64 `json:"cached_grand_total,omitempty"`
-	HousingClass       *string  `json:"housing_class,omitempty"`
-	ConstructionScope  *string  `json:"construction_scope,omitempty"`
-	AreaSP             *float64 `json:"area_sp,omitempty"`
-	AreaClient         *float64 `json:"area_client,omitempty"`
-	VolumeTitle        *string  `json:"volume_title,omitempty"`
-	UploadFolder       *string  `json:"upload_folder,omitempty"`
-	BsmLink            *string  `json:"bsm_link,omitempty"`
-	TzLink             *string  `json:"tz_link,omitempty"`
-	QaFormLink         *string  `json:"qa_form_link,omitempty"`
-	ProjectFolderLink  *string  `json:"project_folder_link,omitempty"`
+	ID                string   `json:"id"`
+	Title             string   `json:"title"`
+	TenderNumber      *string  `json:"tender_number,omitempty"`
+	ClientName        *string  `json:"client_name,omitempty"`
+	Version           *int     `json:"version,omitempty"`
+	IsArchived        *bool    `json:"is_archived,omitempty"`
+	USDRate           *float64 `json:"usd_rate,omitempty"`
+	EURRate           *float64 `json:"eur_rate,omitempty"`
+	CNYRate           *float64 `json:"cny_rate,omitempty"`
+	MarkupTacticID    *string  `json:"markup_tactic_id,omitempty"`
+	CachedGrandTotal  *float64 `json:"cached_grand_total,omitempty"`
+	HousingClass      *string  `json:"housing_class,omitempty"`
+	ConstructionScope *string  `json:"construction_scope,omitempty"`
+	AreaSP            *float64 `json:"area_sp,omitempty"`
+	AreaClient        *float64 `json:"area_client,omitempty"`
+	VolumeTitle       *string  `json:"volume_title,omitempty"`
+	UploadFolder      *string  `json:"upload_folder,omitempty"`
+	BsmLink           *string  `json:"bsm_link,omitempty"`
+	TzLink            *string  `json:"tz_link,omitempty"`
+	QaFormLink        *string  `json:"qa_form_link,omitempty"`
+	ProjectFolderLink *string  `json:"project_folder_link,omitempty"`
 	// SubmissionDeadline is needed by useDeadlineCheck on the frontend —
 	// without it инженер/старший_группы видят canEdit=true даже после
 	// истечения срока сдачи версии тендера.
@@ -128,7 +128,14 @@ type FIBoqItemRow struct {
 // ListAllBoqItemsForTender streams every boq_items row whose client_position
 // belongs to the tender. Returns a flat slice.
 func (r *FIRepo) ListAllBoqItemsForTender(ctx context.Context, tenderID string) ([]FIBoqItemRow, error) {
-	rows, err := r.pool.Query(ctx, `
+	return listAllBoqItemsForTenderQ(ctx, r.pool, tenderID)
+}
+
+// listAllBoqItemsForTenderQ loads the tender's BOQ items through any Querier
+// (pool OR an open tx) — the in-transaction recalc must see rows that copy /
+// transfer has just inserted but not yet committed. Single source of the SQL.
+func listAllBoqItemsForTenderQ(ctx context.Context, q Querier, tenderID string) ([]FIBoqItemRow, error) {
+	rows, err := q.Query(ctx, `
 		SELECT bi.id::text, cp.tender_id::text, bi.client_position_id::text,
 		       bi.boq_item_type::text,
 		       bi.material_type::text,

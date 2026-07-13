@@ -61,7 +61,13 @@ func scanPricingDist(scanner interface{ Scan(...any) error }) (PricingDistributi
 }
 
 func (r *MarkupRepo) GetPricingDistribution(ctx context.Context, tenderID string) (*PricingDistributionRow, error) {
-	row, err := scanPricingDist(r.pool.QueryRow(ctx,
+	return getPricingDistributionQ(ctx, r.pool, tenderID)
+}
+
+// getPricingDistributionQ loads the pricing distribution through any Querier
+// (pool OR an open tx). Single source of the SQL.
+func getPricingDistributionQ(ctx context.Context, q Querier, tenderID string) (*PricingDistributionRow, error) {
+	row, err := scanPricingDist(q.QueryRow(ctx,
 		pricingDistSelect+" WHERE tender_id = $1 LIMIT 1", tenderID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -156,7 +162,13 @@ type SubcontractExclusionRow struct {
 }
 
 func (r *MarkupRepo) ListSubcontractExclusions(ctx context.Context, tenderID string) ([]SubcontractExclusionRow, error) {
-	rows, err := r.pool.Query(ctx, `
+	return listSubcontractExclusionsQ(ctx, r.pool, tenderID)
+}
+
+// listSubcontractExclusionsQ loads exclusions through any Querier (pool OR an
+// open tx). Single source of the SQL.
+func listSubcontractExclusionsQ(ctx context.Context, q Querier, tenderID string) ([]SubcontractExclusionRow, error) {
+	rows, err := q.Query(ctx, `
 		SELECT detail_cost_category_id::text, exclusion_type
 		FROM public.subcontract_growth_exclusions
 		WHERE tender_id = $1

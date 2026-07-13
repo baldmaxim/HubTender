@@ -13,6 +13,10 @@ type CopyResult struct {
 	WorksCount     int `json:"works_count"`
 	MaterialsCount int `json:"materials_count"`
 	TotalCopied    int `json:"total_copied"`
+	// TenderID is the ONE tender the copy actually changed. The service uses it to
+	// invalidate exactly that tender's cache — the affected tender is known from
+	// the operation, never inferred from whichever rows happened to be updated.
+	TenderID string `json:"-"`
 }
 
 // ErrCopyTenderMismatch is returned when source/target positions belong to
@@ -59,41 +63,44 @@ func (r *BoqRepo) CopyPositionItems(
 		return nil, ErrCopyTenderMismatch
 	}
 
-	// Read source items in stable order. We need IDs to build the
-	// parent-mapping table.
+	// Suppress the per-row grand-total trigger during the bulk copy; the tender's
+	// grand total is recomputed exactly ONCE before commit (below).
+	if _, err := tx.Exec(ctx, `SET LOCAL app.skip_grand_total = 'on'`); err != nil {
+		return nil, fmt.Errorf("boqRepo.CopyPositionItems: set skip_grand_total: %w", err)
+	}
+
+	// Read source items in stable order — CLASS A (source inputs) ONLY.
+	// total_amount / commercial_markup / total_commercial_* are CALCULATED values:
+	// they are deliberately NOT selected, so they cannot be copied as authoritative.
+	// The target row's derived values are recomputed below from the target tender's
+	// FX rates and configuration.
 	type srcRow struct {
-		ID                          string
-		SortNumber                  *int
-		BoqItemType                 string
-		MaterialType                *string
-		MaterialNameID              *string
-		WorkNameID                  *string
-		UnitCode                    *string
-		Quantity                    *float64
-		BaseQuantity                *float64
-		ConsumptionCoefficient      *float64
-		ConversionCoefficient       *float64
-		ParentWorkItemID            *string
-		DeliveryPriceType           *string
-		DeliveryAmount              *float64
-		CurrencyType                *string
-		UnitRate                    *float64
-		TotalAmount                 *float64
-		DetailCostCategoryID        *string
-		QuoteLink                   *string
-		Description                 *string
-		CommercialMarkup            *float64
-		TotalCommercialMaterialCost *float64
-		TotalCommercialWorkCost     *float64
+		ID                     string
+		BoqItemType            string
+		MaterialType           *string
+		MaterialNameID         *string
+		WorkNameID             *string
+		UnitCode               *string
+		Quantity               *float64
+		BaseQuantity           *float64
+		ConsumptionCoefficient *float64
+		ConversionCoefficient  *float64
+		ParentWorkItemID       *string
+		DeliveryPriceType      *string
+		DeliveryAmount         *float64
+		CurrencyType           *string
+		UnitRate               *float64
+		DetailCostCategoryID   *string
+		QuoteLink              *string
+		Description            *string
 	}
 	rows, err := tx.Query(ctx, `
-		SELECT id::text, sort_number, boq_item_type::text, material_type::text,
+		SELECT id::text, boq_item_type::text, material_type::text,
 		       material_name_id::text, work_name_id::text, unit_code,
 		       quantity, base_quantity, consumption_coefficient, conversion_coefficient,
 		       parent_work_item_id::text, delivery_price_type::text, delivery_amount,
-		       currency_type::text, unit_rate, total_amount,
-		       detail_cost_category_id::text, quote_link, description,
-		       commercial_markup, total_commercial_material_cost, total_commercial_work_cost
+		       currency_type::text, unit_rate,
+		       detail_cost_category_id::text, quote_link, description
 		FROM public.boq_items
 		WHERE client_position_id = $1
 		ORDER BY sort_number ASC, id ASC
@@ -107,13 +114,12 @@ func (r *BoqRepo) CopyPositionItems(
 		for rows.Next() {
 			var s srcRow
 			if err = rows.Scan(
-				&s.ID, &s.SortNumber, &s.BoqItemType, &s.MaterialType,
+				&s.ID, &s.BoqItemType, &s.MaterialType,
 				&s.MaterialNameID, &s.WorkNameID, &s.UnitCode,
 				&s.Quantity, &s.BaseQuantity, &s.ConsumptionCoefficient, &s.ConversionCoefficient,
 				&s.ParentWorkItemID, &s.DeliveryPriceType, &s.DeliveryAmount,
-				&s.CurrencyType, &s.UnitRate, &s.TotalAmount,
+				&s.CurrencyType, &s.UnitRate,
 				&s.DetailCostCategoryID, &s.QuoteLink, &s.Description,
-				&s.CommercialMarkup, &s.TotalCommercialMaterialCost, &s.TotalCommercialWorkCost,
 			); err != nil {
 				return
 			}
@@ -128,7 +134,22 @@ func (r *BoqRepo) CopyPositionItems(
 		return nil, fmt.Errorf("boqRepo.CopyPositionItems: source has no items")
 	}
 
-	// Insert clones (parent_work_item_id = NULL), keep source-order new IDs.
+	// Validate every parent link against the copied set BEFORE inserting anything:
+	// a declared parent must resolve to a copied WORK row. An unresolvable /
+	// non-work / self parent is a blocking InvalidBoqParentError — never a silent
+	// cleared link, and never a source UUID leaking into the target.
+	refs := make([]CopiedParentRef, len(src))
+	for i, s := range src {
+		refs[i] = CopiedParentRef{ID: s.ID, ParentID: s.ParentWorkItemID, ItemType: s.BoqItemType}
+	}
+	parentIdx, err := ResolveCopiedParents(refs)
+	if err != nil {
+		return nil, fmt.Errorf("boqRepo.CopyPositionItems: %w", err)
+	}
+
+	// Insert clones (parent_work_item_id = NULL for now). Derived money columns are
+	// NOT in the column list at all — they stay NULL until the authoritative
+	// recompute below, inside this same (uncommitted) transaction.
 	newIDs := make([]string, len(src))
 	insertQ := `
 		INSERT INTO public.boq_items (
@@ -137,18 +158,16 @@ func (r *BoqRepo) CopyPositionItems(
 		    unit_code, quantity, base_quantity,
 		    consumption_coefficient, conversion_coefficient,
 		    parent_work_item_id, delivery_price_type, delivery_amount,
-		    currency_type, unit_rate, total_amount,
-		    detail_cost_category_id, quote_link, description,
-		    commercial_markup, total_commercial_material_cost, total_commercial_work_cost
+		    currency_type, unit_rate,
+		    detail_cost_category_id, quote_link, description
 		) VALUES (
 		    $1, $2, $3,
 		    $4::boq_item_type, $5::material_type, $6, $7,
 		    $8, $9, $10,
 		    $11, $12,
 		    NULL, $13::delivery_price_type, $14,
-		    $15::currency_type, $16, $17,
-		    $18, $19, $20,
-		    $21, $22, $23
+		    $15::currency_type, $16,
+		    $17, $18, $19
 		)
 		RETURNING id::text
 	`
@@ -160,33 +179,41 @@ func (r *BoqRepo) CopyPositionItems(
 			s.UnitCode, s.Quantity, s.BaseQuantity,
 			s.ConsumptionCoefficient, s.ConversionCoefficient,
 			s.DeliveryPriceType, s.DeliveryAmount,
-			s.CurrencyType, s.UnitRate, s.TotalAmount,
+			s.CurrencyType, s.UnitRate,
 			s.DetailCostCategoryID, s.QuoteLink, s.Description,
-			s.CommercialMarkup, s.TotalCommercialMaterialCost, s.TotalCommercialWorkCost,
 		).Scan(&newIDs[i]); err != nil {
 			return nil, fmt.Errorf("boqRepo.CopyPositionItems: insert %d: %w", i, err)
 		}
 	}
 
-	// Rebuild parent_work_item_id via sourceID → newID mapping.
-	idxByID := make(map[string]int, len(src))
-	for i, s := range src {
-		idxByID[s.ID] = i
+	// Restore parent_work_item_id from the VALIDATED plan (target UUIDs only), in
+	// ONE bulk UPDATE.
+	childIDs := make([]string, 0, len(src))
+	parentIDs := make([]string, 0, len(src))
+	for i := range src {
+		if parentIdx[i] < 0 {
+			continue
+		}
+		childIDs = append(childIDs, newIDs[i])
+		parentIDs = append(parentIDs, newIDs[parentIdx[i]])
 	}
-	for i, s := range src {
-		if s.ParentWorkItemID == nil {
-			continue
+	if len(childIDs) > 0 {
+		if _, err := tx.Exec(ctx, `
+			UPDATE public.boq_items b
+			SET parent_work_item_id = u.new_parent
+			FROM UNNEST($1::uuid[], $2::uuid[]) AS u(child_id, new_parent)
+			WHERE b.id = u.child_id
+		`, childIDs, parentIDs); err != nil {
+			return nil, fmt.Errorf("boqRepo.CopyPositionItems: restore parent links: %w", err)
 		}
-		parentIdx, ok := idxByID[*s.ParentWorkItemID]
-		if !ok {
-			continue
-		}
-		if _, err := tx.Exec(ctx,
-			`UPDATE public.boq_items SET parent_work_item_id = $1 WHERE id = $2`,
-			newIDs[parentIdx], newIDs[i],
-		); err != nil {
-			return nil, fmt.Errorf("boqRepo.CopyPositionItems: link parent %d: %w", i, err)
-		}
+	}
+
+	// AUTHORITATIVE total_amount: recomputed from the persisted target inputs +
+	// the TARGET tender's FX rates (calc.CalculateBoqItemTotalAmount). Parent links
+	// are already restored, so calc sees the same effective parent the row keeps.
+	// Fail-closed on a missing FX rate → the whole tx rolls back.
+	if err := RecomputeBoqTotalAmountsTx(ctx, tx, tgtTender, newIDs); err != nil {
+		return nil, fmt.Errorf("boqRepo.CopyPositionItems: %w", err)
 	}
 
 	// Recompute target position totals.
@@ -221,11 +248,25 @@ func (r *BoqRepo) CopyPositionItems(
 		}
 	}
 
+	// AUTHORITATIVE commercial values: computed by the server (calc) from the
+	// TARGET tender's configuration and written through the internal writer — in
+	// THIS transaction. Nothing commercial was copied from the source. The async
+	// recalc queue is NOT the source of correctness.
+	if err := MaterializeCommercialForTenderTx(ctx, tx, tgtTender); err != nil {
+		return nil, fmt.Errorf("boqRepo.CopyPositionItems: %w", err)
+	}
+
+	// Grand total of the ONE affected tender (same-tender copy → the source tender
+	// is the target tender), recomputed exactly once, in this tx.
+	if err := RecalculateTenderGrandTotal(ctx, tx, tgtTender); err != nil {
+		return nil, fmt.Errorf("boqRepo.CopyPositionItems: grand total: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("boqRepo.CopyPositionItems: commit: %w", err)
 	}
 
-	res := &CopyResult{TotalCopied: len(newIDs)}
+	res := &CopyResult{TotalCopied: len(newIDs), TenderID: tgtTender}
 	for _, s := range src {
 		if s.WorkNameID != nil && *s.WorkNameID != "" {
 			res.WorksCount++

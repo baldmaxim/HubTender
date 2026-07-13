@@ -28,6 +28,19 @@ func renderMissingFXRate(w http.ResponseWriter, err error) bool {
 	return false
 }
 
+// renderInvalidBoqParent maps a blocking repository.InvalidBoqParentError (a
+// copy / version-transfer row whose parent link cannot be remapped to a copied
+// WORK row) to an RFC 7807 400 with code INVALID_BOQ_PARENT. Returns true when
+// handled so the caller stops before a generic 500.
+func renderInvalidBoqParent(w http.ResponseWriter, err error) bool {
+	var pe *repository.InvalidBoqParentError
+	if errors.As(err, &pe) {
+		apierr.InvalidBoqParent(pe.ItemID, pe.ParentItemID, string(pe.Reason), pe.ParentItemType).Render(w)
+		return true
+	}
+	return false
+}
+
 // renderInvalidTemplateParent maps a blocking repository.InvalidTemplateParentError
 // to an RFC 7807 400 (code INVALID_TEMPLATE_PARENT + the offending template row,
 // parent and reason). Returns true when it handled the error so the caller stops
@@ -422,6 +435,14 @@ func (h *BoqWriteHandler) CopyPositionItems(w http.ResponseWriter, r *http.Reque
 	}
 	res, err := h.svc.CopyPositionItems(r.Context(), req.SourcePositionID, targetID, authUser.ID)
 	if err != nil {
+		// Blocking domain errors are 400s, not 500s: a missing target FX rate and an
+		// unresolvable parent link both abort the copy and roll it back.
+		if renderMissingFXRate(w, err) {
+			return
+		}
+		if renderInvalidBoqParent(w, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, repository.ErrCopyTenderMismatch):
 			apierr.BadRequest(err.Error()).Render(w)

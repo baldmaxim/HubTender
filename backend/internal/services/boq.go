@@ -143,14 +143,26 @@ func (s *BoqService) RecomputeLinkedMaterialsForWork(
 }
 
 // CopyPositionItems clones every boq_item from sourcePositionID into
-// targetPositionID in one tx (with audit), refreshes target totals and
-// invalidates the tender list cache.
+// targetPositionID in one tx (with audit).
+//
+// The copy carries ONLY source inputs; the target rows' total_amount and
+// commercial costs are recomputed authoritatively by the server inside that same
+// transaction, so a successful return already means the DB is correct — the async
+// recalc queue is NOT the source of correctness.
+//
+// Cache is invalidated only AFTER a successful commit, and only for the ONE tender
+// the operation actually changed (known from the result, not inferred from rows).
+// On error nothing is evicted and no recalc is enqueued as compensation.
 func (s *BoqService) CopyPositionItems(
 	ctx context.Context, sourcePositionID, targetPositionID, changedBy string,
 ) (*repository.CopyResult, error) {
 	res, err := s.repo.CopyPositionItems(ctx, sourcePositionID, targetPositionID, changedBy)
 	if err != nil {
 		return nil, fmt.Errorf("boqService.CopyPositionItems: %w", err)
+	}
+	if res.TenderID != "" {
+		s.cache.Delete("tender:overview:" + res.TenderID)
+		s.cache.Delete("positions:with_costs:" + res.TenderID)
 	}
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
 	return res, nil
