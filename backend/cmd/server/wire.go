@@ -58,6 +58,7 @@ type deps struct {
 	userAdminH        *handlers.UserAdminHandler
 	markupH           *handlers.MarkupHandler
 	fiH               *handlers.FIHandler
+	qualityH          *handlers.QualityHandler
 	ccvH              *handlers.ConstructionCostVolumesHandler
 	wsH               *handlers.WsHandler
 }
@@ -106,6 +107,7 @@ func buildDeps(
 	markupRepo := repository.NewMarkupRepo(pool)
 	fiRepo := repository.NewFIRepo(pool)
 	ccvRepo := repository.NewConstructionCostVolumesRepo(pool)
+	qualityRepo := repository.NewQualityRepo(pool)
 
 	// Commercial-cost auto-recalc — replaces the manual «Пересчитать» button.
 	// Mutation services Enqueue(tenderID) after changing a pricing input (BOQ
@@ -150,6 +152,7 @@ func buildDeps(
 	userAdminSvc := services.NewUserAdminService(userAdminRepo, inMemCache)
 	markupSvc := services.NewMarkupService(markupRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	fiSvc := services.NewFIService(fiRepo)
+	qualitySvc := services.NewQualityService(qualityRepo)
 	ccvSvc := services.NewConstructionCostVolumesService(ccvRepo)
 
 	return &deps{
@@ -191,6 +194,7 @@ func buildDeps(
 		userAdminH:        handlers.NewUserAdminHandler(userAdminSvc),
 		markupH:           handlers.NewMarkupHandler(markupSvc),
 		fiH:               handlers.NewFIHandler(fiSvc),
+		qualityH:          handlers.NewQualityHandler(qualitySvc),
 		ccvH:              handlers.NewConstructionCostVolumesHandler(ccvSvc),
 		wsH:               handlers.NewWsHandler(hub, verifyCfg, logger),
 	}

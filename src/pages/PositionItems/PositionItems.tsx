@@ -1,7 +1,7 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, memo, useEffect } from 'react';
 import { Card, Tabs, Alert } from 'antd';
 import { missingFXMessage } from '../../utils/boq/currencyGuard';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import WorkEditForm from './WorkEditForm';
 import MaterialEditForm from './MaterialEditForm';
 import { useBoqItems } from './hooks/useBoqItems';
@@ -32,6 +32,9 @@ interface PositionItemsProps {
 const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionId }) => {
   const params = useParams<{ positionId: string }>();
   const positionId = propPositionId ?? params.positionId;
+  // Этап 1.1 (deep links): ?itemId=… — прокрутить к строке BOQ и подсветить.
+  const [deepLinkParams] = useSearchParams();
+  const deepLinkItemId = deepLinkParams.get('itemId');
   const { user } = useAuth();
   const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
   const { theme } = useTheme();
@@ -47,6 +50,21 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
   const [isDeleteMode, setIsDeleteMode] = useState<boolean>(false);
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
+
+  // Deep-link подсветка: после загрузки строк прокручиваем к itemId из query
+  // и временно подсвечиваем строку (Ant Table рендерит data-row-key на <tr>).
+  useEffect(() => {
+    if (!deepLinkItemId) return;
+    const t = setTimeout(() => {
+      const row = document.querySelector(`[data-row-key="${deepLinkItemId}"]`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('boq-row-deeplink-highlight');
+        setTimeout(() => row.classList.remove('boq-row-deeplink-highlight'), 4000);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [deepLinkItemId]);
 
   const {
     position,

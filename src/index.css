@@ -82,3 +82,12 @@ body {
   transform: translateZ(0); /* GPU acceleration для плавного рендера */
   backface-visibility: hidden; /* Оптимизация рендера */
 }
+
+/* Этап 1.1: временная подсветка строки BOQ при переходе из «Качества расчёта» */
+@keyframes boqDeepLinkPulse {
+  0% { background-color: rgba(16, 185, 129, 0.45); }
+  100% { background-color: transparent; }
+}
+.boq-row-deeplink-highlight > td {
+  animation: boqDeepLinkPulse 4s ease-out;
+}
