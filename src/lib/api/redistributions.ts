@@ -12,14 +12,78 @@ export interface RedistributionRecord {
 }
 
 // Статус сохранённого снимка (GET):
-//  - calculated — server-authoritative (schema_version>=2, source=server);
-//  - requires_recalculation — legacy клиентский снимок: results нельзя
-//    применять в Commerce/FI/экспортах, нужен новый серверный save;
-//  - empty — снимка нет.
+//  - calculated — server-authoritative; prepared-проекция доступна;
+//  - requires_recalculation — legacy клиентский снимок ЛИБО server-снимок,
+//    входы которого изменились: results/prepared нельзя применять в
+//    Commerce/FI/экспортах, нужен новый серверный save;
+//  - not_configured — перераспределение ещё не рассчитано.
 export type RedistributionSnapshotStatus =
   | 'calculated'
   | 'requires_recalculation'
-  | 'empty';
+  | 'not_configured';
+
+// Server-generated prepared-проекция (этап 0.1.2.3b): position adjustments,
+// insurance, rounding, финальные строки и summary считает ТОЛЬКО
+// backend/internal/calc. Клиент отображает эти значения и не пересчитывает их.
+export interface PreparedServerRow {
+  position_id: string;
+  position_number: number;
+  section_number: string | null;
+  position_name: string;
+  item_no: string | null;
+  work_name: string;
+  client_volume: number | null;
+  manual_volume: number | null;
+  unit_code: string;
+  manual_note: string | null;
+  is_additional: boolean;
+  is_leaf: boolean;
+  quantity: number;
+  material_cost: number;
+  work_cost_before: number;
+  category_deducted: number;
+  category_added: number;
+  work_cost_after_category: number;
+  position_deducted: number;
+  position_added: number;
+  work_cost_after_adjustments: number;
+  rounded_material_unit_price: number;
+  rounded_material_cost: number;
+  rounded_work_unit_price: number;
+  rounding_adjustment: number;
+  work_cost_rounded: number;
+  insurance_amount: number;
+  final_work_cost: number;
+  final_work_unit_price: number;
+  final_position_total: number;
+}
+
+export interface PreparedServerSummary {
+  total_material_cost: number;
+  work_total_before_category: number;
+  total_category_deducted: number;
+  total_category_added: number;
+  work_total_after_category: number;
+  total_position_deducted: number;
+  total_position_added: number;
+  work_total_after_adjustments: number;
+  rounding_adjustment_total: number;
+  work_total_rounded_pre_insurance: number;
+  insurance_total: number;
+  insurance_allocated: number;
+  final_work_total: number;
+  final_total: number;
+  is_category_balanced: boolean;
+  is_insurance_fully_allocated: boolean;
+}
+
+export interface PreparedServerRedistribution {
+  rows: PreparedServerRow[];
+  summary: PreparedServerSummary;
+  rounding_policy: string;
+  prepared_schema_version: number;
+  calculation_source: string;
+}
 
 export interface SaveRedistributionInput {
   tenderId: string;
@@ -37,12 +101,14 @@ export interface SavedRedistribution {
   calculation_source: string;
   schema_version: number;
   position_deltas?: Record<string, number>;
+  prepared?: PreparedServerRedistribution;
 }
 
 export interface LoadedRedistribution {
   results: RedistributionRecord[];
   redistribution_rules: RedistributionRule | null;
   status: RedistributionSnapshotStatus;
+  prepared?: PreparedServerRedistribution;
 }
 
 /**
@@ -59,15 +125,17 @@ export async function loadRedistributionResults(
       results: RedistributionRecord[];
       redistribution_rules: RedistributionRule | null;
       status: RedistributionSnapshotStatus;
+      prepared?: PreparedServerRedistribution;
     };
   }>(
     `/api/v1/redistributions?tender_id=${encodeURIComponent(tenderId)}&markup_tactic_id=${encodeURIComponent(tacticId)}`,
   );
-  if (!res.data || res.data.results.length === 0) return null;
+  if (!res.data || res.data.results.length === 0) return null; // not_configured
   return {
     results: res.data.results,
     redistribution_rules: res.data.redistribution_rules ?? null,
     status: res.data.status ?? 'requires_recalculation',
+    prepared: res.data.prepared,
   };
 }
 

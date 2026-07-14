@@ -32,8 +32,8 @@ const (
 	// RedistributionStatusRequiresRecalculation — legacy client-calculated
 	// snapshot; results must NOT be used as authoritative (Commerce/FI/exports).
 	RedistributionStatusRequiresRecalculation = "requires_recalculation"
-	// RedistributionStatusEmpty — no snapshot stored.
-	RedistributionStatusEmpty = "empty"
+	// RedistributionStatusNotConfigured — no snapshot stored yet.
+	RedistributionStatusNotConfigured = "not_configured"
 )
 
 // ErrRedistributionTenderNotFound — the save targets a tender that does not exist.
@@ -59,10 +59,13 @@ type RedistributionSaveOutput struct {
 	TotalAdded     float64
 	IsBalanced     bool
 	CanonicalRules json.RawMessage
-	// PositionDeltas — server-validated cumulative position deltas (diagnostic /
-	// preparation for stage 0.1.2.3b; not persisted as money in this stage).
+	// PositionDeltas — server-validated cumulative position deltas (diagnostic).
 	PositionDeltas map[string]float64
-	TenderID       string
+	// Prepared — the full server-generated prepared projection (stage 0.1.2.3b):
+	// position adjustments + insurance + rounding + final rows + summary, built
+	// by the SAME calc boundary the GET uses.
+	Prepared *calc.PreparedRedistribution
+	TenderID string
 }
 
 // SaveAuthoritative recalculates and persists the redistribution snapshot for
@@ -210,6 +213,15 @@ func (r *RedistributionRepo) SaveAuthoritative(
 			&calc.InvalidRedistributionRulesError{Issues: adjIssues})
 	}
 
+	// Stage 0.1.2.3b: the FULL prepared projection (position adjustments +
+	// insurance + rounding + final rows + summary) is built and validated by the
+	// same calc boundary the GET uses — BEFORE anything is persisted. A prepared
+	// failure rolls the whole save back.
+	prepared, err := buildPreparedTx(ctx, tx, tenderID, items, out.Results, norm.PositionAdjustments)
+	if err != nil {
+		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: prepared: %w", err)
+	}
+
 	canonicalJSON, err := json.Marshal(norm.Canonical)
 	if err != nil {
 		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: canonical rules: %w", err)
@@ -284,6 +296,7 @@ func (r *RedistributionRepo) SaveAuthoritative(
 		IsBalanced:     out.IsBalanced,
 		CanonicalRules: canonicalJSON,
 		PositionDeltas: positionDeltas,
+		Prepared:       prepared,
 		TenderID:       tenderID,
 	}
 	for i, res := range out.Results {
@@ -347,12 +360,16 @@ func loadRedistributionBoq(ctx context.Context, tx pgx.Tx, tenderID string) ([]c
 // ─── loader ──────────────────────────────────────────────────────────────────
 
 // RedistributionLoad is the loader payload: all result rows for a
-// (tender, tactic), the rules JSONB from the single holder row, and the
-// snapshot status (server-authoritative vs legacy client-calculated).
+// (tender, tactic), the rules JSONB from the single holder row, the snapshot
+// status, and — for a server-authoritative snapshot — the prepared projection
+// built by the SAME calc boundary the save uses.
 type RedistributionLoad struct {
 	Results []RedistributionRecord `json:"results"`
 	Rules   json.RawMessage        `json:"redistribution_rules"`
-	Status  string                 `json:"status"`
+	// Status: calculated | requires_recalculation | not_configured.
+	Status string `json:"status"`
+	// Prepared — nil unless Status == calculated.
+	Prepared *calc.PreparedRedistribution `json:"prepared,omitempty"`
 }
 
 // rulesServerMetadata mirrors ONLY the server markers inside the rules JSONB.
@@ -363,14 +380,27 @@ type rulesServerMetadata struct {
 
 // LoadResults returns every cost_redistribution_results row for the given
 // (tender_id, markup_tactic_id), the rules JSONB from the single holder row,
-// and the snapshot status. A snapshot without the server markers
+// the snapshot status, and — for a server snapshot — the prepared projection
+// rebuilt by the SAME calc boundary the save uses (§9: save/GET parity).
+//
+// Everything is read in ONE read-only transaction (consistent view; no
+// per-position queries). A snapshot without the server markers
 // (schema_version >= 2 AND calculation_source == "server") was calculated by a
-// pre-0.1.2.3a client — its results must NOT be applied as authoritative.
+// pre-0.1.2.3a client — status requires_recalculation, no prepared rows. If a
+// server snapshot can no longer produce a valid prepared projection (inputs
+// changed since the save — the stale-snapshot risk deferred to 0.1.3), the
+// status degrades to requires_recalculation instead of returning a 500.
 func (r *RedistributionRepo) LoadResults(
 	ctx context.Context,
 	tenderID, tacticID string,
 ) (*RedistributionLoad, error) {
-	out := &RedistributionLoad{Results: []RedistributionRecord{}, Status: RedistributionStatusEmpty}
+	out := &RedistributionLoad{Results: []RedistributionRecord{}, Status: RedistributionStatusNotConfigured}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, fmt.Errorf("redistributionRepo.LoadResults: begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
 
 	const rulesQ = `
 		SELECT redistribution_rules
@@ -381,7 +411,7 @@ func (r *RedistributionRepo) LoadResults(
 		LIMIT 1
 	`
 	var rawRules []byte
-	if err := r.pool.QueryRow(ctx, rulesQ, tenderID, tacticID).Scan(&rawRules); err != nil {
+	if err := tx.QueryRow(ctx, rulesQ, tenderID, tacticID).Scan(&rawRules); err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("redistributionRepo.LoadResults: rules: %w", err)
 		}
@@ -400,35 +430,75 @@ func (r *RedistributionRepo) LoadResults(
 		WHERE tender_id = $1 AND markup_tactic_id = $2
 		ORDER BY boq_item_id ASC
 	`
-	rows, err := r.pool.Query(ctx, resQ, tenderID, tacticID)
+	rows, err := tx.Query(ctx, resQ, tenderID, tacticID)
 	if err != nil {
 		return nil, fmt.Errorf("redistributionRepo.LoadResults: query: %w", err)
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var rec RedistributionRecord
-		if err := rows.Scan(
-			&rec.BoqItemID, &rec.OriginalWorkCost, &rec.DeductedAmount,
-			&rec.AddedAmount, &rec.FinalWorkCost,
-		); err != nil {
-			return nil, fmt.Errorf("redistributionRepo.LoadResults: scan: %w", err)
+	func() {
+		defer rows.Close()
+		for rows.Next() {
+			var rec RedistributionRecord
+			if err = rows.Scan(
+				&rec.BoqItemID, &rec.OriginalWorkCost, &rec.DeductedAmount,
+				&rec.AddedAmount, &rec.FinalWorkCost,
+			); err != nil {
+				return
+			}
+			out.Results = append(out.Results, rec)
 		}
-		out.Results = append(out.Results, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("redistributionRepo.LoadResults: rows: %w", err)
+		err = rows.Err()
+	}()
+	if err != nil {
+		return nil, fmt.Errorf("redistributionRepo.LoadResults: scan: %w", err)
 	}
 
-	if len(out.Results) > 0 {
-		out.Status = RedistributionStatusRequiresRecalculation
-		if len(rawRules) > 0 {
-			var meta rulesServerMetadata
-			if json.Unmarshal(rawRules, &meta) == nil &&
-				meta.SchemaVersion >= calc.RedistributionSchemaVersion &&
-				meta.CalculationSource == calc.RedistributionCalculationServer {
-				out.Status = RedistributionStatusCalculated
-			}
+	if len(out.Results) == 0 {
+		return out, nil // not_configured
+	}
+
+	out.Status = RedistributionStatusRequiresRecalculation
+	var rules calc.RedistributionRulesInput
+	if len(rawRules) > 0 {
+		var meta rulesServerMetadata
+		if json.Unmarshal(rawRules, &meta) == nil &&
+			meta.SchemaVersion >= calc.RedistributionSchemaVersion &&
+			meta.CalculationSource == calc.RedistributionCalculationServer &&
+			json.Unmarshal(rawRules, &rules) == nil {
+			out.Status = RedistributionStatusCalculated
 		}
 	}
+	if out.Status != RedistributionStatusCalculated {
+		return out, nil // legacy snapshot: no authoritative prepared rows
+	}
+
+	// Rebuild the prepared projection from the persisted server snapshot +
+	// current server-side positions/BOQ/insurance — the same engine as save.
+	items, err := loadRedistributionBoq(ctx, tx, tenderID)
+	if err != nil {
+		return nil, fmt.Errorf("redistributionRepo.LoadResults: %w", err)
+	}
+	categoryResults := make([]calc.RedistributionResult, len(out.Results))
+	for i, rec := range out.Results {
+		categoryResults[i] = calc.RedistributionResult{
+			BoqItemID:        rec.BoqItemID,
+			OriginalWorkCost: rec.OriginalWorkCost,
+			DeductedAmount:   rec.DeductedAmount,
+			AddedAmount:      rec.AddedAmount,
+			FinalWorkCost:    rec.FinalWorkCost,
+		}
+	}
+	adjustments := rules.PositionAdjustments
+	if rules.LegacyPositionAdjustment != nil && len(adjustments) == 0 &&
+		rules.LegacyPositionAdjustment.Amount > 0 {
+		adjustments = []calc.PositionAdjustmentRuleInput{*rules.LegacyPositionAdjustment}
+	}
+	prepared, err := buildPreparedTx(ctx, tx, tenderID, items, categoryResults, adjustments)
+	if err != nil {
+		// Inputs diverged from the snapshot since the save (stale snapshot —
+		// 0.1.3 risk). Degrade honestly instead of serving broken money.
+		out.Status = RedistributionStatusRequiresRecalculation
+		return out, nil
+	}
+	out.Prepared = prepared
 	return out, nil
 }

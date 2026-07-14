@@ -275,6 +275,25 @@ func RedistributionUnbalanced(totalDeducted, totalAdded float64) *ProblemExtra {
 	}
 }
 
+// InvalidInsuranceConfiguration returns a 400 Problem: the stored tender
+// insurance row cannot be safely interpreted (non-finite/negative fields,
+// percentage out of range).
+func InvalidInsuranceConfiguration(field, reason string) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusBadRequest),
+			Title:  "Bad Request",
+			Status: http.StatusBadRequest,
+			Detail: "Конфигурация страхования тендера некорректна. Исправьте её на странице «Страхование».",
+		},
+		Extras: map[string]any{
+			"code":   "INVALID_INSURANCE_CONFIGURATION",
+			"field":  field,
+			"reason": reason,
+		},
+	}
+}
+
 // RedistributionNoBoqItems returns a 400 Problem: the tender has no BOQ items.
 func RedistributionNoBoqItems() *ProblemExtra {
 	return &ProblemExtra{

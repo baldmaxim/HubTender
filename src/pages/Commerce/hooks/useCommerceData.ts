@@ -23,16 +23,10 @@ import { loadTenderInsurance } from '../../../lib/api/insurance';
 import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 import { loadRedistributionResults } from '../../../lib/api/redistributions';
 import { computeLeafPositionIds } from '../../../utils/positions/leafPositions';
-import {
-  applyRedistributionPipeline,
-  computeInsuranceTotal,
-  type PreparedRow,
-} from '../../../services/redistributionPipeline';
-import { buildResultRows } from '../../CostRedistribution/utils/buildResultRows';
-import { computeCumulativePositionDeltas } from '../../CostRedistribution/utils/calculatePositionAdjustment';
-import type { ClientPosition as RedistributionClientPosition } from '../../CostRedistribution/hooks';
-import type { RedistributionResult } from '../../CostRedistribution/utils/calculateDistribution';
-import type { PositionAdjustmentRule } from '../../CostRedistribution/types/positionAdjustment';
+// Этап 0.1.2.3b: Commerce НЕ импортирует клиентский redistribution pipeline
+// (applyRedistributionPipeline / buildResultRows / computeInsuranceTotal /
+// computeCumulativePositionDeltas / smartRounding) — все деньги приходят из
+// server prepared response (backend/internal/calc).
 
 type CommerceBoqItem = Pick<
   BoqItem,
@@ -247,8 +241,10 @@ async function loadCommerceCalculationContext(tenderId: string): Promise<Commerc
 }
 
 async function loadInsuranceTotal(tenderId: string): Promise<number> {
+  // SERVER-computed total (backend/internal/calc.CalculateInsuranceTotal) —
+  // клиентская формула не используется.
   const data = await loadTenderInsurance(tenderId);
-  return computeInsuranceTotal(data);
+  return data?.insurance_total ?? 0;
 }
 
 export function useCommerceData() {
@@ -362,14 +358,14 @@ export function useCommerceData() {
     }
   };
 
-  // Единый источник правды для per-position сумм работ + страхования — страница
-  // «Перераспределение Затрат». Если для выбранной пары (тендер, тактика) есть
-  // сохранённый снимок — прогоняем тот же pipeline (category-redistribution →
-  // position-adjustments → smartRound → insurance) что и CR, и переписываем
-  // work_cost_total + insurance_share позиций. Иначе live-calc остаётся как есть.
+  // Этап 0.1.2.3b: единственный источник per-position сумм работ + страхования —
+  // SERVER prepared projection (GET /api/v1/redistributions → prepared, тот же
+  // backend/internal/calc, что и при save). Commerce НЕ вызывает клиентский
+  // pipeline (applyRedistributionPipeline/buildResultRows/…): при status !==
+  // calculated или отсутствии prepared остаётся live-calc без redistribution.
   useEffect(() => {
     if (!selectedTenderId || !selectedTacticId) return;
-    if (!boqItems || positions.length === 0) return;
+    if (positions.length === 0) return;
 
     let cancelled = false;
 
@@ -383,18 +379,17 @@ export function useCommerceData() {
       }
       if (cancelled) return;
 
-      // Этап 0.1.2.3a: legacy снимок (создан клиентским расчётом, без server
-      // marker'а) НЕ применяется как авторитетный — Commerce работает на live
-      // calc, пока пользователь не выполнит новый серверный save на странице
-      // «Перераспределение Затрат».
-      if (snapshot && snapshot.results.length > 0 && snapshot.status !== 'calculated') {
+      // Legacy снимок / server-снимок с изменившимися входами: prepared
+      // отсутствует — не применяем частичные значения как авторитетные.
+      if (snapshot && snapshot.status !== 'calculated') {
         console.warn(
-          'Снимок перераспределения создан старой версией и требует пересчёта — Commerce использует live-calc',
+          'Снимок перераспределения требует пересчёта на сервере — Commerce использует live-calc',
         );
         snapshot = null;
       }
 
-      if (!snapshot || snapshot.results.length === 0) {
+      const prepared = snapshot?.prepared;
+      if (!prepared || prepared.rows.length === 0) {
         // Снимка нет — сбросить пометки, чтобы Commerce работал на live calc.
         setPositions((prev) =>
           prev.some((p) => p.from_redistribution)
@@ -408,71 +403,14 @@ export function useCommerceData() {
         return;
       }
 
-      const boqItemsByPosition = new Map<
-        string,
-        Array<{
-          id: string;
-          client_position_id: string;
-          total_commercial_work_cost: number;
-          total_commercial_material_cost: number;
-        }>
-      >();
-      for (const item of boqItems) {
-        const existing = boqItemsByPosition.get(item.client_position_id);
-        const entry = {
-          id: item.id,
-          client_position_id: item.client_position_id,
-          total_commercial_work_cost: item.total_commercial_work_cost ?? 0,
-          total_commercial_material_cost: item.total_commercial_material_cost ?? 0,
-        };
-        if (existing) existing.push(entry);
-        else boqItemsByPosition.set(item.client_position_id, [entry]);
-      }
-
-      const resultsMap = new Map<string, RedistributionResult>();
-      for (const r of snapshot.results) resultsMap.set(r.boq_item_id, r);
-
-      const categoryLevelRows = buildResultRows(
-        positions as unknown as RedistributionClientPosition[],
-        boqItemsByPosition,
-        resultsMap,
-      );
-
-      const rules = snapshot.redistribution_rules as
-        | (Record<string, unknown> & {
-            position_adjustments?: PositionAdjustmentRule[];
-            position_adjustment?: PositionAdjustmentRule;
-          })
-        | null;
-      const ruleArray = Array.isArray(rules?.position_adjustments)
-        ? (rules?.position_adjustments as PositionAdjustmentRule[])
-        : rules?.position_adjustment
-          ? [rules.position_adjustment as PositionAdjustmentRule]
-          : [];
-
-      const adjustmentBaseRows = categoryLevelRows.map((row) => ({
-        position_id: row.position_id,
-        total_works_after: row.total_works_after,
-      }));
-      const { cumulative: deltas } = computeCumulativePositionDeltas(
-        adjustmentBaseRows,
-        ruleArray,
-      );
-
-      const prepared = applyRedistributionPipeline({
-        categoryLevelRows,
-        positionAdjustmentDeltas: deltas,
-        insuranceTotal,
-      });
-
-      const byId = new Map<string, PreparedRow>();
-      for (const r of prepared.rows) byId.set(r.position_id, r);
+      // Только копирование серверных значений — никакой финансовой математики.
+      const byId = new Map(prepared.rows.map((r) => [r.position_id, r]));
 
       setPositions((prev) =>
         prev.map((p) => {
           const row = byId.get(p.id);
           if (!row) return p;
-          const newWorkCost = row.total_works_after_pre_insurance;
+          const newWorkCost = row.work_cost_rounded; // pre-insurance (как раньше)
           // Сохраняем согласованность производных полей: commercial_total =
           // material_cost_total + work_cost_total (без страхования — оно
           // отображается как отдельная надбавка через insurance_share).
@@ -484,7 +422,7 @@ export function useCommerceData() {
             work_cost_total: newWorkCost,
             commercial_total: newCommercialTotal,
             markup_percentage: newMarkup,
-            insurance_share: row.insurance_share,
+            insurance_share: row.insurance_amount,
             from_redistribution: true,
           };
         }),
@@ -496,8 +434,7 @@ export function useCommerceData() {
     };
     // positions.length достаточно для триггера «позиции готовы»; полный объект positions
     // умышленно опущен, чтобы не зациклить эффект (мы сами вызываем setPositions внутри).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTenderId, selectedTacticId, boqItems, insuranceTotal, positions.length]);
+  }, [selectedTenderId, selectedTacticId, positions.length]);
 
   const handleTacticChange = (tacticId: string) => {
     setSelectedTacticId(tacticId);

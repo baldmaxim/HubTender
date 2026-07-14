@@ -15,6 +15,11 @@ export interface InsuranceData {
   parking_area: number;
   storage_price_m2: number;
   storage_area: number;
+  // SERVER-computed total (этап 0.1.2.3b, backend/internal/calc):
+  // (apt + parking + storage) × judicial_pct/100 × total_pct/100.
+  // Потребители отображают это значение и не пересчитывают формулу локально.
+  // Optional: при PUT клиент его не отправляет (сервер игнорирует и считает сам).
+  insurance_total?: number;
 }
 
 const ZERO_INSURANCE: InsuranceData = {
@@ -26,6 +31,7 @@ const ZERO_INSURANCE: InsuranceData = {
   parking_area: 0,
   storage_price_m2: 0,
   storage_area: 0,
+  insurance_total: 0,
 };
 
 function toNumber(v: unknown): number {
@@ -42,6 +48,7 @@ function normalize(data: Partial<InsuranceData>): InsuranceData {
     parking_area: toNumber(data.parking_area),
     storage_price_m2: toNumber(data.storage_price_m2),
     storage_area: toNumber(data.storage_area),
+    insurance_total: toNumber(data.insurance_total),
   };
 }
 

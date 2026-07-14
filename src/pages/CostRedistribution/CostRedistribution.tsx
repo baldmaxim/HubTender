@@ -21,12 +21,15 @@ import {
   usePositionAdjustment,
 } from './hooks';
 import { buildResultRows } from './utils/buildResultRows';
-import {
-  applyRedistributionPipeline,
-  computeInsuranceTotal,
-} from '../../services/redistributionPipeline';
+// UI preview only: applyRedistributionPipeline здесь используется исключительно
+// для локального НЕСОХРАНЁННОГО предпросмотра в редакторе. Авторитетная
+// prepared-проекция приходит с сервера (backend/internal/calc) и всегда
+// замещает preview после save/load.
+import { applyRedistributionPipeline } from '../../services/redistributionPipeline';
+import { mapServerPrepared } from './utils/mapServerPrepared';
 import { TabPositionAdjustment } from './components/PositionAdjustment/TabPositionAdjustment';
 import type { PositionAdjustmentRule } from './types/positionAdjustment';
+import type { PreparedServerRedistribution } from '../../lib/api/redistributions';
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const SAVED_TAG_DURATION_MS = 2000;
@@ -36,6 +39,10 @@ const CostRedistribution: React.FC = () => {
   const { isPhone, isPhoneDevice } = useIsMobile();
   const { theme: currentTheme } = useTheme();
   const [insuranceTotal, setInsuranceTotal] = useState(0);
+  // Server prepared projection — единственный авторитетный источник итоговых
+  // строк/сумм после save/load. null = показывается локальный preview с
+  // явным статусом «не сохранён».
+  const [serverPrepared, setServerPrepared] = useState<PreparedServerRedistribution | null>(null);
   const [savedRecently, setSavedRecently] = useState(false);
   const [autosaveNonce, setAutosaveNonce] = useState(0);
   const isSavingRef = useRef(false);
@@ -126,30 +133,36 @@ const CostRedistribution: React.FC = () => {
   const hasAnyRedistribution =
     calculationState.results.length > 0 || adjustment.appliedRules.length > 0;
 
+  // Server prepared (после save/load) — авторитет; локальный pipeline — только
+  // НЕСОХРАНЁННЫЙ preview в редакторе (isPreview=true → бейдж/блок экспорта).
   const preparedResults = useMemo(() => {
+    if (serverPrepared) {
+      return { ...mapServerPrepared(serverPrepared), isPreview: false };
+    }
     if (!hasAnyRedistribution || categoryLevelRows.length === 0) {
       return null;
     }
-    // Единый pipeline (position-adjustment → smartRound → insurance) живёт
-    // в src/services/redistributionPipeline. Commerce/FI/оба Excel-экспорта
-    // используют тот же модуль, чтобы их per-position числа совпадали с CR.
-    return applyRedistributionPipeline({
-      categoryLevelRows,
-      positionAdjustmentDeltas: adjustment.appliedDeltas,
-      insuranceTotal,
-    });
+    return {
+      ...applyRedistributionPipeline({
+        categoryLevelRows,
+        positionAdjustmentDeltas: adjustment.appliedDeltas,
+        insuranceTotal,
+      }),
+      isPreview: true,
+    };
   }, [
+    serverPrepared,
     hasAnyRedistribution,
     categoryLevelRows,
     insuranceTotal,
     adjustment.appliedDeltas,
   ]);
 
-  // Загрузка страхования от судимостей при смене тендера
+  // Загрузка страхования от судимостей при смене тендера (server-computed total)
   useEffect(() => {
     if (!selectedTenderId) { setInsuranceTotal(0); return; }
     loadTenderInsurance(selectedTenderId).then((data) => {
-      setInsuranceTotal(computeInsuranceTotal(data));
+      setInsuranceTotal(data?.insurance_total ?? 0);
     });
   }, [selectedTenderId]);
 
@@ -162,6 +175,7 @@ const CostRedistribution: React.FC = () => {
         clearTargets();
         clearResults();
         adjustment.reset();
+        setServerPrepared(null);
         return;
       }
 
@@ -181,12 +195,14 @@ const CostRedistribution: React.FC = () => {
               final_work_cost: item.final_work_cost,
             }));
             setResults(results);
+            setServerPrepared(savedData.prepared ?? null);
           } else {
-            // Legacy снимок (создан клиентским расчётом до 0.1.2.3a): значения
+            // Legacy снимок / server-снимок с изменившимися входами: значения
             // НЕ применяем как авторитетные — восстанавливаем только правила.
             clearResults();
+            setServerPrepared(null);
             message.warning(
-              'Сохранённый расчёт создан старой версией и требует пересчёта — выполните «Рассчитать» заново',
+              'Расчёт перераспределения необходимо пересчитать и сохранить на сервере',
             );
           }
 
@@ -225,11 +241,13 @@ const CostRedistribution: React.FC = () => {
             setActiveTab('setup');
           }
         } else {
-          // Очистить при отсутствии данных
+          // not_configured: перераспределение ещё не рассчитано — нейтральное
+          // пустое состояние.
           clearRules();
           clearTargets();
           clearResults();
           adjustment.reset();
+          setServerPrepared(null);
           setActiveTab('setup');
         }
       } catch (error) {
@@ -267,13 +285,16 @@ const CostRedistribution: React.FC = () => {
 
       // Сервер — источник истины: сохраняются только правила, все результаты
       // считает backend. Успех объявляется ТОЛЬКО по ответу сервера, и
-      // локальный preview заменяется серверными results.
+      // локальный preview ПОЛНОСТЬЮ заменяется серверными category+prepared
+      // результатами (никакого merge по полям).
       const saved = await saveResults(selectedTenderId, selectedTacticId, sourceRules, targetCosts, []);
       if (!saved) {
-        // Save отклонён backend'ом — preview не считается сохранённым.
+        // Save отклонён backend'ом — preview не считается сохранённым;
+        // предыдущий подтверждённый server snapshot (serverPrepared) не трогаем.
         return;
       }
       setResults(saved.results);
+      setServerPrepared(saved.prepared ?? null);
       setActiveTab('results');
     } catch (error) {
       console.error('Ошибка при переходе к результатам:', error);
@@ -296,6 +317,7 @@ const CostRedistribution: React.FC = () => {
     clearTargets();
     clearResults();
     adjustment.reset();
+    setServerPrepared(null);
   }, [clearRules, clearTargets, clearResults, adjustment]);
 
   const handleExport = useCallback(() => {
@@ -304,6 +326,14 @@ const CostRedistribution: React.FC = () => {
     }
     if (fxMissing.length > 0) {
       message.error(formatFXUnavailable(fxMissing));
+      return;
+    }
+    // REDISTRIBUTION_EXPORT_NOT_READY: экспортируются только SERVER prepared
+    // строки. Несохранённый preview / legacy snapshot файл не создают.
+    if (!serverPrepared || !preparedResults || preparedResults.isPreview) {
+      message.error(
+        'Экспорт недоступен: расчёт перераспределения не сохранён на сервере (REDISTRIBUTION_EXPORT_NOT_READY)',
+      );
       return;
     }
 
@@ -315,11 +345,11 @@ const CostRedistribution: React.FC = () => {
 
     import('./utils/exportToExcel').then(({ exportRedistributionToExcel }) => {
       exportRedistributionToExcel({
-        rows: preparedResults?.rows ?? [],
+        rows: preparedResults.rows,
         tenderTitle: `${selectedTender.title} (v${selectedTender.version})`,
       });
     });
-  }, [selectedTenderId, tenders, preparedResults, fxMissing]);
+  }, [selectedTenderId, tenders, preparedResults, serverPrepared, fxMissing]);
 
   const handleSavePositionAdjustment = useCallback(async () => {
     if (!selectedTenderId || !selectedTacticId) {
@@ -339,8 +369,9 @@ const CostRedistribution: React.FC = () => {
       adjustment.appliedRules,
     );
     if (saved) {
-      // Серверные результаты заменяют локальный preview.
+      // Серверные category+prepared результаты полностью заменяют preview.
       setResults(saved.results);
+      setServerPrepared(saved.prepared ?? null);
       setSavedRecently(true);
     }
   }, [
@@ -452,6 +483,15 @@ const CostRedistribution: React.FC = () => {
     <div style={{ padding: '0 8px' }}>
       {fxMissing.length > 0 && (
         <Alert type="error" showIcon message={formatFXUnavailable(fxMissing)} style={{ marginBottom: 12 }} />
+      )}
+      {preparedResults?.isPreview && (
+        <Alert
+          type="warning"
+          showIcon
+          message="Предварительный расчёт — не сохранён"
+          description="Показан локальный предпросмотр. Итоговые значения будут рассчитаны сервером при сохранении."
+          style={{ marginBottom: 12 }}
+        />
       )}
       <RedistributionHeader
         tenders={tenders}

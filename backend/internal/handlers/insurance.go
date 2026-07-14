@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/su10/hubtender/backend/internal/calc"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
@@ -26,6 +27,13 @@ func NewInsuranceHandler(svc insuranceServicer) *InsuranceHandler {
 	return &InsuranceHandler{svc: svc}
 }
 
+// insuranceResp is InsuranceRow + the SERVER-computed total (stage 0.1.2.3b:
+// clients display insurance_total instead of recomputing the formula locally).
+type insuranceResp struct {
+	repository.InsuranceRow
+	InsuranceTotal float64 `json:"insurance_total"`
+}
+
 // Get handles GET /api/v1/tenders/{id}/insurance.
 // Returns {data: null} when no row exists.
 func (h *InsuranceHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -40,8 +48,25 @@ func (h *InsuranceHandler) Get(w http.ResponseWriter, r *http.Request) {
 		apierr.InternalFromErr(w, r, err, "failed to load insurance")
 		return
 	}
+	if row == nil {
+		renderJSON(w, r, http.StatusOK, dataEnvelope{Data: nil})
+		return
+	}
 
-	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: row})
+	total, err := calc.CalculateInsuranceTotal(&calc.InsuranceInput{
+		AptPriceM2: row.AptPriceM2, AptArea: row.AptArea,
+		ParkingPriceM2: row.ParkingPriceM2, ParkingArea: row.ParkingArea,
+		StoragePriceM2: row.StoragePriceM2, StorageArea: row.StorageArea,
+		JudicialPct: row.JudicialPct, TotalPct: row.TotalPct,
+	})
+	if err != nil {
+		apierr.InternalFromErr(w, r, err, "invalid insurance configuration", "tender_id", tenderID)
+		return
+	}
+
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: insuranceResp{
+		InsuranceRow: *row, InsuranceTotal: total,
+	}})
 }
 
 // Put handles PUT /api/v1/tenders/{id}/insurance.

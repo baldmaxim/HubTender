@@ -57,9 +57,13 @@ type saveRedistributionResp struct {
 	Rules             json.RawMessage                   `json:"redistribution_rules"`
 	CalculationSource string                            `json:"calculation_source"`
 	SchemaVersion     int                               `json:"schema_version"`
-	// PositionDeltas — server-validated diagnostics for 0.1.2.3b (not money
-	// persistence; per-position cumulative deltas of position rules).
+	// PositionDeltas — server-validated diagnostics (per-position cumulative
+	// deltas of position rules).
 	PositionDeltas map[string]float64 `json:"position_deltas,omitempty"`
+	// Prepared — stage 0.1.2.3b: the full server-generated prepared projection
+	// (position adjustments + insurance + rounding + final rows + summary).
+	// Never accepted from the client; the request DTO has no such field.
+	Prepared *calc.PreparedRedistribution `json:"prepared,omitempty"`
 }
 
 // renderRedistributionError maps the typed redistribution domain errors to
@@ -83,6 +87,11 @@ func renderRedistributionError(w http.ResponseWriter, err error) bool {
 	var noItemsErr *calc.RedistributionNoBoqItemsError
 	if errors.As(err, &noItemsErr) {
 		apierr.RedistributionNoBoqItems().Render(w)
+		return true
+	}
+	var insErr *calc.InvalidInsuranceConfigurationError
+	if errors.As(err, &insErr) {
+		apierr.InvalidInsuranceConfiguration(insErr.Field, insErr.Reason).Render(w)
 		return true
 	}
 	return false
@@ -132,6 +141,7 @@ func (h *RedistributionHandler) Save(w http.ResponseWriter, r *http.Request) {
 		CalculationSource: calc.RedistributionCalculationServer,
 		SchemaVersion:     calc.RedistributionSchemaVersion,
 		PositionDeltas:    out.PositionDeltas,
+		Prepared:          out.Prepared,
 	}})
 }
 

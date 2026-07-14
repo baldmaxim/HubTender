@@ -1,0 +1,427 @@
+{
+  "comment": "Stage 0.1.2.3b golden Go↔TS fixtures for the PREPARED redistribution pipeline (aggregation → position adjustments → 2dp unit-price rounding → insurance over the rounded works base). Consumed by redistribution_prepared_test.go AND scripts/checks/redistributionPipelineParity.check.mjs (epsilon 1e-6). expect_error cases are Go-only: the TS preview silently SKIPS invalid position rules (computeCumulativePositionDeltas) while the server blocks — documented divergence, server is authoritative. The tender_insurance model has exactly ONE row per tender (loader LIMIT 1) — 'multiple insurance rows' is not representable and is documented as N/A.",
+  "cases": [
+    {
+      "name": "category_only",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 4 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 200, "work_cost": 1000 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 500 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 1000, "deducted": 100, "added": 0, "final": 900 },
+        { "boq_item_id": "b2", "original": 500, "deducted": 0, "added": 100, "final": 600 }
+      ],
+      "expected": {
+        "row_order": ["p1", "p2"],
+        "rows": {
+          "p1": { "work_after_category": 900, "work_after_adjustments": 900, "work_rounded": 900, "insurance": 0, "final_work": 900, "material_rounded": 200, "final_total": 1100 },
+          "p2": { "work_after_category": 600, "work_after_adjustments": 600, "work_rounded": 600, "insurance": 0, "final_work": 600, "material_rounded": 0, "final_total": 600 }
+        },
+        "summary": { "total_material_cost": 200, "work_total_before_category": 1500, "total_category_deducted": 100, "total_category_added": 100, "work_total_after_adjustments": 1500, "rounding_adjustment_total": 0, "insurance_total": 0, "insurance_allocated": 0, "final_work_total": 1500, "final_total": 1700 }
+      }
+    },
+    {
+      "name": "transfer_a_to_b",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 4 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 200, "work_cost": 1000 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 500 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 1000, "deducted": 100, "added": 0, "final": 900 },
+        { "boq_item_id": "b2", "original": 500, "deducted": 0, "added": 100, "final": 600 }
+      ],
+      "position_adjustments": [
+        { "mode": "transfer", "amount": 100, "sourceIds": ["p1"], "targetIds": ["p2"] }
+      ],
+      "expected": {
+        "row_order": ["p1", "p2"],
+        "rows": {
+          "p1": { "work_after_adjustments": 800, "work_rounded": 800, "final_work": 800 },
+          "p2": { "work_after_adjustments": 700, "work_rounded": 700, "final_work": 700 }
+        },
+        "summary": { "total_position_deducted": 100, "total_position_added": 100, "work_total_after_adjustments": 1500, "final_work_total": 1500 }
+      }
+    },
+    {
+      "name": "multi_source_target",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 4 },
+        { "id": "p3", "number": 3, "volume": 2 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 900 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 600 },
+        { "id": "b3", "position_id": "p3", "material_cost": 0, "work_cost": 300 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 900, "deducted": 0, "added": 0, "final": 900 },
+        { "boq_item_id": "b2", "original": 600, "deducted": 0, "added": 0, "final": 600 },
+        { "boq_item_id": "b3", "original": 300, "deducted": 0, "added": 0, "final": 300 }
+      ],
+      "position_adjustments": [
+        { "mode": "transfer", "amount": 300, "sourceIds": ["p1", "p2"], "targetIds": ["p3"] }
+      ],
+      "expected": {
+        "row_order": ["p1", "p2", "p3"],
+        "rows": {
+          "p1": { "work_after_adjustments": 720, "final_work": 720 },
+          "p2": { "work_after_adjustments": 480, "final_work": 480 },
+          "p3": { "work_after_adjustments": 600, "final_work": 600 }
+        },
+        "summary": { "final_work_total": 1800, "total_position_deducted": 300, "total_position_added": 300 }
+      }
+    },
+    {
+      "name": "sequential_transfers",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 4 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 1000 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 500 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 1000, "deducted": 0, "added": 0, "final": 1000 },
+        { "boq_item_id": "b2", "original": 500, "deducted": 0, "added": 0, "final": 500 }
+      ],
+      "position_adjustments": [
+        { "mode": "transfer", "amount": 400, "sourceIds": ["p1"], "targetIds": ["p2"] },
+        { "mode": "deduct", "amount": 600, "sourceIds": ["p1"] }
+      ],
+      "expected": {
+        "rows": {
+          "p1": { "work_after_adjustments": 0, "work_rounded": 0, "final_work": 0 },
+          "p2": { "work_after_adjustments": 900, "final_work": 900 }
+        },
+        "summary": { "final_work_total": 900, "total_position_deducted": 1000, "total_position_added": 400 }
+      }
+    },
+    {
+      "name": "deduct_only",
+      "positions": [{ "id": "p1", "number": 1, "volume": 10 }],
+      "boq_items": [{ "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 1000 }],
+      "category_results": [{ "boq_item_id": "b1", "original": 1000, "deducted": 0, "added": 0, "final": 1000 }],
+      "position_adjustments": [{ "mode": "deduct", "amount": 200, "sourceIds": ["p1"] }],
+      "expected": {
+        "rows": { "p1": { "work_after_adjustments": 800, "final_work": 800 } },
+        "summary": { "final_work_total": 800, "total_position_deducted": 200, "total_position_added": 0 }
+      }
+    },
+    {
+      "name": "add_only",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 4 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 1000 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 500 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 1000, "deducted": 0, "added": 0, "final": 1000 },
+        { "boq_item_id": "b2", "original": 500, "deducted": 0, "added": 0, "final": 500 }
+      ],
+      "position_adjustments": [{ "mode": "add", "amount": 150, "targetIds": ["p2"] }],
+      "expected": {
+        "rows": { "p2": { "work_after_adjustments": 650, "final_work": 650 } },
+        "summary": { "final_work_total": 1650, "total_position_deducted": 0, "total_position_added": 150 }
+      }
+    },
+    {
+      "name": "amount_equals_source",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 4 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 900 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 100 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 900, "deducted": 0, "added": 0, "final": 900 },
+        { "boq_item_id": "b2", "original": 100, "deducted": 0, "added": 0, "final": 100 }
+      ],
+      "position_adjustments": [{ "mode": "deduct", "amount": 900, "sourceIds": ["p1"] }],
+      "expected": {
+        "rows": { "p1": { "work_after_adjustments": 0, "work_rounded": 0, "final_work": 0 } },
+        "summary": { "final_work_total": 100 }
+      }
+    },
+    {
+      "name": "amount_exceeds_source",
+      "positions": [{ "id": "p1", "number": 1, "volume": 10 }],
+      "boq_items": [{ "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 900 }],
+      "category_results": [{ "boq_item_id": "b1", "original": 900, "deducted": 0, "added": 0, "final": 900 }],
+      "position_adjustments": [{ "mode": "deduct", "amount": 1000, "sourceIds": ["p1"] }],
+      "expect_error": "AMOUNT_EXCEEDS_SOURCE"
+    },
+    {
+      "name": "source_base_zero",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 1 },
+        { "id": "p2", "number": 2, "volume": 1 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 0 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 100 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 0, "deducted": 0, "added": 0, "final": 0 },
+        { "boq_item_id": "b2", "original": 100, "deducted": 0, "added": 0, "final": 100 }
+      ],
+      "position_adjustments": [{ "mode": "transfer", "amount": 10, "sourceIds": ["p1"], "targetIds": ["p2"] }],
+      "expect_error": "AMOUNT_EXCEEDS_SOURCE"
+    },
+    {
+      "name": "position_only",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 2 },
+        { "id": "p2", "number": 2, "volume": 1 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 200 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 100 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 200, "deducted": 0, "added": 0, "final": 200 },
+        { "boq_item_id": "b2", "original": 100, "deducted": 0, "added": 0, "final": 100 }
+      ],
+      "position_adjustments": [{ "mode": "transfer", "amount": 50, "sourceIds": ["p1"], "targetIds": ["p2"] }],
+      "expected": {
+        "rows": {
+          "p1": { "work_after_adjustments": 150, "final_work": 150 },
+          "p2": { "work_after_adjustments": 150, "final_work": 150 }
+        },
+        "summary": { "final_work_total": 300 }
+      }
+    },
+    {
+      "name": "category_plus_deduct",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 4 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 200, "work_cost": 1000 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 500 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 1000, "deducted": 100, "added": 0, "final": 900 },
+        { "boq_item_id": "b2", "original": 500, "deducted": 0, "added": 100, "final": 600 }
+      ],
+      "position_adjustments": [{ "mode": "deduct", "amount": 100, "sourceIds": ["p2"] }],
+      "expected": {
+        "rows": {
+          "p1": { "work_after_adjustments": 900, "final_work": 900 },
+          "p2": { "work_after_category": 600, "work_after_adjustments": 500, "final_work": 500 }
+        },
+        "summary": { "final_work_total": 1400, "total_category_deducted": 100, "total_category_added": 100, "total_position_deducted": 100 }
+      }
+    },
+    {
+      "name": "insurance_percentage",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 2 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 750 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 250 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 750, "deducted": 0, "added": 0, "final": 750 },
+        { "boq_item_id": "b2", "original": 250, "deducted": 0, "added": 0, "final": 250 }
+      ],
+      "insurance": { "apt_price_m2": 10, "apt_area": 10, "judicial_pct": 50, "total_pct": 100 },
+      "expected": {
+        "rows": {
+          "p1": { "work_rounded": 750, "insurance": 37.5, "final_work": 787.5 },
+          "p2": { "work_rounded": 250, "insurance": 12.5, "final_work": 262.5 }
+        },
+        "summary": { "insurance_total": 50, "insurance_allocated": 50, "final_work_total": 1050 }
+      }
+    },
+    {
+      "name": "insurance_multiple_components",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 2 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 750 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 250 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 750, "deducted": 0, "added": 0, "final": 750 },
+        { "boq_item_id": "b2", "original": 250, "deducted": 0, "added": 0, "final": 250 }
+      ],
+      "insurance": { "apt_price_m2": 10, "apt_area": 10, "parking_price_m2": 5, "parking_area": 20, "storage_price_m2": 2, "storage_area": 25, "judicial_pct": 40, "total_pct": 50 },
+      "expected": {
+        "rows": {
+          "p1": { "insurance": 37.5, "final_work": 787.5 },
+          "p2": { "insurance": 12.5, "final_work": 262.5 }
+        },
+        "summary": { "insurance_total": 50, "insurance_allocated": 50, "final_work_total": 1050 }
+      }
+    },
+    {
+      "name": "insurance_zero_base",
+      "positions": [{ "id": "p1", "number": 1, "volume": 5 }],
+      "boq_items": [{ "id": "b1", "position_id": "p1", "material_cost": 500, "work_cost": 0 }],
+      "category_results": [{ "boq_item_id": "b1", "original": 0, "deducted": 0, "added": 0, "final": 0 }],
+      "insurance": { "apt_price_m2": 10, "apt_area": 10, "judicial_pct": 50, "total_pct": 100 },
+      "expected": {
+        "rows": { "p1": { "work_rounded": 0, "insurance": 0, "final_work": 0, "material_rounded": 500 } },
+        "summary": { "insurance_total": 50, "insurance_allocated": 0, "final_work_total": 0, "total_material_cost": 500, "final_total": 500 }
+      }
+    },
+    {
+      "name": "insurance_floating_residual",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 1 },
+        { "id": "p2", "number": 2, "volume": 1 },
+        { "id": "p3", "number": 3, "volume": 1 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 1 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 1 },
+        { "id": "b3", "position_id": "p3", "material_cost": 0, "work_cost": 1 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 1, "deducted": 0, "added": 0, "final": 1 },
+        { "boq_item_id": "b2", "original": 1, "deducted": 0, "added": 0, "final": 1 },
+        { "boq_item_id": "b3", "original": 1, "deducted": 0, "added": 0, "final": 1 }
+      ],
+      "insurance": { "apt_price_m2": 1, "apt_area": 10, "judicial_pct": 100, "total_pct": 100 },
+      "expected": {
+        "rows": {
+          "p1": { "insurance": 3.3333333333333335, "final_work": 4.333333333333334 }
+        },
+        "summary": { "insurance_total": 10, "insurance_allocated": 10, "final_work_total": 13 }
+      }
+    },
+    {
+      "name": "already_round",
+      "positions": [{ "id": "p1", "number": 1, "volume": 4 }],
+      "boq_items": [{ "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 100 }],
+      "category_results": [{ "boq_item_id": "b1", "original": 100, "deducted": 0, "added": 0, "final": 100 }],
+      "expected": {
+        "rows": { "p1": { "work_rounded": 100, "final_work": 100 } },
+        "summary": { "rounding_adjustment_total": 0, "final_work_total": 100 }
+      }
+    },
+    {
+      "name": "rounding_residual_ties",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 3 },
+        { "id": "p2", "number": 2, "volume": 3 }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 100 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 200 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 100, "deducted": 0, "added": 0, "final": 100 },
+        { "boq_item_id": "b2", "original": 200, "deducted": 0, "added": 0, "final": 200 }
+      ],
+      "expected": {
+        "rows": {
+          "p1": { "work_rounded": 99.99, "final_work": 99.99 },
+          "p2": { "work_rounded": 200.01, "final_work": 200.01 }
+        },
+        "summary": { "final_work_total": 300, "rounding_adjustment_total": 0 }
+      }
+    },
+    {
+      "name": "reverse_input_order",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 4 },
+        { "id": "p3", "number": 3, "volume": 2 }
+      ],
+      "boq_items": [
+        { "id": "b3", "position_id": "p3", "material_cost": 0, "work_cost": 300 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 600 },
+        { "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 900 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b3", "original": 300, "deducted": 0, "added": 0, "final": 300 },
+        { "boq_item_id": "b2", "original": 600, "deducted": 0, "added": 0, "final": 600 },
+        { "boq_item_id": "b1", "original": 900, "deducted": 0, "added": 0, "final": 900 }
+      ],
+      "position_adjustments": [
+        { "mode": "transfer", "amount": 300, "sourceIds": ["p1", "p2"], "targetIds": ["p3"] }
+      ],
+      "expected": {
+        "row_order": ["p1", "p2", "p3"],
+        "rows": {
+          "p1": { "final_work": 720 },
+          "p2": { "final_work": 480 },
+          "p3": { "final_work": 600 }
+        },
+        "summary": { "final_work_total": 1800 }
+      }
+    },
+    {
+      "name": "tiny_values",
+      "positions": [{ "id": "p1", "number": 1, "volume": 1 }],
+      "boq_items": [{ "id": "b1", "position_id": "p1", "material_cost": 0.004, "work_cost": 0.004 }],
+      "category_results": [{ "boq_item_id": "b1", "original": 0.004, "deducted": 0, "added": 0, "final": 0.004 }],
+      "expected": {
+        "rows": { "p1": { "work_rounded": 0, "final_work": 0, "material_rounded": 0 } },
+        "summary": { "final_work_total": 0, "total_material_cost": 0 }
+      }
+    },
+    {
+      "name": "large_values",
+      "positions": [{ "id": "p1", "number": 1, "volume": 1 }],
+      "boq_items": [{ "id": "b1", "position_id": "p1", "material_cost": 0, "work_cost": 1000000000000 }],
+      "category_results": [{ "boq_item_id": "b1", "original": 1000000000000, "deducted": 0, "added": 0, "final": 1000000000000 }],
+      "expected": {
+        "rows": { "p1": { "work_rounded": 1000000000000, "final_work": 1000000000000 } },
+        "summary": { "final_work_total": 1000000000000 }
+      }
+    },
+    {
+      "name": "full_pipeline",
+      "positions": [
+        { "id": "p1", "number": 1, "volume": 10 },
+        { "id": "p2", "number": 2, "volume": 4 },
+        { "id": "p3", "number": 3, "volume": 2, "is_additional": true, "parent_position_id": "p1" }
+      ],
+      "boq_items": [
+        { "id": "b1", "position_id": "p1", "material_cost": 333.333, "work_cost": 1000 },
+        { "id": "b2", "position_id": "p2", "material_cost": 0, "work_cost": 500 },
+        { "id": "b3", "position_id": "p3", "material_cost": 0, "work_cost": 200 }
+      ],
+      "category_results": [
+        { "boq_item_id": "b1", "original": 1000, "deducted": 150, "added": 0, "final": 850 },
+        { "boq_item_id": "b2", "original": 500, "deducted": 0, "added": 50, "final": 550 },
+        { "boq_item_id": "b3", "original": 200, "deducted": 0, "added": 100, "final": 300 }
+      ],
+      "position_adjustments": [
+        { "mode": "transfer", "amount": 100, "sourceIds": ["p1"], "targetIds": ["p2"] }
+      ],
+      "insurance": { "apt_price_m2": 17, "apt_area": 10, "judicial_pct": 100, "total_pct": 100 },
+      "expected": {
+        "row_order": ["p1", "p3", "p2"],
+        "rows": {
+          "p1": { "work_after_category": 850, "work_after_adjustments": 750, "work_rounded": 750, "insurance": 75, "final_work": 825, "material_rounded": 333.3, "final_total": 1158.3 },
+          "p2": { "work_after_category": 550, "work_after_adjustments": 650, "work_rounded": 650, "insurance": 65, "final_work": 715 },
+          "p3": { "work_after_category": 300, "work_after_adjustments": 300, "work_rounded": 300, "insurance": 30, "final_work": 330 }
+        },
+        "summary": { "total_material_cost": 333.3, "work_total_before_category": 1700, "total_category_deducted": 150, "total_category_added": 150, "total_position_deducted": 100, "total_position_added": 100, "work_total_after_adjustments": 1700, "rounding_adjustment_total": 0, "insurance_total": 170, "insurance_allocated": 170, "final_work_total": 1870, "final_total": 2203.3 }
+      }
+    }
+  ]
+}

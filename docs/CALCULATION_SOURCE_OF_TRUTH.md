@@ -466,15 +466,89 @@ query; пункт добавлен в deployment checklist миграции.
 10. **TS `calculateDistribution.ts` — UI preview only**; ответ сервера всегда
     побеждает preview; при ошибке backend preview не объявляется сохранённым.
 
-**НЕ закрыто в 0.1.2.3a (остаётся на 0.1.2.3b):** финальное position-level
-отображение (`buildResultRows`), smart rounding, распределение insurance,
-prepared rows Commerce/FI/Excel — весь redistribution-pipeline ещё **не**
-полностью серверный.
+~~**НЕ закрыто в 0.1.2.3a (остаётся на 0.1.2.3b):** финальное position-level
+отображение, smart rounding, распределение insurance, prepared rows
+Commerce/FI/Excel.~~ → ✅ **закрыто в 0.1.2.3b** (см. §7f).
 
 Защита от регресса: `scripts/checks/noClientRedistributionResults.check.mjs`
 (клиентские records/financial-поля в save, financial request DTO, tombstone
 обеих схем, production callers RPC) +
 `scripts/checks/redistributionParity.check.mjs` (Go↔TS parity).
+
+## 7f. Prepared redistribution pipeline — server-authoritative (этап 0.1.2.3b)
+
+Весь **финансовый** redistribution-pipeline теперь серверный (но НЕ versioned —
+см. ограничения ниже):
+
+1. **Один авторитетный движок** — `calc.BuildPreparedRedistribution`
+   (`backend/internal/calc/redistribution_prepared.go`), pure-функция без
+   БД/env/HTTP. Канонический порядок (порт ЕДИНОГО фронтового pipeline,
+   расхождений между CR/Commerce/Excel не было):
+   агрегация category-снимка по позициям (`buildResultRows`-семантика:
+   обычные позиции + ДОП-строки после родителя; ДОП без родителя
+   отбрасывается; item без category-результата проходит с текущей стоимостью)
+   → position adjustments (общий валидатор `ValidatePositionAdjustments`,
+   последовательные правила на меняющейся базе, works-only)
+   → **rounding policy `unit_price_2dp`**: цена за единицу округляется до
+   2 знаков (half up), итог = round2(цена × количество); НИКАКОЙ cross-row
+   компенсации. Примечание: 5-руб ядро `RoundTo5`/`CompensateError` относится
+   к другому legacy-потоку Commerce и НЕ является частью этого pipeline
+   (старый комментарий в smartRounding.ts утверждал обратное — канон =
+   фактическое production-поведение 2dp)
+   → insurance: total = `calc.CalculateInsuranceTotal`
+   ((apt+parking+storage)×judicial%×total%, одна строка на тендер — «несколько
+   insurance rows» в модели не существует), распределяется пропорционально
+   ОКРУГЛЁННОЙ базе работ и добавляется в финальную стоимость работ; нулевая
+   база при ненулевом страховании → доли 0 (каноническая policy, видна через
+   `is_insurance_fully_allocated=false`)
+   → prepared rows (трассируемый breakdown: before/category/adjustments/
+   rounding/insurance/final) + summary (каждое поле = Σ строк, проверяется
+   валидатором `ValidatePreparedRedistribution`; несоответствие — typed
+   internal error, результат не возвращается).
+2. **Save и GET используют один движок**: save строит prepared ДО commit
+   (ошибка prepared откатывает всю транзакцию, включая materialization);
+   GET в одной read-only транзакции перечитывает snapshot+positions+BOQ+
+   insurance и вызывает ту же функцию. При неизменной БД
+   save.prepared == GET.prepared (bit-identical, integration-тест parity).
+   Prepared НЕ персистится (ни новых колонок, ни скрытого snapshot в rules
+   JSON) — это server-generated projection.
+3. **Статусы GET**: `calculated` (prepared доступен) /
+   `requires_recalculation` (legacy снимок ИЛИ server-снимок, входы которого
+   изменились и prepared больше не строится — честная деградация вместо 500) /
+   `not_configured` (снимка нет). Fallback'ов нет: ни live-frontend-расчёта,
+   ни старых client rows, ни частичных итогов.
+4. **Маркеры ответа**: `calculation_source="server"`,
+   `prepared_schema_version=1`, `rounding_policy="unit_price_2dp"`.
+5. **Frontend**: CostRedistribution может показывать локальный preview ТОЛЬКО
+   с явным статусом «Предварительный расчёт — не сохранён»; после save/load
+   server prepared полностью замещает preview (без merge по полям).
+   Commerce/FI/Excel не импортируют и не вызывают preview-калькуляторы
+   (`applyRedistributionPipeline`/`computeInsuranceTotal`/
+   `computeCumulativePositionDeltas`/`buildResultRows`/`smartRoundResults`) —
+   только серверные значения; insurance_total отдаёт GET insurance
+   (server-computed). Excel-экспорт блокируется без server prepared
+   (`REDISTRIBUTION_EXPORT_NOT_READY`), частичный файл не создаётся.
+6. **BOQ commercial-поля НЕ перезаписываются** redistribution-результатом:
+   category-снимок живёт в `cost_redistribution_results`, prepared — это
+   presentation projection, а не новая себестоимость BOQ (фронт их и раньше
+   не мутировал — риска переноса mutation нет).
+7. **Известное расхождение preview↔server**: TS preview молча пропускает
+   невалидные position-правила (`computeCumulativePositionDeltas`), сервер их
+   блокирует typed-ошибкой; сервер авторитетен. Go↔TS числовой drift не
+   обнаружен (21 golden-кейс, epsilon 1e-6).
+8. **Ограничения → этап 0.1.3** (не решались здесь, без скрытых hash/version
+   механизмов): историческое replay prepared-результата, гарантированное
+   обнаружение stale snapshot (сейчас — только честная деградация статуса),
+   защита от concurrent save/recalc, calculation_run/input_revision,
+   updated_at/ETag.
+9. SQL redistribution RPC остаётся retired; client-calculated records —
+   запрещены (guards этапов 0.1.2.3a/b продолжают действовать).
+
+Защита от регресса: `scripts/checks/noClientPreparedRedistribution.check.mjs`
+(импорты/вызовы preview-калькуляторов в Commerce/FI/Analytics/Excel, prepared-
+поля в save-запросе и request DTO, гейт экспорта) +
+`scripts/checks/redistributionPipelineParity.check.mjs` (Go↔TS parity полного
+pipeline на общих fixtures).
 
 ## 8. Что сделано в 0.1.2 (только безопасное)
 

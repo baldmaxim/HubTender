@@ -11,7 +11,8 @@ import {
 import { listTenderMarkupPercentages } from '../../../lib/api/markup';
 import { createSystemNotification } from '../../../lib/api/notifications';
 import { getErrorMessage } from '../../../utils/errors';
-import { computeInsuranceTotal } from '../../../services/redistributionPipeline';
+// Этап 0.1.2.3b: FI не импортирует клиентский redistribution pipeline —
+// insurance_total приходит с сервера (GET insurance).
 import type { CurrencyType } from '../../../lib/types';
 import type { IndicatorRow } from '../types';
 import { aggregateDirectCosts } from '../utils/aggregateDirectCosts';
@@ -94,7 +95,10 @@ export const useFinancialCalculations = () => {
         // ignore — fallback to zero insurance cost
       }
 
-      const insuranceCost = computeInsuranceTotal(insuranceData);
+      // Этап 0.1.2.3b: страхование — SERVER-computed total из GET insurance
+      // (backend/internal/calc.CalculateInsuranceTotal); клиентская формула
+      // не используется.
+      const insuranceCost = insuranceData?.insurance_total ?? 0;
 
       const boqItems: BoqItemWithPosition[] = await listAllBoqItemsForTender(selectedTenderId);
 

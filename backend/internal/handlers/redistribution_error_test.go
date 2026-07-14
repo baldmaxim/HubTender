@@ -20,6 +20,7 @@ import (
 type stubRedistributionSvc struct {
 	err          error
 	out          *repository.RedistributionSaveOutput
+	load         *repository.RedistributionLoad
 	gotTender    string
 	gotTactic    string
 	gotRules     calc.RedistributionRulesInput
@@ -40,7 +41,10 @@ func (s *stubRedistributionSvc) Save(
 }
 
 func (s *stubRedistributionSvc) LoadResults(context.Context, string, string) (*repository.RedistributionLoad, error) {
-	panic("not used")
+	if s.load == nil {
+		panic("stub load not configured")
+	}
+	return s.load, nil
 }
 
 const (
@@ -234,5 +238,148 @@ func TestRedistributionSaveHandler_NoBoqItems400(t *testing.T) {
 	}
 	if m := decodeProblem(t, w); m["code"] != "REDISTRIBUTION_NO_BOQ_ITEMS" {
 		t.Fatalf("code = %v", m["code"])
+	}
+}
+
+// ─── Stage 0.1.2.3b (§21) ─────────────────────────────────────────────────────
+
+func okStubOutputWithPrepared() *repository.RedistributionSaveOutput {
+	out := okStubOutput()
+	out.Prepared = &calc.PreparedRedistribution{
+		Rows: []calc.PreparedPositionRow{{
+			PositionID: "p1", Quantity: 1,
+			WorkCostRounded: 900, FinalWorkCost: 950, InsuranceAmount: 50,
+			FinalPositionTotal: 950,
+		}},
+		Summary:               calc.PreparedSummary{FinalWorkTotal: 950, FinalTotal: 950, InsuranceTotal: 50, InsuranceAllocated: 50},
+		RoundingPolicy:        calc.RoundingPolicyUnitPrice2dp,
+		PreparedSchemaVersion: calc.PreparedSchemaVersion,
+		CalculationSource:     calc.RedistributionCalculationServer,
+	}
+	return out
+}
+
+// §21.1/19/20 — save returns the full server prepared result with markers.
+func TestRedistributionSaveHandler_PreparedInResponse(t *testing.T) {
+	svc := &stubRedistributionSvc{out: okStubOutputWithPrepared()}
+	w := doRedistributionSave(t, svc, rulesOnlyBody())
+	if w.Code != 200 {
+		t.Fatalf("status = %d", w.Code)
+	}
+	var resp struct {
+		Data struct {
+			Prepared *calc.PreparedRedistribution `json:"prepared"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad response: %v", err)
+	}
+	p := resp.Data.Prepared
+	if p == nil || len(p.Rows) != 1 || p.Rows[0].FinalWorkCost != 950 {
+		t.Fatalf("prepared missing/wrong: %+v", p)
+	}
+	if p.CalculationSource != "server" || p.PreparedSchemaVersion != 1 || p.RoundingPolicy != "unit_price_2dp" {
+		t.Fatalf("prepared markers wrong: %+v", p)
+	}
+}
+
+// §21.3/4 — the request DTO does not accept prepared rows / forged
+// position/insurance/rounding values: two requests with different forged
+// prepared payloads produce the identical service command and response.
+func TestRedistributionSaveHandler_ForgedPreparedIgnored(t *testing.T) {
+	forge := func(extra string) string {
+		return fmt.Sprintf(`{
+			"tender_id": %q, "markup_tactic_id": %q,
+			%s
+			"rules": {
+				"deductions": [{"level":"detail","detail_cost_category_id":"33333333-3333-3333-3333-333333333333","percentage":10}],
+				"targets": [{"level":"detail","detail_cost_category_id":"44444444-4444-4444-4444-444444444444"}]
+			}
+		}`, rTender, rTactic, extra)
+	}
+	forged1 := forge(`"prepared_rows":[{"position_id":"x","final_work_cost":999999}],
+		"position_results":[{"position_id":"x","deducted":777}],
+		"insurance_total": 888888, "rounding_adjustments": {"x": -123},
+		"summary": {"final_total": 1},`)
+	forged2 := forge(`"prepared": {"rows":[],"summary":{"final_total":42}},`)
+
+	svc1 := &stubRedistributionSvc{out: okStubOutputWithPrepared()}
+	w1 := doRedistributionSave(t, svc1, forged1)
+	svc2 := &stubRedistributionSvc{out: okStubOutputWithPrepared()}
+	w2 := doRedistributionSave(t, svc2, forged2)
+
+	if w1.Code != 200 || w2.Code != 200 {
+		t.Fatalf("statuses: %d / %d", w1.Code, w2.Code)
+	}
+	r1, _ := json.Marshal(svc1.gotRules)
+	r2, _ := json.Marshal(svc2.gotRules)
+	if string(r1) != string(r2) {
+		t.Fatal("forged prepared values leaked into the command")
+	}
+	if w1.Body.String() != w2.Body.String() {
+		t.Fatal("responses differ for identical rules with different forged prepared payloads")
+	}
+}
+
+// §21.11 — invalid insurance configuration → typed RFC 7807 400.
+func TestRedistributionSaveHandler_InvalidInsurance400(t *testing.T) {
+	svc := &stubRedistributionSvc{err: wrappedR(&calc.InvalidInsuranceConfigurationError{
+		Field: "judicial_pct", Reason: "percentage out of range [0,100]",
+	})}
+	w := doRedistributionSave(t, svc, rulesOnlyBody())
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	m := decodeProblem(t, w)
+	if m["code"] != "INVALID_INSURANCE_CONFIGURATION" || m["field"] != "judicial_pct" {
+		t.Fatalf("code/field = %v/%v", m["code"], m["field"])
+	}
+}
+
+// §21.8/9/17 — GET is a pure passthrough of the repo statuses (no mutation):
+// legacy → requires_recalculation without prepared; missing → not_configured.
+func TestRedistributionLoadHandler_Statuses(t *testing.T) {
+	cases := []struct {
+		name string
+		load *repository.RedistributionLoad
+	}{
+		{"legacy", &repository.RedistributionLoad{
+			Results: []repository.RedistributionRecord{{BoqItemID: "b1"}},
+			Status:  repository.RedistributionStatusRequiresRecalculation,
+		}},
+		{"missing", &repository.RedistributionLoad{
+			Results: []repository.RedistributionRecord{},
+			Status:  repository.RedistributionStatusNotConfigured,
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &stubRedistributionSvc{load: tc.load}
+			h := NewRedistributionHandler(svc)
+			req := httptest.NewRequest("GET",
+				"/api/v1/redistributions?tender_id="+rTender+"&markup_tactic_id="+rTactic, nil)
+			req = req.WithContext(context.WithValue(req.Context(), middleware.CtxUser,
+				&middleware.AuthUser{ID: "user-1"}))
+			w := httptest.NewRecorder()
+			h.Load(w, req)
+			if w.Code != 200 {
+				t.Fatalf("status = %d", w.Code)
+			}
+			var resp struct {
+				Data struct {
+					Status   string                       `json:"status"`
+					Prepared *calc.PreparedRedistribution `json:"prepared"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("bad response: %v", err)
+			}
+			if resp.Data.Status != tc.load.Status {
+				t.Fatalf("status = %q, want %q", resp.Data.Status, tc.load.Status)
+			}
+			if resp.Data.Prepared != nil {
+				t.Fatal("prepared must be absent for non-calculated statuses")
+			}
+		})
 	}
 }

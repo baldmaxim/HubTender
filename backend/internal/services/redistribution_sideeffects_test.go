@@ -43,6 +43,9 @@ func TestRedistributionSave_ErrorHasNoSideEffects(t *testing.T) {
 		&calc.UnbalancedRedistributionError{TotalDeducted: 1, TotalAdded: 2},
 		&calc.RedistributionNoBoqItemsError{TenderID: tenderID},
 		&calc.MissingFXRateError{Currency: "USD"},
+		// Stage 0.1.2.3b: prepared-pipeline failures are equally side-effect-free.
+		&calc.InvalidInsuranceConfigurationError{Field: "judicial_pct", Reason: "negative value"},
+		&calc.InvalidPreparedRedistributionResultError{Field: "summary.final_total", Reason: "mismatch"},
 	}
 	for _, dErr := range domainErrs {
 		t.Run(dErr.Error(), func(t *testing.T) {
