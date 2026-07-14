@@ -16,6 +16,7 @@ package calc
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 )
 
@@ -243,13 +244,19 @@ func (e *InvalidPreparedRedistributionResultError) Error() string {
 // ─── insurance ───────────────────────────────────────────────────────────────
 
 // CalculateInsuranceTotal — the canonical tender-insurance formula
-// (mirrors computeInsuranceTotal.ts and the grand-total SQL twin):
+// (mirrors computeInsuranceTotal.ts and the retired grand-total SQL twin):
 //
 //	(apt_price×apt_area + parking_price×parking_area + storage_price×storage_area)
 //	× judicial_pct/100 × total_pct/100
 //
 // nil input = no insurance row = 0. All fields must be finite and
 // non-negative; percentages are validated to [0, 100].
+//
+// Stage 0.1.2.4a.1: this float64 API is a COMPATIBILITY WRAPPER over the ONE
+// exact kernel (insuranceTotalRat, money_decimal.go) — the formula exists in a
+// single place; the wrapper only converts the legacy float boundary (exact
+// binary values) in and out. The authoritative cached-grand-total path uses
+// CalculateInsuranceTotalDecimal instead.
 func CalculateInsuranceTotal(in *InsuranceInput) (float64, error) {
 	if in == nil {
 		return 0, nil
@@ -263,13 +270,19 @@ func CalculateInsuranceTotal(in *InsuranceInput) (float64, error) {
 		{"storage_price_m2", in.StoragePriceM2}, {"storage_area", in.StorageArea},
 		{"judicial_pct", in.JudicialPct}, {"total_pct", in.TotalPct},
 	}
-	for _, f := range fields {
+	rats := make([]*big.Rat, len(fields))
+	for i, f := range fields {
 		if !isFinite(f.val) {
 			return 0, &InvalidInsuranceConfigurationError{Field: f.name, Reason: "non-finite value"}
 		}
 		if f.val < 0 {
 			return 0, &InvalidInsuranceConfigurationError{Field: f.name, Reason: "negative value"}
 		}
+		r, err := floatToRat(f.name, f.val)
+		if err != nil {
+			return 0, &InvalidInsuranceConfigurationError{Field: f.name, Reason: "non-finite value"}
+		}
+		rats[i] = r
 	}
 	for _, p := range []struct {
 		name string
@@ -279,8 +292,8 @@ func CalculateInsuranceTotal(in *InsuranceInput) (float64, error) {
 			return 0, &InvalidInsuranceConfigurationError{Field: p.name, Reason: "percentage out of range [0,100]"}
 		}
 	}
-	base := in.AptPriceM2*in.AptArea + in.ParkingPriceM2*in.ParkingArea + in.StoragePriceM2*in.StorageArea
-	return base * (in.JudicialPct / 100) * (in.TotalPct / 100), nil
+	total := insuranceTotalRat(rats[0], rats[1], rats[2], rats[3], rats[4], rats[5], rats[6], rats[7])
+	return ratToFloat(total), nil
 }
 
 // round2 mirrors the TS Math.round(v*100)/100 for the non-negative money this

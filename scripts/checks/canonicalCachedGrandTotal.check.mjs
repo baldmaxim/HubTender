@@ -14,6 +14,17 @@
 //   6. app.skip_grand_total (the setting is obsolete — no consumer remains);
 //   7. legacy calc.CalculateGrandTotal wired into the cached-total writer;
 //   8. a frontend recalculation of cached_grand_total for authoritative use.
+//
+// Stage 0.1.2.4a.1 (exact decimal rounding contract) additions — the
+// authoritative boundary (calc/cached_grand_total.go, calc/money_decimal.go,
+// repository/tender_recalc.go) must stay decimal-exact:
+//   9.  no binary math.Round / strconv.ParseFloat / epsilon (1e-…) inside the
+//       boundary files (math.Round stays legal ONLY in the prepared-pipeline
+//       preview round2 — a different, non-authoritative path);
+//   10. tender_recalc.go reads BOTH commercial aggregates as numeric::text
+//       (never through float64 — the file must not mention float64 at all);
+//   11. tender_recalc.go persists the kernel's RoundedTotalDecimal string
+//       (no float bind, no re-rounding).
 
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -92,10 +103,47 @@ function* walk(dir, exts) {
       const m = re.exec(code);
       if (m) violations.push(`${rel}:${lineOf(code, m.index)} — ${what}`);
     }
-    for (const needle of ['CalculateCachedTenderGrandTotal', 'CalculateInsuranceTotal']) {
+    for (const needle of ['CalculateCachedTenderGrandTotal', 'CalculateInsuranceTotalDecimal']) {
       if (!code.includes(needle)) {
         violations.push(`${rel} — must delegate to calc.${needle}`);
       }
+    }
+    // 10. exact aggregate reads: both SUMs leave PostgreSQL as numeric::text.
+    for (const col of ['total_commercial_material_cost', 'total_commercial_work_cost']) {
+      const re = new RegExp(`SUM\\(COALESCE\\(${col}[^)]*\\)\\)[\\s\\S]{0,20}?::text`);
+      if (!re.test(code)) {
+        violations.push(`${rel} — ${col} aggregate must be read as numeric::text (no float64 scan)`);
+      }
+    }
+    const flt = /float64/.exec(code);
+    if (flt) {
+      violations.push(`${rel}:${lineOf(code, flt.index)} — float64 on the authoritative decimal boundary`);
+    }
+    // 11. the persisted value is the kernel's canonical decimal string.
+    if (!code.includes('RoundedTotalDecimal')) {
+      violations.push(`${rel} — must bind result.RoundedTotalDecimal (string) into the UPDATE`);
+    }
+  }
+}
+
+// ─── 9. decimal boundary files: no binary rounding, no epsilon, no ParseFloat ─
+{
+  const boundaryFiles = [
+    'backend/internal/calc/cached_grand_total.go',
+    'backend/internal/calc/money_decimal.go',
+    'backend/internal/repository/tender_recalc.go',
+  ];
+  for (const rel of boundaryFiles) {
+    const raw = read(rel);
+    if (raw == null) continue;
+    const code = stripComments(raw);
+    for (const [re, what] of [
+      [/math\.Round\s*\(/, 'binary math.Round as money policy (decimal boundary must use RoundMoney2Decimal)'],
+      [/\b\d(\.\d+)?e-\d/i, 'epsilon hack on the authoritative rounding path'],
+      [/strconv\.ParseFloat\s*\(/, 'float64 parse on the decimal boundary'],
+    ]) {
+      const m = re.exec(code);
+      if (m) violations.push(`${rel}:${lineOf(code, m.index)} — ${what}`);
     }
   }
 }
@@ -177,6 +225,7 @@ if (violations.length > 0) {
 }
 console.log('  ok — no SQL-function callers, no skip_grand_total, single UPDATE writer (tender_recalc.go)');
 console.log('  ok — writer delegates to calc; no ROUND / insurance / commercial formula duplicates');
+console.log('  ok — decimal boundary: ::text aggregates, string persistence, no math.Round/epsilon/float64');
 console.log('  ok — baseline is tombstone-only, no grand-total triggers; migration structured');
 console.log('  ok — frontend does not recompute cached_grand_total');
 console.log('\ncanonicalCachedGrandTotal.check: passed');

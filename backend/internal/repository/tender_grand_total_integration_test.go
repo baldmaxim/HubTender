@@ -397,3 +397,96 @@ func TestCachedGrandTotal_SQLRetirement(t *testing.T) {
 		t.Fatalf("persisted = %v, want 30", persisted)
 	}
 }
+
+// ─── K. Stage 0.1.2.4a.1 §9: decimal rounding parity with PostgreSQL ─────────
+//
+// Boundary fixtures are seeded EXCLUSIVELY via string binds / numeric literals
+// (never a float64 bind), then three values must agree byte-for-byte:
+//
+//	calc RoundedTotalDecimal == SELECT ROUND($1::numeric, 2)::text == persisted ::text
+
+func TestCachedGrandTotal_DecimalRoundingParity(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+
+	type insFixture struct{ judicial, total, aptPrice, aptArea string }
+	cases := []struct {
+		name        string
+		boqRows     [][2]string // {material, work} as exact decimal strings
+		insurance   *insFixture
+		beforeExact string // known exact pre-rounding sum (test-controlled)
+		want        string // canonical ROUND(…, 2) result
+	}{
+		{"0.005 half-cent up", [][2]string{{"0.005", "0"}}, nil, "0.005", "0.01"},
+		{"1.005 canonical bugfix", [][2]string{{"1.005", "0"}}, nil, "1.005", "1.01"},
+		{"1.015", [][2]string{{"0", "1.015"}}, nil, "1.015", "1.02"},
+		{"2.675 binary trap", [][2]string{{"2.675", "0"}}, nil, "2.675", "2.68"},
+		{"100.555", [][2]string{{"100", "0.555"}}, nil, "100.555", "100.56"},
+		{"multi-row aggregate half-cent", [][2]string{{"0.0025", "0"}, {"0.0025", "0"}}, nil, "0.005", "0.01"},
+		{"commercial+insurance half-cent", [][2]string{{"1.00", "0"}},
+			&insFixture{judicial: "1", total: "1", aptPrice: "50", aptArea: "1"}, "1.005", "1.01"},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var tenderID, posID string
+			tag := "PARITY-" + string(rune('A'+i))
+			if err := pool.QueryRow(ctx, `INSERT INTO public.tenders (title, client_name, tender_number)
+				VALUES ($1,'itest-client',$2) RETURNING id::text`,
+				"itest-cgt-parity-"+tag, "ITEST-CGT-"+tag).Scan(&tenderID); err != nil {
+				t.Fatalf("seed tender: %v", err)
+			}
+			t.Cleanup(func() {
+				_, _ = pool.Exec(ctx, `DELETE FROM public.boq_items WHERE tender_id=$1::uuid`, tenderID)
+				_, _ = pool.Exec(ctx, `DELETE FROM public.client_positions WHERE tender_id=$1::uuid`, tenderID)
+				_, _ = pool.Exec(ctx, `DELETE FROM public.tender_insurance WHERE tender_id=$1::uuid`, tenderID)
+				_, _ = pool.Exec(ctx, `DELETE FROM public.tenders WHERE id=$1::uuid`, tenderID)
+			})
+			if err := pool.QueryRow(ctx, `INSERT INTO public.client_positions (tender_id, position_number, work_name)
+				VALUES ($1::uuid, 1, 'p') RETURNING id::text`, tenderID).Scan(&posID); err != nil {
+				t.Fatalf("seed position: %v", err)
+			}
+			for _, row := range tc.boqRows {
+				// String binds → NUMERIC: the exact decimal reaches the DB untouched.
+				if _, err := pool.Exec(ctx, `INSERT INTO public.boq_items
+					(client_position_id, tender_id, boq_item_type,
+					 total_commercial_material_cost, total_commercial_work_cost)
+					VALUES ($1::uuid,$2::uuid,'раб',$3::numeric,$4::numeric)`,
+					posID, tenderID, row[0], row[1]); err != nil {
+					t.Fatalf("seed boq row: %v", err)
+				}
+			}
+			if tc.insurance != nil {
+				if _, err := pool.Exec(ctx, `INSERT INTO public.tender_insurance
+					(tender_id, judicial_pct, total_pct, apt_price_m2, apt_area)
+					VALUES ($1::uuid,$2::numeric,$3::numeric,$4::numeric,$5::numeric)`,
+					tenderID, tc.insurance.judicial, tc.insurance.total,
+					tc.insurance.aptPrice, tc.insurance.aptArea); err != nil {
+					t.Fatalf("seed insurance: %v", err)
+				}
+			}
+
+			res := runHelper(t, pool, tenderID)
+			if res.RoundedTotalDecimal != tc.want {
+				t.Fatalf("calc = %q, want %q", res.RoundedTotalDecimal, tc.want)
+			}
+			// PostgreSQL's own ROUND over the SAME exact pre-rounding value.
+			var sqlRound string
+			if err := pool.QueryRow(ctx,
+				`SELECT ROUND($1::numeric, 2)::text`, tc.beforeExact).Scan(&sqlRound); err != nil {
+				t.Fatalf("sql round: %v", err)
+			}
+			if sqlRound != tc.want {
+				t.Fatalf("SELECT ROUND(%s,2) = %q, want %q (calc/SQL policy diverged)", tc.beforeExact, sqlRound, tc.want)
+			}
+			// Persisted value, byte-for-byte (never read back through float64).
+			var persisted string
+			if err := pool.QueryRow(ctx,
+				`SELECT cached_grand_total::text FROM public.tenders WHERE id=$1::uuid`, tenderID).Scan(&persisted); err != nil {
+				t.Fatalf("read persisted: %v", err)
+			}
+			if persisted != tc.want {
+				t.Fatalf("persisted = %q, want %q", persisted, tc.want)
+			}
+		})
+	}
+}

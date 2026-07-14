@@ -10,13 +10,20 @@ import (
 	"github.com/su10/hubtender/backend/internal/calc"
 )
 
-// Stage 0.1.2.4a: transaction-aware orchestration of tenders.cached_grand_total.
-// The FORMULA lives ONLY in calc.CalculateCachedTenderGrandTotal (insurance —
-// calc.CalculateInsuranceTotal); SQL here does nothing financial: one aggregate
-// read over boq_items, one insurance read, one exact write of the
-// server-calculated result. No SQL ROUND, no SQL insurance expression, no
-// PL/pgSQL twin (public.recalculate_tender_grand_total is a fail-closed
-// tombstone), no per-row triggers.
+// Stage 0.1.2.4a/0.1.2.4a.1: transaction-aware orchestration of
+// tenders.cached_grand_total. The FORMULA lives ONLY in
+// calc.CalculateCachedTenderGrandTotal (insurance —
+// calc.CalculateInsuranceTotalDecimal); SQL here does nothing financial: one
+// aggregate read over boq_items, one insurance read, one exact write of the
+// server-calculated result.
+//
+// DECIMAL-EXACT boundary (0.1.2.4a.1): every participating column is
+// PostgreSQL NUMERIC, so the aggregates and insurance fields are read as
+// EXACT decimal strings (::text) — never through float64 — and the final
+// value is bound back as the canonical decimal string. No SQL ROUND, no SQL
+// insurance expression, no epsilon, no binary rounding on the authoritative
+// path; public.recalculate_tender_grand_total stays a fail-closed tombstone
+// and the per-row triggers stay removed.
 
 // CachedGrandTotalTenderNotFoundError — the UPDATE matched no tender row.
 type CachedGrandTotalTenderNotFoundError struct {
@@ -42,12 +49,16 @@ func (e *CachedGrandTotalWriteMismatchError) Error() string {
 // ONE tender inside the caller's transaction (or any Querier boundary):
 //
 //  1. aggregate the tender's materialized commercial totals (ONE query,
-//     material and work summed separately — no per-BOQ loop);
-//  2. load the insurance row and compute the total via
-//     calc.CalculateInsuranceTotal (never an SQL expression);
+//     material and work summed separately, returned as numeric::text — no
+//     per-BOQ loop, no float64);
+//  2. load the insurance row as exact decimal strings and compute the total
+//     via calc.CalculateInsuranceTotalDecimal (never an SQL expression);
 //  3. compute the final value via calc.CalculateCachedTenderGrandTotal
-//     (validation + single rounding);
-//  4. write the ready-made number (no ROUND in SQL) and verify RowsAffected==1.
+//     (exact big.Rat arithmetic + single DECIMAL half-away-from-zero
+//     rounding);
+//  4. write the ready-made canonical decimal string (string→numeric bind is
+//     exact; the column has no scale, so PostgreSQL performs no re-rounding)
+//     and verify RowsAffected==1.
 //
 // Fail-closed: any malformed aggregate/insurance input is a typed error and
 // the UPDATE never runs; the caller's transaction owns commit/rollback.
@@ -60,11 +71,11 @@ func RecalculateTenderGrandTotalTx(
 		return nil, &CachedGrandTotalTenderNotFoundError{TenderID: tenderID}
 	}
 
-	// 1. Aggregated materialized commercial totals (material / work separately).
-	var materialTotal, workTotal float64
+	// 1. Aggregated materialized commercial totals — EXACT decimal strings.
+	var materialTotal, workTotal string
 	err := q.QueryRow(ctx, `
-		SELECT COALESCE(SUM(COALESCE(total_commercial_material_cost, 0)), 0),
-		       COALESCE(SUM(COALESCE(total_commercial_work_cost, 0)), 0)
+		SELECT COALESCE(SUM(COALESCE(total_commercial_material_cost, 0)), 0)::text,
+		       COALESCE(SUM(COALESCE(total_commercial_work_cost, 0)), 0)::text
 		FROM public.boq_items
 		WHERE tender_id = $1::uuid
 	`, tenderID).Scan(&materialTotal, &workTotal)
@@ -72,15 +83,15 @@ func RecalculateTenderGrandTotalTx(
 		return nil, fmt.Errorf("recalcTenderGrandTotalTx: aggregate: %w", err)
 	}
 
-	// 2. Insurance configuration → calc kernel (shared with the prepared
-	//    pipeline; the formula is NOT duplicated here or in SQL).
-	var ins calc.InsuranceInput
+	// 2. Insurance configuration as exact decimal strings → calc kernel
+	//    (the formula is NOT duplicated here or in SQL).
+	var ins calc.InsuranceDecimalInput
 	haveInsurance := true
 	err = q.QueryRow(ctx, `
-		SELECT COALESCE(judicial_pct, 0), COALESCE(total_pct, 0),
-		       COALESCE(apt_price_m2, 0), COALESCE(apt_area, 0),
-		       COALESCE(parking_price_m2, 0), COALESCE(parking_area, 0),
-		       COALESCE(storage_price_m2, 0), COALESCE(storage_area, 0)
+		SELECT COALESCE(judicial_pct, 0)::text, COALESCE(total_pct, 0)::text,
+		       COALESCE(apt_price_m2, 0)::text, COALESCE(apt_area, 0)::text,
+		       COALESCE(parking_price_m2, 0)::text, COALESCE(parking_area, 0)::text,
+		       COALESCE(storage_price_m2, 0)::text, COALESCE(storage_area, 0)::text
 		FROM public.tender_insurance
 		WHERE tender_id = $1::uuid
 		LIMIT 1
@@ -94,32 +105,38 @@ func RecalculateTenderGrandTotalTx(
 		}
 		haveInsurance = false
 	}
-	var insurancePtr *calc.InsuranceInput
+	var insurancePtr *calc.InsuranceDecimalInput
 	if haveInsurance {
 		insurancePtr = &ins
 	}
-	insuranceTotal, err := calc.CalculateInsuranceTotal(insurancePtr)
+	insuranceTotal, err := calc.CalculateInsuranceTotalDecimal(insurancePtr)
 	if err != nil {
 		// Materialized configuration is broken — fail closed, never write 0.
 		return nil, fmt.Errorf("recalcTenderGrandTotalTx: tender %s: %w", tenderID, err)
 	}
+	// Exact (unrounded) decimal handoff — insurance participates in the ONE
+	// final rounding inside the kernel, never a rounding of its own.
+	insuranceDecimal, err := calc.ExactDecimalString("insurance_total", insuranceTotal)
+	if err != nil {
+		return nil, fmt.Errorf("recalcTenderGrandTotalTx: tender %s: %w", tenderID, err)
+	}
 
-	// 3. The ONE formula.
+	// 3. The ONE formula (exact decimal arithmetic, single final rounding).
 	result, err := calc.CalculateCachedTenderGrandTotal(calc.CachedTenderGrandTotalInput{
 		CommercialMaterialTotal: materialTotal,
 		CommercialWorkTotal:     workTotal,
-		InsuranceTotal:          insuranceTotal,
+		InsuranceTotalDecimal:   insuranceDecimal,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("recalcTenderGrandTotalTx: tender %s: %w", tenderID, err)
 	}
 
-	// 4. Exact write of the server-calculated number.
+	// 4. Exact write of the canonical decimal string (never a float64 bind).
 	tag, err := q.Exec(ctx, `
 		UPDATE public.tenders
-		SET cached_grand_total = $1
+		SET cached_grand_total = $1::numeric
 		WHERE id = $2::uuid
-	`, result.RoundedTotal, tenderID)
+	`, result.RoundedTotalDecimal, tenderID)
 	if err != nil {
 		return nil, fmt.Errorf("recalcTenderGrandTotalTx: update: %w", err)
 	}

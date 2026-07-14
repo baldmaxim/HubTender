@@ -154,7 +154,7 @@ const price = row.total_amount; // сервер посчитал и вернул
 |---|---|---|---|
 | `calc/smart_rounding.go RoundTo5` | `math.Round(v/5)*5` (до 5 ₽, half-away) | ✅ эталон | нет |
 | `calc/boq_item_cost.go` VAT-детект | `math.Round((num-1)*100)` | ок | нет |
-| `tender_recalc.go` / SQL grand total | `ROUND(x,2)` (копейки) | ок (by design) | нет (консолидировать формулу — backlog) |
+| `calc/money_decimal.go RoundMoney2Decimal` (cached_grand_total) | decimal half away from zero, 2dp (`big.Rat`; 1.005→1.01, ≡ PostgreSQL `ROUND(numeric,2)`) | ✅ эталон денег (0.1.2.4a.1) | нет |
 | `cbr/client.go round2` | `math.Round(x*100)/100` | ок (FX ingestion) | нет |
 | TS `smartRounding.ts roundTo2` | 2 dp для UI | display-only | нет |
 | TS `markupCalculator.ts` | сохраняет JS-float семантику (1:1 с Go) | ок | нет |
@@ -166,10 +166,19 @@ const price = row.total_amount; // сервер посчитал и вернул
 положительны, поэтому риска нет. **Банковского округления в проекте нет** — везде
 арифметическое (half-up); двойного округления в одном пути не обнаружено.
 
+⚠️ Важно (0.1.2.4a.1): `math.Round(x*100)/100` над float64 — это НЕ half away
+from zero по десятичной величине (float64(1.005) < 1.005 → 1.00) и на
+авторитетном денежном пути ЗАПРЕЩЁН (guard). Для cached_grand_total действует
+десятичная политика §7h; float-round2 остаётся только в non-authoritative
+путях (preview-parity prepared pipeline, FX ingestion).
+
 ## 6. Float в деньгах (аудит §5)
 
-Проект использует `float64` (Go) / `number` (TS) для денег — **осознанно, decimal-миграция
-вне этого этапа**. Классификация:
+Проект использует `float64` (Go) / `number` (TS) для денег — **осознанно, полная
+decimal-миграция вне этого этапа**. Исключение (0.1.2.4a.1): узкая decimal-граница
+`cached_grand_total` (`calc/money_decimal.go`, stdlib `math/big.Rat`) — агрегаты и
+insurance читаются как `numeric::text`, арифметика и финальное округление точные,
+float64 на этом пути не авторитетен. Классификация остального:
 
 - **A. Безопасно** (UI, графики, проценты, отображение): все preview-зеркала, экспортеры,
   `computeIndicators`, `useCommerceData`, `buildResultRows`.
@@ -609,31 +618,45 @@ pipeline на общих fixtures).
 экспорта, reason-коды) + `scripts/checks/redistributionConsumptionState.check.mjs`
 (truth-table политики).
 
-## 7h. cached_grand_total — единственная формула в calc (этап 0.1.2.4a)
+## 7h. cached_grand_total — единственная формула в calc (этап 0.1.2.4a / 0.1.2.4a.1)
 
-1. **Семантика:** `cached_grand_total = round2(Σ(total_commercial_material_cost
+1. **Семантика:** `cached_grand_total = round2dec(Σ(total_commercial_material_cost
    + total_commercial_work_cost) + текущее страхование тендера)`. Входы —
    materialized server-generated commercial values; insurance — ровно один раз
-   через `calc.CalculateInsuranceTotal` (то же ядро, что prepared pipeline);
+   через единое ядро `insuranceTotalRat` (`calc/money_decimal.go`; decimal-API
+   `CalculateInsuranceTotalDecimal` для авторитетного пути, float-API
+   `CalculateInsuranceTotal` — compatibility wrapper над тем же ядром);
    redistribution prepared values / position adjustments в итог НЕ входят;
-   markup/НДС уже внутри materialized commercial и повторно не применяются;
-   округление ровно один раз (round2, half away from zero; byte-exact
-   эквивалентность PostgreSQL numeric на float-границах не заявляется —
-   документированное ограничение float64, parity закреплён integration-тестом).
+   markup/НДС уже внутри materialized commercial и повторно не применяются.
    Это ПОСЛЕДНИЙ успешно materialized итог, не исторический snapshot
-   (input_revision — 0.1.3).
-2. **Формула только в calc:** `CalculateCachedTenderGrandTotal`
-   (`calc/cached_grand_total.go`) — pure, typed errors
-   (`INVALID_CACHED_GRAND_TOTAL_INPUT`: NOT_FINITE/NEGATIVE_VALUE — без
-   fallback 0), breakdown для диагностики. НЕ путать с legacy
-   `calc.CalculateGrandTotal` — это FI formula breakdown (отдельный путь,
-   разбор в 0.1.2.4b; помечен комментарием).
-3. **Один writer:** `repository.RecalculateTenderGrandTotalTx(ctx, Querier,
-   tenderID)` — один aggregate-запрос по BOQ (material/work раздельно), один
-   запрос insurance, calc, один UPDATE готового числа (без ROUND/insurance-
-   выражений в SQL), RowsAffected==1 (typed
-   CACHED_GRAND_TOTAL_TENDER_NOT_FOUND / WRITE_MISMATCH).
-4. **Матрица мутаций.** Категория A (пересчёт в той же tx, один раз на тендер):
+   (input_revision — 0.1.3). Семантика 0.1.2.4a не менялась — 0.1.2.4a.1
+   исправил только граничный баг округления.
+2. **Политика округления (0.1.2.4a.1): DECIMAL half away from zero, 2 знака,
+   ровно один раз в конце** (`RoundMoney2Decimal`, точная рациональная
+   арифметика stdlib `math/big.Rat`): `0.005→0.01`, `1.005→1.01`, `1.015→1.02`,
+   `2.675→2.68`, `100.555→100.56` — эквивалентно PostgreSQL `ROUND(numeric,2)`
+   (закреплено integration-тестом `TestCachedGrandTotal_DecimalRoundingParity`;
+   на 2026-07-14 БЕЗ тестовой БД он NOT EXECUTED — compiled+SKIP). float64 на
+   авторитетном пути НЕ авторитетен: `math.Round(x*100)/100` давал `1.005→1.00`
+   (зафиксированный красный regression) и запрещён guard'ом вместе с
+   epsilon-хаками; никакого двойного округления. Публичные JSON DTO остаются
+   `number`, но деривируются ТОЛЬКО после финального decimal-округления
+   (`Result.RoundedTotalDecimal` — канонический персистируемый string).
+3. **Формула только в calc:** `CalculateCachedTenderGrandTotal`
+   (`calc/cached_grand_total.go`) — pure, входы `numeric::text`-строки, typed
+   errors (`INVALID_CACHED_GRAND_TOTAL_INPUT`:
+   MALFORMED_DECIMAL/NEGATIVE_VALUE/NOT_FINITE/OVERFLOW — без fallback 0;
+   пустая строка = MALFORMED, fail-closed), breakdown для диагностики. НЕ
+   путать с legacy `calc.CalculateGrandTotal` — это FI formula breakdown
+   (отдельный путь, разбор в 0.1.2.4b; помечен комментарием).
+4. **Один writer:** `repository.RecalculateTenderGrandTotalTx(ctx, Querier,
+   tenderID)` — один aggregate-запрос по BOQ (material/work раздельно,
+   `SUM(...)::text` — без float64), один запрос insurance (`::text`), calc,
+   один UPDATE уже округлённой канонической decimal-строки
+   (`$1::numeric`, string-bind — без SQL ROUND и повторного округления),
+   RowsAffected==1 (typed CACHED_GRAND_TOTAL_TENDER_NOT_FOUND /
+   WRITE_MISMATCH).
+5. **Матрица мутаций.** Категория A (пересчёт в той же tx, один раз на тендер):
    commercial writer, redistribution save, copy/clone/transfer, audit
    rollback, import, **DeleteBoqItem**, **BulkDeletePositions/ClearPositionsBoq**
    (затронутые тендеры определяются ДО каскадного удаления), **insurance
@@ -647,7 +670,7 @@ pipeline на общих fixtures).
    detection — 0.1.3. Категория C (metadata/notes/документы/prepared
    projection): пересчёта нет. Delete тендера: пересчёт не нужен, skip-GUC
    удалён.
-5. **SQL retired:** `public.recalculate_tender_grand_total(uuid)` — fail-closed
+6. **SQL retired:** `public.recalculate_tender_grand_total(uuid)` — fail-closed
    tombstone (SQLSTATE 0A000 `GRAND_TOTAL_SQL_RETIRED`, CALLED ON NULL INPUT,
    SECURITY INVOKER, REVOKE PUBLIC + non-owner grants); 4 grand-total триггера
    и их функции УДАЛЕНЫ (вторая формула, O(N) per-row SUM, пересчёт по
@@ -657,7 +680,7 @@ pipeline на общих fixtures).
    functions → tombstone → grants; verification query внутри). Deployment:
    сначала полный application rollout 0.1.2.4a, затем миграция; down migration
    с формулой запрещена.
-6. **Readers (double-count audit):** tender lists/registry/Admin Tenders/
+7. **Readers (double-count audit):** tender lists/registry/Admin Tenders/
    useTenderData — отображают значение как есть (fallback `|| 0` — display
    only); insurance/VAT/prepared повторно НЕ добавляются нигде.
    FinancialIndicators cached_grand_total НЕ читает — считает собственный
@@ -667,7 +690,9 @@ pipeline на общих fixtures).
 
 Защита от регресса: `scripts/checks/canonicalCachedGrandTotal.check.mjs`
 (SQL-callers, дубли формулы/insurance/ROUND, единственный UPDATE-writer,
-baseline tombstone/триггеры, skip_grand_total, frontend-пересчёт).
+baseline tombstone/триггеры, skip_grand_total, frontend-пересчёт; 0.1.2.4a.1 —
+на decimal-границе запрещены `math.Round`/epsilon/`ParseFloat`/float64,
+обязательны `::text`-агрегаты и string-bind `RoundedTotalDecimal`).
 
 ## 8. Что сделано в 0.1.2 (только безопасное)
 
