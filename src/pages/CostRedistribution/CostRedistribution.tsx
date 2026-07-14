@@ -27,6 +27,7 @@ import { buildResultRows } from './utils/buildResultRows';
 // замещает preview после save/load.
 import { applyRedistributionPipeline } from '../../services/redistributionPipeline';
 import { mapServerPrepared } from './utils/mapServerPrepared';
+import { resolveRedistributionConsumptionState } from '../../lib/redistribution/consumptionState';
 import { TabPositionAdjustment } from './components/PositionAdjustment/TabPositionAdjustment';
 import type { PositionAdjustmentRule } from './types/positionAdjustment';
 import type { PreparedServerRedistribution } from '../../lib/api/redistributions';
@@ -197,12 +198,18 @@ const CostRedistribution: React.FC = () => {
             setResults(results);
             setServerPrepared(savedData.prepared ?? null);
           } else {
-            // Legacy снимок / server-снимок с изменившимися входами: значения
-            // НЕ применяем как авторитетные — восстанавливаем только правила.
+            // requires_recalculation (legacy / set mismatch / insurance /
+            // изменившиеся входы): значения НЕ применяем как авторитетные —
+            // восстанавливаем только правила. Сообщение — по reason-коду
+            // сервера через единую политику потребления.
             clearResults();
             setServerPrepared(null);
             message.warning(
-              'Расчёт перераспределения необходимо пересчитать и сохранить на сервере',
+              resolveRedistributionConsumptionState(
+                savedData.status,
+                savedData.reason,
+                savedData.message,
+              ).alert ?? 'Расчёт перераспределения необходимо пересчитать и сохранить на сервере',
             );
           }
 

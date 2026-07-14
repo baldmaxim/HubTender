@@ -550,6 +550,64 @@ Commerce/FI/Excel.~~ → ✅ **закрыто в 0.1.2.3b** (см. §7f).
 `scripts/checks/redistributionPipelineParity.check.mjs` (Go↔TS parity полного
 pipeline на общих fixtures).
 
+## 7g. Fail-closed prepared states (этап 0.1.2.3b.1)
+
+Закрыты четыре fail-open сценария prepared-pipeline:
+
+1. **Exact-set snapshot.** Server category snapshot обязан быть полным:
+   `calc.ExpectedRedistributionBoqItems` — ЕДИНАЯ классификация expected-набора
+   (в текущей модели — каждый BOQ item тендера, исключённых классов нет; новый
+   класс расширяет helper, а не создаёт pass-through). Missing/extra строка →
+   typed `RedistributionSnapshotSetMismatchError`; **pass-through текущими
+   commercial values запрещён** и удалён; частичный summary не строится.
+   SAVE: mismatch после свежего расчёта — internal invariant, полный rollback.
+   GET: `status=requires_recalculation`, `reason=SNAPSHOT_SET_MISMATCH`,
+   prepared=nil (не 500; typed context логируется zerolog'ом, в API не течёт).
+2. **ДОП-позиции.** «ДОП» = additional client_positions (не boq_item_type);
+   их BOQ несёт реальные деньги. Финансовая значимость определяется наличием
+   BOQ items, а не наличием parent: cost-bearing ДОП без разрешимого
+   regular-родителя → typed error `ADDITIONAL_POSITION_PARENT_MISSING`
+   (никакого silent drop); пустая ДОП (без items — нулевая финансовая база по
+   построению) может отбрасываться как presentation-only. Ненулевая строка не
+   может исчезнуть из prepared result/summary (regression-тесты).
+3. **Insurance zero-base policy.** `insurance_total==0` — любая база валидна;
+   `insurance_total>ε` при `eligible base≤ε` → typed
+   `InvalidInsuranceAllocationError{NON_ZERO_INSURANCE_WITH_ZERO_BASE}`:
+   SAVE — rollback, GET — requires_recalculation/`INSURANCE_ALLOCATION_INVALID`
+   без prepared. Conservation-инвариант безусловен:
+   |Σ insurance_amount − insurance_total| ≤ ε — «calculated» с
+   нераспределённым страхованием невозможен.
+4. **Статусы разделены.** GET-контракт: `{status, reason, message, prepared}`;
+   reason-коды стабильны (`LEGACY_SNAPSHOT | SNAPSHOT_SET_MISMATCH |
+   PREPARED_INPUT_CHANGED | INSURANCE_ALLOCATION_INVALID |
+   PREPARED_CALCULATION_FAILED`), фронт ветвится по коду, не по тексту.
+   Единая политика потребления —
+   `resolveRedistributionConsumptionState` (`src/lib/redistribution/
+   consumptionState.ts`), обязательная для Commerce/FI/exports:
+   - `calculated`: server prepared, экспорт разрешён;
+   - `not_configured`: база видима ТОЛЬКО как база (не как результат
+     перераспределения), redistribution-specific export недоступен, общий
+     base-export допустим;
+   - `requires_recalculation`: final-итоги «—», база НЕ подставляется как
+     final, один Alert («Расчёт перераспределения устарел или неполон…» /
+     reason-специфичный), **все** exports с final redistributed values
+     блокируются (`REDISTRIBUTION_RECALCULATION_REQUIRED`, файл не создаётся);
+     никакого fallback на preview/live/базу, никакого схлопывания в
+     not_configured.
+   Commerce показывает пометку «значения ДО перераспределения»; FI: все
+   показатели — класс A (не зависят от prepared snapshot; insurance — только
+   конфигурационный вход), новый redistribution-dependent показатель обязан
+   идти через политику (см. комментарий-классификацию в
+   useFinancialCalculations).
+
+Без input_revision snapshot может быть stale даже при совпадающем set —
+остаётся этапом 0.1.3.
+
+Защита от регресса: `scripts/checks/failClosedPreparedRedistribution.check.mjs`
+(pass-through, parent-only drop, zero-base insurance, единая политика, гейты
+экспорта, reason-коды) + `scripts/checks/redistributionConsumptionState.check.mjs`
+(truth-table политики).
+
 ## 8. Что сделано в 0.1.2 (только безопасное)
 
 - Исправлен вводящий в заблуждение комментарий `boq_amount.go` («trigger-computed» → app-computed).

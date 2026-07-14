@@ -340,17 +340,30 @@ func TestRedistributionSaveHandler_InvalidInsurance400(t *testing.T) {
 // legacy → requires_recalculation without prepared; missing → not_configured.
 func TestRedistributionLoadHandler_Statuses(t *testing.T) {
 	cases := []struct {
-		name string
-		load *repository.RedistributionLoad
+		name       string
+		load       *repository.RedistributionLoad
+		wantReason string
 	}{
 		{"legacy", &repository.RedistributionLoad{
 			Results: []repository.RedistributionRecord{{BoqItemID: "b1"}},
 			Status:  repository.RedistributionStatusRequiresRecalculation,
-		}},
+			Reason:  repository.RedistributionReasonLegacySnapshot,
+			Message: "Сохранённый расчёт создан старой версией и требует пересчёта на сервере.",
+		}, "LEGACY_SNAPSHOT"},
+		{"set mismatch", &repository.RedistributionLoad{
+			Results: []repository.RedistributionRecord{{BoqItemID: "b1"}},
+			Status:  repository.RedistributionStatusRequiresRecalculation,
+			Reason:  repository.RedistributionReasonSetMismatch,
+		}, "SNAPSHOT_SET_MISMATCH"},
+		{"insurance", &repository.RedistributionLoad{
+			Results: []repository.RedistributionRecord{{BoqItemID: "b1"}},
+			Status:  repository.RedistributionStatusRequiresRecalculation,
+			Reason:  repository.RedistributionReasonInsuranceInvalid,
+		}, "INSURANCE_ALLOCATION_INVALID"},
 		{"missing", &repository.RedistributionLoad{
 			Results: []repository.RedistributionRecord{},
 			Status:  repository.RedistributionStatusNotConfigured,
-		}},
+		}, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -368,6 +381,7 @@ func TestRedistributionLoadHandler_Statuses(t *testing.T) {
 			var resp struct {
 				Data struct {
 					Status   string                       `json:"status"`
+					Reason   string                       `json:"reason"`
 					Prepared *calc.PreparedRedistribution `json:"prepared"`
 				} `json:"data"`
 			}
@@ -376,6 +390,10 @@ func TestRedistributionLoadHandler_Statuses(t *testing.T) {
 			}
 			if resp.Data.Status != tc.load.Status {
 				t.Fatalf("status = %q, want %q", resp.Data.Status, tc.load.Status)
+			}
+			// §14.3-6 — stable reason code, никакого текст-парсинга на фронте.
+			if resp.Data.Reason != tc.wantReason {
+				t.Fatalf("reason = %q, want %q", resp.Data.Reason, tc.wantReason)
 			}
 			if resp.Data.Prepared != nil {
 				t.Fatal("prepared must be absent for non-calculated statuses")

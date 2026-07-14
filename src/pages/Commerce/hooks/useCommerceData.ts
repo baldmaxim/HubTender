@@ -22,6 +22,10 @@ import { getTenderById, listAllBoqItemsForTender } from '../../../lib/api/fi';
 import { loadTenderInsurance } from '../../../lib/api/insurance';
 import { fetchPositionsWithCosts } from '../../../lib/api/positions';
 import { loadRedistributionResults } from '../../../lib/api/redistributions';
+import {
+  resolveRedistributionConsumptionState,
+  type RedistributionConsumptionState,
+} from '../../../lib/redistribution/consumptionState';
 import { computeLeafPositionIds } from '../../../utils/positions/leafPositions';
 // Этап 0.1.2.3b: Commerce НЕ импортирует клиентский redistribution pipeline
 // (applyRedistributionPipeline / buildResultRows / computeInsuranceTotal /
@@ -261,6 +265,12 @@ export function useCommerceData() {
   const [tacticChanged, setTacticChanged] = useState(false);
   const [referenceTotal, setReferenceTotal] = useState<number>(0);
   const [insuranceTotal, setInsuranceTotal] = useState<number>(0);
+  // Этап 0.1.2.3b.1: единая политика потребления redistribution-статусов
+  // (calculated / requires_recalculation / not_configured) — Commerce.tsx
+  // берёт из неё Alert и export-гейт, без собственных if-веток по статусу.
+  const [redistributionState, setRedistributionState] = useState<RedistributionConsumptionState>(
+    resolveRedistributionConsumptionState('not_configured'),
+  );
 
   // Загрузка списка тендеров и тактик
   useEffect(() => {
@@ -379,18 +389,22 @@ export function useCommerceData() {
       }
       if (cancelled) return;
 
-      // Legacy снимок / server-снимок с изменившимися входами: prepared
-      // отсутствует — не применяем частичные значения как авторитетные.
-      if (snapshot && snapshot.status !== 'calculated') {
-        console.warn(
-          'Снимок перераспределения требует пересчёта на сервере — Commerce использует live-calc',
-        );
-        snapshot = null;
-      }
+      // Этап 0.1.2.3b.1: единая политика. not_configured ≠
+      // requires_recalculation: во втором случае база остаётся видимой ТОЛЬКО
+      // как «до перераспределения», final-итоги недоступны, экспорт блокирован
+      // (гейт в Commerce.tsx по redistributionState).
+      const state = resolveRedistributionConsumptionState(
+        snapshot?.status ?? 'not_configured',
+        snapshot?.reason,
+        snapshot?.message,
+      );
+      setRedistributionState(state);
 
-      const prepared = snapshot?.prepared;
+      const prepared = state.finalValuesAvailable ? snapshot?.prepared : undefined;
       if (!prepared || prepared.rows.length === 0) {
-        // Снимка нет — сбросить пометки, чтобы Commerce работал на live calc.
+        // Prepared недоступен (not_configured ИЛИ requires_recalculation):
+        // снять пометки redistribution — отображаемые значения являются БАЗОЙ
+        // (до перераспределения), не финалом; final-семантику решает state.
         setPositions((prev) =>
           prev.some((p) => p.from_redistribution)
             ? prev.map((p) => ({
@@ -500,5 +514,6 @@ export function useCommerceData() {
     totals,
     referenceTotal,
     insuranceTotal,
+    redistributionState,
   };
 }

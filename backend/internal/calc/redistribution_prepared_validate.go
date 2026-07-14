@@ -146,10 +146,11 @@ func ValidatePreparedRedistribution(p *PreparedRedistribution) error {
 			Field: "summary.final_total", Reason: "final_total != materials + works"}
 	}
 
-	// §18.13 — insurance allocation preserves the total (unless the eligible
-	// base was zero — then allocated stays 0 by the documented policy).
-	if p.Summary.WorkTotalRoundedPreInsur > 0 &&
-		!near(p.Summary.InsuranceAllocated, p.Summary.InsuranceTotal) {
+	// §18.13 / stage 0.1.2.3b.1 conservation invariant — UNCONDITIONAL: a
+	// non-zero insurance total must be fully allocated (a zero eligible base is
+	// rejected earlier with a typed InvalidInsuranceAllocationError, so a
+	// "calculated" projection can never carry unallocated insurance).
+	if !near(p.Summary.InsuranceAllocated, p.Summary.InsuranceTotal) {
 		return &InvalidPreparedRedistributionResultError{
 			Field: "summary.insurance_allocated", Expected: p.Summary.InsuranceTotal,
 			Actual: p.Summary.InsuranceAllocated, Reason: "insurance allocation lost money"}

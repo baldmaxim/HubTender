@@ -108,6 +108,12 @@ export interface LoadedRedistribution {
   results: RedistributionRecord[];
   redistribution_rules: RedistributionRule | null;
   status: RedistributionSnapshotStatus;
+  // Стабильный reason-код для requires_recalculation (LEGACY_SNAPSHOT /
+  // SNAPSHOT_SET_MISMATCH / PREPARED_INPUT_CHANGED /
+  // INSURANCE_ALLOCATION_INVALID / PREPARED_CALCULATION_FAILED).
+  // Frontend ветвится по коду, не по тексту.
+  reason?: string;
+  message?: string;
   prepared?: PreparedServerRedistribution;
 }
 
@@ -125,6 +131,8 @@ export async function loadRedistributionResults(
       results: RedistributionRecord[];
       redistribution_rules: RedistributionRule | null;
       status: RedistributionSnapshotStatus;
+      reason?: string;
+      message?: string;
       prepared?: PreparedServerRedistribution;
     };
   }>(
@@ -135,6 +143,8 @@ export async function loadRedistributionResults(
     results: res.data.results,
     redistribution_rules: res.data.redistribution_rules ?? null,
     status: res.data.status ?? 'requires_recalculation',
+    reason: res.data.reason,
+    message: res.data.message,
     prepared: res.data.prepared,
   };
 }

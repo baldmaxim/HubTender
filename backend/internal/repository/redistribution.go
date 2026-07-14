@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
 
 	"github.com/su10/hubtender/backend/internal/calc"
 )
@@ -34,6 +35,25 @@ const (
 	RedistributionStatusRequiresRecalculation = "requires_recalculation"
 	// RedistributionStatusNotConfigured — no snapshot stored yet.
 	RedistributionStatusNotConfigured = "not_configured"
+)
+
+// Stable reason codes for status = requires_recalculation (stage 0.1.2.3b.1).
+// The frontend branches on these codes, never on message text.
+const (
+	// RedistributionReasonLegacySnapshot — client-calculated pre-0.1.2.3a snapshot.
+	RedistributionReasonLegacySnapshot = "LEGACY_SNAPSHOT"
+	// RedistributionReasonSetMismatch — the persisted snapshot does not match
+	// the current BOQ set (missing/extra rows).
+	RedistributionReasonSetMismatch = "SNAPSHOT_SET_MISMATCH"
+	// RedistributionReasonInputChanged — positions/rules inputs changed so the
+	// prepared projection can no longer be built from the snapshot.
+	RedistributionReasonInputChanged = "PREPARED_INPUT_CHANGED"
+	// RedistributionReasonInsuranceInvalid — the insurance configuration or its
+	// allocation is invalid for the current state.
+	RedistributionReasonInsuranceInvalid = "INSURANCE_ALLOCATION_INVALID"
+	// RedistributionReasonPreparedFailed — any other prepared-calculation
+	// failure (internal detail is logged, never exposed).
+	RedistributionReasonPreparedFailed = "PREPARED_CALCULATION_FAILED"
 )
 
 // ErrRedistributionTenderNotFound — the save targets a tender that does not exist.
@@ -368,6 +388,13 @@ type RedistributionLoad struct {
 	Rules   json.RawMessage        `json:"redistribution_rules"`
 	// Status: calculated | requires_recalculation | not_configured.
 	Status string `json:"status"`
+	// Reason — stable machine-readable code, set ONLY for
+	// requires_recalculation (LEGACY_SNAPSHOT / SNAPSHOT_SET_MISMATCH /
+	// PREPARED_INPUT_CHANGED / INSURANCE_ALLOCATION_INVALID /
+	// PREPARED_CALCULATION_FAILED). Never carries internal error details.
+	Reason string `json:"reason,omitempty"`
+	// Message — user-facing summary matching Reason.
+	Message string `json:"message,omitempty"`
 	// Prepared — nil unless Status == calculated.
 	Prepared *calc.PreparedRedistribution `json:"prepared,omitempty"`
 }
@@ -457,6 +484,8 @@ func (r *RedistributionRepo) LoadResults(
 	}
 
 	out.Status = RedistributionStatusRequiresRecalculation
+	out.Reason = RedistributionReasonLegacySnapshot
+	out.Message = "Сохранённый расчёт создан старой версией и требует пересчёта на сервере."
 	var rules calc.RedistributionRulesInput
 	if len(rawRules) > 0 {
 		var meta rulesServerMetadata
@@ -465,6 +494,7 @@ func (r *RedistributionRepo) LoadResults(
 			meta.CalculationSource == calc.RedistributionCalculationServer &&
 			json.Unmarshal(rawRules, &rules) == nil {
 			out.Status = RedistributionStatusCalculated
+			out.Reason, out.Message = "", ""
 		}
 	}
 	if out.Status != RedistributionStatusCalculated {
@@ -494,11 +524,45 @@ func (r *RedistributionRepo) LoadResults(
 	}
 	prepared, err := buildPreparedTx(ctx, tx, tenderID, items, categoryResults, adjustments)
 	if err != nil {
-		// Inputs diverged from the snapshot since the save (stale snapshot —
-		// 0.1.3 risk). Degrade honestly instead of serving broken money.
+		// The persisted snapshot can no longer produce a valid prepared
+		// projection (stale/incomplete/invalid state — the 0.1.3 risk).
+		// Degrade honestly with a STABLE reason code instead of a 500; the
+		// typed context is logged server-side and never leaks into the API.
 		out.Status = RedistributionStatusRequiresRecalculation
+		out.Reason, out.Message = classifyPreparedFailure(err)
+		out.Prepared = nil
+		log.Warn().
+			Err(err).
+			Str("tender_id", tenderID).
+			Str("markup_tactic_id", tacticID).
+			Str("reason", out.Reason).
+			Msg("redistribution prepared projection degraded to requires_recalculation")
 		return out, nil
 	}
 	out.Prepared = prepared
 	return out, nil
+}
+
+// classifyPreparedFailure maps a prepared-build error onto the stable reason
+// codes + user-facing messages of the GET contract.
+func classifyPreparedFailure(err error) (reason, message string) {
+	var setErr *calc.RedistributionSnapshotSetMismatchError
+	if errors.As(err, &setErr) {
+		return RedistributionReasonSetMismatch,
+			"Сохранённый расчёт не соответствует текущему составу BOQ. Выполните пересчёт."
+	}
+	var insAlloc *calc.InvalidInsuranceAllocationError
+	var insConf *calc.InvalidInsuranceConfigurationError
+	if errors.As(err, &insAlloc) || errors.As(err, &insConf) {
+		return RedistributionReasonInsuranceInvalid,
+			"Страхование не может быть распределено для текущего состояния. Проверьте конфигурацию и выполните пересчёт."
+	}
+	var rulesErr *calc.InvalidRedistributionRulesError
+	var inputErr *calc.InvalidPreparedRedistributionInputError
+	if errors.As(err, &rulesErr) || errors.As(err, &inputErr) {
+		return RedistributionReasonInputChanged,
+			"Входные данные перераспределения изменились. Выполните пересчёт."
+	}
+	return RedistributionReasonPreparedFailed,
+		"Расчёт перераспределения устарел или неполон. Выполните пересчёт."
 }

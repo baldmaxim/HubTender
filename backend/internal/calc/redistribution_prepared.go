@@ -16,6 +16,7 @@ package calc
 import (
 	"fmt"
 	"math"
+	"sort"
 )
 
 // PreparedSchemaVersion marks the prepared projection contract.
@@ -171,6 +172,60 @@ func (e *InvalidInsuranceConfigurationError) Error() string {
 // Code returns the stable machine-readable error code.
 func (e *InvalidInsuranceConfigurationError) Code() string { return "INVALID_INSURANCE_CONFIGURATION" }
 
+// RedistributionSnapshotSetMismatchError — the persisted category snapshot
+// does not exactly match the expected BOQ set (missing/extra rows). A partial
+// snapshot must never be silently completed with current commercial values.
+type RedistributionSnapshotSetMismatchError struct {
+	MissingItemIDs []string
+	ExtraItemIDs   []string
+	ExpectedCount  int
+	ActualCount    int
+	Reason         string
+}
+
+func (e *RedistributionSnapshotSetMismatchError) Error() string {
+	limit := func(ids []string) []string {
+		if len(ids) > 5 {
+			return ids[:5]
+		}
+		return ids
+	}
+	return fmt.Sprintf(
+		"REDISTRIBUTION_SNAPSHOT_SET_MISMATCH: %s (expected %d, actual %d; missing %d %v, extra %d %v)",
+		e.Reason, e.ExpectedCount, e.ActualCount,
+		len(e.MissingItemIDs), limit(e.MissingItemIDs),
+		len(e.ExtraItemIDs), limit(e.ExtraItemIDs))
+}
+
+// Code returns the stable machine-readable error code.
+func (e *RedistributionSnapshotSetMismatchError) Code() string {
+	return "REDISTRIBUTION_SNAPSHOT_SET_MISMATCH"
+}
+
+// InsuranceZeroBaseReason — non-zero insurance with a zero eligible works base:
+// the total cannot be allocated and must never be silently dropped.
+const InsuranceZeroBaseReason = "NON_ZERO_INSURANCE_WITH_ZERO_BASE"
+
+// InvalidInsuranceAllocationError — the insurance total cannot be (or was not)
+// fully allocated across positions; the projection is never "calculated".
+type InvalidInsuranceAllocationError struct {
+	ExpectedTotal  float64
+	AllocatedTotal float64
+	Reason         string
+}
+
+func (e *InvalidInsuranceAllocationError) Error() string {
+	return fmt.Sprintf("INVALID_INSURANCE_ALLOCATION: %s (expected %v, allocated %v)",
+		e.Reason, e.ExpectedTotal, e.AllocatedTotal)
+}
+
+// Code returns the stable machine-readable error code.
+func (e *InvalidInsuranceAllocationError) Code() string { return "INVALID_INSURANCE_ALLOCATION" }
+
+// AdditionalPositionParentMissingReason — a cost-bearing additional position
+// without a resolvable regular parent cannot be silently dropped.
+const AdditionalPositionParentMissingReason = "ADDITIONAL_POSITION_PARENT_MISSING"
+
 // InvalidPreparedRedistributionResultError — an internal invariant of the
 // prepared projection was violated (a bug); never persisted/returned as success.
 type InvalidPreparedRedistributionResultError struct {
@@ -245,12 +300,34 @@ type positionBase struct {
 	worksAfter       float64
 }
 
-// aggregatePositions ports buildResultRows ordering + aggregation:
-// regular positions in input order, each followed by its additional children;
-// an additional row without a resolvable regular parent is dropped (TS
-// semantics). A BOQ item without a category result passes through with its
-// current work cost (before == after). A category result that references an
-// unknown BOQ item, or a duplicate result, is a blocking input error.
+// ExpectedRedistributionBoqItems is the ONE domain classification of which BOQ
+// items must carry a category result — shared by save-invariants and the
+// prepared projection (no separate save/GET/prepared sets).
+//
+// Current domain model: EVERY BOQ item of the tender participates in category
+// redistribution (stage 0.1.2.3a persists the complete set — work, material
+// and additional item types alike; there is no excluded class). If an excluded
+// class ever appears, it must be encoded HERE with an explicit predicate — a
+// missing category result is NEVER a pass-through.
+func ExpectedRedistributionBoqItems(items []BoqItemWithCosts) map[string]bool {
+	expected := make(map[string]bool, len(items))
+	for _, it := range items {
+		expected[it.ID] = true
+	}
+	return expected
+}
+
+// aggregatePositions ports buildResultRows ordering + aggregation with the
+// stage 0.1.2.3b.1 fail-closed rules:
+//
+//   - the category snapshot must EXACTLY match ExpectedRedistributionBoqItems:
+//     a missing or extra result is a RedistributionSnapshotSetMismatchError —
+//     never a pass-through with current commercial values, never an ignored
+//     extra row;
+//   - an additional (ДОП) position without a resolvable REGULAR parent is
+//     dropped ONLY when it carries no BOQ items (presentation-only, zero
+//     financial base by construction); a cost-bearing one is a typed error
+//     (ADDITIONAL_POSITION_PARENT_MISSING) — money never silently disappears.
 func aggregatePositions(in PreparedRedistributionInput) ([]positionBase, error) {
 	resultByItem := make(map[string]RedistributionResult, len(in.CategoryResults))
 	for _, r := range in.CategoryResults {
@@ -282,10 +359,29 @@ func aggregatePositions(in PreparedRedistributionInput) ([]positionBase, error) 
 		}
 		itemsByPosition[it.ClientPositionID] = append(itemsByPosition[it.ClientPositionID], it)
 	}
+
+	// Exact-set check: expected BOQ IDs == actual snapshot IDs.
+	expected := ExpectedRedistributionBoqItems(in.BoqItems)
+	var missing, extra []string
+	for _, it := range in.BoqItems {
+		if _, ok := resultByItem[it.ID]; !ok {
+			missing = append(missing, it.ID)
+		}
+	}
 	for id := range resultByItem {
-		if !knownItems[id] {
-			return nil, &InvalidPreparedRedistributionInputError{
-				Field: "category_results", EntityID: id, Reason: "category result references an unknown BOQ item"}
+		if !expected[id] {
+			extra = append(extra, id)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(extra)
+	if len(missing) > 0 || len(extra) > 0 {
+		return nil, &RedistributionSnapshotSetMismatchError{
+			MissingItemIDs: missing,
+			ExtraItemIDs:   extra,
+			ExpectedCount:  len(expected),
+			ActualCount:    len(resultByItem),
+			Reason:         "category snapshot does not match the expected BOQ set",
 		}
 	}
 
@@ -293,21 +389,21 @@ func aggregatePositions(in PreparedRedistributionInput) ([]positionBase, error) 
 		b := positionBase{pos: p, isLeaf: isLeaf}
 		for _, it := range itemsByPosition[p.ID] {
 			b.materials += it.TotalCommercialMaterialCost
-			if r, ok := resultByItem[it.ID]; ok {
-				b.worksBefore += r.OriginalWorkCost
-				b.worksAfter += r.FinalWorkCost
-				b.categoryDeducted += r.DeductedAmount
-				b.categoryAdded += r.AddedAmount
-			} else {
-				// Item saved after the snapshot — passes through unchanged
-				// (mirrors buildResultRows; the stale-snapshot risk is 0.1.3).
-				b.worksBefore += it.TotalCommercialWorkCost
-				b.worksAfter += it.TotalCommercialWorkCost
-			}
+			r := resultByItem[it.ID] // exact set guaranteed above
+			b.worksBefore += r.OriginalWorkCost
+			b.worksAfter += r.FinalWorkCost
+			b.categoryDeducted += r.DeductedAmount
+			b.categoryAdded += r.AddedAmount
 		}
 		return b
 	}
 
+	regularByID := map[string]bool{}
+	for _, p := range in.Positions {
+		if !p.IsAdditional {
+			regularByID[p.ID] = true
+		}
+	}
 	var regulars []PreparedPositionInput
 	additionalByParent := map[string][]PreparedPositionInput{}
 	for _, p := range in.Positions {
@@ -315,8 +411,15 @@ func aggregatePositions(in PreparedRedistributionInput) ([]positionBase, error) 
 			regulars = append(regulars, p)
 			continue
 		}
-		if p.ParentPositionID == nil {
-			continue // TS drops additional rows without a parent
+		if p.ParentPositionID == nil || !regularByID[*p.ParentPositionID] {
+			// Financial significance is decided by the position's BOQ items —
+			// not by the presence of a parent. Cost-bearing → blocking error.
+			if len(itemsByPosition[p.ID]) > 0 {
+				return nil, &InvalidPreparedRedistributionInputError{
+					Field: "positions", EntityID: p.ID,
+					Reason: AdditionalPositionParentMissingReason}
+			}
+			continue // presentation-only: no BOQ items ⇒ zero financial base
 		}
 		additionalByParent[*p.ParentPositionID] = append(additionalByParent[*p.ParentPositionID], p)
 	}
@@ -426,12 +529,20 @@ func BuildPreparedRedistribution(in PreparedRedistributionInput) (*PreparedRedis
 		})
 	}
 
-	// Insurance: proportional to the ROUNDED works base (post-rounding). A zero
-	// base with non-zero insurance keeps shares at 0 (current canonical policy —
-	// surfaced via summary.IsInsuranceFullyAllocated, never silently hidden).
+	// Insurance: proportional to the ROUNDED works base (post-rounding).
+	// Stage 0.1.2.3b.1 policy: non-zero insurance with a zero eligible base is
+	// a BLOCKING typed error — the total can neither be allocated nor silently
+	// dropped from the final totals. (zero insurance + zero base stays valid.)
 	roundedBase := 0.0
 	for _, r := range rows {
 		roundedBase += r.WorkCostRounded
+	}
+	if insuranceTotal > redistributionBalanceTolerance && roundedBase <= redistributionBalanceTolerance {
+		return nil, &InvalidInsuranceAllocationError{
+			ExpectedTotal:  insuranceTotal,
+			AllocatedTotal: 0,
+			Reason:         InsuranceZeroBaseReason,
+		}
 	}
 	allocated := 0.0
 	for i := range rows {

@@ -11,8 +11,19 @@ import {
 import { listTenderMarkupPercentages } from '../../../lib/api/markup';
 import { createSystemNotification } from '../../../lib/api/notifications';
 import { getErrorMessage } from '../../../utils/errors';
-// Этап 0.1.2.3b: FI не импортирует клиентский redistribution pipeline —
+// Этап 0.1.2.3b/3b.1: FI не импортирует клиентский redistribution pipeline —
 // insurance_total приходит с сервера (GET insurance).
+//
+// КЛАССИФИКАЦИЯ ЗАВИСИМОСТИ ОТ REDISTRIBUTION (единая политика 0.1.2.3b.1):
+// ВСЕ показатели этого экрана относятся к классу A — они считаются из
+// server-authoritative базовых данных (BOQ + наценки + insurance-КОНФИГУРАЦИЯ)
+// и НЕ зависят от prepared redistribution snapshot. Redistribution-dependent
+// показателей (класс B: final redistributed work / insurance allocation /
+// rounded totals) здесь НЕТ. Если такой показатель появится, он ОБЯЗАН
+// использовать server prepared summary через
+// resolveRedistributionConsumptionState (см. src/lib/redistribution/
+// consumptionState.ts) и показывать «—» при requires_recalculation —
+// автоматический fallback на базу запрещён.
 import type { CurrencyType } from '../../../lib/types';
 import type { IndicatorRow } from '../types';
 import { aggregateDirectCosts } from '../utils/aggregateDirectCosts';

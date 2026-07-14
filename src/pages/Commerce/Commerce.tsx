@@ -49,6 +49,7 @@ export default function Commerce() {
     syncTenderMarkupTactic,
     referenceTotal,
     insuranceTotal,
+    redistributionState,
   } = useCommerceData();
 
   const {
@@ -148,6 +149,16 @@ export default function Commerce() {
       message.error(fxMsg);
       return;
     }
+    // Этап 0.1.2.3b.1: при requires_recalculation snapshot существует, но
+    // устарел/неполон — экспорт содержал бы базовые значения под видом final.
+    // Файл НЕ создаётся (REDISTRIBUTION_RECALCULATION_REQUIRED). При
+    // not_configured экспорт — явный base-export без перераспределения.
+    if (redistributionState.exportBlockedCode === 'REDISTRIBUTION_RECALCULATION_REQUIRED') {
+      message.error(
+        `${redistributionState.alert ?? 'Расчёт перераспределения устарел или неполон. Выполните пересчёт.'} (REDISTRIBUTION_RECALCULATION_REQUIRED)`,
+      );
+      return;
+    }
     exportCommerceToExcel(positions, selectedTender, insuranceTotal);
   };
 
@@ -215,6 +226,15 @@ export default function Commerce() {
     >
       {fxWarning && (
         <Alert type="error" showIcon message={fxWarning} style={{ marginBottom: 12 }} />
+      )}
+      {redistributionState.alert && (
+        <Alert
+          type="warning"
+          showIcon
+          message={redistributionState.alert}
+          description="Показаны значения ДО перераспределения — они не являются финальным расчётом."
+          style={{ marginBottom: 12 }}
+        />
       )}
       {selectedTenderId ? (
         <Spin spinning={loading || calculating}>

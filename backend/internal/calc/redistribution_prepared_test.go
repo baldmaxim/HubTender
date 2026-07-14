@@ -134,18 +134,26 @@ func TestPreparedRedistributionGolden(t *testing.T) {
 			out, err := BuildPreparedRedistribution(tc.toInput())
 
 			if tc.ExpectError != "" {
-				var rulesErr *InvalidRedistributionRulesError
-				if !errors.As(err, &rulesErr) {
-					t.Fatalf("want InvalidRedistributionRulesError(%s), got %v", tc.ExpectError, err)
-				}
-				found := false
-				for _, is := range rulesErr.Issues {
-					if is.Code == tc.ExpectError {
-						found = true
+				switch tc.ExpectError {
+				case InsuranceZeroBaseReason:
+					var insErr *InvalidInsuranceAllocationError
+					if !errors.As(err, &insErr) || insErr.Reason != InsuranceZeroBaseReason {
+						t.Fatalf("want InvalidInsuranceAllocationError(%s), got %v", tc.ExpectError, err)
 					}
-				}
-				if !found {
-					t.Fatalf("issues %v do not contain %s", rulesErr.Issues, tc.ExpectError)
+				default:
+					var rulesErr *InvalidRedistributionRulesError
+					if !errors.As(err, &rulesErr) {
+						t.Fatalf("want InvalidRedistributionRulesError(%s), got %v", tc.ExpectError, err)
+					}
+					found := false
+					for _, is := range rulesErr.Issues {
+						if is.Code == tc.ExpectError {
+							found = true
+						}
+					}
+					if !found {
+						t.Fatalf("issues %v do not contain %s", rulesErr.Issues, tc.ExpectError)
+					}
 				}
 				return
 			}
@@ -330,10 +338,16 @@ func TestPreparedProperties_BadInputsTypedErrors(t *testing.T) {
 		t.Fatalf("duplicate result must be a typed input error, got %v", err)
 	}
 
+	// Stage 0.1.2.3b.1: an unknown result ID is an exact-set violation (extra
+	// row) — typed set mismatch, not a silent ignore.
 	in2 := propInput(8, 3)
 	in2.CategoryResults[0].BoqItemID = "ghost"
-	if _, err := BuildPreparedRedistribution(in2); !errors.As(err, &inErr) {
-		t.Fatalf("unknown item must be a typed input error, got %v", err)
+	var setErr *RedistributionSnapshotSetMismatchError
+	if _, err := BuildPreparedRedistribution(in2); !errors.As(err, &setErr) {
+		t.Fatalf("unknown result must be a typed set mismatch, got %v", err)
+	}
+	if len(setErr.MissingItemIDs) != 1 || len(setErr.ExtraItemIDs) != 1 {
+		t.Fatalf("set mismatch details wrong: %+v", setErr)
 	}
 
 	in3 := propInput(9, 3)
@@ -357,5 +371,201 @@ func TestPreparedProperties_EmptyInput(t *testing.T) {
 	}
 	if len(out.Rows) != 0 || out.Summary.FinalTotal != 0 {
 		t.Fatalf("empty input produced money: %+v", out)
+	}
+}
+
+// ─── Stage 0.1.2.3b.1 (§11): exact-set fail-closed ────────────────────────────
+
+// §11.2/7/8/9/12 — a missing expected result (work, material or zero-cost row)
+// is a typed set mismatch; no pass-through, no partial summary.
+func TestPreparedExactSet_MissingResultBlocks(t *testing.T) {
+	vol := 1.0
+	base := PreparedRedistributionInput{
+		Positions: []PreparedPositionInput{
+			{ID: "p1", PositionNumber: 1, WorkName: "w", UnitCode: "м2", ClientVolume: &vol},
+		},
+		BoqItems: []BoqItemWithCosts{
+			{ID: "work", ClientPositionID: "p1", BoqItemType: BoqRab, TotalCommercialWorkCost: 100},
+			{ID: "mat", ClientPositionID: "p1", BoqItemType: BoqMat, TotalCommercialMaterialCost: 50},
+			{ID: "zero", ClientPositionID: "p1", BoqItemType: BoqRab},
+		},
+	}
+	full := []RedistributionResult{
+		{BoqItemID: "work", OriginalWorkCost: 100, FinalWorkCost: 100},
+		{BoqItemID: "mat"},
+		{BoqItemID: "zero"},
+	}
+	// Full set passes.
+	in := base
+	in.CategoryResults = full
+	if _, err := BuildPreparedRedistribution(in); err != nil {
+		t.Fatalf("full set must pass: %v", err)
+	}
+	// Dropping ANY expected row (work / material / zero-cost) blocks.
+	for drop := 0; drop < len(full); drop++ {
+		in := base
+		in.CategoryResults = append(append([]RedistributionResult{}, full[:drop]...), full[drop+1:]...)
+		out, err := BuildPreparedRedistribution(in)
+		var setErr *RedistributionSnapshotSetMismatchError
+		if !errors.As(err, &setErr) {
+			t.Fatalf("drop %s: want set mismatch, got %v", full[drop].BoqItemID, err)
+		}
+		if out != nil {
+			t.Fatalf("drop %s: partial summary returned", full[drop].BoqItemID)
+		}
+		if setErr.ExpectedCount != 3 || setErr.ActualCount != 2 || len(setErr.MissingItemIDs) != 1 {
+			t.Fatalf("drop %s: mismatch details wrong: %+v", full[drop].BoqItemID, setErr)
+		}
+	}
+	// §11.3 — an extra row blocks too.
+	in2 := base
+	in2.CategoryResults = append(append([]RedistributionResult{}, full...), RedistributionResult{BoqItemID: "alien"})
+	var setErr *RedistributionSnapshotSetMismatchError
+	if _, err := BuildPreparedRedistribution(in2); !errors.As(err, &setErr) {
+		t.Fatalf("extra row must be a set mismatch, got %v", err)
+	}
+	if len(setErr.ExtraItemIDs) != 1 || setErr.ExtraItemIDs[0] != "alien" {
+		t.Fatalf("extra ids wrong: %+v", setErr)
+	}
+}
+
+// §11.11 — the exact-set classification is ONE shared helper.
+func TestPreparedExactSet_SharedHelper(t *testing.T) {
+	items := []BoqItemWithCosts{
+		{ID: "a", ClientPositionID: "p", BoqItemType: BoqRab},
+		{ID: "b", ClientPositionID: "p", BoqItemType: BoqMat},
+	}
+	expected := ExpectedRedistributionBoqItems(items)
+	if len(expected) != 2 || !expected["a"] || !expected["b"] {
+		t.Fatalf("expected set wrong: %v", expected)
+	}
+}
+
+// ─── Stage 0.1.2.3b.1 (§12): additional (ДОП) positions ──────────────────────
+
+func additionalInput(withParent bool, withItems bool, itemCost float64) PreparedRedistributionInput {
+	vol := 1.0
+	var parent *string
+	if withParent {
+		p := "p1"
+		parent = &p
+	}
+	in := PreparedRedistributionInput{
+		Positions: []PreparedPositionInput{
+			{ID: "p1", PositionNumber: 1, WorkName: "w", UnitCode: "м2", ClientVolume: &vol},
+			{ID: "add1", PositionNumber: 2, WorkName: "add", UnitCode: "м2", ClientVolume: &vol,
+				IsAdditional: true, ParentPositionID: parent},
+		},
+		BoqItems: []BoqItemWithCosts{
+			{ID: "b1", ClientPositionID: "p1", BoqItemType: BoqRab, TotalCommercialWorkCost: 100},
+		},
+		CategoryResults: []RedistributionResult{
+			{BoqItemID: "b1", OriginalWorkCost: 100, FinalWorkCost: 100},
+		},
+	}
+	if withItems {
+		in.BoqItems = append(in.BoqItems, BoqItemWithCosts{
+			ID: "badd", ClientPositionID: "add1", BoqItemType: BoqRab, TotalCommercialWorkCost: itemCost,
+		})
+		in.CategoryResults = append(in.CategoryResults, RedistributionResult{
+			BoqItemID: "badd", OriginalWorkCost: itemCost, FinalWorkCost: itemCost,
+		})
+	}
+	return in
+}
+
+// §12.1 — additional cost-bearing row with a valid parent is included.
+func TestAdditionalPosition_WithParentIncluded(t *testing.T) {
+	out, err := BuildPreparedRedistribution(additionalInput(true, true, 200))
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if len(out.Rows) != 2 {
+		t.Fatalf("rows = %d, want 2 (parent + additional)", len(out.Rows))
+	}
+	if out.Summary.FinalWorkTotal != 300 {
+		t.Fatalf("final work total = %v, want 300 (100 + 200)", out.Summary.FinalWorkTotal)
+	}
+}
+
+// §12.2/3 — a cost-bearing additional position WITHOUT a parent blocks the
+// projection (typed error) — the money never silently disappears.
+func TestAdditionalPosition_ParentMissingBlocks(t *testing.T) {
+	_, err := BuildPreparedRedistribution(additionalInput(false, true, 200))
+	var inErr *InvalidPreparedRedistributionInputError
+	if !errors.As(err, &inErr) {
+		t.Fatalf("want InvalidPreparedRedistributionInputError, got %v", err)
+	}
+	if inErr.Reason != AdditionalPositionParentMissingReason || inErr.EntityID != "add1" {
+		t.Fatalf("wrong error: %+v", inErr)
+	}
+}
+
+// §12.4 — a zero-cost additional row WITH items still blocks without a parent
+// (it is part of the expected set); an EMPTY additional position (no BOQ
+// items — zero financial base by construction) may be dropped.
+func TestAdditionalPosition_ZeroCostAndEmpty(t *testing.T) {
+	_, err := BuildPreparedRedistribution(additionalInput(false, true, 0))
+	var inErr *InvalidPreparedRedistributionInputError
+	if !errors.As(err, &inErr) {
+		t.Fatalf("zero-cost with items must still block, got %v", err)
+	}
+	out, err := BuildPreparedRedistribution(additionalInput(false, false, 0))
+	if err != nil {
+		t.Fatalf("empty additional must not block: %v", err)
+	}
+	if len(out.Rows) != 1 || out.Summary.FinalWorkTotal != 100 {
+		t.Fatalf("rows/total = %d/%v, want 1/100", len(out.Rows), out.Summary.FinalWorkTotal)
+	}
+}
+
+// §12 — additional whose parent is ANOTHER additional (not a regular) — the
+// same blocking policy for cost-bearing rows.
+func TestAdditionalPosition_AdditionalParentBlocks(t *testing.T) {
+	in := additionalInput(true, true, 200)
+	in.Positions[0].IsAdditional = true
+	pp := "ghost-parent"
+	in.Positions[0].ParentPositionID = &pp
+	_, err := BuildPreparedRedistribution(in)
+	var inErr *InvalidPreparedRedistributionInputError
+	if !errors.As(err, &inErr) {
+		t.Fatalf("additional-parent chain must block cost-bearing rows, got %v", err)
+	}
+}
+
+// ─── Stage 0.1.2.3b.1 (§13): insurance zero-base policy ──────────────────────
+
+func TestInsurancePolicy_ZeroBase(t *testing.T) {
+	vol := 1.0
+	base := PreparedRedistributionInput{
+		Positions: []PreparedPositionInput{
+			{ID: "p1", PositionNumber: 1, WorkName: "w", UnitCode: "м2", ClientVolume: &vol},
+		},
+		BoqItems: []BoqItemWithCosts{
+			{ID: "b1", ClientPositionID: "p1", BoqItemType: BoqMat, TotalCommercialMaterialCost: 500},
+		},
+		CategoryResults: []RedistributionResult{{BoqItemID: "b1"}},
+	}
+
+	// §13.1 — zero insurance + zero base → success.
+	in := base
+	if out, err := BuildPreparedRedistribution(in); err != nil || out.Summary.InsuranceTotal != 0 {
+		t.Fatalf("zero+zero must pass: %v", err)
+	}
+
+	// §13.2/7 — non-zero insurance + zero base → typed error; never a
+	// "calculated" result with lost insurance.
+	in2 := base
+	in2.Insurance = &InsuranceInput{AptPriceM2: 10, AptArea: 10, JudicialPct: 50, TotalPct: 100} // 50
+	out, err := BuildPreparedRedistribution(in2)
+	var allocErr *InvalidInsuranceAllocationError
+	if !errors.As(err, &allocErr) || allocErr.Reason != InsuranceZeroBaseReason {
+		t.Fatalf("want InvalidInsuranceAllocationError(%s), got %v", InsuranceZeroBaseReason, err)
+	}
+	if out != nil {
+		t.Fatal("partial prepared returned with unallocated insurance")
+	}
+	if allocErr.ExpectedTotal != 50 || allocErr.AllocatedTotal != 0 {
+		t.Fatalf("error fields wrong: %+v", allocErr)
 	}
 }

@@ -1,5 +1,5 @@
 {
-  "comment": "Stage 0.1.2.3b golden Go↔TS fixtures for the PREPARED redistribution pipeline (aggregation → position adjustments → 2dp unit-price rounding → insurance over the rounded works base). Consumed by redistribution_prepared_test.go AND scripts/checks/redistributionPipelineParity.check.mjs (epsilon 1e-6). expect_error cases are Go-only: the TS preview silently SKIPS invalid position rules (computeCumulativePositionDeltas) while the server blocks — documented divergence, server is authoritative. The tender_insurance model has exactly ONE row per tender (loader LIMIT 1) — 'multiple insurance rows' is not representable and is documented as N/A.",
+  "comment": "Stage 0.1.2.3b golden Go↔TS fixtures for the PREPARED redistribution pipeline (aggregation → position adjustments → 2dp unit-price rounding → insurance over the rounded works base). Consumed by redistribution_prepared_test.go AND scripts/checks/redistributionPipelineParity.check.mjs (epsilon 1e-6). expect_error cases are Go-only: the TS preview silently SKIPS invalid position rules and keeps zero insurance shares on a zero base, while the server BLOCKS both (stage 0.1.2.3b.1 fail-closed) — documented divergence, server is authoritative. The tender_insurance model has exactly ONE row per tender (loader LIMIT 1) — 'multiple insurance rows' is not representable and is documented as N/A.",
   "cases": [
     {
       "name": "category_only",
@@ -280,9 +280,16 @@
       "boq_items": [{ "id": "b1", "position_id": "p1", "material_cost": 500, "work_cost": 0 }],
       "category_results": [{ "boq_item_id": "b1", "original": 0, "deducted": 0, "added": 0, "final": 0 }],
       "insurance": { "apt_price_m2": 10, "apt_area": 10, "judicial_pct": 50, "total_pct": 100 },
+      "expect_error": "NON_ZERO_INSURANCE_WITH_ZERO_BASE"
+    },
+    {
+      "name": "zero_insurance_zero_base",
+      "positions": [{ "id": "p1", "number": 1, "volume": 5 }],
+      "boq_items": [{ "id": "b1", "position_id": "p1", "material_cost": 500, "work_cost": 0 }],
+      "category_results": [{ "boq_item_id": "b1", "original": 0, "deducted": 0, "added": 0, "final": 0 }],
       "expected": {
         "rows": { "p1": { "work_rounded": 0, "insurance": 0, "final_work": 0, "material_rounded": 500 } },
-        "summary": { "insurance_total": 50, "insurance_allocated": 0, "final_work_total": 0, "total_material_cost": 500, "final_total": 500 }
+        "summary": { "insurance_total": 0, "insurance_allocated": 0, "final_work_total": 0, "total_material_cost": 500, "final_total": 500 }
       }
     },
     {
