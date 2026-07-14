@@ -104,7 +104,12 @@ Redistribution в quality — облегчённые признаки из metad
 revision marker); полные prepared-проверки остаются на странице
 «Перераспределение».
 
-## 12. Backlog следующего этапа
+## 12. Связанные инструменты
+
+Ценовые отклонения (исторический benchmark) — отдельная страница и методика:
+см. [PRICE_BENCHMARK_ANALYTICS.md](PRICE_BENCHMARK_ANALYTICS.md) (этап 1.2).
+
+## 13. Backlog следующего этапа
 
 price anomaly detection · historical benchmarks · fuzzy duplicates ·
 quote freshness (+обязательность quote_link — сейчас модель его не требует) ·

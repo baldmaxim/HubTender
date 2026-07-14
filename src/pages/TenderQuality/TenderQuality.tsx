@@ -275,6 +275,9 @@ export default function TenderQuality() {
             />
           )}
 
+          <Button style={{ marginTop: 12 }} onClick={() => navigate(`/analytics/price-benchmark?tenderId=${tenderId}`)}>
+            Проверить ценовые отклонения →
+          </Button>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
             Снимок от {report.generated_at}, ревизия входов {report.financial_input_revision}.
             Анализ read-only: данные не изменяются.

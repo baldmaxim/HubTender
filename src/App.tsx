@@ -31,6 +31,7 @@ import CostRedistribution from './pages/CostRedistribution';
 import Bsm from './pages/Bsm/Bsm';
 import ObjectComparison from './pages/Analytics/ObjectComparison';
 import TenderQuality from './pages/TenderQuality/TenderQuality';
+import PriceBenchmark from './pages/PriceBenchmark/PriceBenchmark';
 import FinancialIndicators from './pages/FinancialIndicators/FinancialIndicators';
 import Users from './pages/Users/Users';
 import Projects from './pages/Projects';
@@ -87,6 +88,7 @@ function AppContent() {
             <Route path="analytics">
               <Route path="comparison" element={<ObjectComparison />} />
               <Route path="quality" element={<TenderQuality />} />
+              <Route path="price-benchmark" element={<PriceBenchmark />} />
             </Route>
             <Route path="admin">
               <Route index element={<Navigate to="/admin/nomenclatures" replace />} />

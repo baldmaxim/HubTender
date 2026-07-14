@@ -116,6 +116,11 @@ export const menuItems: NonNullable<MenuProps['items']> = [
         label: 'Качество расчёта',
       },
       {
+        key: '/analytics/price-benchmark',
+        icon: <FundOutlined />,
+        label: 'Ценовые отклонения',
+      },
+      {
         key: '/costs',
         icon: <DollarOutlined />,
         label: 'Затраты на строительство',
