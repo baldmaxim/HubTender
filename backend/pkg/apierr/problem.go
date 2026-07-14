@@ -326,6 +326,28 @@ func MissingFXRate(currency string) *ProblemExtra {
 	}
 }
 
+// FinancialCalculationNotReady returns 409 with code FINANCIAL_CALCULATION_NOT_READY:
+// the tender's financial calculation is not current (stale/calculating/failed or
+// revision/redistribution mismatch), so approval / final export is refused.
+// Exposes ONLY the safe state fields — never an internal error stack.
+func FinancialCalculationNotReady(calculationStatus string, inputRevision, calculationRevision int64, reason string) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusConflict),
+			Title:  "Conflict",
+			Status: http.StatusConflict,
+			Detail: "Финансовый расчёт не актуален — согласование и финальный экспорт недоступны до пересчёта.",
+		},
+		Extras: map[string]any{
+			"code":                "FINANCIAL_CALCULATION_NOT_READY",
+			"calculationStatus":   calculationStatus,
+			"inputRevision":       inputRevision,
+			"calculationRevision": calculationRevision,
+			"reason":              reason,
+		},
+	}
+}
+
 // ProblemExtra extends Problem with arbitrary extra fields serialised into
 // the same JSON object (RFC 7807 §3.2 extension members).
 type ProblemExtra struct {

@@ -25,6 +25,7 @@ export type RedistributionReason =
   | 'PREPARED_INPUT_CHANGED'
   | 'INSURANCE_ALLOCATION_INVALID'
   | 'PREPARED_CALCULATION_FAILED'
+  | 'INPUT_REVISION_CHANGED'
   | string;
 
 export interface RedistributionConsumptionState {
@@ -55,6 +56,8 @@ const REASON_MESSAGES: Record<string, string> = {
     'Страхование не может быть распределено для текущего состояния. Проверьте конфигурацию и выполните пересчёт.',
   PREPARED_CALCULATION_FAILED:
     'Расчёт перераспределения устарел или неполон. Выполните пересчёт.',
+  INPUT_REVISION_CHANGED:
+    'Финансовые данные тендера изменились после сохранения перераспределения — требуется пересчёт.',
 };
 
 // resolveRedistributionConsumptionState — pure mapping status/reason →

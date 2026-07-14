@@ -22,8 +22,10 @@ import (
 func fptr(v float64) *float64 { return &v }
 func sptr(s string) *string   { return &s }
 
-func importItem(posID, itemType string, qty, rate float64, currency *string, clientTotal *float64) ImportBoqItem {
-	return ImportBoqItem{
+func importItem(t *testing.T, pool *pgxpool.Pool, posID, itemType string, qty, rate float64, currency *string, clientTotal *float64) ImportBoqItem {
+	t.Helper()
+	workNameID, matNameID := ensureTestNames(t, pool)
+	item := ImportBoqItem{
 		ClientPositionID: posID,
 		BoqItemType:      itemType,
 		Quantity:         fptr(qty),
@@ -31,6 +33,14 @@ func importItem(posID, itemType string, qty, rate float64, currency *string, cli
 		CurrencyType:     currency,
 		TotalAmount:      clientTotal,
 	}
+	// boq_items_material_check: works carry work_name_id, materials —
+	// material_name_id (the production frontend always sends them).
+	if calc.IsWorkBoqType(itemType) {
+		item.WorkNameID = &workNameID
+	} else {
+		item.MaterialNameID = &matNameID
+	}
+	return item
 }
 
 func scanItemTotals(t *testing.T, pool *pgxpool.Pool, tenderID string) map[string]float64 {
@@ -77,7 +87,7 @@ func TestImportIntegration_IgnoresForgedClientTotal(t *testing.T) {
 		TenderID: f.tenderID,
 		FileName: "forged.xlsx",
 		Items: []ImportBoqItem{
-			importItem(f.posID, "раб", 100, 500, nil, fptr(1)),
+			importItem(t, pool, f.posID, "раб", 100, 500, nil, fptr(1)),
 		},
 	})
 	if err != nil {
@@ -116,7 +126,7 @@ func TestImportIntegration_IgnoresForgedClientTotal(t *testing.T) {
 		TenderID: f.tenderID,
 		FileName: "forged-usd.xlsx",
 		Items: []ImportBoqItem{
-			importItem(f.posID, "раб", 10, 100, sptr("USD"), fptr(100)),
+			importItem(t, pool, f.posID, "раб", 10, 100, sptr("USD"), fptr(100)),
 		},
 	})
 	if err != nil {
@@ -149,11 +159,11 @@ func TestImportIntegration_MismatchReport(t *testing.T) {
 		FileName: "report.xlsx",
 		Items: []ImportBoqItem{
 			// G.4 — client total matches server calc → no warning.
-			importItem(f.posID, "раб", 2, 10, nil, fptr(20)),
+			importItem(t, pool, f.posID, "раб", 2, 10, nil, fptr(20)),
 			// G.3 — client total absent → no warning.
-			importItem(f.posID, "раб", 3, 10, nil, nil),
+			importItem(t, pool, f.posID, "раб", 3, 10, nil, nil),
 			// G.5 — divergent → warning; G.6 — negative diagnostic value.
-			importItem(f.posID, "мат", 4, 10, nil, fptr(-5)),
+			importItem(t, pool, f.posID, "мат", 4, 10, nil, fptr(-5)),
 		},
 	})
 	if err != nil {
@@ -173,7 +183,7 @@ func TestImportIntegration_MismatchReport(t *testing.T) {
 	res2, err := repo.BulkImport(context.Background(), ImportInput{
 		TenderID: f.tenderID,
 		FileName: "repeat.xlsx",
-		Items:    []ImportBoqItem{importItem(f.posID, "раб", 2, 10, nil, nil)},
+		Items:    []ImportBoqItem{importItem(t, pool, f.posID, "раб", 2, 10, nil, nil)},
 	})
 	if err != nil {
 		t.Fatalf("repeat import: %v", err)
@@ -206,8 +216,8 @@ func TestImportIntegration_MissingFXRollsBackEverything(t *testing.T) {
 		TenderID: f.tenderID,
 		FileName: "usd-no-rate.xlsx",
 		Items: []ImportBoqItem{
-			importItem(f.posID, "раб", 1, 10, nil, nil),           // valid RUB row
-			importItem(f.posID, "раб", 10, 100, sptr("USD"), nil), // uncalculable
+			importItem(t, pool, f.posID, "раб", 1, 10, nil, nil),           // valid RUB row
+			importItem(t, pool, f.posID, "раб", 10, 100, sptr("USD"), nil), // uncalculable
 		},
 	})
 	var fx *calc.MissingFXRateError
@@ -244,7 +254,7 @@ func TestImportIntegration_NaNControlValueRejected(t *testing.T) {
 	_, err := repo.BulkImport(context.Background(), ImportInput{
 		TenderID: f.tenderID,
 		FileName: "nan.xlsx",
-		Items:    []ImportBoqItem{importItem(f.posID, "раб", 1, 10, nil, &nan)},
+		Items:    []ImportBoqItem{importItem(t, pool, f.posID, "раб", 1, 10, nil, &nan)},
 	})
 	var bulkErr *ErrBulkImport
 	if !errors.As(err, &bulkErr) {
@@ -262,9 +272,9 @@ func TestImportIntegration_ParentMaterialAuthoritativeAmount(t *testing.T) {
 	f := seedRollbackFixture(t, pool, "IMPP", fptr(90))
 	repo := NewImportRepo(pool)
 
-	work := importItem(f.posID, "раб", 5, 100, nil, nil)
+	work := importItem(t, pool, f.posID, "раб", 5, 100, nil, nil)
 	work.TempID = sptr("w1")
-	child := importItem(f.posID, "мат", 2, 10, nil, nil)
+	child := importItem(t, pool, f.posID, "мат", 2, 10, nil, nil)
 	child.ParentWorkTempID = sptr("w1")
 	child.ConsumptionCoeff = fptr(1.5)
 
@@ -313,7 +323,7 @@ func TestImportIntegration_LargeBatch(t *testing.T) {
 
 	items := make([]ImportBoqItem, 0, 1000)
 	for i := 0; i < 1000; i++ {
-		items = append(items, importItem(f.posID, "раб", 2, 5, nil, nil))
+		items = append(items, importItem(t, pool, f.posID, "раб", 2, 5, nil, nil))
 	}
 	res, err := repo.BulkImport(context.Background(), ImportInput{
 		TenderID: f.tenderID, FileName: "big.xlsx", Items: items,
@@ -502,13 +512,15 @@ func TestRateChangeIntegration_DeliveryAndConsumptionViaCalc(t *testing.T) {
 	ctx := context.Background()
 
 	// USD material with delivery "не в цене" (3% matrix rule in calc).
+	_, matNameID := ensureTestNames(t, pool)
 	var itemID string
 	if err := pool.QueryRow(ctx, `
 		INSERT INTO public.boq_items
 		  (client_position_id, tender_id, boq_item_type, quantity, unit_rate, currency_type,
-		   delivery_price_type, consumption_coefficient, detail_cost_category_id, total_amount)
-		VALUES ($1::uuid,$2::uuid,'мат',2,100,'USD','не в цене',1.5,$3::uuid, 111)
-		RETURNING id::text`, f.posID, f.tenderID, f.detailCatID).Scan(&itemID); err != nil {
+		   delivery_price_type, consumption_coefficient, detail_cost_category_id,
+		   material_name_id, total_amount)
+		VALUES ($1::uuid,$2::uuid,'мат',2,100,'USD','не в цене',1.5,$3::uuid,$4::uuid, 111)
+		RETURNING id::text`, f.posID, f.tenderID, f.detailCatID, matNameID).Scan(&itemID); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 

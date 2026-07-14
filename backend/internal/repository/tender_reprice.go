@@ -27,7 +27,12 @@ import (
 //
 // The async recalc queue may still run afterwards as an idempotent extra pass,
 // but it is NOT the mechanism that makes the values correct — the transaction is.
-func repriceTenderAfterRateChangeTx(ctx context.Context, tx pgx.Tx, tenderID string) error {
+//
+// Stage 0-F2 (category B): the caller marks the financial inputs changed
+// (revision N) BEFORE the rate UPDATE; this pipeline performs the FULL
+// calculation for revision N and finishes with the success CAS — after commit
+// the tender is 'calculated' with calculation_revision == input_revision.
+func repriceTenderAfterRateChangeTx(ctx context.Context, tx pgx.Tx, tenderID string, revision int64) error {
 	// All BOQ rows of the tender (one query; batch recompute — no per-row FX).
 	rows, err := tx.Query(ctx,
 		`SELECT id::text FROM public.boq_items WHERE tender_id = $1::uuid`, tenderID)
@@ -63,6 +68,10 @@ func repriceTenderAfterRateChangeTx(ctx context.Context, tx pgx.Tx, tenderID str
 	}
 	// 4. cached_grand_total exactly once, from the fresh commercial values.
 	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID); err != nil {
+		return fmt.Errorf("repriceTenderAfterRateChangeTx: %w", err)
+	}
+	// 5. Full sync calculation done for revision N → success CAS in the same tx.
+	if err := MarkTenderCalculationSucceededTx(ctx, tx, tenderID, revision); err != nil {
 		return fmt.Errorf("repriceTenderAfterRateChangeTx: %w", err)
 	}
 	return nil

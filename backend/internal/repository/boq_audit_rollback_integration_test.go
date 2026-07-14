@@ -65,10 +65,10 @@ func seedRollbackFixture(t *testing.T, pool *pgxpool.Pool, tag string, usdRate *
 	                      VALUES ($1::uuid,'loc',$2,'м2') RETURNING id::text`, costCatID, "itest-rb-detail-"+tag)
 
 	var pMat string
-	scan(&f.pWorksID, `INSERT INTO public.markup_parameters (key,label,default_value)
-	                   VALUES ('works_16_markup','itest rb works',60) RETURNING id::text`)
-	scan(&pMat, `INSERT INTO public.markup_parameters (key,label,default_value)
-	             VALUES ('material_cost_growth','itest rb mat',10) RETURNING id::text`)
+	scan(&f.pWorksID, `INSERT INTO public.markup_parameters AS mp (key,label,default_value)
+	                   VALUES ('works_16_markup','itest rb works',60) ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label RETURNING id::text`)
+	scan(&pMat, `INSERT INTO public.markup_parameters AS mp (key,label,default_value)
+	             VALUES ('material_cost_growth','itest rb mat',10) ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label RETURNING id::text`)
 
 	const sequences = `{
 	  "раб":[{"baseIndex":-1,"action1":"multiply","operand1Type":"markup",
@@ -122,16 +122,24 @@ func seedRollbackFixture(t *testing.T, pool *pgxpool.Pool, tag string, usdRate *
 // values (total 111, commercial 1/2/3) so any surviving stale value is obvious.
 func (f *rbFixture) addItem(t *testing.T, pool *pgxpool.Pool, itemType, currency string, qty, rate float64, parentID *string) string {
 	t.Helper()
+	workID, matID := ensureTestNames(t, pool)
+	var workRef, matRef *string
+	if calc.IsWorkBoqType(itemType) {
+		workRef = &workID
+	} else {
+		matRef = &matID
+	}
 	var id string
 	if err := pool.QueryRow(context.Background(), `
 		INSERT INTO public.boq_items
 		  (client_position_id, tender_id, boq_item_type, quantity, unit_rate, currency_type,
 		   delivery_price_type, parent_work_item_id, detail_cost_category_id,
+		   work_name_id, material_name_id,
 		   total_amount, commercial_markup, total_commercial_material_cost, total_commercial_work_cost)
 		VALUES ($1::uuid,$2::uuid,$3::boq_item_type,$4,$5,$6::currency_type,
-		        'в цене',$7::uuid,$8::uuid, 111, 1, 2, 3)
+		        'в цене',$7::uuid,$8::uuid, $9::uuid, $10::uuid, 111, 1, 2, 3)
 		RETURNING id::text`,
-		f.posID, f.tenderID, itemType, qty, rate, currency, parentID, f.detailCatID,
+		f.posID, f.tenderID, itemType, qty, rate, currency, parentID, f.detailCatID, workRef, matRef,
 	).Scan(&id); err != nil {
 		t.Fatalf("add item: %v", err)
 	}
@@ -140,15 +148,23 @@ func (f *rbFixture) addItem(t *testing.T, pool *pgxpool.Pool, itemType, currency
 
 // triggerShapeOldData builds a full to_jsonb(OLD.*)-shaped snapshot with
 // deliberately CORRUPTED derived values (999999 / 777 / 888888 / 999999).
-func (f *rbFixture) triggerShapeOldData(itemID, itemType, currency string, qty, rate float64, parentID *string) string {
+func (f *rbFixture) triggerShapeOldData(t *testing.T, pool *pgxpool.Pool, itemID, itemType, currency string, qty, rate float64, parentID *string) string {
+	t.Helper()
 	parent := "null"
 	if parentID != nil {
 		parent = `"` + *parentID + `"`
 	}
+	workNameID, matNameID := ensureTestNames(t, pool)
+	workRef, matRef := "null", "null"
+	if calc.IsWorkBoqType(itemType) {
+		workRef = `"` + workNameID + `"`
+	} else {
+		matRef = `"` + matNameID + `"`
+	}
 	return fmt.Sprintf(`{
 		"id": %q, "tender_id": %q, "client_position_id": %q, "sort_number": 1,
 		"boq_item_type": %q, "material_type": null,
-		"material_name_id": null, "work_name_id": null, "unit_code": "м2",
+		"material_name_id": `+matRef+`, "work_name_id": `+workRef+`, "unit_code": "м2",
 		"quantity": %v, "base_quantity": null,
 		"consumption_coefficient": null, "conversion_coefficient": null,
 		"delivery_price_type": "в цене", "delivery_amount": 0,
@@ -166,9 +182,16 @@ func (f *rbFixture) triggerShapeOldData(itemID, itemType, currency string, qty, 
 func (f *rbFixture) addAuditRow(t *testing.T, pool *pgxpool.Pool, itemID, op, oldData string) string {
 	t.Helper()
 	var id string
+	// audit_data_check: UPDATE requires BOTH old_data and new_data; DELETE
+	// requires old only. The rollback code reads old_data — the UPDATE row's
+	// new_data content is irrelevant, so reuse the snapshot shape.
 	if err := pool.QueryRow(context.Background(), `
 		INSERT INTO public.boq_items_audit (boq_item_id, operation_type, changed_by, old_data, new_data)
-		VALUES ($1::uuid, $2, $3::uuid, NULLIF($4,'')::jsonb, NULL)
+		VALUES ($1::uuid, $2, $3::uuid,
+		        CASE WHEN $2 = 'INSERT' THEN NULL ELSE NULLIF($4,'')::jsonb END,
+		        CASE WHEN $2 = 'UPDATE' THEN NULLIF($4,'')::jsonb
+		             WHEN $2 = 'INSERT' THEN COALESCE(NULLIF($4,'')::jsonb, '{}'::jsonb)
+		             ELSE NULL END)
 		RETURNING id::text`, itemID, op, rbActor, oldData,
 	).Scan(&id); err != nil {
 		t.Fatalf("add audit row: %v", err)
@@ -233,7 +256,7 @@ func TestBoqAuditRollback_RecalculatesDerivedValues(t *testing.T) {
 	// Current state: qty5 × rate10 (junk derived). History: qty10 × rate100.
 	itemID := f.addItem(t, pool, calc.BoqRab, calc.CurrencyRUB, 5, 10, nil)
 	auditID := f.addAuditRow(t, pool, itemID, "UPDATE",
-		f.triggerShapeOldData(itemID, calc.BoqRab, calc.CurrencyRUB, 10, 100, nil))
+		f.triggerShapeOldData(t, pool, itemID, calc.BoqRab, calc.CurrencyRUB, 10, 100, nil))
 	before := rbAuditCount(t, pool, itemID)
 
 	res, err := repo.Rollback(context.Background(), auditID, rbActor)
@@ -290,7 +313,7 @@ func TestBoqAuditRollback_UsesCurrentTenderFX(t *testing.T) {
 	// Historical snapshot: USD qty2 × rate100 written when USD was 80 ⇒ its
 	// stored (corrupted) totals reflect the old world; only inputs matter now.
 	auditID := f.addAuditRow(t, pool, itemID, "UPDATE",
-		f.triggerShapeOldData(itemID, calc.BoqRab, calc.CurrencyUSD, 2, 100, nil))
+		f.triggerShapeOldData(t, pool, itemID, calc.BoqRab, calc.CurrencyUSD, 2, 100, nil))
 
 	if _, err := repo.Rollback(context.Background(), auditID, rbActor); err != nil {
 		t.Fatalf("rollback failed: %v", err)
@@ -310,7 +333,7 @@ func TestBoqAuditRollback_UsesCurrentCommercialConfiguration(t *testing.T) {
 
 	itemID := f.addItem(t, pool, calc.BoqRab, calc.CurrencyRUB, 5, 10, nil)
 	auditID := f.addAuditRow(t, pool, itemID, "UPDATE",
-		f.triggerShapeOldData(itemID, calc.BoqRab, calc.CurrencyRUB, 10, 100, nil))
+		f.triggerShapeOldData(t, pool, itemID, calc.BoqRab, calc.CurrencyRUB, 10, 100, nil))
 
 	// AFTER the audit was written the configuration changed: works 50% → 100%.
 	if _, err := pool.Exec(context.Background(),
@@ -339,7 +362,7 @@ func TestBoqAuditRollback_MissingFXRollsBackEverything(t *testing.T) {
 
 	itemID := f.addItem(t, pool, calc.BoqRab, calc.CurrencyRUB, 5, 10, nil)
 	auditID := f.addAuditRow(t, pool, itemID, "UPDATE",
-		f.triggerShapeOldData(itemID, calc.BoqRab, calc.CurrencyUSD, 2, 100, nil))
+		f.triggerShapeOldData(t, pool, itemID, calc.BoqRab, calc.CurrencyUSD, 2, 100, nil))
 	beforeItem := readRbItem(t, pool, itemID)
 	beforeMat, beforeWork, beforeGrand := readRbTotals(t, pool, f)
 	beforeAudit := rbAuditCount(t, pool, itemID)
@@ -389,7 +412,7 @@ func TestBoqAuditRollback_InvalidHistoricalParentRollsBackEverything(t *testing.
 		t.Run(tc.name, func(t *testing.T) {
 			p := tc.parent
 			auditID := f.addAuditRow(t, pool, itemID, "UPDATE",
-				f.triggerShapeOldData(itemID, calc.BoqMat, calc.CurrencyRUB, 10, 100, &p))
+				f.triggerShapeOldData(t, pool, itemID, calc.BoqMat, calc.CurrencyRUB, 10, 100, &p))
 			before := readRbItem(t, pool, itemID)
 			beforeAudit := rbAuditCount(t, pool, itemID)
 
@@ -424,10 +447,10 @@ func TestBoqAuditRollback_CannotApplyAuditToAnotherItemOrTender(t *testing.T) {
 	itemB := fB.addItem(t, pool, calc.BoqRab, calc.CurrencyRUB, 7, 20, nil)
 
 	// 1. Snapshot carries tender B, audit points at item A (cross-tender).
-	crossTender := fB.triggerShapeOldData(itemA, calc.BoqRab, calc.CurrencyRUB, 10, 100, nil)
+	crossTender := fB.triggerShapeOldData(t, pool, itemA, calc.BoqRab, calc.CurrencyRUB, 10, 100, nil)
 	auditID1 := fA.addAuditRow(t, pool, itemA, "UPDATE", crossTender)
 	// 2. Snapshot carries item B's id, audit points at item A (cross-item).
-	crossItem := fA.triggerShapeOldData(itemB, calc.BoqRab, calc.CurrencyRUB, 10, 100, nil)
+	crossItem := fA.triggerShapeOldData(t, pool, itemB, calc.BoqRab, calc.CurrencyRUB, 10, 100, nil)
 	auditID2 := fA.addAuditRow(t, pool, itemA, "UPDATE", crossItem)
 
 	beforeA, beforeB := readRbItem(t, pool, itemA), readRbItem(t, pool, itemB)
@@ -497,10 +520,12 @@ func TestBoqAuditRollback_DeleteRestoreRecalculates(t *testing.T) {
 	if s.mat != nil && *s.mat == 888888 {
 		t.Fatal("snapshot commercial material cost was restored")
 	}
-	// Position totals include both rows again: work 1000 + material 1000.
+	// Position totals include both rows again. The rollback recomputes ONLY
+	// the restored row (single-item semantics, 0.1.2.2b): the sibling work row
+	// keeps its fixture junk total (111), the restored child contributes 1000.
 	posMat, posWork, _ := readRbTotals(t, pool, f)
-	if posWork != 1000 || posMat != 1000 {
-		t.Fatalf("position totals = mat %v / work %v, want 1000 / 1000", posMat, posWork)
+	if posWork != 111 || posMat != 1000 {
+		t.Fatalf("position totals = mat %v / work %v, want 1000 / 111", posMat, posWork)
 	}
 	// Restoring twice must conflict (id already exists) and change nothing.
 	if _, err := repo.Rollback(ctx, auditID, rbActor); err == nil {

@@ -29,6 +29,11 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItem
 		return nil, fmt.Errorf("boqRepo.UpdateBoqItem: lock row: %w", err)
 	}
 
+	// 0-F2 (category A): one revision bump; commercial recalc follows async.
+	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, oldItem.TenderID, "boq_update"); err != nil {
+		return nil, fmt.Errorf("boqRepo.UpdateBoqItem: %w", err)
+	}
+
 	args := []any{}
 	argN := 1
 	setClauses := ""
@@ -164,6 +169,12 @@ func (r *BoqRepo) DeleteBoqItem(ctx context.Context, id, changedBy string) (*Boq
 	item, err := scanBoqItemRow(tx.QueryRow(ctx, lockQ, id))
 	if err != nil {
 		return nil, fmt.Errorf("boqRepo.DeleteBoqItem: lock row: %w", err)
+	}
+
+	// 0-F2 (category A): one revision bump; the sync grand-total refresh below
+	// keeps the cached value fresh, but the commercial recalc is async → stale.
+	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, item.TenderID, "boq_delete"); err != nil {
+		return nil, fmt.Errorf("boqRepo.DeleteBoqItem: %w", err)
 	}
 
 	if _, err := tx.Exec(ctx, "DELETE FROM public.boq_items WHERE id = $1", id); err != nil {

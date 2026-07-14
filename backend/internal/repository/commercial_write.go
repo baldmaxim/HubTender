@@ -197,13 +197,17 @@ func PersistCalculatedCommercialCostsTx(
 
 	// 2. Update ONLY rows of this tender. The tender_id predicate is what makes a
 	// cross-tender write impossible — not a post-hoc check of what got updated.
+	//
+	// 0-F2 §10: this is a PURELY DERIVED system write (commercial_markup +
+	// total_commercial_*), so it deliberately does NOT touch updated_at —
+	// boq_items.updated_at is the USER-INPUT change marker (ETag source), and a
+	// background recalc must never shift a user's ETag or force a PATCH retry.
 	const updateQ = `
 		UPDATE public.boq_items bi
 		SET
 		    commercial_markup               = u.markup,
 		    total_commercial_material_cost  = u.mat_cost,
-		    total_commercial_work_cost      = u.work_cost,
-		    updated_at                      = NOW()
+		    total_commercial_work_cost      = u.work_cost
 		FROM UNNEST(
 		    $1::uuid[],
 		    $2::numeric[],

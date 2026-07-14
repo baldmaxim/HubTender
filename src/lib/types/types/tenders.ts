@@ -55,6 +55,14 @@ export interface Tender extends TenderInsert {
   financial_approved?: boolean;
   financial_approved_by?: string | null;
   financial_approved_at?: string | null;
+  // 0-F2: статус финансового расчёта (единая политика —
+  // src/lib/financial/calculationState.ts).
+  financial_input_revision?: number | null;
+  financial_calculation_revision?: number | null;
+  financial_calculation_status?: string | null;
+  financial_calculated_at?: string | null;
+  financial_calculation_error_code?: string | null;
+  financial_calculation_error_message?: string | null;
 }
 
 // =============================================

@@ -32,6 +32,11 @@ func (r *SubcontractRepo) ToggleExclusion(
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	// 0-F2 (category A): exclusion toggle changes the commercial growth logic.
+	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, tenderID, "toggle_subcontract_exclusion"); err != nil {
+		return false, fmt.Errorf("subcontractRepo.ToggleExclusion: %w", err)
+	}
+
 	var exists bool
 	err = tx.QueryRow(ctx, `
 		SELECT EXISTS (

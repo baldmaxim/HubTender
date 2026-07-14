@@ -63,6 +63,13 @@ func (r *BoqRepo) CopyPositionItems(
 		return nil, ErrCopyTenderMismatch
 	}
 
+	// 0-F2 (category B): one revision bump for the whole copy command; the full
+	// recalculation below finishes with the success CAS before commit.
+	revision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, tgtTender, "copy_position_items")
+	if err != nil {
+		return nil, fmt.Errorf("boqRepo.CopyPositionItems: %w", err)
+	}
+
 	// Read source items in stable order — CLASS A (source inputs) ONLY.
 	// total_amount / commercial_markup / total_commercial_* are CALCULATED values:
 	// they are deliberately NOT selected, so they cannot be copied as authoritative.
@@ -254,6 +261,10 @@ func (r *BoqRepo) CopyPositionItems(
 	// is the target tender), recomputed exactly once, in this tx.
 	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tgtTender); err != nil {
 		return nil, fmt.Errorf("boqRepo.CopyPositionItems: grand total: %w", err)
+	}
+	// Full sync recalculation done for this revision → success CAS (same tx).
+	if err := MarkTenderCalculationSucceededTx(ctx, tx, tgtTender, revision); err != nil {
+		return nil, fmt.Errorf("boqRepo.CopyPositionItems: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

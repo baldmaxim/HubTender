@@ -98,7 +98,12 @@ type PricingDistributionInput struct {
 }
 
 func (r *MarkupRepo) UpsertPricingDistribution(ctx context.Context, in PricingDistributionInput) (*PricingDistributionRow, error) {
-	row, err := scanPricingDist(r.pool.QueryRow(ctx, `
+	// 0-F2 (category A): pricing distribution shapes the commercial split —
+	// revision bump + stale + approval invalidation in the SAME tx.
+	var row PricingDistributionRow
+	err := WithTenderFinancialMutationTx(ctx, r.pool, in.TenderID, "upsert_pricing_distribution", func(tx pgx.Tx) error {
+		var innerErr error
+		row, innerErr = scanPricingDist(tx.QueryRow(ctx, `
 		INSERT INTO public.tender_pricing_distribution (
 			tender_id, markup_tactic_id,
 			basic_material_base_target, basic_material_markup_target,
@@ -139,17 +144,22 @@ func (r *MarkupRepo) UpsertPricingDistribution(ctx context.Context, in PricingDi
 		          to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		          to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 	`,
-		in.TenderID, in.MarkupTacticID,
-		in.BasicMaterialBaseTarget, in.BasicMaterialMarkupTarget,
-		in.AuxiliaryMaterialBaseTarget, in.AuxiliaryMaterialMarkupTarget,
-		in.ComponentMaterialBaseTarget, in.ComponentMaterialMarkupTarget,
-		in.SubcontractBasicMaterialBaseTarget, in.SubcontractBasicMaterialMarkupTarget,
-		in.SubcontractAuxiliaryMaterialBaseTarget, in.SubcontractAuxiliaryMaterialMarkupTarget,
-		in.WorkBaseTarget, in.WorkMarkupTarget,
-		in.ComponentWorkBaseTarget, in.ComponentWorkMarkupTarget,
-	))
+			in.TenderID, in.MarkupTacticID,
+			in.BasicMaterialBaseTarget, in.BasicMaterialMarkupTarget,
+			in.AuxiliaryMaterialBaseTarget, in.AuxiliaryMaterialMarkupTarget,
+			in.ComponentMaterialBaseTarget, in.ComponentMaterialMarkupTarget,
+			in.SubcontractBasicMaterialBaseTarget, in.SubcontractBasicMaterialMarkupTarget,
+			in.SubcontractAuxiliaryMaterialBaseTarget, in.SubcontractAuxiliaryMaterialMarkupTarget,
+			in.WorkBaseTarget, in.WorkMarkupTarget,
+			in.ComponentWorkBaseTarget, in.ComponentWorkMarkupTarget,
+		))
+		if innerErr != nil {
+			return fmt.Errorf("markupRepo.UpsertPricingDistribution: %w", innerErr)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("markupRepo.UpsertPricingDistribution: %w", err)
+		return nil, err
 	}
 	return &row, nil
 }
@@ -195,15 +205,17 @@ type SubcontractExclusionInput struct {
 }
 
 func (r *MarkupRepo) InsertSubcontractExclusion(ctx context.Context, in SubcontractExclusionInput) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO public.subcontract_growth_exclusions (tender_id, detail_cost_category_id, exclusion_type)
-		VALUES ($1::uuid, $2::uuid, $3)
-		ON CONFLICT DO NOTHING
-	`, in.TenderID, in.DetailCostCategoryID, in.ExclusionType)
-	if err != nil {
-		return fmt.Errorf("markupRepo.InsertSubcontractExclusion: %w", err)
-	}
-	return nil
+	// 0-F2 (category A): exclusions shape the commercial growth logic.
+	return WithTenderFinancialMutationTx(ctx, r.pool, in.TenderID, "insert_subcontract_exclusion", func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO public.subcontract_growth_exclusions (tender_id, detail_cost_category_id, exclusion_type)
+			VALUES ($1::uuid, $2::uuid, $3)
+			ON CONFLICT DO NOTHING
+		`, in.TenderID, in.DetailCostCategoryID, in.ExclusionType); err != nil {
+			return fmt.Errorf("markupRepo.InsertSubcontractExclusion: %w", err)
+		}
+		return nil
+	})
 }
 
 func (r *MarkupRepo) InsertSubcontractExclusionsBatch(ctx context.Context, rows []SubcontractExclusionInput) error {
@@ -215,6 +227,10 @@ func (r *MarkupRepo) InsertSubcontractExclusionsBatch(ctx context.Context, rows 
 		return fmt.Errorf("markupRepo.InsertSubcontractExclusionsBatch: begin: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	// 0-F2 (category A): ONE bump for the whole batch (rows share the tender).
+	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, rows[0].TenderID, "insert_subcontract_exclusions_batch"); err != nil {
+		return fmt.Errorf("markupRepo.InsertSubcontractExclusionsBatch: %w", err)
+	}
 	for _, rec := range rows {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO public.subcontract_growth_exclusions (tender_id, detail_cost_category_id, exclusion_type)
@@ -231,26 +247,30 @@ func (r *MarkupRepo) InsertSubcontractExclusionsBatch(ctx context.Context, rows 
 }
 
 func (r *MarkupRepo) DeleteSubcontractExclusion(ctx context.Context, in SubcontractExclusionInput) error {
-	_, err := r.pool.Exec(ctx, `
-		DELETE FROM public.subcontract_growth_exclusions
-		WHERE tender_id = $1 AND detail_cost_category_id = $2 AND exclusion_type = $3
-	`, in.TenderID, in.DetailCostCategoryID, in.ExclusionType)
-	if err != nil {
-		return fmt.Errorf("markupRepo.DeleteSubcontractExclusion: %w", err)
-	}
-	return nil
+	// 0-F2 (category A).
+	return WithTenderFinancialMutationTx(ctx, r.pool, in.TenderID, "delete_subcontract_exclusion", func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `
+			DELETE FROM public.subcontract_growth_exclusions
+			WHERE tender_id = $1 AND detail_cost_category_id = $2 AND exclusion_type = $3
+		`, in.TenderID, in.DetailCostCategoryID, in.ExclusionType); err != nil {
+			return fmt.Errorf("markupRepo.DeleteSubcontractExclusion: %w", err)
+		}
+		return nil
+	})
 }
 
 func (r *MarkupRepo) DeleteSubcontractExclusionsBatch(ctx context.Context, tenderID string, ids []string, exclusionType string) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	_, err := r.pool.Exec(ctx, `
-		DELETE FROM public.subcontract_growth_exclusions
-		WHERE tender_id = $1 AND exclusion_type = $2 AND detail_cost_category_id = ANY($3::uuid[])
-	`, tenderID, exclusionType, ids)
-	if err != nil {
-		return fmt.Errorf("markupRepo.DeleteSubcontractExclusionsBatch: %w", err)
-	}
-	return nil
+	// 0-F2 (category A): ONE bump for the whole batch command.
+	return WithTenderFinancialMutationTx(ctx, r.pool, tenderID, "delete_subcontract_exclusions_batch", func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `
+			DELETE FROM public.subcontract_growth_exclusions
+			WHERE tender_id = $1 AND exclusion_type = $2 AND detail_cost_category_id = ANY($3::uuid[])
+		`, tenderID, exclusionType, ids); err != nil {
+			return fmt.Errorf("markupRepo.DeleteSubcontractExclusionsBatch: %w", err)
+		}
+		return nil
+	})
 }

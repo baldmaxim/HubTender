@@ -66,6 +66,14 @@ type FITenderRow struct {
 	// CreatedAt anchors the deadline progress bar on «Позиции Заказчика»
 	// (DeadlineBar считает долю прошедшего времени created_at→submission_deadline).
 	CreatedAt *string `json:"created_at,omitempty"`
+	// 0-F2: financial calculation state (safe fields only) — the FI page and
+	// the approval button gate on these.
+	FinancialInputRevision           int64   `json:"financial_input_revision"`
+	FinancialCalculationRevision     int64   `json:"financial_calculation_revision"`
+	FinancialCalculationStatus       string  `json:"financial_calculation_status"`
+	FinancialCalculatedAt            *string `json:"financial_calculated_at"`
+	FinancialCalculationErrorCode    *string `json:"financial_calculation_error_code,omitempty"`
+	FinancialCalculationErrorMessage *string `json:"financial_calculation_error_message,omitempty"`
 }
 
 func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, error) {
@@ -80,7 +88,10 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 		       upload_folder, bsm_link, tz_link, qa_form_link, project_folder_link,
 		       submission_deadline::text,
 		       financial_approved, financial_approved_by::text, financial_approved_at::text,
-		       created_at::text
+		       created_at::text,
+		       financial_input_revision, financial_calculation_revision,
+		       financial_calculation_status, financial_calculated_at::text,
+		       financial_calculation_error_code, financial_calculation_error_message
 		FROM public.tenders
 		WHERE id = $1
 	`, id).Scan(&t.ID, &t.Title, &t.TenderNumber, &t.ClientName, &t.Version, &t.IsArchived,
@@ -90,7 +101,10 @@ func (r *FIRepo) GetTenderByID(ctx context.Context, id string) (*FITenderRow, er
 		&t.UploadFolder, &t.BsmLink, &t.TzLink, &t.QaFormLink, &t.ProjectFolderLink,
 		&t.SubmissionDeadline,
 		&t.FinancialApproved, &t.FinancialApprovedBy, &t.FinancialApprovedAt,
-		&t.CreatedAt)
+		&t.CreatedAt,
+		&t.FinancialInputRevision, &t.FinancialCalculationRevision,
+		&t.FinancialCalculationStatus, &t.FinancialCalculatedAt,
+		&t.FinancialCalculationErrorCode, &t.FinancialCalculationErrorMessage)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

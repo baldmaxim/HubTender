@@ -54,6 +54,10 @@ const (
 	// RedistributionReasonPreparedFailed — any other prepared-calculation
 	// failure (internal detail is logged, never exposed).
 	RedistributionReasonPreparedFailed = "PREPARED_CALCULATION_FAILED"
+	// RedistributionReasonInputRevisionChanged — stage 0-F2: the tender's
+	// financial_input_revision moved past the revision the snapshot was built
+	// for (catches stale snapshots even when the BOQ id set is unchanged).
+	RedistributionReasonInputRevisionChanged = "INPUT_REVISION_CHANGED"
 )
 
 // ErrRedistributionTenderNotFound — the save targets a tender that does not exist.
@@ -138,6 +142,14 @@ func (r *RedistributionRepo) SaveAuthoritative(
 		return nil, &calc.RedistributionTacticMismatchError{
 			TenderID: tenderID, RequestedTacticID: tacticID, ActiveTacticID: active,
 		}
+	}
+
+	// 0-F2 (category B): one revision bump per save command. The snapshot below
+	// is stamped with this revision (INPUT_REVISION_CHANGED detection) and the
+	// full recalculation finishes with the success CAS before commit.
+	revision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, tenderID, "redistribution_save")
+	if err != nil {
+		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: %w", err)
 	}
 
 	// ── reference data for validation (DB-confirmed, canonical names) ──
@@ -243,6 +255,13 @@ func (r *RedistributionRepo) SaveAuthoritative(
 	if err != nil {
 		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: canonical rules: %w", err)
 	}
+	// 0-F2 §7: stamp the snapshot with the input revision it was built for —
+	// repo-level metadata enrichment (the calc canonical shape is unchanged).
+	// The marker is written ONLY here, i.e. only with a real server calculation.
+	canonicalJSON, err = stampRulesInputRevision(canonicalJSON, revision)
+	if err != nil {
+		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: revision marker: %w", err)
+	}
 
 	// ── atomic batched replace of the COMPLETE server-generated set ──
 	if _, err := tx.Exec(ctx, `
@@ -299,6 +318,10 @@ func (r *RedistributionRepo) SaveAuthoritative(
 	// ── grand total exactly once (commercial values may have changed above) ──
 	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID); err != nil {
 		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: grand total: %w", err)
+	}
+	// Full sync recalculation done for this revision → success CAS (same tx).
+	if err := MarkTenderCalculationSucceededTx(ctx, tx, tenderID, revision); err != nil {
+		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -400,6 +423,25 @@ type RedistributionLoad struct {
 type rulesServerMetadata struct {
 	SchemaVersion     int    `json:"schema_version"`
 	CalculationSource string `json:"calculation_source"`
+	// FinancialInputRevision — 0-F2 §7: the tender input revision the server
+	// snapshot was built for. nil on snapshots saved before 0-F2.
+	FinancialInputRevision *int64 `json:"financial_input_revision"`
+}
+
+// stampRulesInputRevision enriches the canonical rules JSON with the input
+// revision the snapshot was calculated for. Pure repo-level metadata: the calc
+// canonical shape (and its Go↔TS golden fixtures) is untouched.
+func stampRulesInputRevision(canonicalJSON []byte, revision int64) ([]byte, error) {
+	var m map[string]any
+	if err := json.Unmarshal(canonicalJSON, &m); err != nil {
+		return nil, fmt.Errorf("stampRulesInputRevision: %w", err)
+	}
+	m["financial_input_revision"] = revision
+	out, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("stampRulesInputRevision: %w", err)
+	}
+	return out, nil
 }
 
 // LoadResults returns every cost_redistribution_results row for the given
@@ -484,8 +526,8 @@ func (r *RedistributionRepo) LoadResults(
 	out.Reason = RedistributionReasonLegacySnapshot
 	out.Message = "Сохранённый расчёт создан старой версией и требует пересчёта на сервере."
 	var rules calc.RedistributionRulesInput
+	var meta rulesServerMetadata
 	if len(rawRules) > 0 {
-		var meta rulesServerMetadata
 		if json.Unmarshal(rawRules, &meta) == nil &&
 			meta.SchemaVersion >= calc.RedistributionSchemaVersion &&
 			meta.CalculationSource == calc.RedistributionCalculationServer &&
@@ -496,6 +538,29 @@ func (r *RedistributionRepo) LoadResults(
 	}
 	if out.Status != RedistributionStatusCalculated {
 		return out, nil // legacy snapshot: no authoritative prepared rows
+	}
+
+	// 0-F2 §7: the snapshot must have been built for the CURRENT financial
+	// input revision. This catches stale snapshots even when the BOQ id set is
+	// unchanged (rates/markup/insurance edits) — the gap the exact-set check
+	// could not see. A pre-0-F2 server snapshot (no marker) is trusted only
+	// while the tender has had no revisions at all.
+	var tenderInputRev int64
+	if err := tx.QueryRow(ctx,
+		`SELECT financial_input_revision FROM public.tenders WHERE id = $1::uuid`, tenderID,
+	).Scan(&tenderInputRev); err != nil {
+		return nil, fmt.Errorf("redistributionRepo.LoadResults: tender revision: %w", err)
+	}
+	snapshotRev := int64(0)
+	if meta.FinancialInputRevision != nil {
+		snapshotRev = *meta.FinancialInputRevision
+	}
+	if snapshotRev != tenderInputRev {
+		out.Status = RedistributionStatusRequiresRecalculation
+		out.Reason = RedistributionReasonInputRevisionChanged
+		out.Message = "Финансовые данные тендера изменились после сохранения перераспределения — требуется пересчёт."
+		out.Prepared = nil
+		return out, nil
 	}
 
 	// Rebuild the prepared projection from the persisted server snapshot +

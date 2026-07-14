@@ -258,6 +258,11 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
 	}
 
+	// 0-F2 (category A): one revision bump; commercial recalc follows async.
+	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, in.TenderID, "boq_create"); err != nil {
+		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
+	}
+
 	sortNum := 0
 	if in.SortNumber != nil {
 		sortNum = *in.SortNumber

@@ -378,6 +378,14 @@ func (r *PositionRepo) BulkDeletePositions(ctx context.Context, positionIDs []st
 		return fmt.Errorf("positionRepo.BulkDeletePositions: %w", err)
 	}
 
+	// 0-F2 (category A): ONE revision bump per affected tender for the whole
+	// batch command (never per row); commercial recalc follows async.
+	for _, tenderID := range affectedTenders {
+		if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, tenderID, "bulk_delete_positions"); err != nil {
+			return fmt.Errorf("positionRepo.BulkDeletePositions: %w", err)
+		}
+	}
+
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM public.boq_items WHERE client_position_id = ANY($1::uuid[])`,
 		positionIDs,
@@ -516,6 +524,14 @@ func (r *PositionRepo) ClearPositionsBoq(ctx context.Context, ids []string, chan
 	affectedTenders, err := affectedTenderIDs(ctx, tx, ids)
 	if err != nil {
 		return fmt.Errorf("positionRepo.ClearPositionsBoq: %w", err)
+	}
+
+	// 0-F2 (category A): ONE revision bump per affected tender for the whole
+	// batch command (never per row); commercial recalc follows async.
+	for _, tenderID := range affectedTenders {
+		if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, tenderID, "clear_positions_boq"); err != nil {
+			return fmt.Errorf("positionRepo.ClearPositionsBoq: %w", err)
+		}
 	}
 
 	if _, err := tx.Exec(ctx,

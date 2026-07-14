@@ -44,6 +44,13 @@ type TenderRow struct {
 	CreatedBy                       *string   `json:"created_by"`
 	CreatedAt                       time.Time `json:"created_at"`
 	UpdatedAt                       time.Time `json:"updated_at"`
+	// 0-F2: financial calculation state (safe fields only).
+	FinancialInputRevision           int64   `json:"financial_input_revision"`
+	FinancialCalculationRevision     int64   `json:"financial_calculation_revision"`
+	FinancialCalculationStatus       string  `json:"financial_calculation_status"`
+	FinancialCalculatedAt            *string `json:"financial_calculated_at"`
+	FinancialCalculationErrorCode    *string `json:"financial_calculation_error_code,omitempty"`
+	FinancialCalculationErrorMessage *string `json:"financial_calculation_error_message,omitempty"`
 }
 
 // TenderOverviewRow is the aggregate returned by GetTenderOverview.

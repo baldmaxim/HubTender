@@ -115,6 +115,14 @@ func (r *BoqAuditRollbackRepo) Rollback(ctx context.Context, auditID, changedBy 
 		return nil, &UnsupportedBoqAuditRollbackError{AuditID: auditID, Operation: opType}
 	}
 
+	// 0-F2 (category B): one revision bump for the whole rollback command —
+	// the full recalculation below is performed for exactly this revision and
+	// finishes with the success CAS before commit.
+	revision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, tenderID, "boq_audit_rollback")
+	if err != nil {
+		return nil, fmt.Errorf("boqAuditRollbackRepo: %w", err)
+	}
+
 	// ── Phase 2: authoritative recalculation, same transaction, shared kernels.
 	// Order: inputs+parent applied → total_amount (calc, current FX, fail-closed)
 	// → position totals → commercial (current tactic/percentages/distribution)
@@ -145,6 +153,10 @@ func (r *BoqAuditRollbackRepo) Rollback(ctx context.Context, auditID, changedBy 
 	}
 	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID); err != nil {
 		return nil, fmt.Errorf("boqAuditRollbackRepo: grand total: %w", err)
+	}
+	// Full sync recalculation done for this revision → success CAS (same tx).
+	if err := MarkTenderCalculationSucceededTx(ctx, tx, tenderID, revision); err != nil {
+		return nil, fmt.Errorf("boqAuditRollbackRepo: %w", err)
 	}
 
 	// Rollback audit event: captures the state right before the rollback and the

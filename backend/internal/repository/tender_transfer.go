@@ -113,6 +113,14 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		return nil, err
 	}
 
+	// 0-F2 (category B): the NEW tender version gets one revision bump for the
+	// whole transfer; the full recalculation at the end of this tx finishes
+	// with the success CAS, so the version is born 'calculated'.
+	transferRevision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, newTenderID, "version_transfer")
+	if err != nil {
+		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
+	}
+
 	// Step 5: Bulk-insert new client_positions.
 	positionsInserted, err := insertNewPositions(ctx, tx, newTenderID, in.NewPositions)
 	if err != nil {
@@ -318,6 +326,10 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 	// tender is not modified (this is a copy, not a move), so it is not recomputed.
 	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, newTenderID); err != nil {
 		return nil, fmt.Errorf("transferRepo: recompute grand total: %w", err)
+	}
+	// Full sync recalculation done for this revision → success CAS (same tx).
+	if err := MarkTenderCalculationSucceededTx(ctx, tx, newTenderID, transferRevision); err != nil {
+		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
 	}
 
 	// Step 14: Commit.

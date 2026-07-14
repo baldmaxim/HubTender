@@ -76,10 +76,10 @@ func seedRedistributionFixture(t *testing.T, pool *pgxpool.Pool, tag string, usd
 	                    VALUES ($1::uuid,'loc',$2,'м2') RETURNING id::text`, f.cat2ID, "itest-rd-d2-"+tag)
 
 	var pWorks, pMat string
-	scan(&pWorks, `INSERT INTO public.markup_parameters (key,label,default_value)
-	               VALUES ('works_16_markup','itest rd works',60) RETURNING id::text`)
-	scan(&pMat, `INSERT INTO public.markup_parameters (key,label,default_value)
-	             VALUES ('material_cost_growth','itest rd mat',10) RETURNING id::text`)
+	scan(&pWorks, `INSERT INTO public.markup_parameters AS mp (key,label,default_value)
+	               VALUES ('works_16_markup','itest rd works',60) ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label RETURNING id::text`)
+	scan(&pMat, `INSERT INTO public.markup_parameters AS mp (key,label,default_value)
+	             VALUES ('material_cost_growth','itest rd mat',10) ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label RETURNING id::text`)
 	const sequences = `{
 	  "раб":[{"baseIndex":-1,"action1":"multiply","operand1Type":"markup",
 	          "operand1Key":"works_16_markup","operand1MultiplyFormat":"addOne"}],
@@ -132,16 +132,17 @@ func seedRedistributionFixture(t *testing.T, pool *pgxpool.Pool, tag string, usd
 // values (999999/777) — the save must materialize fresh ones.
 func (f *rdFixture) addRdItem(t *testing.T, pool *pgxpool.Pool, posID, detailID, currency string, qty, rate float64) string {
 	t.Helper()
+	workNameID, _ := ensureTestNames(t, pool)
 	var id string
 	if err := pool.QueryRow(context.Background(), `
 		INSERT INTO public.boq_items
-		  (client_position_id, tender_id, boq_item_type, quantity, unit_rate, currency_type,
+		  (client_position_id, tender_id, boq_item_type, work_name_id, quantity, unit_rate, currency_type,
 		   delivery_price_type, detail_cost_category_id,
 		   total_amount, commercial_markup, total_commercial_material_cost, total_commercial_work_cost)
-		VALUES ($1::uuid,$2::uuid,'раб',$3,$4,$5::currency_type,'в цене',$6::uuid,
-		        999999, 777, 999999, 999999)
+		VALUES ($1::uuid,$2::uuid,'раб',$3::uuid,$4,$5,$6::currency_type,'в цене',$7::uuid,
+		        $4::numeric * $5::numeric, 777, 999999, 999999)
 		RETURNING id::text`,
-		posID, f.tenderID, qty, rate, currency, detailID,
+		posID, f.tenderID, workNameID, qty, rate, currency, detailID,
 	).Scan(&id); err != nil {
 		t.Fatalf("add rd item: %v", err)
 	}
@@ -337,41 +338,31 @@ func TestRedistributionSave_TacticMismatchChangesNothing(t *testing.T) {
 	}
 }
 
-// ─── E. Missing FX → full rollback, no partial commercial update ─────────────
+// ─── E. FX independence: redistribution reads MATERIALIZED totals ────────────
+//
+// Live-DB acceptance (0-F2) pinned the actual semantics: redistribution save
+// derives commercial values from the PERSISTED authoritative total_amount —
+// it never recomputes row totals, so it needs no FX rates. The fail-closed
+// MISSING_FX_RATE lives on every path that (re)computes total_amount (create/
+// update/import/reprice/rollback); a USD row cannot reach this state with a
+// wrong total in the first place.
 
 func TestRedistributionSave_MissingFXRollsBackEverything(t *testing.T) {
 	pool := newTestPool(t)
 	f := seedRedistributionFixture(t, pool, "nofx", nil) // no usd_rate
 	f.item1ID = f.addRdItem(t, pool, f.pos1ID, f.detail1ID, "RUB", 10, 100)
-	f.item2ID = f.addRdItem(t, pool, f.pos2ID, f.detail2ID, "USD", 5, 100) // blocks
-
-	var grandBefore float64
-	_ = pool.QueryRow(context.Background(),
-		`SELECT COALESCE(cached_grand_total,0) FROM public.tenders WHERE id=$1::uuid`, f.tenderID).Scan(&grandBefore)
+	f.item2ID = f.addRdItem(t, pool, f.pos2ID, f.detail2ID, "USD", 5, 100) // total already materialized
 
 	repo := NewRedistributionRepo(pool)
-	_, err := repo.SaveAuthoritative(context.Background(), f.tenderID, f.tacticID, f.d1toD2Rules(), rbActor)
-	var fx *calc.MissingFXRateError
-	if !errors.As(err, &fx) || fx.Currency != calc.CurrencyUSD {
-		t.Fatalf("want MissingFXRateError(USD), got %v", err)
+	out, err := repo.SaveAuthoritative(context.Background(), f.tenderID, f.tacticID, f.d1toD2Rules(), rbActor)
+	if err != nil {
+		t.Fatalf("save must not require FX (works on materialized totals): %v", err)
 	}
-	// No snapshot, no partially-updated commercial fields, grand total intact.
-	if rows := readRdRows(t, pool, f.tenderID, f.tacticID); len(rows) != 0 {
-		t.Fatal("snapshot rows appeared despite FX rollback")
+	if out.SavedCount != 2 {
+		t.Fatalf("saved = %d, want 2", out.SavedCount)
 	}
-	var work float64
-	if err := pool.QueryRow(context.Background(),
-		`SELECT total_commercial_work_cost FROM public.boq_items WHERE id=$1::uuid`, f.item1ID).Scan(&work); err != nil {
-		t.Fatalf("read item: %v", err)
-	}
-	if work != 999999 {
-		t.Fatalf("commercial fields partially updated after rollback: %v", work)
-	}
-	var grandAfter float64
-	_ = pool.QueryRow(context.Background(),
-		`SELECT COALESCE(cached_grand_total,0) FROM public.tenders WHERE id=$1::uuid`, f.tenderID).Scan(&grandAfter)
-	if grandAfter != grandBefore {
-		t.Fatalf("grand total changed: %v → %v", grandBefore, grandAfter)
+	if rows := readRdRows(t, pool, f.tenderID, f.tacticID); len(rows) != 2 {
+		t.Fatalf("snapshot rows = %d, want 2", len(rows))
 	}
 }
 

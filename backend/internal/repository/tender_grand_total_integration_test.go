@@ -45,13 +45,14 @@ func seedCachedGrandTotalFixture(t *testing.T, pool *pgxpool.Pool, tag string) *
 		VALUES ($1,'itest-client',$2) RETURNING id::text`, "itest-cgt-"+tag, "ITEST-CGT-"+tag)
 	scan(&f.posID, `INSERT INTO public.client_positions (tender_id, position_number, work_name)
 		VALUES ($1::uuid, 1, 'p') RETURNING id::text`, f.tenderID)
+	workNameID, _ := ensureTestNames(t, pool)
 	addItem := func(mat, work float64) string {
 		var id string
 		scan(&id, `INSERT INTO public.boq_items
-			(client_position_id, tender_id, boq_item_type,
+			(client_position_id, tender_id, boq_item_type, work_name_id,
 			 total_commercial_material_cost, total_commercial_work_cost)
-			VALUES ($1::uuid,$2::uuid,'раб',$3,$4) RETURNING id::text`,
-			f.posID, f.tenderID, mat, work)
+			VALUES ($1::uuid,$2::uuid,'раб',$3::uuid,$4,$5) RETURNING id::text`,
+			f.posID, f.tenderID, workNameID, mat, work)
 		return id
 	}
 	f.item1ID = addItem(100, 300)
@@ -376,9 +377,10 @@ func TestCachedGrandTotal_SQLRetirement(t *testing.T) {
 		VALUES ($1::uuid,1,'p') RETURNING id::text`, tenderID).Scan(&posID); err != nil {
 		t.Fatalf("seed pos: %v", err)
 	}
+	wnID, _ := ensureTestNames(t, pool)
 	if _, err := tx.Exec(ctx, `INSERT INTO public.boq_items
-		(client_position_id, tender_id, boq_item_type, total_commercial_material_cost, total_commercial_work_cost)
-		VALUES ($1::uuid,$2::uuid,'раб',10,20)`, posID, tenderID); err != nil {
+		(client_position_id, tender_id, boq_item_type, work_name_id, total_commercial_material_cost, total_commercial_work_cost)
+		VALUES ($1::uuid,$2::uuid,'раб',$3::uuid,10,20)`, posID, tenderID, wnID); err != nil {
 		t.Fatalf("seed item: %v", err)
 	}
 	res, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID)
@@ -445,13 +447,14 @@ func TestCachedGrandTotal_DecimalRoundingParity(t *testing.T) {
 				VALUES ($1::uuid, 1, 'p') RETURNING id::text`, tenderID).Scan(&posID); err != nil {
 				t.Fatalf("seed position: %v", err)
 			}
+			parityWorkName, _ := ensureTestNames(t, pool)
 			for _, row := range tc.boqRows {
 				// String binds → NUMERIC: the exact decimal reaches the DB untouched.
 				if _, err := pool.Exec(ctx, `INSERT INTO public.boq_items
-					(client_position_id, tender_id, boq_item_type,
+					(client_position_id, tender_id, boq_item_type, work_name_id,
 					 total_commercial_material_cost, total_commercial_work_cost)
-					VALUES ($1::uuid,$2::uuid,'раб',$3::numeric,$4::numeric)`,
-					posID, tenderID, row[0], row[1]); err != nil {
+					VALUES ($1::uuid,$2::uuid,'раб',$3::uuid,$4::numeric,$5::numeric)`,
+					posID, tenderID, parityWorkName, row[0], row[1]); err != nil {
 					t.Fatalf("seed boq row: %v", err)
 				}
 			}

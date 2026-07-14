@@ -236,6 +236,15 @@ func (h *TenderWriteHandler) ApproveFinancial(w http.ResponseWriter, r *http.Req
 			apierr.NotFound("tender not found").Render(w)
 			return
 		}
+		// 0-F2: a stale/failed/running calculation blocks approval — 409 with
+		// the safe state fields only (no internal error details).
+		var notReady *repository.FinancialCalculationNotReadyError
+		if errors.As(err, &notReady) {
+			apierr.FinancialCalculationNotReady(
+				notReady.CalculationStatus, notReady.InputRevision,
+				notReady.CalculationRevision, notReady.Reason).Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to approve financial indicators")
 		return
 	}

@@ -128,13 +128,14 @@ func TestFailClosedRedistribution_ZeroBaseInsuranceSaveRollback(t *testing.T) {
 	pool := newTestPool(t)
 	f := seedRedistributionFixture(t, pool, "fc-insur", nil)
 	// Только материалы: commercial works = 0 при ненулевом insurance (50).
+	_, matNameID := ensureTestNames(t, pool)
 	var matID string
 	if err := pool.QueryRow(context.Background(), `
 		INSERT INTO public.boq_items
-		  (client_position_id, tender_id, boq_item_type, material_type, quantity, unit_rate,
+		  (client_position_id, tender_id, boq_item_type, material_type, material_name_id, quantity, unit_rate,
 		   currency_type, delivery_price_type, detail_cost_category_id)
-		VALUES ($1::uuid,$2::uuid,'мат','основн.',10,100,'RUB','в цене',$3::uuid)
-		RETURNING id::text`, f.pos1ID, f.tenderID, f.detail1ID).Scan(&matID); err != nil {
+		VALUES ($1::uuid,$2::uuid,'мат','основн.',$3::uuid,10,100,'RUB','в цене',$4::uuid)
+		RETURNING id::text`, f.pos1ID, f.tenderID, matNameID, f.detail1ID).Scan(&matID); err != nil {
 		t.Fatalf("seed mat item: %v", err)
 	}
 	f.item1ID = matID

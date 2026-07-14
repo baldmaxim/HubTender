@@ -73,6 +73,12 @@ func (r *BoqRepo) RecomputeLinkedMaterialsForWork(
 		wq = *workQty
 	}
 
+	// 0-F2 (category A): one user command → one revision bump for the tender;
+	// the children's quantity/total change here, commercial recalc is async.
+	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, workTenderID, "recompute_linked_materials"); err != nil {
+		return 0, fmt.Errorf("boqRepo.RecomputeLinkedMaterialsForWork: %w", err)
+	}
+
 	rates, err := loadTenderRates(ctx, tx, workTenderID)
 	if err != nil {
 		return 0, fmt.Errorf("boqRepo.RecomputeLinkedMaterialsForWork: %w", err)

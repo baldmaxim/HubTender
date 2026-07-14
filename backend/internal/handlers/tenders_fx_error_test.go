@@ -22,9 +22,10 @@ import (
 // regular PATCH and the admin patch — never a generic 500 and never a success.
 
 type stubTenderWriteSvc struct {
-	current   *repository.TenderRow
-	updateErr error
-	adminErr  error
+	current    *repository.TenderRow
+	updateErr  error
+	adminErr   error
+	approveErr error
 }
 
 func (s *stubTenderWriteSvc) ListTenders(context.Context, string, repository.TenderListParams) ([]repository.TenderRow, error) {
@@ -47,7 +48,7 @@ func (s *stubTenderWriteSvc) AdminPatchTender(context.Context, string, repositor
 }
 func (s *stubTenderWriteSvc) DeleteTender(context.Context, string) error { panic("not used") }
 func (s *stubTenderWriteSvc) ApproveFinancial(context.Context, string, string) error {
-	panic("not used")
+	return s.approveErr
 }
 
 func authedTenderReq(t *testing.T, method, target, body string) *http.Request {
@@ -193,5 +194,37 @@ func TestImportBoq_EmptyMismatchesIsArray(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), `"total_mismatches":[]`) {
 		t.Fatalf("nil slice must render as []: %s", w.Body.String())
+	}
+}
+
+// ─── 0-F2 §12.13: stale/failed/running calculation blocks approval with 409 ──
+
+func TestApproveFinancial_NotReadyIs409(t *testing.T) {
+	svc := &stubTenderWriteSvc{}
+	h := NewTenderWriteHandler(svc)
+	// The service wraps the repo error; errors.As must reach it.
+	svcErr := fmt.Errorf("tenderService.ApproveFinancial: %w",
+		&repository.FinancialCalculationNotReadyError{
+			TenderID: "t1", CalculationStatus: "stale",
+			InputRevision: 5, CalculationRevision: 3, Reason: "CALCULATION_STALE",
+		})
+	svc.approveErr = svcErr
+
+	r := authedTenderReq(t, http.MethodPost, "/api/v1/tenders/22222222-2222-2222-2222-222222222222/financial-approval", `{}`)
+	w := httptest.NewRecorder()
+	h.ApproveFinancial(w, r)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409\n%s", w.Code, w.Body.String())
+	}
+	m := decodeProblem(t, w)
+	if m["code"] != "FINANCIAL_CALCULATION_NOT_READY" || m["reason"] != "CALCULATION_STALE" {
+		t.Fatalf("problem = %v", m)
+	}
+	if m["inputRevision"] != float64(5) || m["calculationRevision"] != float64(3) || m["calculationStatus"] != "stale" {
+		t.Fatalf("state fields lost: %v", m)
+	}
+	if _, hasStack := m["stack"]; hasStack {
+		t.Fatal("no internal details may leak")
 	}
 }

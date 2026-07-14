@@ -114,9 +114,11 @@ func buildDeps(
 	// materializes boq_items commercial costs + tenders.cached_grand_total.
 	// The commercial calculation itself lives in repository.CommercialRepo so the
 	// SAME implementation can run inside copy / version-transfer transactions.
-	commercialRepo := repository.NewCommercialRepo(pool)
-	recalcSvc := services.NewCommercialRecalcService(commercialRepo, bulkBoqRepo, inMemCache)
+	// 0-F2: the recalc runs as ONE REPEATABLE READ tx (advisory lock + revision
+	// CAS) directly on the pool; a stale_requeue outcome re-enqueues the tender.
+	recalcSvc := services.NewCommercialRecalcService(pool, inMemCache)
 	recalcQueue := services.NewRecalcQueue(rootCtx, recalcSvc, 1500*time.Millisecond, 4, logger)
+	recalcSvc.WithRequeue(recalcQueue)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)

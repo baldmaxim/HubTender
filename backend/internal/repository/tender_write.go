@@ -50,7 +50,10 @@ const tenderScanCols = `
 	housing_class::text, construction_scope::text,
 	is_archived, cached_grand_total,
 	usd_rate, eur_rate, cny_rate,
-	COALESCE(created_at,NOW()), COALESCE(updated_at,NOW())
+	COALESCE(created_at,NOW()), COALESCE(updated_at,NOW()),
+	financial_input_revision, financial_calculation_revision,
+	financial_calculation_status, financial_calculated_at::text,
+	financial_calculation_error_code, financial_calculation_error_message
 `
 
 func scanTenderRow(row interface{ Scan(...any) error }) (*TenderRow, error) {
@@ -61,6 +64,9 @@ func scanTenderRow(row interface{ Scan(...any) error }) (*TenderRow, error) {
 		&t.IsArchived, &t.CachedGrandTotal,
 		&t.USDRate, &t.EURRate, &t.CNYRate,
 		&t.CreatedAt, &t.UpdatedAt,
+		&t.FinancialInputRevision, &t.FinancialCalculationRevision,
+		&t.FinancialCalculationStatus, &t.FinancialCalculatedAt,
+		&t.FinancialCalculationErrorCode, &t.FinancialCalculationErrorMessage,
 	); err != nil {
 		return nil, err
 	}
@@ -171,19 +177,30 @@ func (r *TenderRepo) UpdateTender(ctx context.Context, id string, in UpdateTende
 		return t, nil
 	}
 
-	// Rate change → atomic update + reprice.
+	// Rate change → atomic update + reprice (0-F2 category B: revision bump →
+	// input change → full calculation → success CAS, one transaction).
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("tenderRepo.UpdateTender: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	t, err := scanTenderRow(tx.QueryRow(ctx, q, args...))
+	revision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, id, "tender_rate_update")
 	if err != nil {
+		return nil, fmt.Errorf("tenderRepo.UpdateTender: %w", err)
+	}
+	if _, err := scanTenderRow(tx.QueryRow(ctx, q, args...)); err != nil {
 		return nil, fmt.Errorf("tenderRepo.UpdateTender: scan: %w", err)
 	}
-	if err := repriceTenderAfterRateChangeTx(ctx, tx, id); err != nil {
+	if err := repriceTenderAfterRateChangeTx(ctx, tx, id, revision); err != nil {
 		return nil, fmt.Errorf("tenderRepo.UpdateTender: %w", err)
+	}
+	// Re-read AFTER the success CAS so the response carries the final
+	// 'calculated' state, not the transient 'stale'.
+	t, err := scanTenderRow(tx.QueryRow(ctx,
+		"SELECT "+tenderScanCols+" FROM public.tenders WHERE id = $1", id))
+	if err != nil {
+		return nil, fmt.Errorf("tenderRepo.UpdateTender: reread: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("tenderRepo.UpdateTender: commit: %w", err)

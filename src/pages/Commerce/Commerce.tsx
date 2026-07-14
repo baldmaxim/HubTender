@@ -12,6 +12,7 @@ import { useCommerceData, useCommerceActions } from './hooks';
 import { TenderSelector, CommerceTable, CommerceCards, CommerceHeader, COMMERCE_TABLE_FIT_WIDTH } from './components';
 import CommerceTotalsBar from './components/CommerceTotalsBar';
 import { exportCommerceToExcel } from './utils/exportToExcel';
+import { resolveFinancialCalculationState, LAST_CALCULATED_TOTAL_LABEL } from '../../lib/financial/calculationState';
 import { computeCommerceTotals } from './utils/computeCommerceTotals';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -149,6 +150,14 @@ export default function Commerce() {
       message.error(fxMsg);
       return;
     }
+    // 0-F2: экспорт «Коммерции» содержит финальные финансовые суммы — при
+    // неактуальном расчёте файл не создаётся (никаких сумм под видом final).
+    if (!financialState.canExportFinal) {
+      message.error(
+        `${financialState.alertMessage ?? 'Финансовый расчёт не актуален.'} Финальный экспорт недоступен (FINANCIAL_CALCULATION_NOT_READY).`,
+      );
+      return;
+    }
     // Этап 0.1.2.3b.1: при requires_recalculation snapshot существует, но
     // устарел/неполон — экспорт содержал бы базовые значения под видом final.
     // Файл НЕ создаётся (REDISTRIBUTION_RECALCULATION_REQUIRED). При
@@ -174,6 +183,12 @@ export default function Commerce() {
       cny_rate: tender.cny_rate,
     });
   }, [loading, boqItems, tenders, selectedTenderId]);
+
+  // 0-F2: единая политика статуса финансового расчёта — final-export гейт.
+  const financialState = useMemo(
+    () => resolveFinancialCalculationState(tenders.find(t => t.id === selectedTenderId)),
+    [tenders, selectedTenderId],
+  );
 
   // Навигация к позиции — открываем внутренней вкладкой приложения (keep-alive), «Форма КП»
   // остаётся смонтированной вкладкой и сохраняет состояние.
@@ -226,6 +241,15 @@ export default function Commerce() {
     >
       {fxWarning && (
         <Alert type="error" showIcon message={fxWarning} style={{ marginBottom: 12 }} />
+      )}
+      {financialState.alertMessage && (
+        <Alert
+          type={financialState.alertType ?? 'warning'}
+          showIcon
+          message={financialState.alertMessage}
+          description={financialState.totalsAreLastCalculated ? `Суммы ниже — ${LAST_CALCULATED_TOTAL_LABEL.toLowerCase()}.` : undefined}
+          style={{ marginBottom: 12 }}
+        />
       )}
       {redistributionState.alert && (
         <Alert

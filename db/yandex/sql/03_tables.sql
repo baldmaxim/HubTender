@@ -162,7 +162,19 @@ CREATE TABLE IF NOT EXISTS public.tenders (
     cached_grand_total numeric NOT NULL DEFAULT 0,
     financial_approved boolean NOT NULL DEFAULT false,
     financial_approved_by uuid,
-    financial_approved_at timestamp with time zone
+    financial_approved_at timestamp with time zone,
+    -- 0-F2: минимальная revision-модель финансового расчёта
+    financial_input_revision bigint NOT NULL DEFAULT 0,
+    financial_calculation_revision bigint NOT NULL DEFAULT 0,
+    financial_calculation_status text NOT NULL DEFAULT 'calculated'
+        CONSTRAINT tenders_financial_calculation_status_check
+        CHECK (financial_calculation_status IN ('calculated', 'stale', 'calculating', 'failed')),
+    financial_calculation_started_at timestamp with time zone,
+    financial_calculated_at timestamp with time zone,
+    financial_calculation_error_code text,
+    financial_calculation_error_message text,
+    CONSTRAINT tenders_financial_revision_order_check
+        CHECK (financial_calculation_revision <= financial_input_revision)
 );
 
 CREATE TABLE IF NOT EXISTS public.detail_cost_categories (
@@ -257,6 +269,11 @@ CREATE TABLE IF NOT EXISTS public.client_positions (
     manual_note text,
     hierarchy_level integer DEFAULT 0,
     is_additional boolean DEFAULT false,
+    -- 0-F2 baseline gap found by the disposable-DB acceptance run: these two
+    -- columns exist in production and are read by the prepared-redistribution
+    -- pipeline (loadPreparedPositions), but were missing from the baseline.
+    section_number text,
+    position_name text,
     parent_position_id uuid,
     total_material numeric DEFAULT 0,
     total_works numeric DEFAULT 0,

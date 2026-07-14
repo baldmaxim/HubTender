@@ -187,8 +187,8 @@ func (f *tmplFixture) addMaterialItem(t *testing.T, pool *pgxpool.Pool, pos int,
 	t.Helper()
 	var id string
 	if err := pool.QueryRow(context.Background(),
-		`INSERT INTO public.template_items (template_id, kind, material_library_id, parent_work_item_id, position)
-		 VALUES ($1::uuid,'material',$2::uuid,$3::uuid,$4) RETURNING id::text`,
+		`INSERT INTO public.template_items (template_id, kind, material_library_id, parent_work_item_id, conversation_coeff, position)
+		 VALUES ($1::uuid,'material',$2::uuid,$3::uuid, CASE WHEN $3::uuid IS NULL THEN NULL ELSE 1::numeric END, $4) RETURNING id::text`,
 		f.templateID, f.matLibID, parentTID, pos,
 	).Scan(&id); err != nil {
 		t.Fatalf("add material item: %v", err)
@@ -254,8 +254,10 @@ func TestTemplateInsertIntegration_AtomicRollback(t *testing.T) {
 	// a blocking InvalidTemplateParentError.
 	f.addWorkItem(t, pool, 1)
 	matID := f.addMaterialItem(t, pool, 2, nil)
+	// template_items_material_logic_check: a material with a parent must carry
+	// a conversation_coeff — set both so ONLY the self-reference is invalid.
 	if _, err := pool.Exec(context.Background(),
-		`UPDATE public.template_items SET parent_work_item_id = id WHERE id = $1::uuid`, matID); err != nil {
+		`UPDATE public.template_items SET parent_work_item_id = id, conversation_coeff = 1 WHERE id = $1::uuid`, matID); err != nil {
 		t.Fatalf("make self-parent: %v", err)
 	}
 
@@ -310,6 +312,10 @@ func TestTemplateInsertIntegration_AtomicRollback_MissingFX(t *testing.T) {
 		t.Fatalf("insert usd material lib: %v", err)
 	}
 	t.Cleanup(func() {
+		// LIFO: this runs BEFORE seedFixture's cleanup, so drop the dependent
+		// template_items row first or the library delete silently FK-fails and
+		// the fixture's material_names delete then breaks.
+		_, _ = pool.Exec(context.Background(), `DELETE FROM public.template_items WHERE material_library_id = $1::uuid`, usdMatLib)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM public.materials_library WHERE id = $1::uuid`, usdMatLib)
 	})
 	if _, err := pool.Exec(context.Background(),

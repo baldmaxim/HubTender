@@ -214,7 +214,7 @@ func (s *TenderService) AdminPatchTender(
 	}
 	s.cache.Delete("tender:overview:" + id)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
-	if p.USDRate != nil || p.EURRate != nil || p.CNYRate != nil {
+	if p.USDRate != nil || p.EURRate != nil || p.CNYRate != nil || p.MarkupTacticID != nil {
 		s.cache.Delete("positions:with_costs:" + id)
 		if s.recalc != nil {
 			s.recalc.Enqueue(id)

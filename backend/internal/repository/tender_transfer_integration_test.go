@@ -183,20 +183,27 @@ func addBoq(
 	itemType, currency string, qty, rate float64, consumption *float64, parentID *string,
 ) string {
 	t.Helper()
+	workNameID, matNameID := ensureTestNames(t, pool)
+	var workRef, matRef *string
+	if calc.IsWorkBoqType(itemType) {
+		workRef = &workNameID
+	} else {
+		matRef = &matNameID
+	}
 	var id string
 	if err := pool.QueryRow(context.Background(), `
 		INSERT INTO public.boq_items
 		  (client_position_id, tender_id, boq_item_type, material_type, quantity, unit_rate,
 		   currency_type, delivery_price_type, consumption_coefficient, parent_work_item_id,
-		   detail_cost_category_id,
+		   detail_cost_category_id, work_name_id, material_name_id,
 		   total_amount, commercial_markup,
 		   total_commercial_material_cost, total_commercial_work_cost)
 		VALUES ($1::uuid,$2::uuid,$3::boq_item_type,
 		        CASE WHEN $3 = 'мат' THEN 'основн.'::material_type ELSE NULL END,
-		        $4,$5,$6::currency_type,'в цене',$7,$8::uuid,$9::uuid,
+		        $4,$5,$6::currency_type,'в цене',$7,$8::uuid,$9::uuid,$10::uuid,$11::uuid,
 		        999999, 777, 888888, 999999)
 		RETURNING id::text`,
-		posID, tenderID, itemType, qty, rate, currency, consumption, parentID, detailCatID,
+		posID, tenderID, itemType, qty, rate, currency, consumption, parentID, detailCatID, workRef, matRef,
 	).Scan(&id); err != nil {
 		t.Fatalf("add source boq (%s): %v", itemType, err)
 	}

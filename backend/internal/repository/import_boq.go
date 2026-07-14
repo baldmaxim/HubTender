@@ -177,6 +177,13 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 		return nil, fmt.Errorf("importRepo.BulkImport: %w", err)
 	}
 
+	// 0-F2 (category A): ONE revision bump for the whole import command —
+	// after commit the tender is 'stale' (approval invalidated) until the
+	// async commercial recalc CASes it back to 'calculated'.
+	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, in.TenderID, "bulk_import"); err != nil {
+		return nil, fmt.Errorf("importRepo.BulkImport: %w", err)
+	}
+
 	result := &ImportResult{}
 
 	// ------------------------------------------------------------------

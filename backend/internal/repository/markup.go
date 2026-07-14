@@ -200,11 +200,14 @@ func (r *MarkupRepo) GetTenderTacticID(ctx context.Context, tenderID string) (*s
 }
 
 func (r *MarkupRepo) SetTenderTacticID(ctx context.Context, tenderID, tacticID string) error {
-	_, err := r.pool.Exec(ctx, `
-		UPDATE public.tenders SET markup_tactic_id = $1::uuid WHERE id = $2
-	`, tacticID, tenderID)
-	if err != nil {
-		return fmt.Errorf("markupRepo.SetTenderTacticID: %w", err)
-	}
-	return nil
+	// 0-F2 (category A): tactic assignment changes the commercial config —
+	// revision bump + stale + approval invalidation in the SAME tx.
+	return WithTenderFinancialMutationTx(ctx, r.pool, tenderID, "set_tender_tactic", func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `
+			UPDATE public.tenders SET markup_tactic_id = $1::uuid WHERE id = $2
+		`, tacticID, tenderID); err != nil {
+			return fmt.Errorf("markupRepo.SetTenderTacticID: %w", err)
+		}
+		return nil
+	})
 }

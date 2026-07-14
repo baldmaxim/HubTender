@@ -96,6 +96,13 @@ func (r *InsuranceRepo) Upsert(ctx context.Context, tenderID string, in Insuranc
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	// 0-F2 (category B): insurance affects ONLY the cached grand total, which
+	// is recomputed synchronously below — one revision bump + success CAS.
+	revision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, tenderID, "insurance_upsert")
+	if err != nil {
+		return nil, fmt.Errorf("insuranceRepo.Upsert: %w", err)
+	}
+
 	var out InsuranceRow
 	err = tx.QueryRow(ctx, `
 		INSERT INTO public.tender_insurance (
@@ -147,6 +154,10 @@ func (r *InsuranceRepo) Upsert(ctx context.Context, tenderID string, in Insuranc
 	// «insurance commit → async total recalc позже».
 	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID); err != nil {
 		return nil, fmt.Errorf("insuranceRepo.Upsert: grand total: %w", err)
+	}
+	// Полный sync-расчёт для этой ревизии завершён → success CAS в той же tx.
+	if err := MarkTenderCalculationSucceededTx(ctx, tx, tenderID, revision); err != nil {
+		return nil, fmt.Errorf("insuranceRepo.Upsert: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

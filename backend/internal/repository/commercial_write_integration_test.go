@@ -50,14 +50,15 @@ func seedCommercialTender(t *testing.T, pool *pgxpool.Pool, nItems int, tag stri
 	scan(&f.positionID, `INSERT INTO public.client_positions (tender_id, position_number, work_name)
 	                     VALUES ($1::uuid, 1, 'itest-position') RETURNING id::text`, f.tenderID)
 
+	cwWorkName, _ := ensureTestNames(t, pool)
 	for i := 0; i < nItems; i++ {
 		var id string
 		scan(&id, `INSERT INTO public.boq_items
-		             (client_position_id, tender_id, boq_item_type, quantity, unit_rate,
+		             (client_position_id, tender_id, boq_item_type, work_name_id, quantity, unit_rate,
 		              currency_type, total_amount, commercial_markup,
 		              total_commercial_material_cost, total_commercial_work_cost)
-		           VALUES ($1::uuid, $2::uuid, 'раб', 1, 100, 'RUB', 100, 1, 0, 0)
-		           RETURNING id::text`, f.positionID, f.tenderID)
+		           VALUES ($1::uuid, $2::uuid, 'раб', $3::uuid, 1, 100, 'RUB', 100, 1, 0, 0)
+		           RETURNING id::text`, f.positionID, f.tenderID, cwWorkName)
 		f.itemIDs = append(f.itemIDs, id)
 	}
 

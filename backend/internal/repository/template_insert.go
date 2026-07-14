@@ -185,6 +185,12 @@ func (r *BoqRepo) InsertTemplateItems(
 		return nil, fmt.Errorf("boqRepo.InsertTemplateItems: position: %w", err)
 	}
 
+	// 0-F2 (category A): one revision bump for the whole template insert;
+	// commercial recalc follows async (the service enqueues after commit).
+	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, posTenderID, "template_insert"); err != nil {
+		return nil, fmt.Errorf("boqRepo.InsertTemplateItems: %w", err)
+	}
+
 	// 4. Tender currency rates — loaded ONCE for the whole operation (no N+1).
 	// Passed verbatim to calc, which BLOCKS on a missing/non-positive foreign
 	// rate (MissingFXRateError). There is deliberately no FX fallback to 1.0.

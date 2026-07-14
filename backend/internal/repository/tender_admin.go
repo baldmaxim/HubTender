@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -123,25 +124,36 @@ func (r *TenderRepo) AdminPatchTender(ctx context.Context, id string, p AdminTen
 	q := fmt.Sprintf(`UPDATE public.tenders SET %s WHERE id = $%d`, setClauses, len(args))
 
 	ratesChanged := p.USDRate != nil || p.EURRate != nil || p.CNYRate != nil
-	if !ratesChanged {
+	// markup_tactic_id changes the commercial config → financial input
+	// (category A: stale + async recalc; the service enqueues after commit).
+	tacticChanged := p.MarkupTacticID != nil
+	if !ratesChanged && !tacticChanged {
 		if _, err := r.pool.Exec(ctx, q, args...); err != nil {
 			return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
 		}
 		return nil
 	}
 
-	// Rate change → same atomic update + reprice pipeline as the regular PATCH.
+	// Financial change → one tx: revision bump first, then the patch.
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("tenderRepo.AdminPatchTender: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	revision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, id, "admin_tender_patch")
+	if err != nil {
+		return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
+	}
 	if _, err := tx.Exec(ctx, q, args...); err != nil {
 		return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
 	}
-	if err := repriceTenderAfterRateChangeTx(ctx, tx, id); err != nil {
-		return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
+	if ratesChanged {
+		// Category B: the reprice pipeline is a FULL calculation (it reads the
+		// new tactic too), so it finishes with the success CAS for `revision`.
+		if err := repriceTenderAfterRateChangeTx(ctx, tx, id, revision); err != nil {
+			return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("tenderRepo.AdminPatchTender: commit: %w", err)
@@ -165,34 +177,104 @@ func (r *TenderRepo) GetUserRoleCode(ctx context.Context, userID string) (string
 // tender version (one public.tenders row). Irreversible by design: it only
 // flips false→true, so the WHERE clause makes a repeat call a no-op. Returns
 // pgx.ErrNoRows when the tender does not exist.
+//
+// Stage 0-F2 gates — approval is possible ONLY for a CURRENT calculation:
+//  1. financial_calculation_status = 'calculated';
+//  2. financial_calculation_revision = financial_input_revision;
+//  3. no calculation error;
+//  4. a configured redistribution snapshot must carry the current input
+//     revision (stale snapshot → REDISTRIBUTION_STALE).
+//
+// A violated gate returns FinancialCalculationNotReadyError (RFC 7807 409).
 func (r *TenderRepo) ApproveFinancial(ctx context.Context, tenderID, userID string) error {
-	tag, err := r.pool.Exec(ctx, `
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("tenderRepo.ApproveFinancial: begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// Lock the tender row so the gate check and the flip are atomic against a
+	// concurrent financial mutation (which would invalidate the approval).
+	var (
+		approved bool
+		status   string
+		inputRev int64
+		calcRev  int64
+		errCode  *string
+		tacticID *string
+		notReady *FinancialCalculationNotReadyError
+	)
+	err = tx.QueryRow(ctx, `
+		SELECT financial_approved, financial_calculation_status,
+		       financial_input_revision, financial_calculation_revision,
+		       financial_calculation_error_code, markup_tactic_id::text
+		FROM public.tenders WHERE id = $1 FOR UPDATE
+	`, tenderID).Scan(&approved, &status, &inputRev, &calcRev, &errCode, &tacticID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return pgx.ErrNoRows
+	}
+	if err != nil {
+		return fmt.Errorf("tenderRepo.ApproveFinancial: read: %w", err)
+	}
+	if approved {
+		return nil // already approved → idempotent no-op success
+	}
+
+	switch {
+	case status == "calculating":
+		notReady = &FinancialCalculationNotReadyError{Reason: "CALCULATION_RUNNING"}
+	case status == "failed" || errCode != nil:
+		notReady = &FinancialCalculationNotReadyError{Reason: "CALCULATION_FAILED"}
+	case status != "calculated":
+		notReady = &FinancialCalculationNotReadyError{Reason: "CALCULATION_STALE"}
+	case calcRev != inputRev:
+		notReady = &FinancialCalculationNotReadyError{Reason: "REVISION_MISMATCH"}
+	}
+	if notReady == nil && tacticID != nil {
+		// Redistribution configured? Its snapshot must match the CURRENT revision.
+		var rawRules []byte
+		err := tx.QueryRow(ctx, `
+			SELECT redistribution_rules FROM public.cost_redistribution_results
+			WHERE tender_id = $1::uuid AND markup_tactic_id = $2::uuid
+			  AND redistribution_rules IS NOT NULL
+			ORDER BY created_at ASC LIMIT 1
+		`, tenderID, *tacticID).Scan(&rawRules)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("tenderRepo.ApproveFinancial: redistribution: %w", err)
+		}
+		if len(rawRules) > 0 {
+			var meta rulesServerMetadata
+			snapshotRev := int64(0)
+			if json.Unmarshal(rawRules, &meta) == nil && meta.FinancialInputRevision != nil {
+				snapshotRev = *meta.FinancialInputRevision
+			}
+			if snapshotRev != inputRev {
+				notReady = &FinancialCalculationNotReadyError{Reason: "REDISTRIBUTION_STALE"}
+			}
+		}
+	}
+	if notReady != nil {
+		notReady.TenderID = tenderID
+		notReady.CalculationStatus = status
+		notReady.InputRevision = inputRev
+		notReady.CalculationRevision = calcRev
+		return notReady
+	}
+
+	if _, err := tx.Exec(ctx, `
 		UPDATE public.tenders
 		   SET financial_approved = true,
 		       financial_approved_by = $2,
 		       financial_approved_at = NOW(),
 		       updated_at = NOW()
-		 WHERE id = $1 AND financial_approved = false
-	`, tenderID, userID)
-	if err != nil {
+		 WHERE id = $1
+	`, tenderID, userID); err != nil {
 		return fmt.Errorf("tenderRepo.ApproveFinancial: %w", err)
 	}
-	if tag.RowsAffected() > 0 {
-		return nil // just approved
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("tenderRepo.ApproveFinancial: commit: %w", err)
 	}
-	// 0 rows updated: either the tender is missing, or it was already approved
-	// (idempotent success). Disambiguate with a presence check.
-	var approved bool
-	err = r.pool.QueryRow(ctx,
-		`SELECT financial_approved FROM public.tenders WHERE id = $1`, tenderID,
-	).Scan(&approved)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return pgx.ErrNoRows
-	}
-	if err != nil {
-		return fmt.Errorf("tenderRepo.ApproveFinancial: verify: %w", err)
-	}
-	return nil // already approved → no-op success
+	return nil
 }
 
 // DeleteTender removes the tender (cascade is handled by FKs).

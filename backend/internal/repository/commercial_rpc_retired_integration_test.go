@@ -121,11 +121,12 @@ func setupRetiredRPC(t *testing.T, pool *pgxpool.Pool) *retiredRPCFixture {
 		VALUES ($1::uuid, 1, 'itest-rpc-pos') RETURNING id::text`, f.tenderID).Scan(&f.posID); err != nil {
 		t.Fatalf("seed position: %v", err)
 	}
+	wnID, _ := ensureTestNames(t, pool)
 	if err := tx.QueryRow(ctx, `INSERT INTO public.boq_items
-		(client_position_id, tender_id, boq_item_type, quantity, unit_rate,
+		(client_position_id, tender_id, boq_item_type, work_name_id, quantity, unit_rate,
 		 commercial_markup, total_commercial_material_cost, total_commercial_work_cost)
-		VALUES ($1::uuid, $2::uuid, 'раб', 10, 100, 7, 8, 9) RETURNING id::text`,
-		f.posID, f.tenderID).Scan(&f.itemID); err != nil {
+		VALUES ($1::uuid, $2::uuid, 'раб', $3::uuid, 10, 100, 7, 8, 9) RETURNING id::text`,
+		f.posID, f.tenderID, wnID).Scan(&f.itemID); err != nil {
 		t.Fatalf("seed item: %v", err)
 	}
 	return f
@@ -202,9 +203,10 @@ func TestRetiredCommercialCostRPC_PayloadIndependentFailure(t *testing.T) {
 		VALUES ($1::uuid, 1, 'p') RETURNING id::text`, otherTender).Scan(&otherPos); err != nil {
 		t.Fatalf("seed pos2: %v", err)
 	}
+	_, mnID := ensureTestNames(t, pool)
 	if err := f.tx.QueryRow(ctx, `INSERT INTO public.boq_items
-		(client_position_id, tender_id, boq_item_type, commercial_markup)
-		VALUES ($1::uuid, $2::uuid, 'мат', 42) RETURNING id::text`, otherPos, otherTender).Scan(&otherItem); err != nil {
+		(client_position_id, tender_id, boq_item_type, material_name_id, commercial_markup)
+		VALUES ($1::uuid, $2::uuid, 'мат', $3::uuid, 42) RETURNING id::text`, otherPos, otherTender, mnID).Scan(&otherItem); err != nil {
 		t.Fatalf("seed item2: %v", err)
 	}
 

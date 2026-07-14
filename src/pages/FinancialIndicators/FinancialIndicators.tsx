@@ -8,6 +8,11 @@ import { getVersionColorByTitle } from '../../utils/versionColor';
 import { getTenderById, approveFinancial } from '../../lib/api/fi';
 import { adminPatchTender } from '../../lib/api/tenders';
 import { getErrorMessage } from '../../utils/errors';
+import {
+  resolveFinancialCalculationState,
+  FinancialCalculationState,
+  APPROVAL_INVALIDATED_MESSAGE,
+} from '../../lib/financial/calculationState';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import {
   Chart as ChartJS,
@@ -76,6 +81,10 @@ const FinancialIndicators: React.FC = () => {
   const [tableScale, setTableScale] = useState(1);
   // Статус согласования «Финансовых показателей» текущей версии тендера.
   const [financialApproved, setFinancialApproved] = useState(false);
+  // 0-F2: единая политика статуса финансового расчёта (approval/export-гейты).
+  const [calcState, setCalcState] = useState<FinancialCalculationState>(
+    () => resolveFinancialCalculationState(null),
+  );
   const isGeneralDirector = user?.role_code === 'general_director';
 
   const loadVolumeTitle = useCallback(async (tenderId: string) => {
@@ -85,6 +94,7 @@ const FinancialIndicators: React.FC = () => {
       setVolumeTitle(title);
       setTempVolumeTitle(title);
       setFinancialApproved(Boolean((data as { financial_approved?: boolean })?.financial_approved));
+      setCalcState(resolveFinancialCalculationState(data));
     } catch (error) {
       console.error('Ошибка загрузки заголовка:', error);
     }
@@ -137,6 +147,12 @@ const FinancialIndicators: React.FC = () => {
       setFinancialApproved(true);
       message.success('Согласовано');
     } catch (error) {
+      const e = error as { status?: number; body?: { code?: string } };
+      if (e?.status === 409 && e?.body?.code === 'FINANCIAL_CALCULATION_NOT_READY') {
+        message.warning('Расчёт не актуален — дождитесь пересчёта и повторите согласование.', 8);
+        loadVolumeTitle(selectedTenderId); // обновить статус на экране
+        return;
+      }
       message.error('Ошибка согласования: ' + getErrorMessage(error));
     }
   };
@@ -429,19 +445,36 @@ const FinancialIndicators: React.FC = () => {
                 okText="Согласовать"
                 cancelText="Отмена"
                 onConfirm={handleApprove}
+                disabled={!calcState.canApprove}
               >
                 <Button
                   type="primary"
                   icon={<CheckOutlined />}
                   size={isPhone ? 'middle' : 'large'}
                   block={isPhone}
-                  style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
+                  disabled={!calcState.canApprove}
+                  title={calcState.canApprove ? undefined : 'Расчёт не актуален — согласование недоступно'}
+                  style={calcState.canApprove ? { backgroundColor: '#10b981', borderColor: '#10b981' } : undefined}
                 >
                   Согласовать
                 </Button>
               </Popconfirm>
             )}
           </div>
+          {/* 0-F2: статус финансового расчёта — единая политика. */}
+          {calcState.alertMessage && (
+            <Alert
+              type={calcState.alertType ?? 'warning'}
+              showIcon
+              style={{ marginTop: 12 }}
+              message={calcState.alertMessage}
+              description={
+                calcState.kind === 'stale' && !financialApproved
+                  ? APPROVAL_INVALIDATED_MESSAGE
+                  : undefined
+              }
+            />
+          )}
         </div>
 
         <Spin spinning={loading}>

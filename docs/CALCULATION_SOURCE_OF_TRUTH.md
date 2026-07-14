@@ -734,6 +734,67 @@ reprice-pipeline, admin-паритет, отсутствие FX fallback=1, payl
 inputs). Следующий этап **0-F2** (финальный): stale/concurrent guard, approval
 invalidation, финальная приёмка.
 
+## 7j. Financial revision model — финальное закрытие этапа 0 (0-F2)
+
+1. **Схема**: `tenders.financial_input_revision` (+1 на каждую пользовательскую
+   финансовую команду, НЕ на строку batch'а), `financial_calculation_revision`
+   (ревизия входов последнего успешного расчёта), `financial_calculation_status`
+   (`calculated | stale | calculating | failed`, CHECK), `started_at /
+   calculated_at / error_code / error_message`; CHECK `calc_rev <= input_rev`.
+   Миграция `2026_07_financial_calculation_revision.sql` (идемпотентна,
+   выполнена дважды на приёмочной БД).
+2. **Центральный helper** `MarkTenderFinancialInputsChangedTx` — ЕДИНСТВЕННЫЙ
+   способ зафиксировать финансовое изменение: в одной tx с мутацией (+1
+   revision, stale, очистка error, **инвалидация согласования**:
+   approved=false/by=NULL/at=NULL; факт инвалидации активного approval пишется
+   в structured log — отдельной tender-audit таблицы нет, схема не расширена).
+3. **Старый расчёт не может перезаписать новые входы**:
+   `MarkTenderCalculationSucceededTx` — CAS `WHERE financial_input_revision =
+   calculatedRevision`; провал → typed `StaleCalculationResultError`, ВСЕ
+   derived-записи расчёта откатываются, latest revision re-enqueue'ится.
+   Фоновая ошибка → `MarkTenderCalculationFailedIfCurrent` (failed только для
+   текущей ревизии; без stack trace/SQL в message).
+4. **Сериализация recalc** (`RecalcTenderCommercialAuthoritative`): session
+   advisory lock (`pg_advisory_lock(42001, hashtext(tender_id))`) на выделенном
+   соединении, взятый ДО начала ОДНОЙ REPEATABLE READ tx (lock-then-begin —
+   иначе второй job получил бы pre-lock snapshot); чтение ревизии → no-op при
+   актуальном расчёте → compute из того же snapshot → внутренний writer →
+   grand total → CAS → commit. Кросс-процессно; lock умирает с соединением
+   (crash не подвешивает тендер); индикативный status='calculating' ничего не
+   блокирует. Два конкурентных job'а: один calculated, второй no-op
+   (интеграционно доказано на живой БД).
+5. **Категории мутаций**: A (async: BOQ create/update/delete, batch clear,
+   mass import, template insert, linked-materials, markup tactic/percentages/
+   pricing distribution/subcontract exclusions, admin tactic) — mark → commit →
+   enqueue; B (sync full: FX reprice regular+admin, audit rollback, copy,
+   version transfer, insurance, redistribution save) — mark → change → полный
+   расчёт → success CAS в той же tx. Presentation-изменения ревизию не
+   трогают.
+6. **Redistribution marker**: SaveAuthoritative штампует canonical rules
+   `financial_input_revision: N` (repo-обогащение, calc-форма не менялась);
+   GET при несовпадении с текущей ревизией →
+   `requires_recalculation / INPUT_REVISION_CHANGED` (ловит stale snapshot при
+   неизменном BOQ-set); approve тоже проверяет marker (REDISTRIBUTION_STALE).
+7. **Approval**: разрешён только при status=calculated ∧ calc_rev=input_rev ∧
+   нет error ∧ redistribution snapshot (если настроен) актуален; иначе RFC 7807
+   **409 FINANCIAL_CALCULATION_NOT_READY** (calculationStatus/inputRevision/
+   calculationRevision/reason). Любая финансовая мутация автоматически снимает
+   approval (история не удаляется).
+8. **UX**: единая политика `src/lib/financial/calculationState.ts`
+   (`resolveFinancialCalculationState`) — calculated/stale/calculating/failed;
+   stale/failed/calculating блокируют approve + final exports, суммы подписаны
+   «Последний рассчитанный итог»; fail-closed (неизвестный статус = stale).
+   Подключено: FinancialIndicators (approve + Alert), Commerce (final-export
+   gate + Alert), CostRedistribution (через INPUT_REVISION_CHANGED reason).
+9. **ETag**: derived commercial writer (`PersistCalculatedCommercialCostsTx`)
+   больше НЕ трогает `boq_items.updated_at` — пользовательский ETag меняют
+   только input-мутации (интеграционно доказано).
+
+Защита от регресса: `scripts/checks/financialRevisionSafety.check.mjs`
+(17 mutation paths → central helper; CAS в recalc и отсутствие безусловного
+'calculated'; approval-гейты; stale+enqueue импорта; revision marker;
+frontend shared policy; derived writes не трогают updated_at).
+
 ## 8. Что сделано в 0.1.2 (только безопасное)
 
 - Исправлен вводящий в заблуждение комментарий `boq_amount.go` («trigger-computed» → app-computed).

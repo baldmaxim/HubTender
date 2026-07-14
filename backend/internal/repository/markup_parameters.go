@@ -170,6 +170,11 @@ func (r *MarkupRepo) ReplaceTenderMarkupPercentages(ctx context.Context, tenderI
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	// 0-F2 (category A): ONE bump for the whole replace command.
+	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, tenderID, "replace_markup_percentages"); err != nil {
+		return fmt.Errorf("markupRepo.ReplaceTenderMarkupPercentages: %w", err)
+	}
+
 	if _, err := tx.Exec(ctx, `
 		DELETE FROM public.tender_markup_percentage WHERE tender_id = $1
 	`, tenderID); err != nil {
