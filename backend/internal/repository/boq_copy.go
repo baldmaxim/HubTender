@@ -206,7 +206,7 @@ func (r *BoqRepo) CopyPositionItems(
 	// the TARGET tender's FX rates (calc.CalculateBoqItemTotalAmount). Parent links
 	// are already restored, so calc sees the same effective parent the row keeps.
 	// Fail-closed on a missing FX rate → the whole tx rolls back.
-	if err := RecomputeBoqTotalAmountsTx(ctx, tx, tgtTender, newIDs); err != nil {
+	if _, err := RecomputeBoqTotalAmountsTx(ctx, tx, tgtTender, newIDs); err != nil {
 		return nil, fmt.Errorf("boqRepo.CopyPositionItems: %w", err)
 	}
 

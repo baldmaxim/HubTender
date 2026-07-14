@@ -111,7 +111,7 @@ const price = row.total_amount; // сервер посчитал и вернул
 | `position_recompute.go` (recompute) | total_amount | ✅ да (кол-во — частично вне) | MED | quantity-деривация вне calc — **backlog** |
 | `commercial_recalc.go RecalcTender` | commercial split | ✅ да | LOW | эталон |
 | `template_insert.go` | total_amount | ✅ **да** (0.1.2.1) | LOW | **исправлено** — legacy-формула удалена |
-| `import_boq.go BulkImport` | total_amount **от клиента** | ❌ нет | **HIGH** | **этап 0.2 (импорт)** |
+| `import_boq.go BulkImport` | total_amount | ✅ **да** (0-F1) | LOW | **исправлено** — client total диагностический, деньги через `RecomputeBoqTotalAmountsTx` |
 | `commercial_write.go PersistCalculatedCommercialCosts` | запись **рассчитанных** commercial (внутренний писатель) | ✅ да (пишет результат calc) | LOW | **0.1.2.2** — единственный writer, привязан к одному tender |
 | `redistribution.go SaveResults` | redistribution от клиента | ❌ нет | **HIGH** | **backlog** (см. §7) |
 | `tender_recalc.go RecalculateTenderGrandTotal` | Σcommercial + insurance, ROUND(,2) | ❌ нет | MED | дубль с SQL — **backlog** |
@@ -203,8 +203,11 @@ float64 на этом пути не авторитетен. Классифика
    SQL-функция — tombstone, grand-total триггеры удалены.
 3. ~~**`template_insert.go`** legacy-формула~~ → ✅ **закрыто в 0.1.2.1**: путь переведён на
    `calc.CalculateBoqItemTotalAmount`, effective parent определяется до INSERT, FX блокирует.
-4. **Импорт BOQ** доверяет `total_amount` клиента (`import_boq.go`, mass/single import). →
-   **этап 0.2**.
+4. ~~**Импорт BOQ** доверяет `total_amount` клиента (`import_boq.go`, mass/single import).~~ →
+   ✅ **закрыто в 0-F1** (см. §7i): mass import вставляет строки без total_amount и
+   пересчитывает их в той же tx через `RecomputeBoqTotalAmountsTx`; client total —
+   только диагностика (mismatch report). Single-position import и раньше шёл через
+   server-authoritative `CreateBoqItem`.
 5. ~~**`PATCH /items/bulk-commercial`** — сырой client-write commercial~~ → ✅ **закрыто в 0.1.2.2**
    (endpoint retired, 410; см. раздел «Коммерческие стоимости» ниже).
    ~~Латентный DB-level bypass `public.bulk_update_boq_items_commercial_costs`~~ →
@@ -693,6 +696,43 @@ pipeline на общих fixtures).
 baseline tombstone/триггеры, skip_grand_total, frontend-пересчёт; 0.1.2.4a.1 —
 на decimal-границе запрещены `math.Round`/epsilon/`ParseFloat`/float64,
 обязательны `::text`-агрегаты и string-bind `RoundedTotalDecimal`).
+
+## 7i. Импорт BOQ и изменение валютного курса (этап 0-F1)
+
+1. **Импорт передаёт только inputs** (quantity, unit_rate, currency,
+   коэффициенты, доставка, связи). `total_amount` от клиента/Excel —
+   **только диагностика** (обратная совместимость): в INSERT его нет, fallback'ом
+   не служит, на расчёт не влияет.
+2. **Persisted total всегда считает calc**: после INSERT'ов строки
+   пересчитываются в той же tx через `RecomputeBoqTotalAmountsTx`
+   (persisted inputs + реальные parent-связи, курсы тендера загружаются один
+   раз, один bulk UPDATE), затем `RecomputePositionTotalsForTenderTx` и
+   `RecalculateTenderGrandTotalTx`. Import atomicity — all-or-nothing:
+   любая ошибка (MISSING_FX_RATE, invalid parent, NaN-контроль, DB) откатывает
+   всё; commercial материализует существующий async recalc (категория B).
+3. **Mismatch report**: расхождение client total vs server calc >
+   `ImportTotalMismatchTolerance` (0.01) → warning-запись
+   (row/name/client/server/Δ/Δ%) в ответе импорта и в модалке; не ошибка,
+   значение в БД всегда серверное.
+4. **Изменение курса (usd/eur/cny) атомарно**: оба пути записи (PATCH tenders
+   и admin-patch) при изменении курса выполняют в одной tx
+   `repriceTenderAfterRateChangeTx`: rates → BOQ totals → position totals →
+   commercial (`MaterializeCommercialForTenderTx`) → `cached_grand_total` →
+   commit; cache-инвалидация и success — только после commit. Частичное
+   применение невозможно.
+5. **FX fail-closed**: новый курс, делающий существующую строку
+   нерассчитываемой (null/0 при наличии строк в этой валюте) → 400
+   `MISSING_FX_RATE`, полный rollback (старые rates/totals/commercial/cached
+   сохранены). Async-очередь recalc — идемпотентный ДОП. механизм, не источник
+   корректности.
+6. Клиентский FX fallback `|| 1` и клиентский расчёт `total_amount` удалены из
+   mass-import фронта.
+
+Защита от регресса: `scripts/checks/serverAuthoritativeImportFx.check.mjs`
+(INSERT без client total/commercial, calc-pipeline в tx импорта, полный
+reprice-pipeline, admin-паритет, отсутствие FX fallback=1, payload только с
+inputs). Следующий этап **0-F2** (финальный): stale/concurrent guard, approval
+invalidation, финальная приёмка.
 
 ## 8. Что сделано в 0.1.2 (только безопасное)
 

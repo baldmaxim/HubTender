@@ -2,8 +2,13 @@
 // после атомарного импорта. Вынесено из useMassBoqImport без изменений логики.
 // Импортируем соседей напрямую (не через '../utils' — барель реэкспортирует
 // и этот файл, self-import создал бы цикл).
+//
+// Этап 0-F1: клиент передаёт ТОЛЬКО исходные данные (quantity, unit_rate,
+// currency, коэффициенты, доставка, связи). total_amount больше не отправляется —
+// авторитетную сумму каждой строки считает сервер (calc.CalculateBoqItemTotalAmount)
+// по фактическим курсам тендера; поле в API осталось только для обратной
+// совместимости старых клиентов как диагностическое контрольное значение.
 import { ParsedBoqItem, PositionUpdateData, isWork, isMaterial } from './massBoqImportUtils';
-import { calculateTotalAmount } from './massBoqImportValidation';
 
 export const buildPositionUpdatesPayload = (
   positionUpdates: Map<string, PositionUpdateData>,
@@ -32,7 +37,6 @@ export const buildPositionUpdatesPayload = (
 
 export const buildBoqItemsPayload = (
   data: ParsedBoqItem[],
-  rates: { usd: number; eur: number; cny: number },
 ): Record<string, unknown>[] => {
   return data
     .filter(item => item.matchedPositionId)
@@ -43,7 +47,6 @@ export const buildBoqItemsPayload = (
         boq_item_type: item.boq_item_type,
         unit_code: item.unit_code,
         quantity: item.quantity,
-        total_amount: calculateTotalAmount(item, rates),
       };
 
       if (item.base_quantity !== undefined) {
@@ -95,6 +98,18 @@ export const buildBoqItemsPayload = (
       return payload;
     });
 };
+
+/** Диагностическая запись отчёта сервера: legacy контрольное значение
+ *  total_amount разошлось с авторитетным серверным расчётом. Warning, не ошибка;
+ *  в БД всегда сохранён server total. */
+export interface ImportTotalMismatch {
+  row_number: number;
+  item_name: string;
+  client_total_amount: number;
+  server_total_amount: number;
+  absolute_difference: number;
+  relative_difference_percent: number;
+}
 
 export interface ImportMismatchAnalysis {
   expectedItems: number;

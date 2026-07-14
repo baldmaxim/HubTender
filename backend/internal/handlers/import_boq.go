@@ -31,17 +31,22 @@ func NewImportBoqHandler(svc importBoqServicer) *ImportBoqHandler {
 // importBoqReq is the JSON body for POST /api/v1/imports/boq.
 // Items and PositionUpdates may be empty slices — that is a valid no-op call.
 type importBoqReq struct {
-	TenderID        string                          `json:"tender_id" validate:"required,uuid"`
-	FileName        string                          `json:"file_name" validate:"required"`
-	Items           []repository.ImportBoqItem      `json:"items"`
+	TenderID        string                            `json:"tender_id" validate:"required,uuid"`
+	FileName        string                            `json:"file_name" validate:"required"`
+	Items           []repository.ImportBoqItem        `json:"items"`
 	PositionUpdates []repository.ImportPositionUpdate `json:"position_updates"`
 }
 
-// importBoqResp is the JSON body returned on success.
+// importBoqResp is the JSON body returned on success. TotalMismatches is the
+// stage 0-F1 diagnostic report: rows whose legacy client total_amount diverged
+// from the authoritative server calculation (warnings, not errors — the server
+// total is what got persisted).
 type importBoqResp struct {
-	ImportSessionID      *string `json:"import_session_id"`
-	InsertedItemsCount   int     `json:"inserted_items_count"`
-	UpdatedPositionsCount int    `json:"updated_positions_count"`
+	ImportSessionID       *string                          `json:"import_session_id"`
+	InsertedItemsCount    int                              `json:"inserted_items_count"`
+	UpdatedPositionsCount int                              `json:"updated_positions_count"`
+	TotalMismatchCount    int                              `json:"total_mismatch_count"`
+	TotalMismatches       []repository.ImportTotalMismatch `json:"total_mismatches"`
 }
 
 // BulkImport handles POST /api/v1/imports/boq.
@@ -82,6 +87,11 @@ func (h *ImportBoqHandler) BulkImport(w http.ResponseWriter, r *http.Request) {
 			apierr.BadRequest(bulkErr.Message).Render(w)
 			return
 		}
+		// Stage 0-F1: server-side recompute fails closed on a missing FX rate —
+		// a clear 400, the whole import already rolled back.
+		if renderMissingFXRate(w, err) {
+			return
+		}
 		// Подстраховка: основные ошибки данных/ограничений уже превращаются в
 		// ErrBulkImport (с номером строки) в repository.boqInsertError. Эти
 		// override'ы срабатывают, только если ошибка пришла иным путём.
@@ -96,9 +106,15 @@ func (h *ImportBoqHandler) BulkImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mismatches := result.TotalMismatches
+	if mismatches == nil {
+		mismatches = []repository.ImportTotalMismatch{}
+	}
 	renderJSON(w, r, http.StatusOK, importBoqResp{
 		ImportSessionID:       result.ImportSessionID,
 		InsertedItemsCount:    result.InsertedItemsCount,
 		UpdatedPositionsCount: result.UpdatedPositionsCount,
+		TotalMismatchCount:    result.TotalMismatchCount,
+		TotalMismatches:       mismatches,
 	})
 }

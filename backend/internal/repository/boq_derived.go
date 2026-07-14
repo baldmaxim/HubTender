@@ -126,7 +126,9 @@ func LoadTenderRatesTx(ctx context.Context, tx pgx.Tx, tenderID string) (calc.Cu
 // RecomputeBoqTotalAmountsTx recomputes total_amount for the given boq_items from
 // their PERSISTED inputs and the TARGET tender's currency rates, using the
 // authoritative kernel calc.CalculateBoqItemTotalAmount, and applies the results
-// in ONE bulk UPDATE.
+// in ONE bulk UPDATE. Returns the authoritative totals per item id (stage 0-F1:
+// the import mismatch report compares the client's diagnostic control value
+// against these — never the other way around).
 //
 // Why it reads the rows back instead of computing before the INSERT: at this
 // point parent_work_item_id has already been restored, so calc sees exactly the
@@ -143,14 +145,14 @@ func RecomputeBoqTotalAmountsTx(
 	tx pgx.Tx,
 	tenderID string,
 	itemIDs []string,
-) error {
+) (map[string]float64, error) {
 	if len(itemIDs) == 0 {
-		return nil
+		return map[string]float64{}, nil
 	}
 
 	rates, err := LoadTenderRatesTx(ctx, tx, tenderID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Read the persisted inputs of exactly these rows, scoped to the tender.
@@ -162,7 +164,7 @@ func RecomputeBoqTotalAmountsTx(
 		WHERE tender_id = $1::uuid AND id = ANY($2::uuid[])
 	`, tenderID, itemIDs)
 	if err != nil {
-		return fmt.Errorf("recomputeBoqTotalAmountsTx: select: %w", err)
+		return nil, fmt.Errorf("recomputeBoqTotalAmountsTx: select: %w", err)
 	}
 
 	ids := make([]string, 0, len(itemIDs))
@@ -206,11 +208,11 @@ func RecomputeBoqTotalAmountsTx(
 		scanErr = rows.Err()
 	}()
 	if scanErr != nil {
-		return scanErr
+		return nil, scanErr
 	}
 
 	if len(ids) != len(itemIDs) {
-		return fmt.Errorf("recomputeBoqTotalAmountsTx: expected %d rows for tender %s, found %d",
+		return nil, fmt.Errorf("recomputeBoqTotalAmountsTx: expected %d rows for tender %s, found %d",
 			len(itemIDs), tenderID, len(ids))
 	}
 
@@ -222,11 +224,41 @@ func RecomputeBoqTotalAmountsTx(
 		WHERE bi.id = u.id AND bi.tender_id = $3::uuid
 	`, ids, totals, tenderID)
 	if err != nil {
-		return fmt.Errorf("recomputeBoqTotalAmountsTx: update: %w", err)
+		return nil, fmt.Errorf("recomputeBoqTotalAmountsTx: update: %w", err)
 	}
 	if int(tag.RowsAffected()) != len(ids) {
-		return fmt.Errorf("recomputeBoqTotalAmountsTx: expected %d updated rows, got %d",
+		return nil, fmt.Errorf("recomputeBoqTotalAmountsTx: expected %d updated rows, got %d",
 			len(ids), tag.RowsAffected())
+	}
+	out := make(map[string]float64, len(ids))
+	for i, id := range ids {
+		out[id] = totals[i]
+	}
+	return out, nil
+}
+
+// RecomputePositionTotalsForTenderTx re-aggregates client_positions totals
+// (total_material / total_works) for EVERY position of the tender in one
+// UPDATE-FROM, inside the caller's transaction. Same aggregation as
+// PositionRepo.RecomputePositionTotals — tender scope instead of one position;
+// no per-position loop.
+func RecomputePositionTotalsForTenderTx(ctx context.Context, tx pgx.Tx, tenderID string) error {
+	if _, err := tx.Exec(ctx, `
+		UPDATE public.client_positions cp
+		SET total_material = COALESCE(s.tm, 0),
+		    total_works    = COALESCE(s.tw, 0),
+		    updated_at     = NOW()
+		FROM (
+			SELECT client_position_id,
+				SUM(total_amount) FILTER (WHERE boq_item_type::text IN ('мат','суб-мат','мат-комп.')) AS tm,
+				SUM(total_amount) FILTER (WHERE boq_item_type::text IN ('раб','суб-раб','раб-комп.')) AS tw
+			FROM public.boq_items
+			WHERE tender_id = $1::uuid
+			GROUP BY client_position_id
+		) s
+		WHERE cp.id = s.client_position_id AND cp.tender_id = $1::uuid
+	`, tenderID); err != nil {
+		return fmt.Errorf("recomputePositionTotalsForTenderTx: %w", err)
 	}
 	return nil
 }

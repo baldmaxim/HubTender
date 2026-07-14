@@ -171,6 +171,11 @@ func (h *TenderWriteHandler) UpdateTender(w http.ResponseWriter, r *http.Request
 
 	updated, err := h.svc.UpdateTender(r.Context(), tenderID, in)
 	if err != nil {
+		// Fail-closed rate change: the new rates make an existing BOQ row
+		// uncalculable → the whole update rolled back, nothing changed.
+		if renderMissingFXRate(w, err) {
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to update tender")
 		return
 	}
@@ -197,6 +202,10 @@ func (h *TenderWriteHandler) AdminPatchTender(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if err := h.svc.AdminPatchTender(r.Context(), id, p); err != nil {
+		// Same fail-closed rate semantics as the regular update.
+		if renderMissingFXRate(w, err) {
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to patch tender")
 		return
 	}

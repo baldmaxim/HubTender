@@ -101,6 +101,12 @@ func (r *TenderRepo) CreateTender(ctx context.Context, in CreateTenderInput) (*T
 // UpdateTender applies non-nil fields from in to the tender row and returns
 // the updated row. Optimistic concurrency (If-Match) is enforced by the
 // handler before this method is called.
+//
+// Stage 0-F1: when the patch changes a currency rate, the UPDATE and the full
+// reprice pipeline (BOQ totals → position totals → commercial → cached grand
+// total) run in ONE transaction — success is returned only after everything
+// is recomputed with the new rates; any failure (e.g. MISSING_FX_RATE) rolls
+// the rate change back entirely.
 func (r *TenderRepo) UpdateTender(ctx context.Context, id string, in UpdateTenderInput) (*TenderRow, error) {
 	args := []any{}
 	argN := 1
@@ -155,9 +161,32 @@ func (r *TenderRepo) UpdateTender(ctx context.Context, id string, in UpdateTende
 
 	q := fmt.Sprintf("UPDATE public.tenders SET %s WHERE id = $%d RETURNING "+tenderScanCols,
 		setClauses, argN)
-	t, err := scanTenderRow(r.pool.QueryRow(ctx, q, args...))
+
+	ratesChanged := in.USDRate != nil || in.EURRate != nil || in.CNYRate != nil
+	if !ratesChanged {
+		t, err := scanTenderRow(r.pool.QueryRow(ctx, q, args...))
+		if err != nil {
+			return nil, fmt.Errorf("tenderRepo.UpdateTender: scan: %w", err)
+		}
+		return t, nil
+	}
+
+	// Rate change → atomic update + reprice.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("tenderRepo.UpdateTender: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	t, err := scanTenderRow(tx.QueryRow(ctx, q, args...))
 	if err != nil {
 		return nil, fmt.Errorf("tenderRepo.UpdateTender: scan: %w", err)
+	}
+	if err := repriceTenderAfterRateChangeTx(ctx, tx, id); err != nil {
+		return nil, fmt.Errorf("tenderRepo.UpdateTender: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("tenderRepo.UpdateTender: commit: %w", err)
 	}
 	return t, nil
 }

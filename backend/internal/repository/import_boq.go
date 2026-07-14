@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/jackc/pgx/v5"
@@ -32,16 +32,22 @@ type ImportBoqItem struct {
 	// within the same batch. Resolved to a real UUID before INSERT.
 	ParentWorkTempID *string `json:"parent_work_temp_id"`
 
-	BoqItemType          string   `json:"boq_item_type"`
-	WorkNameID           *string  `json:"work_name_id"`
-	MaterialNameID       *string  `json:"material_name_id"`
-	UnitCode             *string  `json:"unit_code"`
-	Quantity             *float64 `json:"quantity"`
-	BaseQuantity         *float64 `json:"base_quantity"`
-	ConversionCoeff      *float64 `json:"conversion_coefficient"`
-	ConsumptionCoeff     *float64 `json:"consumption_coefficient"`
-	UnitRate             *float64 `json:"unit_rate"`
-	CurrencyType         *string  `json:"currency_type"`
+	BoqItemType      string   `json:"boq_item_type"`
+	WorkNameID       *string  `json:"work_name_id"`
+	MaterialNameID   *string  `json:"material_name_id"`
+	UnitCode         *string  `json:"unit_code"`
+	Quantity         *float64 `json:"quantity"`
+	BaseQuantity     *float64 `json:"base_quantity"`
+	ConversionCoeff  *float64 `json:"conversion_coefficient"`
+	ConsumptionCoeff *float64 `json:"consumption_coefficient"`
+	UnitRate         *float64 `json:"unit_rate"`
+	CurrencyType     *string  `json:"currency_type"`
+	// TotalAmount is accepted ONLY for backward compatibility with older
+	// clients/Excel payloads and is a DIAGNOSTIC CONTROL VALUE: it is never
+	// inserted, never used as a fallback and never influences the server
+	// calculation. The persisted total_amount is always recomputed via
+	// calc.CalculateBoqItemTotalAmount; a divergent client value only produces
+	// an ImportTotalMismatch warning in the result.
 	TotalAmount          *float64 `json:"total_amount"`
 	DeliveryPriceType    *string  `json:"delivery_price_type"`
 	DeliveryAmount       *float64 `json:"delivery_amount"`
@@ -77,11 +83,32 @@ type ImportInput struct {
 	PositionUpdates []ImportPositionUpdate
 }
 
-// ImportResult mirrors the JSONB returned by the original RPC.
+// ImportTotalMismatchTolerance — the ONE tolerance used when comparing a
+// legacy client's diagnostic total_amount with the authoritative server total.
+// It exists solely to silence last-money-digit noise (одна копейка); it never
+// changes what is persisted — the server total is written unconditionally.
+const ImportTotalMismatchTolerance = 0.01
+
+// ImportTotalMismatch is one row of the diagnostic mismatch report: the legacy
+// client/Excel control value diverged from the authoritative server total.
+// A mismatch is a WARNING, not an import error.
+type ImportTotalMismatch struct {
+	RowNumber                 int     `json:"row_number"` // Excel row (0 when the client sent no row_index)
+	ItemName                  string  `json:"item_name"`
+	ClientTotalAmount         float64 `json:"client_total_amount"`
+	ServerTotalAmount         float64 `json:"server_total_amount"`
+	AbsoluteDifference        float64 `json:"absolute_difference"`
+	RelativeDifferencePercent float64 `json:"relative_difference_percent"`
+}
+
+// ImportResult mirrors the JSONB returned by the original RPC, extended with
+// the stage 0-F1 diagnostic mismatch report.
 type ImportResult struct {
-	ImportSessionID       *string `json:"import_session_id"`
-	InsertedItemsCount    int     `json:"inserted_items_count"`
-	UpdatedPositionsCount int     `json:"updated_positions_count"`
+	ImportSessionID       *string               `json:"import_session_id"`
+	InsertedItemsCount    int                   `json:"inserted_items_count"`
+	UpdatedPositionsCount int                   `json:"updated_positions_count"`
+	TotalMismatchCount    int                   `json:"total_mismatch_count"`
+	TotalMismatches       []ImportTotalMismatch `json:"total_mismatches"`
 }
 
 // ErrBulkImport is a sentinel type for 400-class errors raised inside the
@@ -135,13 +162,10 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	// Подавляем построчный пересчёт grand_total (trg_boq_items_grand_total,
-	// FOR EACH ROW) на время bulk-вставки — иначе импорт N строк = N полных
-	// агрегатов по тендеру (O(N×M)) и большие файлы упираются в тайм-аут.
-	// Пересчитываем один раз перед commit. SET LOCAL транзакционно-локален и
-	// не утекает через PgBouncer. (Образец: tender_clone/tender_transfer.)
 	// Большой импорт не должен упираться в statement_timeout пула; общий
-	// предел держит HTTP-таймаут сервера (5 мин).
+	// предел держит HTTP-таймаут сервера (5 мин). SET LOCAL транзакционно-
+	// локален и не утекает через PgBouncer. (Grand-total триггеров больше нет —
+	// этап 0.1.2.4a; пересчёт итога выполняется один раз перед commit.)
 	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout = '0'`); err != nil {
 		return nil, fmt.Errorf("importRepo.BulkImport: set statement_timeout: %w", err)
 	}
@@ -224,6 +248,10 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 		WHERE client_position_id = $1::uuid
 	`
 
+	// Server-authoritative money (stage 0-F1): the INSERT deliberately has NO
+	// total_amount column — the client's calculated value never reaches the
+	// row. total_amount is written afterwards by RecomputeBoqTotalAmountsTx
+	// (the ONE calc path), from the persisted inputs and the tender's rates.
 	const insertBoqQ = `
 		INSERT INTO public.boq_items (
 			tender_id,
@@ -240,7 +268,6 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			consumption_coefficient,
 			unit_rate,
 			currency_type,
-			total_amount,
 			delivery_price_type,
 			delivery_amount,
 			quote_link,
@@ -263,17 +290,26 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			$12,
 			$13,
 			COALESCE($14::public.currency_type, 'RUB'::public.currency_type),
-			COALESCE($15, 0::numeric),
-			$16::public.delivery_price_type,
+			$15::public.delivery_price_type,
+			$16,
 			$17,
-			$18,
-			$19::uuid,
-			$20::public.material_type,
-			$21,
-			$22::uuid
+			$18::uuid,
+			$19::public.material_type,
+			$20,
+			$21::uuid
 		)
 		RETURNING id
 	`
+
+	// Diagnostic control values for the mismatch report (never persisted).
+	type controlValue struct {
+		itemID      string
+		rowNumber   int
+		itemName    string
+		clientTotal float64
+	}
+	controls := make([]controlValue, 0)
+	insertedIDs := make([]string, 0, len(indexed))
 
 	for _, ii := range indexed {
 		item := ii.item
@@ -320,6 +356,15 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			parentWorkItemID = &resolved
 		}
 
+		// The diagnostic control value must be a finite number: a NaN/Inf smuggled
+		// through a legacy payload is a clear input error (it could never have
+		// been a real Excel money value), never a persisted total.
+		if item.TotalAmount != nil && (math.IsNaN(*item.TotalAmount) || math.IsInf(*item.TotalAmount, 0)) {
+			return nil, &ErrBulkImport{
+				Message: fmt.Sprintf("Строка %s: контрольное значение total_amount не является числом", rowLabel),
+			}
+		}
+
 		var insertedID string
 		if err := tx.QueryRow(ctx, insertBoqQ,
 			in.TenderID,               // $1  tender_id
@@ -336,25 +381,59 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			item.ConsumptionCoeff,     // $12 consumption_coefficient
 			item.UnitRate,             // $13 unit_rate
 			item.CurrencyType,         // $14 currency_type (COALESCE → 'RUB')
-			item.TotalAmount,          // $15 total_amount  (COALESCE → 0)
-			item.DeliveryPriceType,    // $16 delivery_price_type
-			item.DeliveryAmount,       // $17 delivery_amount
-			item.QuoteLink,            // $18 quote_link
-			item.DetailCostCategoryID, // $19 detail_cost_category_id
-			item.MaterialType,         // $20 material_type
-			item.Description,          // $21 description
-			importSessionID,           // $22 import_session_id
+			item.DeliveryPriceType,    // $15 delivery_price_type
+			item.DeliveryAmount,       // $16 delivery_amount
+			item.QuoteLink,            // $17 quote_link
+			item.DetailCostCategoryID, // $18 detail_cost_category_id
+			item.MaterialType,         // $19 material_type
+			item.Description,          // $20 description
+			importSessionID,           // $21 import_session_id
 		).Scan(&insertedID); err != nil {
 			return nil, boqInsertError(err, rowLabel, currentPositionID)
 		}
 
 		result.InsertedItemsCount++
+		insertedIDs = append(insertedIDs, insertedID)
+		if item.TotalAmount != nil {
+			controls = append(controls, controlValue{
+				itemID:      insertedID,
+				rowNumber:   derefIntOrZero(item.RowIndex),
+				itemName:    importItemName(item),
+				clientTotal: *item.TotalAmount,
+			})
+		}
 
 		// Record temp_id → real UUID for parent_work linking.
 		if item.TempID != nil && *item.TempID != "" {
 			workRefMap[*item.TempID] = insertedID
 		}
 	}
+
+	// ------------------------------------------------------------------
+	// Step 3b: authoritative money. total_amount is recomputed from the
+	// PERSISTED inputs (real parent links, tender rates loaded once) via the
+	// shared calc path — the same fail-closed helper copy/transfer/rollback
+	// use. Any calc error (missing FX, invalid input) aborts the whole import.
+	// ------------------------------------------------------------------
+	serverTotals, err := RecomputeBoqTotalAmountsTx(ctx, tx, in.TenderID, insertedIDs)
+	if err != nil {
+		return nil, fmt.Errorf("importRepo.BulkImport: recompute totals: %w", err)
+	}
+	// Position totals follow the authoritative row totals in the same tx.
+	if err := RecomputePositionTotalsForTenderTx(ctx, tx, in.TenderID); err != nil {
+		return nil, fmt.Errorf("importRepo.BulkImport: recompute position totals: %w", err)
+	}
+	// Diagnostic mismatch report: legacy control value vs server total.
+	for _, cv := range controls {
+		server, ok := serverTotals[cv.itemID]
+		if !ok {
+			return nil, fmt.Errorf("importRepo.BulkImport: no recomputed total for item %s", cv.itemID)
+		}
+		if m := buildImportTotalMismatch(cv.rowNumber, cv.itemName, cv.clientTotal, server); m != nil {
+			result.TotalMismatches = append(result.TotalMismatches, *m)
+		}
+	}
+	result.TotalMismatchCount = len(result.TotalMismatches)
 
 	// ------------------------------------------------------------------
 	// Step 4: conditional UPDATE of client_positions for each update entry.
@@ -467,81 +546,4 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 
 	result.ImportSessionID = importSessionID
 	return result, nil
-}
-
-// boqInsertError превращает ошибку INSERT boq_item в сообщение с номером строки
-// Excel. Ошибки данных/ограничений (классы SQLSTATE 22/23) → ErrBulkImport (400)
-// с человекочитаемой причиной — она доедет до пользователя в RFC 7807 `detail`.
-// Прочие ошибки (соединение, отмена контекста) → обёрнутая ошибка (500), но
-// номер строки/позиция теперь видны в логах и Sentry.
-func boqInsertError(err error, rowLabel, positionID string) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && len(pgErr.Code) >= 2 {
-		switch pgErr.Code[:2] {
-		case "22", "23": // data exception / integrity constraint violation
-			return &ErrBulkImport{
-				Message: fmt.Sprintf("Строка %s: %s", rowLabel, boqConstraintReason(pgErr)),
-			}
-		}
-	}
-	return fmt.Errorf("importRepo.BulkImport: insert boq_item (row %s, position %s): %w",
-		rowLabel, positionID, err)
-}
-
-// boqConstraintReason формирует понятную причину из pg-ошибки: сначала по имени
-// constraint'а boq_items, затем по коду SQLSTATE; при наличии добавляет
-// pgErr.Detail (там Postgres указывает конкретный ключ/значение).
-func boqConstraintReason(pgErr *pgconn.PgError) string {
-	var reason string
-	switch pgErr.ConstraintName {
-	case "boq_items_quantity_positive":
-		reason = "количество должно быть больше нуля"
-	case "boq_items_base_quantity_positive":
-		reason = "базовое количество должно быть больше нуля"
-	case "boq_items_consumption_coefficient_positive":
-		reason = "коэффициент расхода должен быть больше нуля"
-	case "boq_items_conversion_coefficient_positive":
-		reason = "коэффициент перевода должен быть больше нуля"
-	case "boq_items_material_check":
-		reason = "тип элемента не соответствует заполненным полям (работа/материал)"
-	case "boq_items_parent_work_check":
-		reason = "у работы не может быть привязки к родительской работе"
-	case "boq_items_delivery_amount_check":
-		reason = "для типа доставки «суммой» нужна стоимость доставки"
-	case "boq_items_client_position_id_fkey":
-		reason = "позиция заказчика не найдена"
-	case "boq_items_material_name_id_fkey":
-		reason = "материал не найден в номенклатуре"
-	case "boq_items_work_name_id_fkey":
-		reason = "работа не найдена в номенклатуре"
-	case "boq_items_unit_code_fkey":
-		reason = "единица измерения не найдена в справочнике"
-	case "boq_items_detail_cost_category_id_fkey":
-		reason = "затрата на строительство не найдена"
-	case "boq_items_tender_id_fkey":
-		reason = "тендер не найден"
-	case "boq_items_parent_work_item_id_fkey":
-		reason = "родительская работа не найдена"
-	default:
-		switch pgErr.Code {
-		case "23502": // not_null_violation
-			reason = fmt.Sprintf("не заполнено обязательное поле «%s»", pgErr.ColumnName)
-		case "23503": // foreign_key_violation
-			reason = "ссылка на несуществующую запись (внешний ключ)"
-		case "23505": // unique_violation
-			reason = "запись с такими данными уже существует"
-		case "23514": // check_violation
-			reason = "значение не прошло проверку ограничений БД"
-		case "22P02": // invalid_text_representation (кривой enum/uuid)
-			reason = "недопустимое значение (тип элемента, валюта или идентификатор)"
-		case "22003": // numeric_value_out_of_range
-			reason = "числовое значение вне допустимого диапазона"
-		default:
-			reason = pgErr.Message
-		}
-	}
-	if pgErr.Detail != "" {
-		reason += " (" + pgErr.Detail + ")"
-	}
-	return reason
 }

@@ -164,7 +164,7 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 	for _, newID := range oldItemIDToNew {
 		newItemIDs = append(newItemIDs, newID)
 	}
-	if err := RecomputeBoqTotalAmountsTx(ctx, tx, newTenderID, newItemIDs); err != nil {
+	if _, err := RecomputeBoqTotalAmountsTx(ctx, tx, newTenderID, newItemIDs); err != nil {
 		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
 	}
 

@@ -119,7 +119,7 @@ func (r *BoqAuditRollbackRepo) Rollback(ctx context.Context, auditID, changedBy 
 	// Order: inputs+parent applied → total_amount (calc, current FX, fail-closed)
 	// → position totals → commercial (current tactic/percentages/distribution)
 	// → grand total exactly once → rollback audit event → commit.
-	if err := RecomputeBoqTotalAmountsTx(ctx, tx, tenderID, []string{itemID}); err != nil {
+	if _, err := RecomputeBoqTotalAmountsTx(ctx, tx, tenderID, []string{itemID}); err != nil {
 		return nil, fmt.Errorf("boqAuditRollbackRepo: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `

@@ -36,6 +36,7 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
     uploadProgress,
     importStatus,
     importError,
+    importMismatches,
     clientPositionsMap,
     existingItemsByPosition,
     availableUnits,
@@ -288,6 +289,8 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
           <ImportProgressStep
             importStatus={importStatus}
             importError={importError}
+            importMismatches={importMismatches}
+            insertedCount={parsedData.filter(i => i.matchedPositionId).length}
             uploadProgress={uploadProgress}
             parsedDataLength={parsedData.length}
             matchedCount={matchedCount}

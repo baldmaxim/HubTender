@@ -37,6 +37,11 @@ type AdminTenderPatch struct {
 // AdminPatchTender applies the non-nil fields. Used by the admin tenders page
 // (no optimistic concurrency check — the existing PATCH with ETag remains for
 // other callers).
+//
+// Stage 0-F1: the admin path has the SAME fail-closed rate semantics as the
+// regular update — a currency-rate change runs the UPDATE plus the full
+// reprice pipeline in one transaction (see repriceTenderAfterRateChangeTx);
+// it can not bypass the recompute or partially apply.
 func (r *TenderRepo) AdminPatchTender(ctx context.Context, id string, p AdminTenderPatch) error {
 	args := []any{}
 	setClauses := ""
@@ -116,8 +121,30 @@ func (r *TenderRepo) AdminPatchTender(ctx context.Context, id string, p AdminTen
 	setClauses += ", updated_at = NOW()"
 	args = append(args, id)
 	q := fmt.Sprintf(`UPDATE public.tenders SET %s WHERE id = $%d`, setClauses, len(args))
-	if _, err := r.pool.Exec(ctx, q, args...); err != nil {
+
+	ratesChanged := p.USDRate != nil || p.EURRate != nil || p.CNYRate != nil
+	if !ratesChanged {
+		if _, err := r.pool.Exec(ctx, q, args...); err != nil {
+			return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
+		}
+		return nil
+	}
+
+	// Rate change → same atomic update + reprice pipeline as the regular PATCH.
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("tenderRepo.AdminPatchTender: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, q, args...); err != nil {
 		return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
+	}
+	if err := repriceTenderAfterRateChangeTx(ctx, tx, id); err != nil {
+		return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("tenderRepo.AdminPatchTender: commit: %w", err)
 	}
 	return nil
 }

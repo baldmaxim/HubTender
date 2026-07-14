@@ -15,6 +15,7 @@ import {
   buildPositionUpdatesPayload,
   buildBoqItemsPayload,
   analyzeImportMismatch,
+  ImportTotalMismatch,
 } from '../utils/massBoqImportPayload';
 import { buildMissingNomenclatureInserts } from '../../../utils/boq/nomenclatureImport';
 import { useMassBoqImportRefs } from './useMassBoqImportRefs';
@@ -36,6 +37,8 @@ export const useMassBoqImport = () => {
   // Явный статус результата импорта — чтобы не выводить «успех» из uploadProgress.
   const [importStatus, setImportStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [importError, setImportError] = useState<string | null>(null);
+  // Диагностический отчёт сервера: расхождения legacy total_amount vs server calc.
+  const [importMismatches, setImportMismatches] = useState<ImportTotalMismatch[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [unitMappings, setUnitMappings] = useState<Record<string, string>>({});
 
@@ -47,9 +50,7 @@ export const useMassBoqImport = () => {
     leafPositionIds,
     availableUnits,
     existingItemsByPosition,
-    currencyRates,
     loadNomenclature: loadNomenclatureRefs,
-    loadCurrencyRates,
     loadExistingItems,
     resetRefs,
   } = useMassBoqImportRefs();
@@ -148,21 +149,20 @@ export const useMassBoqImport = () => {
       setUploadProgress(5);
       setImportStatus('running');
       setImportError(null);
+      setImportMismatches([]);
 
       const positionUpdatesPayload = buildPositionUpdatesPayload(positionUpdates);
 
-      let rates = currencyRates;
-      if (data.length > 0) {
-        rates = await loadCurrencyRates(tenderId);
-      }
-
-      const itemsPayload = buildBoqItemsPayload(data, rates);
+      // Этап 0-F1: клиент больше не считает total_amount — курсы и расчёт
+      // каждой строки выполняет сервер (calc) по фактическим курсам тендера.
+      const itemsPayload = buildBoqItemsPayload(data);
 
       setUploadProgress(15);
 
       let insertedItemsCount = 0;
       let updatedPositionsCount = 0;
       let importSessionId: string | null = null;
+      let totalMismatches: ImportTotalMismatch[] = [];
 
       {
         // Go BFF: один pgx.Tx, audit в той же транзакции, user_id из JWT
@@ -172,6 +172,8 @@ export const useMassBoqImport = () => {
           import_session_id: string | null;
           inserted_items_count: number;
           updated_positions_count: number;
+          total_mismatch_count?: number;
+          total_mismatches?: ImportTotalMismatch[];
         }>('/api/v1/imports/boq', {
           method: 'POST',
           timeoutMs: 0,
@@ -185,7 +187,9 @@ export const useMassBoqImport = () => {
         insertedItemsCount = goResp.inserted_items_count;
         updatedPositionsCount = goResp.updated_positions_count;
         importSessionId = goResp.import_session_id;
+        totalMismatches = goResp.total_mismatches ?? [];
       }
+      setImportMismatches(totalMismatches);
 
       setUploadProgress(100);
 
@@ -228,6 +232,14 @@ export const useMassBoqImport = () => {
         msgParts.push(`обновлено ${updatedPositionsCount} позиций`);
       }
       message.success(`Импортировано: ${msgParts.join(', ')}`);
+      if (totalMismatches.length > 0) {
+        // Диагностика, не ошибка: в БД сохранены серверные суммы.
+        message.warning(
+          `Суммы ${totalMismatches.length} строк(и) пересчитаны сервером — ` +
+          'значения из файла отличались (см. таблицу расхождений)',
+          8,
+        );
+      }
       setImportStatus('success');
       return true;
     } catch (error) {
@@ -345,6 +357,7 @@ export const useMassBoqImport = () => {
     setUploadProgress(0);
     setImportStatus('idle');
     setImportError(null);
+    setImportMismatches([]);
     resetRefs();
     setFileName('');
     setUnitMappings({});
@@ -384,6 +397,7 @@ export const useMassBoqImport = () => {
     uploadProgress,
     importStatus,
     importError,
+    importMismatches,
     clientPositionsMap,
     existingItemsByPosition,
 

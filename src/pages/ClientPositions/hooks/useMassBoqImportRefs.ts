@@ -6,7 +6,6 @@ import {
 } from '../../../lib/api/nomenclatures';
 import { listDetailCostCategoriesWithCategory } from '../../../lib/api/costs';
 import { fetchPositionsWithCosts, listBoqPreviewByPositions } from '../../../lib/api/positions';
-import { getTenderById } from '../../../lib/api/fi';
 import { computeLeafPositionIds } from '../../../utils/positions/leafPositions';
 import {
   ClientPosition,
@@ -43,9 +42,6 @@ export const useMassBoqImportRefs = () => {
 
   // Существующие BOQ items по позициям (для предпросмотра)
   const [existingItemsByPosition, setExistingItemsByPosition] = useState<Map<string, ExistingBoqPreviewItem[]>>(new Map());
-
-  // Курсы валют
-  const [currencyRates, setCurrencyRates] = useState({ usd: 1, eur: 1, cny: 1 });
 
   const loadNomenclature = async (tenderId: string) => {
     try {
@@ -136,22 +132,6 @@ export const useMassBoqImportRefs = () => {
     }
   };
 
-  const loadCurrencyRates = async (tenderId: string): Promise<{ usd: number; eur: number; cny: number }> => {
-    const tender = await getTenderById(tenderId);
-    if (!tender) {
-      throw new Error('Не удалось загрузить курсы валют');
-    }
-
-    const rates = {
-      usd: tender.usd_rate || 1,
-      eur: tender.eur_rate || 1,
-      cny: tender.cny_rate || 1,
-    };
-
-    setCurrencyRates(rates);
-    return rates;
-  };
-
   const loadExistingItems = async (positionIds: string[]) => {
     if (positionIds.length === 0) return;
     const data = await listBoqPreviewByPositions(positionIds);
@@ -177,9 +157,7 @@ export const useMassBoqImportRefs = () => {
     leafPositionIds,
     availableUnits,
     existingItemsByPosition,
-    currencyRates,
     loadNomenclature,
-    loadCurrencyRates,
     loadExistingItems,
     resetRefs,
   };

@@ -185,19 +185,27 @@ func (s *TenderService) UpdateTender(
 ) (*repository.TenderRow, error) {
 	t, err := s.repo.UpdateTender(ctx, id, in)
 	if err != nil {
+		// Fail-closed: the repo rolled the rate change back — no cache
+		// invalidation, no recalc enqueue, no success.
 		return nil, fmt.Errorf("tenderService.UpdateTender: %w", err)
 	}
 	s.cache.Delete("tender:overview:" + id)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
-	// A currency-rate change re-bases every BOQ item, so re-materialize the
-	// tender's commercial costs. Other field edits don't affect pricing.
-	if s.recalc != nil && (in.USDRate != nil || in.EURRate != nil || in.CNYRate != nil) {
-		s.recalc.Enqueue(id)
+	// Stage 0-F1: a currency-rate change is repriced ATOMICALLY inside the repo
+	// transaction (BOQ totals → position totals → commercial → cached grand
+	// total) BEFORE this point. The queue below is only an idempotent extra
+	// pass, never the mechanism that makes the values correct.
+	if in.USDRate != nil || in.EURRate != nil || in.CNYRate != nil {
+		s.cache.Delete("positions:with_costs:" + id)
+		if s.recalc != nil {
+			s.recalc.Enqueue(id)
+		}
 	}
 	return t, nil
 }
 
 // AdminPatchTender applies a no-ETag patch (admin tenders page).
+// Rate changes get the same atomic reprice + cache semantics as UpdateTender.
 func (s *TenderService) AdminPatchTender(
 	ctx context.Context, id string, p repository.AdminTenderPatch,
 ) error {
@@ -206,6 +214,12 @@ func (s *TenderService) AdminPatchTender(
 	}
 	s.cache.Delete("tender:overview:" + id)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	if p.USDRate != nil || p.EURRate != nil || p.CNYRate != nil {
+		s.cache.Delete("positions:with_costs:" + id)
+		if s.recalc != nil {
+			s.recalc.Enqueue(id)
+		}
+	}
 	return nil
 }
 
