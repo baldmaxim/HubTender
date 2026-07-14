@@ -150,7 +150,7 @@ func (r *BulkBoqRepo) PersistCalculatedCommercialCosts(
 	}
 
 	// Recompute this tender's grand total ONCE, in the same tx.
-	if err := RecalculateTenderGrandTotal(ctx, tx, tenderID); err != nil {
+	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID); err != nil {
 		return 0, fmt.Errorf("bulkBoqRepo.PersistCalculatedCommercialCosts: grand total: %w", err)
 	}
 

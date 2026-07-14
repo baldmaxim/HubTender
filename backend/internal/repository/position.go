@@ -370,6 +370,14 @@ func (r *PositionRepo) BulkDeletePositions(ctx context.Context, positionIDs []st
 		return fmt.Errorf("positionRepo.BulkDeletePositions: %w", err)
 	}
 
+	// Категория A (0.1.2.4a): каскадное удаление BOQ меняет состав
+	// cached_grand_total — затронутые тендеры определяем ДО удаления и
+	// пересчитываем каждый РОВНО ОДИН РАЗ (не per-row) в этой же транзакции.
+	affectedTenders, err := affectedTenderIDs(ctx, tx, positionIDs)
+	if err != nil {
+		return fmt.Errorf("positionRepo.BulkDeletePositions: %w", err)
+	}
+
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM public.boq_items WHERE client_position_id = ANY($1::uuid[])`,
 		positionIDs,
@@ -382,10 +390,37 @@ func (r *PositionRepo) BulkDeletePositions(ctx context.Context, positionIDs []st
 	); err != nil {
 		return fmt.Errorf("positionRepo.BulkDeletePositions: delete positions: %w", err)
 	}
+	for _, tenderID := range affectedTenders {
+		if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID); err != nil {
+			return fmt.Errorf("positionRepo.BulkDeletePositions: grand total: %w", err)
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("positionRepo.BulkDeletePositions: commit: %w", err)
 	}
 	return nil
+}
+
+// affectedTenderIDs returns the distinct tenders owning the given positions —
+// resolved BEFORE a cascade delete so the grand total can be recomputed once
+// per affected tender.
+func affectedTenderIDs(ctx context.Context, q Querier, positionIDs []string) ([]string, error) {
+	rows, err := q.Query(ctx,
+		`SELECT DISTINCT tender_id::text FROM public.client_positions WHERE id = ANY($1::uuid[])`,
+		positionIDs)
+	if err != nil {
+		return nil, fmt.Errorf("affectedTenderIDs: %w", err)
+	}
+	defer rows.Close()
+	out := make([]string, 0, 1)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("affectedTenderIDs scan: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // BoqNameEmbed mirrors the work_names(name) / material_names(name) embed.
@@ -476,6 +511,13 @@ func (r *PositionRepo) ClearPositionsBoq(ctx context.Context, ids []string, chan
 		return fmt.Errorf("positionRepo.ClearPositionsBoq: %w", err)
 	}
 
+	// Категория A (0.1.2.4a): удаление BOQ-строк с commercial values — пересчёт
+	// cached_grand_total один раз на каждый затронутый тендер в этой же tx.
+	affectedTenders, err := affectedTenderIDs(ctx, tx, ids)
+	if err != nil {
+		return fmt.Errorf("positionRepo.ClearPositionsBoq: %w", err)
+	}
+
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM public.boq_items WHERE client_position_id = ANY($1::uuid[])`,
 		ids,
@@ -489,6 +531,11 @@ func (r *PositionRepo) ClearPositionsBoq(ctx context.Context, ids []string, chan
 		ids,
 	); err != nil {
 		return fmt.Errorf("positionRepo.ClearPositionsBoq: zero totals: %w", err)
+	}
+	for _, tenderID := range affectedTenders {
+		if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID); err != nil {
+			return fmt.Errorf("positionRepo.ClearPositionsBoq: grand total: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("positionRepo.ClearPositionsBoq: commit: %w", err)

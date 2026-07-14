@@ -106,9 +106,6 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 	// Suppress the per-row grand-total recompute (O(N²) over boq_items) during
 	// the bulk copy; recomputed once before commit (Step 13c). SET LOCAL is
 	// transaction-scoped, so it cannot leak across PgBouncer-pooled connections.
-	if _, err := tx.Exec(ctx, `SET LOCAL app.skip_grand_total = 'on'`); err != nil {
-		return nil, fmt.Errorf("transferRepo: set skip_grand_total: %w", err)
-	}
 
 	// Steps 2-4: fetch source tender, version check, insert new tender.
 	newTenderID, newVersion, err := createNextTenderVersion(ctx, tx, in.SourceTenderID)
@@ -317,11 +314,9 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 	}
 
 	// Step 13c: Recompute cached_grand_total once for the ONE tender this operation
-	// created — the per-row trigger was skipped via app.skip_grand_total. The source
+	// created, via the canonical Go/calc helper (stage 0.1.2.4a). The source
 	// tender is not modified (this is a copy, not a move), so it is not recomputed.
-	if _, err := tx.Exec(ctx,
-		`SELECT public.recalculate_tender_grand_total($1::uuid)`, newTenderID,
-	); err != nil {
+	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, newTenderID); err != nil {
 		return nil, fmt.Errorf("transferRepo: recompute grand total: %w", err)
 	}
 

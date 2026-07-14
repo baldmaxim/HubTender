@@ -71,9 +71,6 @@ func (r *CloneRepo) CloneTender(ctx context.Context, sourceTenderID string) (*Cl
 	// FOR EACH ROW) during the bulk INSERT inside the SQL function; recomputed
 	// once below. SET LOCAL is transaction-scoped, so it cannot leak across
 	// PgBouncer-pooled connections.
-	if _, err := tx.Exec(ctx, `SET LOCAL app.skip_grand_total = 'on'`); err != nil {
-		return nil, fmt.Errorf("cloneRepo.CloneTender: set skip_grand_total: %w", err)
-	}
 
 	var raw []byte
 	err = tx.QueryRow(ctx,
@@ -96,11 +93,10 @@ func (r *CloneRepo) CloneTender(ctx context.Context, sourceTenderID string) (*Cl
 		return nil, fmt.Errorf("cloneRepo.CloneTender: decode result: %w", err)
 	}
 
-	// Recompute cached_grand_total once for the new tender — the per-row trigger
-	// was skipped via app.skip_grand_total.
-	if _, err := tx.Exec(ctx,
-		`SELECT public.recalculate_tender_grand_total($1::uuid)`, res.TenderID,
-	); err != nil {
+	// Recompute cached_grand_total once for the new tender via the canonical
+	// Go/calc helper (stage 0.1.2.4a: the SQL function is a tombstone and the
+	// per-row triggers are gone).
+	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, res.TenderID); err != nil {
 		return nil, fmt.Errorf("cloneRepo.CloneTender: recompute grand total: %w", err)
 	}
 

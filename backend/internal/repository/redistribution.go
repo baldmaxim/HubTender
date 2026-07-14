@@ -188,11 +188,8 @@ func (r *RedistributionRepo) SaveAuthoritative(
 	}
 
 	// ── authoritative commercial base, in THIS transaction ──
-	// The per-row grand-total trigger is suppressed; the grand total is
-	// recomputed exactly once below.
-	if _, err := tx.Exec(ctx, `SET LOCAL app.skip_grand_total = 'on'`); err != nil {
-		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: set skip_grand_total: %w", err)
-	}
+	// The grand total is recomputed exactly once below (stage 0.1.2.4a:
+	// no per-row SQL triggers).
 	if err := MaterializeCommercialForTenderTx(ctx, tx, tenderID); err != nil {
 		// e.g. calc.MissingFXRateError — the whole save rolls back, no partially
 		// updated commercial fields survive.
@@ -300,7 +297,7 @@ func (r *RedistributionRepo) SaveAuthoritative(
 	}
 
 	// ── grand total exactly once (commercial values may have changed above) ──
-	if err := RecalculateTenderGrandTotal(ctx, tx, tenderID); err != nil {
+	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID); err != nil {
 		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: grand total: %w", err)
 	}
 

@@ -1467,42 +1467,40 @@ BEGIN
 END;
 $function$;
 
+-- RETIRED (этап 0.1.2.4a): fail-closed tombstone. Раньше эта функция была
+-- SQL-двойником формулы cached_grand_total (SUM commercial + insurance +
+-- ROUND). Теперь формула существует ТОЛЬКО в backend/internal/calc
+-- (CalculateCachedTenderGrandTotal + CalculateInsuranceTotal), а запись
+-- выполняет transaction-aware Go helper RecalculateTenderGrandTotalTx.
+-- Имя и сигнатура сохранены на переходный период ради внешних stale callers:
+-- любой вызов (включая NULL) всегда завершается SQLSTATE 0A000
+-- GRAND_TOTAL_SQL_RETIRED до какого-либо чтения/записи. НЕ STRICT
+-- (CALLED ON NULL INPUT), SECURITY INVOKER, фиксированный search_path.
 CREATE OR REPLACE FUNCTION public.recalculate_tender_grand_total(p_tender_id uuid)
  RETURNS void
  LANGUAGE plpgsql
- SECURITY DEFINER
+ SECURITY INVOKER
+ CALLED ON NULL INPUT
    SET search_path = public, pg_temp
 AS $function$
-DECLARE
-  v_boq_total   NUMERIC;
-  v_insurance   NUMERIC;
-  v_grand_total NUMERIC;
 BEGIN
-  -- Сумма коммерческих затрат по всем BOQ-позициям тендера
-  SELECT COALESCE(SUM(total_commercial_material_cost + total_commercial_work_cost), 0)
-  INTO v_boq_total
-  FROM public.boq_items
-  WHERE tender_id = p_tender_id;
-
-  -- Сумма страхования от судимостей (если есть запись)
-  SELECT COALESCE(
-    (apt_price_m2 * apt_area + parking_price_m2 * parking_area + storage_price_m2 * storage_area)
-    * (judicial_pct / 100.0)
-    * (total_pct / 100.0),
-    0
-  )
-  INTO v_insurance
-  FROM public.tender_insurance
-  WHERE tender_id = p_tender_id
-  LIMIT 1;
-
-  v_grand_total := v_boq_total + COALESCE(v_insurance, 0);
-
-  UPDATE public.tenders
-  SET cached_grand_total = ROUND(v_grand_total, 2)
-  WHERE id = p_tender_id;
+  RAISE EXCEPTION 'GRAND_TOTAL_SQL_RETIRED'
+    USING ERRCODE = '0A000',
+          DETAIL  = 'Итог тендера (cached_grand_total) рассчитывается только серверным '
+                    'расчётным контуром (Go BFF, backend/internal/calc). '
+                    'SQL-функция выведена из эксплуатации (этап 0.1.2.4a).',
+          HINT    = 'Не вызывайте эту функцию: она сохранена только как fail-closed tombstone.';
 END;
 $function$;
+
+REVOKE ALL PRIVILEGES
+  ON FUNCTION public.recalculate_tender_grand_total(uuid)
+  FROM PUBLIC;
+
+COMMENT ON FUNCTION public.recalculate_tender_grand_total(uuid) IS
+  'RETIRED (2026-07, этап 0.1.2.4a): fail-closed tombstone, всегда SQLSTATE 0A000 '
+  'GRAND_TOTAL_SQL_RETIRED. Никогда не читает boq_items/insurance и не пишет tenders. '
+  'Единственный writer cached_grand_total — Go helper RecalculateTenderGrandTotalTx.';
 
 CREATE OR REPLACE FUNCTION public.register_user(p_user_id uuid, p_full_name text, p_email text, p_role_code text, p_allowed_pages jsonb)
  RETURNS void
@@ -1672,103 +1670,11 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.trg_boq_items_update_grand_total()
- RETURNS trigger
- LANGUAGE plpgsql
-   SET search_path = public, pg_temp
-AS $function$
-BEGIN
-  -- Bulk fast-path: when a bulk operation (e.g. version transfer) sets
-  -- `app.skip_grand_total='on'` (SET LOCAL, transaction-scoped), skip the
-  -- per-row O(N) recompute. The caller MUST call
-  -- recalculate_tender_grand_total(tender_id) once before commit.
-  -- current_setting(..., true) returns NULL when unset → default path unchanged.
-  IF current_setting('app.skip_grand_total', true) = 'on' THEN
-    RETURN COALESCE(NEW, OLD);
-  END IF;
-
-  IF TG_OP = 'DELETE' THEN
-    PERFORM public.recalculate_tender_grand_total(OLD.tender_id);
-    RETURN OLD;
-  END IF;
-
-  PERFORM public.recalculate_tender_grand_total(NEW.tender_id);
-
-  -- Если tender_id сменился при UPDATE — пересчитываем и старый тендер
-  IF TG_OP = 'UPDATE' AND OLD.tender_id IS DISTINCT FROM NEW.tender_id THEN
-    PERFORM public.recalculate_tender_grand_total(OLD.tender_id);
-  END IF;
-
-  RETURN NEW;
-END;
-$function$;
-
-CREATE OR REPLACE FUNCTION public.trg_insurance_update_grand_total()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
-   SET search_path = public, pg_temp
-AS $function$
-BEGIN
-  -- Bulk fast-path: skip per-row recompute when a bulk op (clone/transfer)
-  -- sets app.skip_grand_total='on'. Caller recomputes once before commit.
-  IF current_setting('app.skip_grand_total', true) = 'on' THEN
-    RETURN COALESCE(NEW, OLD);
-  END IF;
-
-  IF TG_OP = 'DELETE' THEN
-    PERFORM public.recalculate_tender_grand_total(OLD.tender_id);
-    RETURN OLD;
-  END IF;
-
-  PERFORM public.recalculate_tender_grand_total(NEW.tender_id);
-  RETURN NEW;
-END;
-$function$;
-
-CREATE OR REPLACE FUNCTION public.trg_markup_pct_update_grand_total()
- RETURNS trigger
- LANGUAGE plpgsql
-   SET search_path = public, pg_temp
-AS $function$
-BEGIN
-  -- Bulk fast-path: skip per-row recompute when a bulk op (clone/transfer)
-  -- sets app.skip_grand_total='on'. Caller recomputes once before commit.
-  IF current_setting('app.skip_grand_total', true) = 'on' THEN
-    RETURN COALESCE(NEW, OLD);
-  END IF;
-
-  IF TG_OP = 'DELETE' THEN
-    PERFORM public.recalculate_tender_grand_total(OLD.tender_id);
-    RETURN OLD;
-  END IF;
-
-  PERFORM public.recalculate_tender_grand_total(NEW.tender_id);
-  RETURN NEW;
-END;
-$function$;
-
-CREATE OR REPLACE FUNCTION public.trg_subcontract_excl_update_grand_total()
- RETURNS trigger
- LANGUAGE plpgsql
-   SET search_path = public, pg_temp
-AS $function$
-BEGIN
-  -- Bulk fast-path: skip per-row recompute when a bulk op (clone/transfer)
-  -- sets app.skip_grand_total='on'. Caller recomputes once before commit.
-  IF current_setting('app.skip_grand_total', true) = 'on' THEN
-    RETURN COALESCE(NEW, OLD);
-  END IF;
-
-  IF TG_OP = 'DELETE' THEN
-    PERFORM public.recalculate_tender_grand_total(OLD.tender_id);
-    RETURN OLD;
-  END IF;
-
-  PERFORM public.recalculate_tender_grand_total(NEW.tender_id);
-  RETURN NEW;
-END;
-$function$;
+-- NOTE (этап 0.1.2.4a): trigger-функции trg_boq_items_update_grand_total,
+-- trg_insurance_update_grand_total, trg_markup_pct_update_grand_total и
+-- trg_subcontract_excl_update_grand_total УДАЛЕНЫ из fresh baseline: они
+-- содержали вторую SQL-формулу итога и O(N) per-row пересчёт. cached_grand_total
+-- пересчитывают только application-транзакции через Go helper.
 
 CREATE OR REPLACE FUNCTION public.update_boq_item_with_audit(p_user_id uuid, p_item_id uuid, p_data jsonb)
  RETURNS jsonb

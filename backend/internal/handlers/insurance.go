@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -87,6 +88,13 @@ func (h *InsuranceHandler) Put(w http.ResponseWriter, r *http.Request) {
 
 	row, err := h.svc.Upsert(r.Context(), tenderID, in)
 	if err != nil {
+		// Пользовательская конфигурация страхования (NaN/отрицательные значения/
+		// проценты вне [0,100]) — typed 400, не generic 500.
+		var insErr *calc.InvalidInsuranceConfigurationError
+		if errors.As(err, &insErr) {
+			apierr.InvalidInsuranceConfiguration(insErr.Field, insErr.Reason).Render(w)
+			return
+		}
 		apierr.InternalFromErr(w, r, err, "failed to save insurance")
 		return
 	}

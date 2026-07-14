@@ -188,9 +188,10 @@ const price = row.total_amount; // сервер посчитал и вернул
    `backend/internal/calc`, SQL RPC `save_redistribution_results` — tombstone.
    **Остаётся на 0.1.2.3b:** финальный position-level pipeline (`buildResultRows`,
    smart rounding, insurance-распределение, Commerce/FI/Excel prepared rows).
-2. **Grand total + insurance — два экземпляра** (Go `tender_recalc.go` ⇄ SQL
-   `recalculate_tender_grand_total`), формула не в `calc/`. → вынести insurance/Σcommercial
-   в `calc/`, оставить один владелец; SQL-триггер — снять в этапе работы с БД.
+2. ~~**Grand total + insurance — два экземпляра** (Go `tender_recalc.go` ⇄ SQL
+   `recalculate_tender_grand_total`), формула не в `calc/`.~~ → ✅ **закрыто в
+   0.1.2.4a** (см. §7h): формула только в `calc.CalculateCachedTenderGrandTotal`,
+   SQL-функция — tombstone, grand-total триггеры удалены.
 3. ~~**`template_insert.go`** legacy-формула~~ → ✅ **закрыто в 0.1.2.1**: путь переведён на
    `calc.CalculateBoqItemTotalAmount`, effective parent определяется до INSERT, FX блокирует.
 4. **Импорт BOQ** доверяет `total_amount` клиента (`import_boq.go`, mass/single import). →
@@ -607,6 +608,66 @@ pipeline на общих fixtures).
 (pass-through, parent-only drop, zero-base insurance, единая политика, гейты
 экспорта, reason-коды) + `scripts/checks/redistributionConsumptionState.check.mjs`
 (truth-table политики).
+
+## 7h. cached_grand_total — единственная формула в calc (этап 0.1.2.4a)
+
+1. **Семантика:** `cached_grand_total = round2(Σ(total_commercial_material_cost
+   + total_commercial_work_cost) + текущее страхование тендера)`. Входы —
+   materialized server-generated commercial values; insurance — ровно один раз
+   через `calc.CalculateInsuranceTotal` (то же ядро, что prepared pipeline);
+   redistribution prepared values / position adjustments в итог НЕ входят;
+   markup/НДС уже внутри materialized commercial и повторно не применяются;
+   округление ровно один раз (round2, half away from zero; byte-exact
+   эквивалентность PostgreSQL numeric на float-границах не заявляется —
+   документированное ограничение float64, parity закреплён integration-тестом).
+   Это ПОСЛЕДНИЙ успешно materialized итог, не исторический snapshot
+   (input_revision — 0.1.3).
+2. **Формула только в calc:** `CalculateCachedTenderGrandTotal`
+   (`calc/cached_grand_total.go`) — pure, typed errors
+   (`INVALID_CACHED_GRAND_TOTAL_INPUT`: NOT_FINITE/NEGATIVE_VALUE — без
+   fallback 0), breakdown для диагностики. НЕ путать с legacy
+   `calc.CalculateGrandTotal` — это FI formula breakdown (отдельный путь,
+   разбор в 0.1.2.4b; помечен комментарием).
+3. **Один writer:** `repository.RecalculateTenderGrandTotalTx(ctx, Querier,
+   tenderID)` — один aggregate-запрос по BOQ (material/work раздельно), один
+   запрос insurance, calc, один UPDATE готового числа (без ROUND/insurance-
+   выражений в SQL), RowsAffected==1 (typed
+   CACHED_GRAND_TOTAL_TENDER_NOT_FOUND / WRITE_MISMATCH).
+4. **Матрица мутаций.** Категория A (пересчёт в той же tx, один раз на тендер):
+   commercial writer, redistribution save, copy/clone/transfer, audit
+   rollback, import, **DeleteBoqItem**, **BulkDeletePositions/ClearPositionsBoq**
+   (затронутые тендеры определяются ДО каскадного удаления), **insurance
+   Upsert** (валидация конфигурации через calc до записи; невалидная → rollback,
+   RFC7807 INVALID_INSURANCE_CONFIGURATION; никакого «commit → async recalc
+   позже»). Категория B (входы: quantity/rate/FX, markup/tactic/distribution/
+   exclusions, create/update BOQ, template insert): существующий async
+   commercial recalc сохраняется; итог остаётся последним materialized
+   значением — SQL-формула по старым commercial больше НЕ выдаётся за свежий
+   пересчёт (это и делали удалённые триггеры markup/exclusions); stale
+   detection — 0.1.3. Категория C (metadata/notes/документы/prepared
+   projection): пересчёта нет. Delete тендера: пересчёт не нужен, skip-GUC
+   удалён.
+5. **SQL retired:** `public.recalculate_tender_grand_total(uuid)` — fail-closed
+   tombstone (SQLSTATE 0A000 `GRAND_TOTAL_SQL_RETIRED`, CALLED ON NULL INPUT,
+   SECURITY INVOKER, REVOKE PUBLIC + non-owner grants); 4 grand-total триггера
+   и их функции УДАЛЕНЫ (вторая формула, O(N) per-row SUM, пересчёт по
+   несвежим commercial); `app.skip_grand_total` больше никем не читается и не
+   выставляется. Baseline (04_functions/05_triggers) + идемпотентная миграция
+   `2026_07_retire_sql_grand_total_recalc.sql` (порядок: triggers → trigger
+   functions → tombstone → grants; verification query внутри). Deployment:
+   сначала полный application rollout 0.1.2.4a, затем миграция; down migration
+   с формулой запрещена.
+6. **Readers (double-count audit):** tender lists/registry/Admin Tenders/
+   useTenderData — отображают значение как есть (fallback `|| 0` — display
+   only); insurance/VAT/prepared повторно НЕ добавляются нигде.
+   FinancialIndicators cached_grand_total НЕ читает — считает собственный
+   legacy breakdown (computeIndicators + insurance config) — расхождение
+   семантики зафиксировано как отдельный путь и переходит в 0.1.2.4b
+   (серверный FI breakdown, унификация VAT/итогов).
+
+Защита от регресса: `scripts/checks/canonicalCachedGrandTotal.check.mjs`
+(SQL-callers, дубли формулы/insurance/ROUND, единственный UPDATE-writer,
+baseline tombstone/триггеры, skip_grand_total, frontend-пересчёт).
 
 ## 8. Что сделано в 0.1.2 (только безопасное)
 

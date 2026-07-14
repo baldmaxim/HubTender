@@ -170,6 +170,13 @@ func (r *BoqRepo) DeleteBoqItem(ctx context.Context, id, changedBy string) (*Boq
 		return nil, fmt.Errorf("boqRepo.DeleteBoqItem: delete: %w", err)
 	}
 
+	// Категория A (0.1.2.4a): удаление строки с materialized commercial values
+	// немедленно меняет состав cached_grand_total — пересчёт в ЭТОЙ транзакции
+	// (per-row SQL-триггеров больше нет).
+	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, item.TenderID); err != nil {
+		return nil, fmt.Errorf("boqRepo.DeleteBoqItem: grand total: %w", err)
+	}
+
 	oldJSON, _ := boqRowJSON(item)
 	if err := insertAudit(ctx, tx, id, "DELETE", changedBy, nil, oldJSON, nil); err != nil {
 		return nil, fmt.Errorf("boqRepo.DeleteBoqItem: audit: %w", err)

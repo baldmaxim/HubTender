@@ -23,10 +23,8 @@ CREATE TRIGGER trg_boq_items_audit
   AFTER INSERT OR DELETE OR UPDATE ON public.boq_items
   FOR EACH ROW EXECUTE FUNCTION public.log_boq_items_changes();
 
-DROP TRIGGER IF EXISTS trg_boq_items_grand_total ON public.boq_items;
-CREATE TRIGGER trg_boq_items_grand_total
-  AFTER INSERT OR DELETE OR UPDATE OF total_amount ON public.boq_items
-  FOR EACH ROW EXECUTE FUNCTION public.trg_boq_items_update_grand_total();
+-- (этап 0.1.2.4a) grand-total trigger удалён: cached_grand_total пересчитывают
+-- только application-транзакции (RecalculateTenderGrandTotalTx, backend/internal/calc).
 
 -- ----- client_positions -----------------------------------------------------
 DROP TRIGGER IF EXISTS trigger_update_client_positions_updated_at ON public.client_positions;
@@ -112,10 +110,8 @@ CREATE TRIGGER set_updated_at
   BEFORE UPDATE ON public.subcontract_growth_exclusions
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
-DROP TRIGGER IF EXISTS trg_subcontract_excl_grand_total ON public.subcontract_growth_exclusions;
-CREATE TRIGGER trg_subcontract_excl_grand_total
-  AFTER INSERT OR DELETE OR UPDATE ON public.subcontract_growth_exclusions
-  FOR EACH ROW EXECUTE FUNCTION public.trg_subcontract_excl_update_grand_total();
+-- (этап 0.1.2.4a) grand-total trigger удалён: cached_grand_total пересчитывают
+-- только application-транзакции (RecalculateTenderGrandTotalTx, backend/internal/calc).
 
 -- ----- template_items -------------------------------------------------------
 DROP TRIGGER IF EXISTS set_updated_at_template_items ON public.template_items;
@@ -142,10 +138,8 @@ CREATE TRIGGER update_tender_groups_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
 -- ----- tender_insurance -----------------------------------------------------
-DROP TRIGGER IF EXISTS trg_insurance_grand_total ON public.tender_insurance;
-CREATE TRIGGER trg_insurance_grand_total
-  AFTER INSERT OR DELETE OR UPDATE ON public.tender_insurance
-  FOR EACH ROW EXECUTE FUNCTION public.trg_insurance_update_grand_total();
+-- (этап 0.1.2.4a) grand-total trigger удалён: cached_grand_total пересчитывают
+-- только application-транзакции (RecalculateTenderGrandTotalTx, backend/internal/calc).
 
 DROP TRIGGER IF EXISTS update_tender_insurance_updated_at ON public.tender_insurance;
 CREATE TRIGGER update_tender_insurance_updated_at
@@ -159,10 +153,8 @@ CREATE TRIGGER update_tender_iterations_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
 -- ----- tender_markup_percentage --------------------------------------------
-DROP TRIGGER IF EXISTS trg_markup_pct_grand_total ON public.tender_markup_percentage;
-CREATE TRIGGER trg_markup_pct_grand_total
-  AFTER INSERT OR DELETE OR UPDATE ON public.tender_markup_percentage
-  FOR EACH ROW EXECUTE FUNCTION public.trg_markup_pct_update_grand_total();
+-- (этап 0.1.2.4a) grand-total trigger удалён: cached_grand_total пересчитывают
+-- только application-транзакции (RecalculateTenderGrandTotalTx, backend/internal/calc).
 
 DROP TRIGGER IF EXISTS trigger_update_tender_markup_percentage_updated_at ON public.tender_markup_percentage;
 CREATE TRIGGER trigger_update_tender_markup_percentage_updated_at

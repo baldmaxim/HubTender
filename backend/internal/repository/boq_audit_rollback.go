@@ -69,16 +69,13 @@ func (r *BoqAuditRollbackRepo) Rollback(ctx context.Context, auditID, changedBy 
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	// Curated audit row is written via insertAudit below; the trigger must not
-	// double-log. The per-row grand-total trigger is suppressed too — the grand
-	// total is recomputed exactly ONCE before commit.
+	// double-log. The grand total is recomputed exactly ONCE before commit via
+	// the canonical Go/calc helper (stage 0.1.2.4a: no per-row SQL triggers).
 	if err := skipBoqAuditTrigger(ctx, tx); err != nil {
 		return nil, fmt.Errorf("boqAuditRollbackRepo: %w", err)
 	}
 	if err := setAuditUser(ctx, tx, changedBy); err != nil {
 		return nil, fmt.Errorf("boqAuditRollbackRepo: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `SET LOCAL app.skip_grand_total = 'on'`); err != nil {
-		return nil, fmt.Errorf("boqAuditRollbackRepo: set skip_grand_total: %w", err)
 	}
 
 	// ── Phase 1: planning/validation. The audit record is loaded SERVER-SIDE —
@@ -146,7 +143,7 @@ func (r *BoqAuditRollbackRepo) Rollback(ctx context.Context, auditID, changedBy 
 	if err := MaterializeCommercialForTenderTx(ctx, tx, tenderID); err != nil {
 		return nil, fmt.Errorf("boqAuditRollbackRepo: %w", err)
 	}
-	if err := RecalculateTenderGrandTotal(ctx, tx, tenderID); err != nil {
+	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID); err != nil {
 		return nil, fmt.Errorf("boqAuditRollbackRepo: grand total: %w", err)
 	}
 

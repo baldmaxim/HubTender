@@ -63,12 +63,6 @@ func (r *BoqRepo) CopyPositionItems(
 		return nil, ErrCopyTenderMismatch
 	}
 
-	// Suppress the per-row grand-total trigger during the bulk copy; the tender's
-	// grand total is recomputed exactly ONCE before commit (below).
-	if _, err := tx.Exec(ctx, `SET LOCAL app.skip_grand_total = 'on'`); err != nil {
-		return nil, fmt.Errorf("boqRepo.CopyPositionItems: set skip_grand_total: %w", err)
-	}
-
 	// Read source items in stable order — CLASS A (source inputs) ONLY.
 	// total_amount / commercial_markup / total_commercial_* are CALCULATED values:
 	// they are deliberately NOT selected, so they cannot be copied as authoritative.
@@ -258,7 +252,7 @@ func (r *BoqRepo) CopyPositionItems(
 
 	// Grand total of the ONE affected tender (same-tender copy → the source tender
 	// is the target tender), recomputed exactly once, in this tx.
-	if err := RecalculateTenderGrandTotal(ctx, tx, tgtTender); err != nil {
+	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tgtTender); err != nil {
 		return nil, fmt.Errorf("boqRepo.CopyPositionItems: grand total: %w", err)
 	}
 

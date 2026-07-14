@@ -79,9 +79,9 @@ type ImportInput struct {
 
 // ImportResult mirrors the JSONB returned by the original RPC.
 type ImportResult struct {
-	ImportSessionID     *string `json:"import_session_id"`
-	InsertedItemsCount  int     `json:"inserted_items_count"`
-	UpdatedPositionsCount int   `json:"updated_positions_count"`
+	ImportSessionID       *string `json:"import_session_id"`
+	InsertedItemsCount    int     `json:"inserted_items_count"`
+	UpdatedPositionsCount int     `json:"updated_positions_count"`
 }
 
 // ErrBulkImport is a sentinel type for 400-class errors raised inside the
@@ -140,9 +140,6 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 	// агрегатов по тендеру (O(N×M)) и большие файлы упираются в тайм-аут.
 	// Пересчитываем один раз перед commit. SET LOCAL транзакционно-локален и
 	// не утекает через PgBouncer. (Образец: tender_clone/tender_transfer.)
-	if _, err := tx.Exec(ctx, `SET LOCAL app.skip_grand_total = 'on'`); err != nil {
-		return nil, fmt.Errorf("importRepo.BulkImport: set skip_grand_total: %w", err)
-	}
 	// Большой импорт не должен упираться в statement_timeout пула; общий
 	// предел держит HTTP-таймаут сервера (5 мин).
 	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout = '0'`); err != nil {
@@ -325,28 +322,28 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 
 		var insertedID string
 		if err := tx.QueryRow(ctx, insertBoqQ,
-			in.TenderID,         // $1  tender_id
-			currentPositionID,   // $2  client_position_id
-			sortNumber,          // $3  sort_number
-			item.BoqItemType,    // $4  boq_item_type
-			item.WorkNameID,     // $5  work_name_id
-			item.MaterialNameID, // $6  material_name_id
-			parentWorkItemID,    // $7  parent_work_item_id
-			item.UnitCode,       // $8  unit_code
-			item.Quantity,       // $9  quantity
-			item.BaseQuantity,   // $10 base_quantity
-			item.ConversionCoeff,  // $11 conversion_coefficient
-			item.ConsumptionCoeff, // $12 consumption_coefficient
-			item.UnitRate,         // $13 unit_rate
-			item.CurrencyType,     // $14 currency_type (COALESCE → 'RUB')
-			item.TotalAmount,      // $15 total_amount  (COALESCE → 0)
-			item.DeliveryPriceType, // $16 delivery_price_type
-			item.DeliveryAmount,    // $17 delivery_amount
-			item.QuoteLink,         // $18 quote_link
+			in.TenderID,               // $1  tender_id
+			currentPositionID,         // $2  client_position_id
+			sortNumber,                // $3  sort_number
+			item.BoqItemType,          // $4  boq_item_type
+			item.WorkNameID,           // $5  work_name_id
+			item.MaterialNameID,       // $6  material_name_id
+			parentWorkItemID,          // $7  parent_work_item_id
+			item.UnitCode,             // $8  unit_code
+			item.Quantity,             // $9  quantity
+			item.BaseQuantity,         // $10 base_quantity
+			item.ConversionCoeff,      // $11 conversion_coefficient
+			item.ConsumptionCoeff,     // $12 consumption_coefficient
+			item.UnitRate,             // $13 unit_rate
+			item.CurrencyType,         // $14 currency_type (COALESCE → 'RUB')
+			item.TotalAmount,          // $15 total_amount  (COALESCE → 0)
+			item.DeliveryPriceType,    // $16 delivery_price_type
+			item.DeliveryAmount,       // $17 delivery_amount
+			item.QuoteLink,            // $18 quote_link
 			item.DetailCostCategoryID, // $19 detail_cost_category_id
-			item.MaterialType,     // $20 material_type
-			item.Description,      // $21 description
-			importSessionID,       // $22 import_session_id
+			item.MaterialType,         // $20 material_type
+			item.Description,          // $21 description
+			importSessionID,           // $22 import_session_id
 		).Scan(&insertedID); err != nil {
 			return nil, boqInsertError(err, rowLabel, currentPositionID)
 		}
@@ -456,12 +453,11 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 		}
 	}
 
-	// Пересчитываем cached_grand_total тендера один раз — построчный триггер был
-	// подавлён через app.skip_grand_total. Выполняется безусловно, чтобы значение
-	// было свежим даже при импорте, не менявшем суммы.
-	if _, err := tx.Exec(ctx,
-		`SELECT public.recalculate_tender_grand_total($1::uuid)`, in.TenderID,
-	); err != nil {
+	// Пересчитываем cached_grand_total тендера один раз через canonical Go/calc
+	// helper (этап 0.1.2.4a: SQL-функция retired, per-row триггеров нет).
+	// Выполняется безусловно, чтобы значение было свежим даже при импорте,
+	// не менявшем суммы.
+	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, in.TenderID); err != nil {
 		return nil, fmt.Errorf("importRepo.BulkImport: recompute grand total: %w", err)
 	}
 

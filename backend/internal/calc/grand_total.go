@@ -9,13 +9,13 @@ package calc
 // computed in the service layer (SELECT ... GROUP BY boq_item_type).
 // Aligns with the forEach loop in calculateGrandTotal.ts lines 74-105.
 type DirectCosts struct {
-	Works                      float64 // 'раб'
-	Materials                  float64 // 'мат'
-	SubcontractWorks           float64 // 'суб-раб'
-	SubcontractMaterials       float64 // 'суб-мат'
-	WorksComp                  float64 // 'раб-комп.'
-	MaterialsComp              float64 // 'мат-комп.'
-	SubcontractWorksForGrowth  float64 // 'суб-раб' excluding growth-exempt categories
+	Works                         float64 // 'раб'
+	Materials                     float64 // 'мат'
+	SubcontractWorks              float64 // 'суб-раб'
+	SubcontractMaterials          float64 // 'суб-мат'
+	WorksComp                     float64 // 'раб-комп.'
+	MaterialsComp                 float64 // 'мат-комп.'
+	SubcontractWorksForGrowth     float64 // 'суб-раб' excluding growth-exempt categories
 	SubcontractMaterialsForGrowth float64 // 'суб-мат' excluding growth-exempt categories
 }
 
@@ -24,64 +24,72 @@ type DirectCosts struct {
 // by label/key substring match (kept in the service layer — this package doesn't
 // care how coefficients were picked).
 type MarkupCoefficients struct {
-	Mechanization              float64 // "механизация" / "буринц"
-	MvpGsm                     float64 // "мвп" / "гсм"
-	Warranty                   float64 // "гаранти*"
-	Coefficient06              float64 // "0.6" / "1.6" / works_16 / works_markup
-	WorksCostGrowth            float64 // "рост * работ*" (not subcontract)
-	MaterialCostGrowth         float64 // "рост * материал*" (not subcontract)
-	SubcontractWorksCostGrowth    float64 // "рост * работ* * субподряд"
+	Mechanization                  float64 // "механизация" / "буринц"
+	MvpGsm                         float64 // "мвп" / "гсм"
+	Warranty                       float64 // "гаранти*"
+	Coefficient06                  float64 // "0.6" / "1.6" / works_16 / works_markup
+	WorksCostGrowth                float64 // "рост * работ*" (not subcontract)
+	MaterialCostGrowth             float64 // "рост * материал*" (not subcontract)
+	SubcontractWorksCostGrowth     float64 // "рост * работ* * субподряд"
 	SubcontractMaterialsCostGrowth float64 // "рост * материал* * субподряд"
-	OverheadOwnForces          float64 // "ооз" (not subcontract)
-	OverheadSubcontract        float64 // "ооз * субподряд"
-	GeneralCosts               float64 // "офз" / "общ.*затрат*"
-	ProfitOwnForces            float64 // "прибыль" (not subcontract)
-	ProfitSubcontract          float64 // "прибыль * субподряд"
-	Unforeseeable              float64 // "непредвид*"
+	OverheadOwnForces              float64 // "ооз" (not subcontract)
+	OverheadSubcontract            float64 // "ооз * субподряд"
+	GeneralCosts                   float64 // "офз" / "общ.*затрат*"
+	ProfitOwnForces                float64 // "прибыль" (not subcontract)
+	ProfitSubcontract              float64 // "прибыль * субподряд"
+	Unforeseeable                  float64 // "непредвид*"
 }
 
 // GrandTotalBreakdown mirrors every intermediate amount that calculateGrandTotal.ts
 // computes. Exposed so dual-run can diff any component, not just the final sum.
 type GrandTotalBreakdown struct {
-	SubcontractTotal      float64
-	Su10Total             float64
-	DirectCostsTotal      float64
-	MechanizationCost     float64
-	Coefficient06Cost     float64
-	MvpGsmCost            float64
-	WarrantyCost          float64
-	WorksWithMarkup       float64
-	WorksCostGrowthAmount float64
-	MaterialCostGrowthAmount float64
-	SubcontractWorksCostGrowthAmount    float64
+	SubcontractTotal                     float64
+	Su10Total                            float64
+	DirectCostsTotal                     float64
+	MechanizationCost                    float64
+	Coefficient06Cost                    float64
+	MvpGsmCost                           float64
+	WarrantyCost                         float64
+	WorksWithMarkup                      float64
+	WorksCostGrowthAmount                float64
+	MaterialCostGrowthAmount             float64
+	SubcontractWorksCostGrowthAmount     float64
 	SubcontractMaterialsCostGrowthAmount float64
-	TotalCostGrowth       float64
-	BaseForUnforeseeable  float64
-	UnforeseeableCost     float64
-	BaseForOOZ            float64
-	OverheadOwnForcesCost float64
-	SubcontractGrowth     float64
-	BaseForSubcontractOOZ float64
-	OverheadSubcontractCost float64
-	BaseForOFZ            float64
-	GeneralCostsCost      float64
-	BaseForProfit         float64
-	ProfitOwnForcesCost   float64
-	BaseForSubcontractProfit float64
-	ProfitSubcontractCost float64
-	GrandTotal            float64
+	TotalCostGrowth                      float64
+	BaseForUnforeseeable                 float64
+	UnforeseeableCost                    float64
+	BaseForOOZ                           float64
+	OverheadOwnForcesCost                float64
+	SubcontractGrowth                    float64
+	BaseForSubcontractOOZ                float64
+	OverheadSubcontractCost              float64
+	BaseForOFZ                           float64
+	GeneralCostsCost                     float64
+	BaseForProfit                        float64
+	ProfitOwnForcesCost                  float64
+	BaseForSubcontractProfit             float64
+	ProfitSubcontractCost                float64
+	GrandTotal                           float64
 }
 
 // CalculateGrandTotal takes already-aggregated inputs and returns the tender's
 // commercial grand total along with every intermediate subtotal.
 //
 // The formula mirrors calculateGrandTotal.ts lines 259-306 EXACTLY:
-//   worksSu10Only     = works
-//   mechanizationCost = worksSu10Only * mechanization / 100
-//   coefficient06Cost = (worksSu10Only + mechanizationCost) * coeff06 / 100
-//   mvpGsmCost        = worksSu10Only * mvpGsm / 100
-//   warrantyCost      = worksSu10Only * warranty / 100
-//   ...and so on through all 13 cost components.
+//
+//	worksSu10Only     = works
+//	mechanizationCost = worksSu10Only * mechanization / 100
+//	coefficient06Cost = (worksSu10Only + mechanizationCost) * coeff06 / 100
+//	mvpGsmCost        = worksSu10Only * mvpGsm / 100
+//	warrantyCost      = worksSu10Only * warranty / 100
+//	...and so on through all 13 cost components.
+//
+// NOTE (этап 0.1.2.4a): это НЕ формула tenders.cached_grand_total. Данная
+// функция — legacy formula breakdown Financial Indicators (порт
+// calculateGrandTotal.ts) и работает от direct costs + markup coefficients.
+// Каноническая формула materialized-итога тендера — ТОЛЬКО
+// CalculateCachedTenderGrandTotal (cached_grand_total.go). Унификация FI с
+// серверным breakdown — отдельный этап 0.1.2.4b.
 func CalculateGrandTotal(d DirectCosts, c MarkupCoefficients) GrandTotalBreakdown {
 	b := GrandTotalBreakdown{}
 
