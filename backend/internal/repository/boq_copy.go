@@ -94,6 +94,8 @@ func (r *BoqRepo) CopyPositionItems(
 		DetailCostCategoryID   *string
 		QuoteLink              *string
 		Description            *string
+		QuotePriceDate         *string
+		QuoteValidUntil        *string
 	}
 	rows, err := tx.Query(ctx, `
 		SELECT id::text, boq_item_type::text, material_type::text,
@@ -101,7 +103,8 @@ func (r *BoqRepo) CopyPositionItems(
 		       quantity, base_quantity, consumption_coefficient, conversion_coefficient,
 		       parent_work_item_id::text, delivery_price_type::text, delivery_amount,
 		       currency_type::text, unit_rate,
-		       detail_cost_category_id::text, quote_link, description
+		       detail_cost_category_id::text, quote_link, description,
+		       to_char(quote_price_date, 'YYYY-MM-DD'), to_char(quote_valid_until, 'YYYY-MM-DD')
 		FROM public.boq_items
 		WHERE client_position_id = $1
 		ORDER BY sort_number ASC, id ASC
@@ -121,6 +124,7 @@ func (r *BoqRepo) CopyPositionItems(
 				&s.ParentWorkItemID, &s.DeliveryPriceType, &s.DeliveryAmount,
 				&s.CurrencyType, &s.UnitRate,
 				&s.DetailCostCategoryID, &s.QuoteLink, &s.Description,
+				&s.QuotePriceDate, &s.QuoteValidUntil,
 			); err != nil {
 				return
 			}
@@ -160,7 +164,7 @@ func (r *BoqRepo) CopyPositionItems(
 		    consumption_coefficient, conversion_coefficient,
 		    parent_work_item_id, delivery_price_type, delivery_amount,
 		    currency_type, unit_rate,
-		    detail_cost_category_id, quote_link, description
+		    detail_cost_category_id, quote_link, description, quote_price_date, quote_valid_until
 		) VALUES (
 		    $1, $2, $3,
 		    $4::boq_item_type, $5::material_type, $6, $7,
@@ -168,7 +172,7 @@ func (r *BoqRepo) CopyPositionItems(
 		    $11, $12,
 		    NULL, $13::delivery_price_type, $14,
 		    $15::currency_type, $16,
-		    $17, $18, $19
+		    $17, $18, $19, $20::date, $21::date
 		)
 		RETURNING id::text
 	`
@@ -182,6 +186,7 @@ func (r *BoqRepo) CopyPositionItems(
 			s.DeliveryPriceType, s.DeliveryAmount,
 			s.CurrencyType, s.UnitRate,
 			s.DetailCostCategoryID, s.QuoteLink, s.Description,
+			s.QuotePriceDate, s.QuoteValidUntil,
 		).Scan(&newIDs[i]); err != nil {
 			return nil, fmt.Errorf("boqRepo.CopyPositionItems: insert %d: %w", i, err)
 		}

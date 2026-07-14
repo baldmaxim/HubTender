@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -29,9 +31,19 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItem
 		return nil, fmt.Errorf("boqRepo.UpdateBoqItem: lock row: %w", err)
 	}
 
+	// 1.3: quote source dates — валидация ДО каких-либо записей.
+	if err := validateQuoteDates(in.QuotePriceDate, in.QuoteValidUntil, oldItem); err != nil {
+		return nil, err
+	}
+
 	// 0-F2 (category A): one revision bump; commercial recalc follows async.
-	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, oldItem.TenderID, "boq_update"); err != nil {
-		return nil, fmt.Errorf("boqRepo.UpdateBoqItem: %w", err)
+	// 1.3: patch, меняющий ТОЛЬКО source-метаданные (quote_link / даты цены),
+	// НЕ является финансовым изменением — ревизия не двигается, approval не
+	// снимается, recalc не нужен (метаданные не входят в формулу).
+	if !isQuoteMetadataOnlyPatch(&in) {
+		if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, oldItem.TenderID, "boq_update"); err != nil {
+			return nil, fmt.Errorf("boqRepo.UpdateBoqItem: %w", err)
+		}
 	}
 
 	args := []any{}
@@ -100,6 +112,12 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItem
 	}
 	if in.QuoteLink != nil {
 		set("quote_link", *in.QuoteLink)
+	}
+	if in.QuotePriceDate != nil {
+		set("quote_price_date", nullIfEmptyDate(*in.QuotePriceDate))
+	}
+	if in.QuoteValidUntil != nil {
+		set("quote_valid_until", nullIfEmptyDate(*in.QuoteValidUntil))
 	}
 
 	var newItem *BoqItemRow
@@ -197,4 +215,81 @@ func (r *BoqRepo) DeleteBoqItem(ctx context.Context, id, changedBy string) (*Boq
 		return nil, fmt.Errorf("boqRepo.DeleteBoqItem: commit: %w", err)
 	}
 	return item, nil
+}
+
+// ─── 1.3: source metadata (quote dates) ──────────────────────────────────────
+
+// InvalidQuoteDatesError — некорректные даты источника (400 на write-path).
+type InvalidQuoteDatesError struct {
+	Reason string
+}
+
+func (e *InvalidQuoteDatesError) Error() string {
+	return "INVALID_QUOTE_DATES: " + e.Reason
+}
+
+// Code returns the stable machine-readable code.
+func (e *InvalidQuoteDatesError) Code() string { return "INVALID_QUOTE_DATES" }
+
+// isQuoteMetadataOnlyPatch — true, если patch затрагивает ТОЛЬКО справочные
+// source-поля (quote_link, даты цены): такие правки не финансовые (§3 этапа
+// 1.3) — ревизия/approval/recalc не трогаются.
+func isQuoteMetadataOnlyPatch(in *UpdateBoqItemInput) bool {
+	touchesMetadata := in.QuoteLink != nil || in.QuotePriceDate != nil || in.QuoteValidUntil != nil
+	touchesFinancial := in.BoqItemType != nil || in.MaterialType != nil || in.Description != nil ||
+		in.UnitCode != nil || in.Quantity != nil || in.BaseQuantity != nil ||
+		in.ConversionCoefficient != nil || in.UnitRate != nil || in.CurrencyType != nil ||
+		in.DeliveryPriceType != nil || in.DeliveryAmount != nil || in.ConsumptionCoefficient != nil ||
+		in.DetailCostCategoryID != nil || in.MaterialNameID != nil || in.WorkNameID != nil ||
+		in.ParentWorkItemID != nil || in.SortNumber != nil
+	return touchesMetadata && !touchesFinancial
+}
+
+// nullIfEmptyDate — "" → NULL (очистка), иначе дата как есть (валидация выше).
+func nullIfEmptyDate(s string) any {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return strings.TrimSpace(s)
+}
+
+// validateQuoteDates — семантика §3: формат YYYY-MM-DD; price_date не в
+// будущем относительно СЕРВЕРНОЙ даты; valid_until >= price_date (учитывая
+// уже сохранённые значения при частичном patch'е). Пустые значения разрешены;
+// valid_until в прошлом — допустимые исторические данные.
+func validateQuoteDates(priceDate, validUntil *string, old *BoqItemRow) error {
+	parse := func(field string, p *string, fallback *string) (*time.Time, error) {
+		var raw *string
+		if p != nil {
+			if strings.TrimSpace(*p) == "" {
+				return nil, nil // явная очистка
+			}
+			raw = p
+		} else {
+			raw = fallback
+		}
+		if raw == nil || strings.TrimSpace(*raw) == "" {
+			return nil, nil
+		}
+		t, err := time.Parse("2006-01-02", strings.TrimSpace(*raw))
+		if err != nil {
+			return nil, &InvalidQuoteDatesError{Reason: field + ": ожидается дата в формате ГГГГ-ММ-ДД"}
+		}
+		return &t, nil
+	}
+	pd, err := parse("Дата цены", priceDate, old.QuotePriceDate)
+	if err != nil {
+		return err
+	}
+	vu, err := parse("Действительно до", validUntil, old.QuoteValidUntil)
+	if err != nil {
+		return err
+	}
+	if pd != nil && pd.After(time.Now().UTC().Truncate(24*time.Hour).Add(24*time.Hour-time.Second)) {
+		return &InvalidQuoteDatesError{Reason: "дата цены не может быть в будущем"}
+	}
+	if pd != nil && vu != nil && vu.Before(*pd) {
+		return &InvalidQuoteDatesError{Reason: "срок действия не может быть раньше даты цены"}
+	}
+	return nil
 }

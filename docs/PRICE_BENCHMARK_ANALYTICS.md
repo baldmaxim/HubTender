@@ -93,7 +93,15 @@ latest_versions → per-tender representative через `percentile_cont` → J
 observations — в Go pure-слое (детерминированная интерполяция). Perf-тест:
 3000 строк × история < 2 s + анти-квадратичный контроль.
 
-## 15. Следующий уровень (backlog)
+## 15. Связанные инструменты
+
+Актуальность источников цен (quote coverage & freshness) — отдельная страница
+и методика: см.
+[PRICE_SOURCE_FRESHNESS_ANALYTICS.md](PRICE_SOURCE_FRESHNESS_ANALYTICS.md)
+(этап 1.3); из бенчмарка ведёт компактная ссылка «Проверить источник текущей
+цены». Endpoints не объединены.
+
+## 16. Следующий уровень (backlog)
 
 regional benchmark (после появления поля региона) · inflation normalization ·
 supplier quote freshness · fuzzy nomenclature matching · external market data ·

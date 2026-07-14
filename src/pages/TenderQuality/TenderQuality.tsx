@@ -275,9 +275,14 @@ export default function TenderQuality() {
             />
           )}
 
-          <Button style={{ marginTop: 12 }} onClick={() => navigate(`/analytics/price-benchmark?tenderId=${tenderId}`)}>
-            Проверить ценовые отклонения →
-          </Button>
+          <Space style={{ marginTop: 12 }}>
+            <Button onClick={() => navigate(`/analytics/price-benchmark?tenderId=${tenderId}`)}>
+              Проверить ценовые отклонения →
+            </Button>
+            <Button onClick={() => navigate(`/analytics/price-sources?tenderId=${tenderId}`)}>
+              Проверить актуальность источников цен →
+            </Button>
+          </Space>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
             Снимок от {report.generated_at}, ревизия входов {report.financial_input_revision}.
             Анализ read-only: данные не изменяются.

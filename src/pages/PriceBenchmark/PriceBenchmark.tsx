@@ -106,7 +106,6 @@ export default function PriceBenchmark() {
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, status, positionId, boqType, search, sortMode, page]);
 
   useEffect(() => {
@@ -277,6 +276,11 @@ export default function PriceBenchmark() {
             />
           )}
 
+          <Space style={{ marginTop: 12 }}>
+            <Button size="small" onClick={() => navigate(`/analytics/price-sources?tenderId=${tenderId}`)}>
+              Проверить источник текущей цены →
+            </Button>
+          </Space>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
             Снимок {report.generated_at}, ревизия входов {report.financial_input_revision}, период {report.period_months} мес.
           </Text>

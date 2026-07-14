@@ -18,6 +18,7 @@ export function benchmarkStatusDisplay(status: string): { label: string; icon: s
 }
 
 /** Outlier — предупреждение, не blocker: никакой статус бенчмарка не блокирует. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function isBlockingStatus(_status: string): false {
   return false;
 }

@@ -108,6 +108,10 @@ revision marker); полные prepared-проверки остаются на �
 
 Ценовые отклонения (исторический benchmark) — отдельная страница и методика:
 см. [PRICE_BENCHMARK_ANALYTICS.md](PRICE_BENCHMARK_ANALYTICS.md) (этап 1.2).
+Актуальность источников цен (quote coverage & freshness) — см.
+[PRICE_SOURCE_FRESHNESS_ANALYTICS.md](PRICE_SOURCE_FRESHNESS_ANALYTICS.md)
+(этап 1.3); со страницы качества ведёт ссылка «Проверить актуальность
+источников цен».
 
 ## 13. Backlog следующего этапа
 

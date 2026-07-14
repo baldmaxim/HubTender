@@ -36,6 +36,8 @@ type BoqItemRow struct {
 	MaterialNameID         *string   `json:"material_name_id"`
 	WorkNameID             *string   `json:"work_name_id"`
 	QuoteLink              *string   `json:"quote_link"`
+	QuotePriceDate         *string   `json:"quote_price_date"`
+	QuoteValidUntil        *string   `json:"quote_valid_until"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }

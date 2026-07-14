@@ -104,6 +104,8 @@ type createBoqItemReq struct {
 	ParentWorkItemID       *string  `json:"parent_work_item_id" validate:"omitempty,uuid"`
 	SortNumber             *int     `json:"sort_number" validate:"omitempty,gte=0"`
 	QuoteLink              *string  `json:"quote_link"`
+	QuotePriceDate         *string  `json:"quote_price_date"`
+	QuoteValidUntil        *string  `json:"quote_valid_until"`
 }
 
 // updateBoqItemReq is the request body for PATCH /api/v1/items/:id.
@@ -126,6 +128,8 @@ type updateBoqItemReq struct {
 	ParentWorkItemID       *string  `json:"parent_work_item_id" validate:"omitempty,uuid"`
 	SortNumber             *int     `json:"sort_number" validate:"omitempty,gte=0"`
 	QuoteLink              *string  `json:"quote_link"`
+	QuotePriceDate         *string  `json:"quote_price_date"`
+	QuoteValidUntil        *string  `json:"quote_valid_until"`
 }
 
 // CreateBoqItem handles POST /api/v1/positions/:posId/items.
@@ -175,12 +179,19 @@ func (h *BoqWriteHandler) CreateBoqItem(w http.ResponseWriter, r *http.Request) 
 		ParentWorkItemID:       req.ParentWorkItemID,
 		SortNumber:             req.SortNumber,
 		QuoteLink:              req.QuoteLink,
+		QuotePriceDate:         req.QuotePriceDate,
+		QuoteValidUntil:        req.QuoteValidUntil,
 		CreatedBy:              authUser.ID,
 	}
 
 	item, err := h.svc.CreateBoqItem(r.Context(), in)
 	if err != nil {
 		if renderMissingFXRate(w, err) {
+			return
+		}
+		var qd *repository.InvalidQuoteDatesError
+		if errors.As(err, &qd) {
+			apierr.BadRequest(qd.Reason).Render(w)
 			return
 		}
 		apierr.InternalFromErr(w, r, err, "failed to create BOQ item", "tender_id", tenderID, "position_id", posID)
@@ -257,12 +268,20 @@ func (h *BoqWriteHandler) UpdateBoqItem(w http.ResponseWriter, r *http.Request) 
 		ParentWorkItemID:       req.ParentWorkItemID,
 		SortNumber:             req.SortNumber,
 		QuoteLink:              req.QuoteLink,
+		QuotePriceDate:         req.QuotePriceDate,
+		QuoteValidUntil:        req.QuoteValidUntil,
 		ChangedBy:              authUser.ID,
 	}
 
 	updated, err := h.svc.UpdateBoqItem(r.Context(), itemID, in)
 	if err != nil {
 		if renderMissingFXRate(w, err) {
+			return
+		}
+		// 1.3: некорректные даты источника — понятная 400.
+		var qd *repository.InvalidQuoteDatesError
+		if errors.As(err, &qd) {
+			apierr.BadRequest(qd.Reason).Render(w)
 			return
 		}
 		apierr.InternalFromErr(w, r, err, "failed to update BOQ item", "item_id", itemID)

@@ -14,6 +14,7 @@ import {
   ClockCircleOutlined,
   BarChartOutlined,
   FundOutlined,
+  LinkOutlined,
   LineChartOutlined,
   SwapOutlined,
   BuildOutlined,
@@ -119,6 +120,11 @@ export const menuItems: NonNullable<MenuProps['items']> = [
         key: '/analytics/price-benchmark',
         icon: <FundOutlined />,
         label: 'Ценовые отклонения',
+      },
+      {
+        key: '/analytics/price-sources',
+        icon: <LinkOutlined />,
+        label: 'Источники цен',
       },
       {
         key: '/costs',

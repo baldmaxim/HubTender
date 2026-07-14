@@ -69,7 +69,9 @@ type CreateBoqItemInput struct {
 	ParentWorkItemID       *string
 	SortNumber             *int
 	QuoteLink              *string
-	CreatedBy              string // app users UUID for audit (changed_by)
+	QuotePriceDate         *string // YYYY-MM-DD; metadata-only (1.3)
+	QuoteValidUntil        *string // YYYY-MM-DD; metadata-only (1.3)
+	CreatedBy              string  // app users UUID for audit (changed_by)
 }
 
 // UpdateBoqItemInput holds validated patch fields for a boq_item.
@@ -92,7 +94,9 @@ type UpdateBoqItemInput struct {
 	ParentWorkItemID       *string
 	SortNumber             *int
 	QuoteLink              *string
-	ChangedBy              string // app users UUID for audit (changed_by)
+	QuotePriceDate         *string // YYYY-MM-DD; "" = очистить; metadata-only (1.3)
+	QuoteValidUntil        *string // YYYY-MM-DD; "" = очистить; metadata-only (1.3)
+	ChangedBy              string  // app users UUID for audit (changed_by)
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +111,7 @@ const boqScanCols = `
 	consumption_coefficient, total_amount, sort_number,
 	detail_cost_category_id::text, parent_work_item_id::text,
 	material_name_id::text, work_name_id::text, quote_link,
+	to_char(quote_price_date, 'YYYY-MM-DD'), to_char(quote_valid_until, 'YYYY-MM-DD'),
 	COALESCE(created_at,NOW()), COALESCE(updated_at,NOW())
 `
 
@@ -133,6 +138,7 @@ func scanBoqItemRow(row interface{ Scan(...any) error }) (*BoqItemRow, error) {
 		&b.ConsumptionCoefficient, &b.TotalAmount, &b.SortNumber,
 		&b.DetailCostCategoryID, &b.ParentWorkItemID,
 		&b.MaterialNameID, &b.WorkNameID, &b.QuoteLink,
+		&b.QuotePriceDate, &b.QuoteValidUntil,
 		&b.CreatedAt, &b.UpdatedAt,
 	); err != nil {
 		return nil, err
@@ -172,6 +178,8 @@ func changedFields(old, new *BoqItemRow) []string {
 		{"material_name_id", old.MaterialNameID, new.MaterialNameID},
 		{"work_name_id", old.WorkNameID, new.WorkNameID},
 		{"quote_link", old.QuoteLink, new.QuoteLink},
+		{"quote_price_date", old.QuotePriceDate, new.QuotePriceDate},
+		{"quote_valid_until", old.QuoteValidUntil, new.QuoteValidUntil},
 	}
 	var out []string
 	for _, p := range pairs {
@@ -263,6 +271,18 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
 	}
 
+	// 1.3: quote source dates — та же валидация, что и в UpdateBoqItem.
+	if err := validateQuoteDates(in.QuotePriceDate, in.QuoteValidUntil, &BoqItemRow{}); err != nil {
+		return nil, err
+	}
+	qpd, qvu := any(nil), any(nil)
+	if in.QuotePriceDate != nil {
+		qpd = nullIfEmptyDate(*in.QuotePriceDate)
+	}
+	if in.QuoteValidUntil != nil {
+		qvu = nullIfEmptyDate(*in.QuoteValidUntil)
+	}
+
 	sortNum := 0
 	if in.SortNumber != nil {
 		sortNum = *in.SortNumber
@@ -302,8 +322,10 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		     unit_rate, currency_type, delivery_price_type,
 		     delivery_amount, consumption_coefficient, total_amount,
 		     detail_cost_category_id, material_name_id, work_name_id,
-		     parent_work_item_id, sort_number, quote_link)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+		     parent_work_item_id, sort_number, quote_link,
+		     quote_price_date, quote_valid_until)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+		        $22::date, $23::date)
 		RETURNING ` + boqScanCols
 	row := tx.QueryRow(ctx, q,
 		in.ClientPositionID, in.TenderID, in.BoqItemType,
@@ -314,6 +336,7 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		in.DetailCostCategoryID,
 		in.MaterialNameID, in.WorkNameID,
 		in.ParentWorkItemID, sortNum, in.QuoteLink,
+		qpd, qvu,
 	)
 	item, err := scanBoqItemRow(row)
 	if err != nil {

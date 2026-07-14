@@ -95,6 +95,7 @@ func bulkCopyBoqItems(
 				old_boq.delivery_price_type, old_boq.delivery_amount,
 				old_boq.currency_type,
 				old_boq.detail_cost_category_id, old_boq.quote_link,
+				old_boq.quote_price_date, old_boq.quote_valid_until,
 				old_boq.description, old_boq.unit_rate
 			FROM UNNEST($2::uuid[], $3::uuid[]) AS pairs(old_id, new_id)
 			JOIN public.boq_items old_boq ON old_boq.client_position_id = pairs.old_id
@@ -111,6 +112,7 @@ func bulkCopyBoqItems(
 				delivery_price_type, delivery_amount,
 				currency_type,
 				detail_cost_category_id, quote_link,
+				quote_price_date, quote_valid_until,
 				parent_work_item_id, description, unit_rate
 			)
 			SELECT
@@ -121,6 +123,7 @@ func bulkCopyBoqItems(
 				gen.delivery_price_type, gen.delivery_amount,
 				gen.currency_type,
 				gen.detail_cost_category_id, gen.quote_link,
+				gen.quote_price_date, gen.quote_valid_until,
 				NULL, gen.description, gen.unit_rate
 			FROM gen
 		)

@@ -430,6 +430,12 @@ CREATE TABLE IF NOT EXISTS public.boq_items (
     total_amount numeric,
     detail_cost_category_id uuid,
     quote_link text,
+    -- 1.3: справочные даты источника цены (metadata-only, вне расчёта)
+    quote_price_date date,
+    quote_valid_until date,
+    CONSTRAINT boq_items_quote_dates_check
+        CHECK (quote_valid_until IS NULL OR quote_price_date IS NULL
+            OR quote_valid_until >= quote_price_date),
     commercial_markup numeric,
     total_commercial_material_cost numeric,
     total_commercial_work_cost numeric,
