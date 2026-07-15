@@ -113,6 +113,9 @@ revision marker); полные prepared-проверки остаются на �
 (этап 1.3); со страницы качества ведёт ссылка «Проверить актуальность
 источников цен». Единый «План действий» по всем трём аналитикам — см.
 [TENDER_REVIEW_ACTION_PLAN.md](TENDER_REVIEW_ACTION_PLAN.md) (этап 1.4).
+Сравнение версий тендера — «Изменения расчёта»:
+[TENDER_CHANGE_IMPACT_ANALYTICS.md](TENDER_CHANGE_IMPACT_ANALYTICS.md)
+(этап 1.5).
 
 ## 13. Backlog следующего этапа
 

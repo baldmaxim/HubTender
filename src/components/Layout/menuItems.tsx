@@ -16,6 +16,7 @@ import {
   FundOutlined,
   LinkOutlined,
   OrderedListOutlined,
+  DiffOutlined,
   LineChartOutlined,
   SwapOutlined,
   BuildOutlined,
@@ -131,6 +132,11 @@ export const menuItems: NonNullable<MenuProps['items']> = [
         key: '/analytics/action-plan',
         icon: <OrderedListOutlined />,
         label: 'План действий',
+      },
+      {
+        key: '/analytics/change-impact',
+        icon: <DiffOutlined />,
+        label: 'Изменения расчёта',
       },
       {
         key: '/costs',

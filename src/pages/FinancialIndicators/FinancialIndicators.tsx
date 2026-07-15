@@ -513,13 +513,16 @@ const FinancialIndicators: React.FC = () => {
                 ),
                 children: (
                   <>
-                    {showFullscreenTable && (
-                      <div style={{ marginBottom: 8, textAlign: 'right' }}>
+                    <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                      <Button size="small" onClick={() => { window.location.href = `/analytics/change-impact?tenderId=${selectedTenderId}`; }}>
+                        Изменения расчёта →
+                      </Button>
+                      {showFullscreenTable && (
                         <Button icon={<FullscreenOutlined />} onClick={() => setTableFullscreen(true)}>
                           На весь экран
                         </Button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                     {/* Телефон в landscape: таблица раскрывается на весь экран
                         (fixed-оверлей); колонки вписываются по ширине, строки
                         прокручиваются вертикально. Поворот в портрет → карточный вид. */}

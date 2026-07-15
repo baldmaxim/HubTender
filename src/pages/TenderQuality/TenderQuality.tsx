@@ -285,6 +285,9 @@ export default function TenderQuality() {
             <Button onClick={() => navigate(`/analytics/action-plan?tenderId=${tenderId}`)}>
               Открыть общий план действий →
             </Button>
+            <Button onClick={() => navigate(`/analytics/change-impact?tenderId=${tenderId}`)}>
+              Изменения между версиями →
+            </Button>
           </Space>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
             Снимок от {report.generated_at}, ревизия входов {report.financial_input_revision}.

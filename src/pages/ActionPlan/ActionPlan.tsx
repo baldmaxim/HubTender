@@ -278,6 +278,11 @@ export default function ActionPlan() {
             />
           )}
 
+          <Space style={{ marginTop: 12 }}>
+            <Button size="small" onClick={() => navigate(`/analytics/change-impact?tenderId=${tenderId}`)}>
+              Изменения расчёта между версиями →
+            </Button>
+          </Space>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
             Снимок {report.generated_at} · ревизия входов {report.financial_input_revision} ·
             история цен {report.benchmark_period_months} мес. · возраст источника до {report.source_max_age_days} дн.

@@ -62,6 +62,7 @@ type deps struct {
 	priceBenchmarkH   *handlers.PriceBenchmarkHandler
 	priceSourceH      *handlers.PriceSourceHandler
 	actionPlanH       *handlers.ActionPlanHandler
+	changeImpactH     *handlers.ChangeImpactHandler
 	ccvH              *handlers.ConstructionCostVolumesHandler
 	wsH               *handlers.WsHandler
 }
@@ -114,6 +115,7 @@ func buildDeps(
 	priceBenchmarkRepo := repository.NewPriceBenchmarkRepo(pool)
 	priceSourceRepo := repository.NewPriceSourceRepo(pool)
 	actionPlanRepo := repository.NewActionPlanRepo(pool)
+	changeImpactRepo := repository.NewChangeImpactRepo(pool)
 
 	// Commercial-cost auto-recalc — replaces the manual «Пересчитать» button.
 	// Mutation services Enqueue(tenderID) after changing a pricing input (BOQ
@@ -162,6 +164,7 @@ func buildDeps(
 	priceBenchmarkSvc := services.NewPriceBenchmarkService(priceBenchmarkRepo)
 	priceSourceSvc := services.NewPriceSourceService(priceSourceRepo)
 	actionPlanSvc := services.NewActionPlanService(actionPlanRepo)
+	changeImpactSvc := services.NewChangeImpactService(changeImpactRepo)
 	ccvSvc := services.NewConstructionCostVolumesService(ccvRepo)
 
 	return &deps{
@@ -207,6 +210,7 @@ func buildDeps(
 		priceBenchmarkH:   handlers.NewPriceBenchmarkHandler(priceBenchmarkSvc),
 		priceSourceH:      handlers.NewPriceSourceHandler(priceSourceSvc),
 		actionPlanH:       handlers.NewActionPlanHandler(actionPlanSvc),
+		changeImpactH:     handlers.NewChangeImpactHandler(changeImpactSvc),
 		ccvH:              handlers.NewConstructionCostVolumesHandler(ccvSvc),
 		wsH:               handlers.NewWsHandler(hub, verifyCfg, logger),
 	}
