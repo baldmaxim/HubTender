@@ -39,10 +39,26 @@ func (r *QualityRepo) LoadSnapshot(ctx context.Context, tenderID string) (*quali
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	s, err := loadQualitySnapshotTx(ctx, tx, tenderID)
+	if err != nil {
+		return nil, err
+	}
+
+	// READ ONLY tx: commit == rollback; закрываем явно.
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("qualityRepo.LoadSnapshot: commit: %w", err)
+	}
+	return s, nil
+}
+
+// loadQualitySnapshotTx — тело загрузки в УЖЕ открытой транзакции. Позволяет
+// Action Plan (этап 1.4) читать все три аналитики в одном REPEATABLE READ
+// READ ONLY снапшоте без дублирования SQL.
+func loadQualitySnapshotTx(ctx context.Context, tx pgx.Tx, tenderID string) (*quality.Snapshot, error) {
 	s := &quality.Snapshot{}
 
 	// 1. Tender: конфигурация + revision-состояние + generated_at из snapshot.
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT id::text, usd_rate, eur_rate, cny_rate,
 		       COALESCE(cached_grand_total, 0)::text,
 		       markup_tactic_id::text,
@@ -196,9 +212,5 @@ func (r *QualityRepo) LoadSnapshot(ctx context.Context, tenderID string) (*quali
 		return nil, fmt.Errorf("qualityRepo.LoadSnapshot: insurance/aggregates: %w", err)
 	}
 
-	// READ ONLY tx: commit == rollback; закрываем явно.
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("qualityRepo.LoadSnapshot: commit: %w", err)
-	}
 	return s, nil
 }

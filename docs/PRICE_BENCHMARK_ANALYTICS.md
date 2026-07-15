@@ -99,7 +99,8 @@ observations — в Go pure-слое (детерминированная инт�
 и методика: см.
 [PRICE_SOURCE_FRESHNESS_ANALYTICS.md](PRICE_SOURCE_FRESHNESS_ANALYTICS.md)
 (этап 1.3); из бенчмарка ведёт компактная ссылка «Проверить источник текущей
-цены». Endpoints не объединены.
+цены». Endpoints не объединены. Единый «План действий» — см.
+[TENDER_REVIEW_ACTION_PLAN.md](TENDER_REVIEW_ACTION_PLAN.md) (этап 1.4).
 
 ## 16. Следующий уровень (backlog)
 

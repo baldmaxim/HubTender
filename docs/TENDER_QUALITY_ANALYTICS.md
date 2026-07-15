@@ -111,7 +111,8 @@ revision marker); полные prepared-проверки остаются на �
 Актуальность источников цен (quote coverage & freshness) — см.
 [PRICE_SOURCE_FRESHNESS_ANALYTICS.md](PRICE_SOURCE_FRESHNESS_ANALYTICS.md)
 (этап 1.3); со страницы качества ведёт ссылка «Проверить актуальность
-источников цен».
+источников цен». Единый «План действий» по всем трём аналитикам — см.
+[TENDER_REVIEW_ACTION_PLAN.md](TENDER_REVIEW_ACTION_PLAN.md) (этап 1.4).
 
 ## 13. Backlog следующего этапа
 

@@ -124,6 +124,8 @@ amount-метриках — явное пояснение, что статусы
 - «Ценовые отклонения» — [PRICE_BENCHMARK_ANALYTICS.md](PRICE_BENCHMARK_ANALYTICS.md)
   (этап 1.2); из бенчмарка — компактная ссылка «Проверить источник текущей
   цены». Endpoints НЕ объединены: у экранов разные snapshot-инварианты.
+- Единый «План действий» по трём аналитикам —
+  [TENDER_REVIEW_ACTION_PLAN.md](TENDER_REVIEW_ACTION_PLAN.md) (этап 1.4).
 
 ## 13. Тесты
 

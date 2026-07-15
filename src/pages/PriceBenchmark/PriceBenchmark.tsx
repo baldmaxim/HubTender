@@ -280,6 +280,9 @@ export default function PriceBenchmark() {
             <Button size="small" onClick={() => navigate(`/analytics/price-sources?tenderId=${tenderId}`)}>
               Проверить источник текущей цены →
             </Button>
+            <Button size="small" onClick={() => navigate(`/analytics/action-plan?tenderId=${tenderId}`)}>
+              Открыть общий план действий →
+            </Button>
           </Space>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
             Снимок {report.generated_at}, ревизия входов {report.financial_input_revision}, период {report.period_months} мес.

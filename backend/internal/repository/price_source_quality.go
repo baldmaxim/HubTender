@@ -42,10 +42,24 @@ func (r *PriceSourceRepo) LoadSnapshot(ctx context.Context, tenderID string) (*S
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	s, err := loadSourceSnapshotTx(ctx, tx, tenderID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("priceSourceRepo: commit: %w", err)
+	}
+	return s, nil
+}
+
+// loadSourceSnapshotTx — тело загрузки в уже открытой транзакции
+// (переиспользуется Action Plan этапа 1.4 для общего снапшота).
+func loadSourceSnapshotTx(ctx context.Context, tx pgx.Tx, tenderID string) (*SourceSnapshot, error) {
 	s := &SourceSnapshot{TenderID: tenderID}
 
 	// 1. Tender-state + server dates.
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT financial_input_revision, financial_calculation_revision,
 		       financial_calculation_status,
 		       to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
@@ -93,9 +107,6 @@ func (r *PriceSourceRepo) LoadSnapshot(ctx context.Context, tenderID string) (*S
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("priceSourceRepo: rows: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("priceSourceRepo: commit: %w", err)
 	}
 	return s, nil
 }

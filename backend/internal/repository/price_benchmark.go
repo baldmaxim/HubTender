@@ -99,10 +99,24 @@ func (r *PriceBenchmarkRepo) LoadSnapshot(ctx context.Context, tenderID string, 
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	s, err := loadBenchmarkSnapshotTx(ctx, tx, tenderID, periodMonths)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("priceBenchmarkRepo: commit: %w", err)
+	}
+	return s, nil
+}
+
+// loadBenchmarkSnapshotTx — тело загрузки в уже открытой транзакции
+// (переиспользуется Action Plan этапа 1.4 для общего снапшота).
+func loadBenchmarkSnapshotTx(ctx context.Context, tx pgx.Tx, tenderID string, periodMonths int) (*BenchmarkSnapshot, error) {
 	s := &BenchmarkSnapshot{TenderID: tenderID, Observations: map[pb.Key][]pb.Observation{}}
 
 	// 1. Tender state (+generated_at из snapshot).
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT financial_input_revision, financial_calculation_revision,
 		       financial_calculation_status,
 		       to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
@@ -173,8 +187,5 @@ func (r *PriceBenchmarkRepo) LoadSnapshot(ctx context.Context, tenderID string, 
 		return nil, fmt.Errorf("priceBenchmarkRepo: history rows: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("priceBenchmarkRepo: commit: %w", err)
-	}
 	return s, nil
 }

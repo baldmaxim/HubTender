@@ -282,6 +282,9 @@ export default function TenderQuality() {
             <Button onClick={() => navigate(`/analytics/price-sources?tenderId=${tenderId}`)}>
               Проверить актуальность источников цен →
             </Button>
+            <Button onClick={() => navigate(`/analytics/action-plan?tenderId=${tenderId}`)}>
+              Открыть общий план действий →
+            </Button>
           </Space>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
             Снимок от {report.generated_at}, ревизия входов {report.financial_input_revision}.

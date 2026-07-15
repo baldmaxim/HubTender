@@ -276,6 +276,11 @@ export default function PriceSourceQuality() {
               scroll={{ x: true }} />
           )}
 
+          <Space style={{ marginTop: 12 }}>
+            <Button size="small" onClick={() => navigate(`/analytics/action-plan?tenderId=${tenderId}`)}>
+              Открыть общий план действий →
+            </Button>
+          </Space>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
             Снимок {report.generated_at}, серверная дата {report.as_of_date}, допустимый возраст {report.max_age_days} дн.,
             окно «скоро истечёт» {report.expiring_soon_days} дн.

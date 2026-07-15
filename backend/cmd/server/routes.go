@@ -88,6 +88,7 @@ func newRouter(
 		r.Get("/api/v1/tenders/{id}/price-benchmarks", d.priceBenchmarkH.TenderPriceBenchmarks)
 		r.Get("/api/v1/tenders/{id}/price-benchmarks/{itemId}/history", d.priceBenchmarkH.ItemHistory)
 		r.Get("/api/v1/tenders/{id}/price-source-quality", d.priceSourceH.TenderPriceSourceQuality)
+		r.Get("/api/v1/tenders/{id}/action-plan", d.actionPlanH.TenderActionPlan)
 		r.Get("/api/v1/tenders/{id}/positions", d.positionH.GetPositions)
 		r.Get("/api/v1/positions/boq-preview", d.positionH.GetBoqPreview)
 		r.Post("/api/v1/positions/boq-preview", d.positionH.PostBoqPreview)

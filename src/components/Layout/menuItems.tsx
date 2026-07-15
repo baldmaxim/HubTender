@@ -15,6 +15,7 @@ import {
   BarChartOutlined,
   FundOutlined,
   LinkOutlined,
+  OrderedListOutlined,
   LineChartOutlined,
   SwapOutlined,
   BuildOutlined,
@@ -125,6 +126,11 @@ export const menuItems: NonNullable<MenuProps['items']> = [
         key: '/analytics/price-sources',
         icon: <LinkOutlined />,
         label: 'Источники цен',
+      },
+      {
+        key: '/analytics/action-plan',
+        icon: <OrderedListOutlined />,
+        label: 'План действий',
       },
       {
         key: '/costs',
