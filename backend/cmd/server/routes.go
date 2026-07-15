@@ -90,6 +90,8 @@ func newRouter(
 		r.Get("/api/v1/tenders/{id}/price-source-quality", d.priceSourceH.TenderPriceSourceQuality)
 		r.Get("/api/v1/tenders/{id}/action-plan", d.actionPlanH.TenderActionPlan)
 		r.Get("/api/v1/tenders/{id}/change-impact", d.changeImpactH.TenderChangeImpact)
+		r.Get("/api/v1/tenders/{id}/review-report", d.reviewPackH.TenderReviewReport)
+		r.Get("/api/v1/tenders/{id}/review-report.xlsx", d.reviewPackH.TenderReviewReportXLSX)
 		r.Get("/api/v1/tenders/{id}/positions", d.positionH.GetPositions)
 		r.Get("/api/v1/positions/boq-preview", d.positionH.GetBoqPreview)
 		r.Post("/api/v1/positions/boq-preview", d.positionH.PostBoqPreview)

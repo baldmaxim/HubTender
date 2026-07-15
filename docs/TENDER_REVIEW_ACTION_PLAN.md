@@ -161,6 +161,9 @@ approval); outlier не утверждается как ошибка цены; �
 [TENDER_CHANGE_IMPACT_ANALYTICS.md](TENDER_CHANGE_IMPACT_ANALYTICS.md)
 (этап 1.5); из плана действий ведёт ссылка «Изменения расчёта между версиями».
 
+Серверный XLSX «Отчёт для проверки» (включает план действий листом) —
+[TENDER_REVIEW_PACK.md](TENDER_REVIEW_PACK.md) (этап 1.6).
+
 ## 17. Backlog (осознанно НЕ в этапе 1.4)
 
 assignment · acknowledgement/ручное закрытие · дедлайны · уведомления

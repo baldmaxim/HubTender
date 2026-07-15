@@ -102,6 +102,9 @@ observations — в Go pure-слое (детерминированная инт�
 цены». Endpoints не объединены. Единый «План действий» — см.
 [TENDER_REVIEW_ACTION_PLAN.md](TENDER_REVIEW_ACTION_PLAN.md) (этап 1.4).
 
+Единый серверный XLSX-отчёт по всем аналитикам — «Отчёт для проверки»:
+[TENDER_REVIEW_PACK.md](TENDER_REVIEW_PACK.md) (этап 1.6).
+
 ## 16. Следующий уровень (backlog)
 
 regional benchmark (после появления поля региона) · inflation normalization ·

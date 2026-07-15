@@ -333,6 +333,11 @@ export default function ChangeImpact() {
             />
           )}
 
+          <Space style={{ marginTop: 12 }}>
+            <Button size="small" onClick={() => navigate(`/analytics/review-pack?tenderId=${tenderId}`)}>
+              Добавить сравнение версий в отчёт →
+            </Button>
+          </Space>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
             Снимок {report.generated_at} · базовая версия v{report.baseline.version}
             {report.baseline.approved_at ? ` (согласована ${report.baseline.approved_at.slice(0, 10)})` : ''}.

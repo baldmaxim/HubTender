@@ -282,6 +282,9 @@ export default function ActionPlan() {
             <Button size="small" onClick={() => navigate(`/analytics/change-impact?tenderId=${tenderId}`)}>
               Изменения расчёта между версиями →
             </Button>
+            <Button size="small" onClick={() => navigate(`/analytics/review-pack?tenderId=${tenderId}`)}>
+              Сформировать отчёт →
+            </Button>
           </Space>
           <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 12 }}>
             Снимок {report.generated_at} · ревизия входов {report.financial_input_revision} ·

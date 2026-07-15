@@ -89,6 +89,21 @@ func (r *ChangeImpactRepo) LoadSnapshot(
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	out, err := loadChangeImpactSnapshotTx(ctx, tx, tenderID, baselineID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("changeImpactRepo: commit: %w", err)
+	}
+	return out, nil
+}
+
+// loadChangeImpactSnapshotTx — тело загрузки в уже открытой транзакции
+// (переиспользуется Review Pack этапа 1.6 для общего снапшота).
+func loadChangeImpactSnapshotTx(
+	ctx context.Context, tx pgx.Tx, tenderID, baselineID string,
+) (*ChangeImpactSnapshot, error) {
 	out := &ChangeImpactSnapshot{}
 
 	// 1. Текущая версия (+generated_at).
@@ -147,31 +162,28 @@ func (r *ChangeImpactRepo) LoadSnapshot(
 		baseState = ci.PickDefaultBaseline(&cur, versions)
 	}
 	if baseState == nil {
-		return out, tx.Commit(ctx) // BASELINE_NOT_AVAILABLE — не ошибка (§12)
+		return out, nil // BASELINE_NOT_AVAILABLE — не ошибка (§12)
 	}
 	base := ci.VersionData{Tender: *baseState}
 
 	// 3. Позиции обеих версий (один запрос).
-	if err := r.loadPositions(ctx, tx, tenderID, baseState.ID, &out.Current, &base); err != nil {
+	if err := ciLoadPositions(ctx, tx, tenderID, baseState.ID, &out.Current, &base); err != nil {
 		return nil, err
 	}
 	// 4. BOQ обеих версий (один запрос).
-	if err := r.loadItems(ctx, tx, tenderID, baseState.ID, &out.Current, &base); err != nil {
+	if err := ciLoadItems(ctx, tx, tenderID, baseState.ID, &out.Current, &base); err != nil {
 		return nil, err
 	}
 	// 5-7. Конфигурация обеих версий (set-based).
-	if err := r.loadConfig(ctx, tx, tenderID, baseState.ID, &out.Current.Tender, &base.Tender); err != nil {
+	if err := ciLoadConfig(ctx, tx, tenderID, baseState.ID, &out.Current.Tender, &base.Tender); err != nil {
 		return nil, err
 	}
 
 	out.Baseline = &base
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("changeImpactRepo: commit: %w", err)
-	}
 	return out, nil
 }
 
-func (r *ChangeImpactRepo) loadPositions(ctx context.Context, tx pgx.Tx, curID, baseID string, cur, base *ci.VersionData) error {
+func ciLoadPositions(ctx context.Context, tx pgx.Tx, curID, baseID string, cur, base *ci.VersionData) error {
 	rows, err := tx.Query(ctx, `
 		SELECT tender_id::text, id::text, position_number,
 		       COALESCE(item_no, ''), COALESCE(work_name, ''), COALESCE(unit_code, '')
@@ -200,7 +212,7 @@ func (r *ChangeImpactRepo) loadPositions(ctx context.Context, tx pgx.Tx, curID, 
 	return rows.Err()
 }
 
-func (r *ChangeImpactRepo) loadItems(ctx context.Context, tx pgx.Tx, curID, baseID string, cur, base *ci.VersionData) error {
+func ciLoadItems(ctx context.Context, tx pgx.Tx, curID, baseID string, cur, base *ci.VersionData) error {
 	rows, err := tx.Query(ctx, `
 		SELECT bi.tender_id::text, bi.id::text, bi.client_position_id::text,
 		       bi.boq_item_type::text, bi.material_type::text,
@@ -252,7 +264,7 @@ func (r *ChangeImpactRepo) loadItems(ctx context.Context, tx pgx.Tx, curID, base
 	return rows.Err()
 }
 
-func (r *ChangeImpactRepo) loadConfig(ctx context.Context, tx pgx.Tx, curID, baseID string, cur, base *ci.TenderState) error {
+func ciLoadConfig(ctx context.Context, tx pgx.Tx, curID, baseID string, cur, base *ci.TenderState) error {
 	// Проценты наценок (label из markup_parameters).
 	rows, err := tx.Query(ctx, `
 		SELECT tmp.tender_id::text, COALESCE(mp.label, tmp.markup_parameter_id::text), tmp.value::text

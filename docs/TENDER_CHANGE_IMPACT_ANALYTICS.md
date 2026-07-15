@@ -146,6 +146,9 @@ fuzzy matching; без calculation replay; без Shapley/причинного �
 без rollback/создания версий/принятия изменений; сравнение недоступно, пока
 current не рассчитан.
 
+Сравнение версий входит листом в серверный XLSX «Отчёт для проверки» —
+[TENDER_REVIEW_PACK.md](TENDER_REVIEW_PACK.md) (этап 1.6).
+
 ## 19. Backlog
 
 calculation-run comparison · intra-version audit timeline · exact causal

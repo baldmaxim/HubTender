@@ -517,6 +517,9 @@ const FinancialIndicators: React.FC = () => {
                       <Button size="small" onClick={() => { window.location.href = `/analytics/change-impact?tenderId=${selectedTenderId}`; }}>
                         Изменения расчёта →
                       </Button>
+                      <Button size="small" onClick={() => { window.location.href = `/analytics/review-pack?tenderId=${selectedTenderId}`; }}>
+                        Скачать отчёт для проверки →
+                      </Button>
                       {showFullscreenTable && (
                         <Button icon={<FullscreenOutlined />} onClick={() => setTableFullscreen(true)}>
                           На весь экран

@@ -117,6 +117,9 @@ revision marker); полные prepared-проверки остаются на �
 [TENDER_CHANGE_IMPACT_ANALYTICS.md](TENDER_CHANGE_IMPACT_ANALYTICS.md)
 (этап 1.5).
 
+Единый серверный XLSX-отчёт по всем аналитикам — «Отчёт для проверки»:
+[TENDER_REVIEW_PACK.md](TENDER_REVIEW_PACK.md) (этап 1.6).
+
 ## 13. Backlog следующего этапа
 
 price anomaly detection · historical benchmarks · fuzzy duplicates ·
