@@ -151,6 +151,8 @@ func newRouter(
 
 		// Phase 4c-lite: bulk BOQ import (replaces public.bulk_import_client_position_boq RPC).
 		r.Post("/api/v1/imports/boq", d.importBoqH.BulkImport)
+		r.Post("/api/v1/tenders/{id}/boq-import/analyze", d.smartImportH.AnalyzeBoqImport)
+		r.Post("/api/v1/tenders/{id}/boq-import/execute", d.smartImportH.ExecuteBoqImport)
 
 		// Phase 5: version transfer (replaces public.execute_version_transfer RPC).
 		r.Post("/api/v1/tenders/{id}/versions/transfer", d.transferH.Transfer)

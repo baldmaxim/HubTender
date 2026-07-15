@@ -8,6 +8,7 @@ import {
   FileAddOutlined,
   FilterOutlined,
   UploadOutlined,
+  ThunderboltOutlined,
   EyeOutlined,
   EyeInvisibleOutlined,
   VerticalAlignBottomOutlined,
@@ -73,6 +74,7 @@ interface PositionTableProps {
   canDeletePositions?: boolean;
   onExportToExcel: () => void;
   onMassImport?: () => void;
+  onSmartImport?: () => void;
   searchQuery?: string;
   onSearchQueryChange?: (value: string) => void;
   tempSelectedPositionIds?: Set<string>;
@@ -131,6 +133,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
   canDeletePositions = false,
   onExportToExcel,
   onMassImport,
+  onSmartImport,
   searchQuery = '',
   onSearchQueryChange,
   isFilterActive = false,
@@ -515,6 +518,15 @@ export const PositionTable: React.FC<PositionTableProps> = ({
               disabled={!selectedTender || loading || readOnly}
             >
               Импорт из Excel
+            </Button>
+          </HideOnPhone>
+          <HideOnPhone>
+            <Button
+              icon={<ThunderboltOutlined />}
+              onClick={onSmartImport}
+              disabled={!selectedTender || loading || readOnly}
+            >
+              Умный импорт
             </Button>
           </HideOnPhone>
           <HideOnPhone>

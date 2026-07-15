@@ -16,6 +16,7 @@ import { DeadlineBar } from './components/DeadlineBar';
 import { PositionTable } from './components/PositionTable';
 import AddAdditionalPositionModal from './AddAdditionalPositionModal';
 import { MassBoqImportModal } from './components/MassBoqImportModal';
+import SmartImportWizard from './components/SmartImportWizard';
 import type { Tender } from '../../lib/types';
 import { collectSectionDescendants } from '../../utils/positions/collectSectionDescendants';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -50,6 +51,7 @@ const ClientPositions: React.FC = () => {
   const filterSel = useUndoableSet();
   const tempSelectedPositionIds = filterSel.value;
   const [massImportModalOpen, setMassImportModalOpen] = useState(false);
+  const [smartImportOpen, setSmartImportOpen] = useState(false);
   const [showAllPositions, setShowAllPositions] = useState(false);
   const [tableScrollY, setTableScrollY] = useState(600);
   const [positionSearchQuery, setPositionSearchQuery] = useState('');
@@ -485,6 +487,7 @@ const ClientPositions: React.FC = () => {
             isFilterActive && !showAllPositions ? selectedPositionIds : null
           )}
           onMassImport={() => setMassImportModalOpen(true)}
+          onSmartImport={() => setSmartImportOpen(true)}
           searchQuery={positionSearchQuery}
           onSearchQueryChange={setPositionSearchQuery}
           tempSelectedPositionIds={tempSelectedPositionIds}
@@ -508,6 +511,18 @@ const ClientPositions: React.FC = () => {
           setSelectedParentId(null);
         }}
         onSuccess={handleAdditionalSuccess}
+      />
+
+      {/* Мастер умного импорта BOQ (этап 2.1) */}
+      <SmartImportWizard
+        open={smartImportOpen}
+        tenderId={selectedTenderId || ''}
+        onClose={(imported) => {
+          setSmartImportOpen(false);
+          if (imported && selectedTenderId) {
+            fetchClientPositions(selectedTenderId);
+          }
+        }}
       />
 
       {/* Модальное окно массового импорта BOQ */}
