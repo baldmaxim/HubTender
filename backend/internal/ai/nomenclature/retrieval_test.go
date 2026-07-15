@@ -237,6 +237,9 @@ func TestLimitDuplicatesAndEmpty(t *testing.T) {
 
 // §19.20: 10 000 записей каталога.
 func TestLargeCatalogPerformance(t *testing.T) {
+	if raceEnabled {
+		t.Skip("perf-порог не осмыслен под -race instrumentation")
+	}
 	catalog := make([]CatalogEntry, 0, 10000)
 	for i := 0; i < 10000; i++ {
 		catalog = append(catalog, CatalogEntry{

@@ -180,17 +180,17 @@ func TestPriceSourceIntegration_InvalidDatesRejected(t *testing.T) {
 	// price_date в будущем.
 	future := time.Now().UTC().AddDate(0, 0, 10).Format("2006-01-02")
 	var qd *InvalidQuoteDatesError
-	if _, err := boqRepo.UpdateBoqItem(ctx, itemID, UpdateBoqItemInput{QuotePriceDate: sptr(future)}); !errors.As(err, &qd) {
+	if _, err := boqRepo.UpdateBoqItem(ctx, itemID, BoqItemPatch{QuotePriceDate: sptr(future)}); !errors.As(err, &qd) {
 		t.Fatalf("future price_date: want InvalidQuoteDatesError, got %v", err)
 	}
 	// valid_until < price_date.
-	if _, err := boqRepo.UpdateBoqItem(ctx, itemID, UpdateBoqItemInput{
+	if _, err := boqRepo.UpdateBoqItem(ctx, itemID, BoqItemPatch{
 		QuotePriceDate: sptr("2026-07-01"), QuoteValidUntil: sptr("2026-06-01"),
 	}); !errors.As(err, &qd) {
 		t.Fatalf("reversed range: want InvalidQuoteDatesError, got %v", err)
 	}
 	// Мусорный формат.
-	if _, err := boqRepo.UpdateBoqItem(ctx, itemID, UpdateBoqItemInput{QuotePriceDate: sptr("мусор")}); !errors.As(err, &qd) {
+	if _, err := boqRepo.UpdateBoqItem(ctx, itemID, BoqItemPatch{QuotePriceDate: sptr("мусор")}); !errors.As(err, &qd) {
 		t.Fatalf("malformed date: want InvalidQuoteDatesError, got %v", err)
 	}
 	// DB CHECK — защита в обход приложения.
@@ -266,7 +266,7 @@ func TestPriceSourceIntegration_MetadataEditKeepsRevisionAndApproval(t *testing.
 
 	// Metadata-only patch: link + обе даты.
 	yesterday := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
-	if _, err := NewBoqRepo(pool).UpdateBoqItem(ctx, itemID, UpdateBoqItemInput{
+	if _, err := NewBoqRepo(pool).UpdateBoqItem(ctx, itemID, BoqItemPatch{
 		QuoteLink:       sptr("https://supplier.kz/quote-O.pdf"),
 		QuotePriceDate:  sptr(yesterday),
 		QuoteValidUntil: sptr(""), // явная очистка тоже metadata-only
@@ -293,7 +293,7 @@ func TestPriceSourceIntegration_MetadataEditKeepsRevisionAndApproval(t *testing.
 	}
 
 	// Контроль: смешанный patch (дата + количество) — финансовый.
-	if _, err := NewBoqRepo(pool).UpdateBoqItem(ctx, itemID, UpdateBoqItemInput{
+	if _, err := NewBoqRepo(pool).UpdateBoqItem(ctx, itemID, BoqItemPatch{
 		QuotePriceDate: sptr(yesterday), Quantity: fptr(6),
 	}); err != nil {
 		t.Fatalf("financial edit: %v", err)

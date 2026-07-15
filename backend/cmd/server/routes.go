@@ -43,6 +43,7 @@ func newRouter(
 	r.Get("/health", d.healthH.ServeHTTP)
 	r.Get("/health/db", d.healthH.CheckDB)
 	r.Get("/health/cache", d.healthH.CacheStats)
+	r.Get("/health/recalc", d.recalcHealthH.Diagnostics)
 
 	// Public auth routes — login / register / refresh / forgot / reset do
 	// NOT require an existing JWT. JWKS is served public so any RP can

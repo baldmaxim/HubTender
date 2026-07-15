@@ -11,9 +11,52 @@ import (
 	"github.com/su10/hubtender/backend/internal/calc"
 )
 
-// UpdateBoqItem applies non-nil fields from in, writes an UPDATE audit row,
-// all in one transaction. Returns the updated row.
-func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItemInput) (*BoqItemRow, error) {
+// BoqItemPatch — этап 2.4 (§6): PATCH-вход с tri-state полями для nullable
+// колонок, которые UI реально очищает (аудит §5). Остальные поля сохраняют
+// семантику «absent = не менять» через *T.
+type BoqItemPatch struct {
+	BoqItemType            *string
+	MaterialType           *string
+	Description            *string
+	UnitCode               *string
+	Quantity               *float64
+	UnitRate               *float64
+	CurrencyType           *string
+	DeliveryPriceType      *string
+	DeliveryAmount         *float64
+	ConsumptionCoefficient *float64
+	SortNumber             *int
+	QuoteLink              *string
+	QuotePriceDate         *string // YYYY-MM-DD; "" = очистить; metadata-only (1.3)
+	QuoteValidUntil        *string // YYYY-MM-DD; "" = очистить; metadata-only (1.3)
+
+	// Tri-state (§6): различают absent / явный null / значение.
+	BaseQuantity          OptionalNullable[float64]
+	ConversionCoefficient OptionalNullable[float64]
+	DetailCostCategoryID  OptionalNullable[string]
+	MaterialNameID        OptionalNullable[string]
+	WorkNameID            OptionalNullable[string]
+	ParentWorkItemID      OptionalNullable[string]
+
+	ChangedBy string // app users UUID for audit (changed_by)
+}
+
+// touchesAnything — есть ли хоть одно присутствующее поле.
+func (p *BoqItemPatch) touchesAnything() bool {
+	return p.BoqItemType != nil || p.MaterialType != nil || p.Description != nil ||
+		p.UnitCode != nil || p.Quantity != nil || p.UnitRate != nil ||
+		p.CurrencyType != nil || p.DeliveryPriceType != nil || p.DeliveryAmount != nil ||
+		p.ConsumptionCoefficient != nil || p.SortNumber != nil ||
+		p.QuoteLink != nil || p.QuotePriceDate != nil || p.QuoteValidUntil != nil ||
+		p.BaseQuantity.Present || p.ConversionCoefficient.Present ||
+		p.DetailCostCategoryID.Present || p.MaterialNameID.Present ||
+		p.WorkNameID.Present || p.ParentWorkItemID.Present
+}
+
+// UpdateBoqItem применяет tri-state patch (§6) одним статическим typed-SQL
+// UPDATE (CASE per column, без динамической сборки SET), пишет UPDATE-audit,
+// пересчитывает total_amount — всё в одной транзакции.
+func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in BoqItemPatch) (*BoqItemRow, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("boqRepo.UpdateBoqItem: begin tx: %w", err)
@@ -40,103 +83,99 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in UpdateBoqItem
 	// 1.3: patch, меняющий ТОЛЬКО source-метаданные (quote_link / даты цены),
 	// НЕ является финансовым изменением — ревизия не двигается, approval не
 	// снимается, recalc не нужен (метаданные не входят в формулу).
+	// §6: очистка финансово значимого input (parent/base_quantity/коэффициент)
+	// — финансовое изменение: ревизия двигается ровно один раз здесь же.
 	if !isQuoteMetadataOnlyPatch(&in) {
 		if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, oldItem.TenderID, "boq_update"); err != nil {
 			return nil, fmt.Errorf("boqRepo.UpdateBoqItem: %w", err)
 		}
 	}
 
-	args := []any{}
-	argN := 1
-	setClauses := ""
-
-	set := func(col string, val any) {
-		if setClauses != "" {
-			setClauses += ", "
-		}
-		setClauses += fmt.Sprintf("%s = $%d", col, argN)
-		args = append(args, val)
-		argN++
-	}
-
-	if in.BoqItemType != nil {
-		set("boq_item_type", *in.BoqItemType)
-	}
-	if in.MaterialType != nil {
-		set("material_type", *in.MaterialType)
-	}
-	if in.Description != nil {
-		set("description", *in.Description)
-	}
-	if in.UnitCode != nil {
-		set("unit_code", *in.UnitCode)
-	}
-	if in.Quantity != nil {
-		set("quantity", *in.Quantity)
-	}
-	if in.BaseQuantity != nil {
-		set("base_quantity", *in.BaseQuantity)
-	}
-	if in.ConversionCoefficient != nil {
-		set("conversion_coefficient", *in.ConversionCoefficient)
-	}
-	if in.UnitRate != nil {
-		set("unit_rate", *in.UnitRate)
-	}
-	if in.CurrencyType != nil {
-		set("currency_type", *in.CurrencyType)
-	}
-	if in.DeliveryPriceType != nil {
-		set("delivery_price_type", *in.DeliveryPriceType)
-	}
-	if in.DeliveryAmount != nil {
-		set("delivery_amount", *in.DeliveryAmount)
-	}
-	if in.ConsumptionCoefficient != nil {
-		set("consumption_coefficient", *in.ConsumptionCoefficient)
-	}
-	if in.DetailCostCategoryID != nil {
-		set("detail_cost_category_id", *in.DetailCostCategoryID)
-	}
-	if in.MaterialNameID != nil {
-		set("material_name_id", *in.MaterialNameID)
-	}
-	if in.WorkNameID != nil {
-		set("work_name_id", *in.WorkNameID)
-	}
-	if in.ParentWorkItemID != nil {
-		set("parent_work_item_id", *in.ParentWorkItemID)
-	}
-	if in.SortNumber != nil {
-		set("sort_number", *in.SortNumber)
-	}
-	if in.QuoteLink != nil {
-		set("quote_link", *in.QuoteLink)
-	}
-	if in.QuotePriceDate != nil {
-		set("quote_price_date", nullIfEmptyDate(*in.QuotePriceDate))
-	}
-	if in.QuoteValidUntil != nil {
-		set("quote_valid_until", nullIfEmptyDate(*in.QuoteValidUntil))
-	}
-
+	touched := in.touchesAnything()
 	var newItem *BoqItemRow
-	if setClauses == "" {
+	if !touched {
 		newItem = oldItem
 	} else {
-		setClauses += ", updated_at = NOW()"
-		args = append(args, id)
-		updQ := fmt.Sprintf("UPDATE public.boq_items SET %s WHERE id = $%d RETURNING "+boqScanCols,
-			setClauses, argN)
-		newItem, err = scanBoqItemRow(tx.QueryRow(ctx, updQ, args...))
+		// Статический typed-SET (§6): col = CASE WHEN $present THEN $value ELSE col END.
+		// Для tri-state полей $value=NULL при явной очистке.
+		bqP, bqV := in.BaseQuantity.arg()
+		ccP, ccV := in.ConversionCoefficient.arg()
+		dcP, dcV := in.DetailCostCategoryID.arg()
+		mnP, mnV := in.MaterialNameID.arg()
+		wnP, wnV := in.WorkNameID.arg()
+		pwP, pwV := in.ParentWorkItemID.arg()
+		ptrArg := func(p *string) (bool, any) {
+			if p == nil {
+				return false, nil
+			}
+			return true, *p
+		}
+		fArg := func(p *float64) (bool, any) {
+			if p == nil {
+				return false, nil
+			}
+			return true, *p
+		}
+		btP, btV := ptrArg(in.BoqItemType)
+		mtP, mtV := ptrArg(in.MaterialType)
+		deP, deV := ptrArg(in.Description)
+		ucP, ucV := ptrArg(in.UnitCode)
+		qtP, qtV := fArg(in.Quantity)
+		urP, urV := fArg(in.UnitRate)
+		cuP, cuV := ptrArg(in.CurrencyType)
+		dtP, dtV := ptrArg(in.DeliveryPriceType)
+		daP, daV := fArg(in.DeliveryAmount)
+		coP, coV := fArg(in.ConsumptionCoefficient)
+		snP, snV := false, any(nil)
+		if in.SortNumber != nil {
+			snP, snV = true, *in.SortNumber
+		}
+		qlP, qlV := ptrArg(in.QuoteLink)
+		qdP, qdV := false, any(nil)
+		if in.QuotePriceDate != nil {
+			qdP, qdV = true, nullIfEmptyDate(*in.QuotePriceDate)
+		}
+		qvP, qvV := false, any(nil)
+		if in.QuoteValidUntil != nil {
+			qvP, qvV = true, nullIfEmptyDate(*in.QuoteValidUntil)
+		}
+
+		const updQ = `UPDATE public.boq_items SET
+			boq_item_type           = CASE WHEN $2  THEN $3::public.boq_item_type      ELSE boq_item_type END,
+			material_type           = CASE WHEN $4  THEN $5::public.material_type      ELSE material_type END,
+			description             = CASE WHEN $6  THEN $7::text                      ELSE description END,
+			unit_code               = CASE WHEN $8  THEN $9::text                      ELSE unit_code END,
+			quantity                = CASE WHEN $10 THEN $11::numeric                  ELSE quantity END,
+			unit_rate               = CASE WHEN $12 THEN $13::numeric                  ELSE unit_rate END,
+			currency_type           = CASE WHEN $14 THEN $15::public.currency_type     ELSE currency_type END,
+			delivery_price_type     = CASE WHEN $16 THEN $17::public.delivery_price_type ELSE delivery_price_type END,
+			delivery_amount         = CASE WHEN $18 THEN $19::numeric                  ELSE delivery_amount END,
+			consumption_coefficient = CASE WHEN $20 THEN $21::numeric                  ELSE consumption_coefficient END,
+			sort_number             = CASE WHEN $22 THEN $23::integer                  ELSE sort_number END,
+			quote_link              = CASE WHEN $24 THEN $25::text                     ELSE quote_link END,
+			quote_price_date        = CASE WHEN $26 THEN $27::date                     ELSE quote_price_date END,
+			quote_valid_until       = CASE WHEN $28 THEN $29::date                     ELSE quote_valid_until END,
+			base_quantity           = CASE WHEN $30 THEN $31::numeric                  ELSE base_quantity END,
+			conversion_coefficient  = CASE WHEN $32 THEN $33::numeric                  ELSE conversion_coefficient END,
+			detail_cost_category_id = CASE WHEN $34 THEN $35::uuid                     ELSE detail_cost_category_id END,
+			material_name_id        = CASE WHEN $36 THEN $37::uuid                     ELSE material_name_id END,
+			work_name_id            = CASE WHEN $38 THEN $39::uuid                     ELSE work_name_id END,
+			parent_work_item_id     = CASE WHEN $40 THEN $41::uuid                     ELSE parent_work_item_id END,
+			updated_at              = NOW()
+		WHERE id = $1 RETURNING ` + boqScanCols
+		newItem, err = scanBoqItemRow(tx.QueryRow(ctx, updQ, id,
+			btP, btV, mtP, mtV, deP, deV, ucP, ucV, qtP, qtV, urP, urV,
+			cuP, cuV, dtP, dtV, daP, daV, coP, coV, snP, snV, qlP, qlV,
+			qdP, qdV, qvP, qvV,
+			bqP, bqV, ccP, ccV, dcP, dcV, mnP, mnV, wnP, wnV, pwP, pwV))
 		if err != nil {
 			return nil, fmt.Errorf("boqRepo.UpdateBoqItem: update scan: %w", err)
 		}
 	}
 
 	// Recompute total_amount on every patch that touched a price input.
-	// Skip when no setClauses ran (newItem == oldItem) — total stays correct.
-	if setClauses != "" {
+	// Parent clear (§6) проходит здесь же: standalone-семантика total.
+	if touched {
 		rates, err := loadTenderRates(ctx, tx, newItem.TenderID)
 		if err != nil {
 			return nil, fmt.Errorf("boqRepo.UpdateBoqItem: %w", err)
@@ -233,15 +272,18 @@ func (e *InvalidQuoteDatesError) Code() string { return "INVALID_QUOTE_DATES" }
 
 // isQuoteMetadataOnlyPatch — true, если patch затрагивает ТОЛЬКО справочные
 // source-поля (quote_link, даты цены): такие правки не финансовые (§3 этапа
-// 1.3) — ревизия/approval/recalc не трогаются.
-func isQuoteMetadataOnlyPatch(in *UpdateBoqItemInput) bool {
+// 1.3) — ревизия/approval/recalc не трогаются. Tri-state поля (§6) считаются
+// финансовыми при ЛЮБОМ присутствии (включая явную очистку null).
+func isQuoteMetadataOnlyPatch(in *BoqItemPatch) bool {
 	touchesMetadata := in.QuoteLink != nil || in.QuotePriceDate != nil || in.QuoteValidUntil != nil
 	touchesFinancial := in.BoqItemType != nil || in.MaterialType != nil || in.Description != nil ||
-		in.UnitCode != nil || in.Quantity != nil || in.BaseQuantity != nil ||
-		in.ConversionCoefficient != nil || in.UnitRate != nil || in.CurrencyType != nil ||
+		in.UnitCode != nil || in.Quantity != nil ||
+		in.UnitRate != nil || in.CurrencyType != nil ||
 		in.DeliveryPriceType != nil || in.DeliveryAmount != nil || in.ConsumptionCoefficient != nil ||
-		in.DetailCostCategoryID != nil || in.MaterialNameID != nil || in.WorkNameID != nil ||
-		in.ParentWorkItemID != nil || in.SortNumber != nil
+		in.SortNumber != nil ||
+		in.BaseQuantity.Present || in.ConversionCoefficient.Present ||
+		in.DetailCostCategoryID.Present || in.MaterialNameID.Present ||
+		in.WorkNameID.Present || in.ParentWorkItemID.Present
 	return touchesMetadata && !touchesFinancial
 }
 

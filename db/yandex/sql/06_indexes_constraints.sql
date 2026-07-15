@@ -464,3 +464,14 @@ CREATE INDEX IF NOT EXISTS idx_nomenclature_import_aliases_material
     ON public.nomenclature_import_aliases (material_name_id) WHERE material_name_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_nomenclature_import_aliases_work
     ON public.nomenclature_import_aliases (work_name_id) WHERE work_name_id IS NOT NULL;
+
+-- Этап 2.4 (§8): структурная целостность BOQ-связей (см. incremental
+-- 2026_07_boq_relation_integrity.sql; в baseline данные заведомо чистые).
+ALTER TABLE public.client_positions ADD CONSTRAINT client_positions_id_tender_uniq UNIQUE (id, tender_id);
+ALTER TABLE public.boq_items ADD CONSTRAINT boq_items_id_scope_uniq UNIQUE (id, tender_id, client_position_id);
+ALTER TABLE public.boq_items ADD CONSTRAINT boq_items_position_scope_fkey
+    FOREIGN KEY (client_position_id, tender_id)
+    REFERENCES public.client_positions (id, tender_id) ON DELETE CASCADE;
+ALTER TABLE public.boq_items ADD CONSTRAINT boq_items_parent_scope_fkey
+    FOREIGN KEY (parent_work_item_id, tender_id, client_position_id)
+    REFERENCES public.boq_items (id, tender_id, client_position_id) ON DELETE CASCADE;

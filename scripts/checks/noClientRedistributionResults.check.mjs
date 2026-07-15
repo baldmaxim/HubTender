@@ -187,6 +187,7 @@ for (const dir of SCAN_DIRS) {
   for (const file of walk(abs)) {
     const rel = relative(ROOT, file).replace(/\\/g, '/');
     if (ALLOWED.has(rel) || /_test\.go$/.test(rel)) continue;
+    if (rel === 'backend/internal/readiness/acl.go') continue; // 2.4: read-only ACL verifier
     const text = readFileSync(file, 'utf8');
     const i = text.indexOf('save_redistribution_results');
     if (i >= 0) {

@@ -13,7 +13,7 @@ type boqRepoer interface {
 	ListBoqItems(ctx context.Context, tenderID, positionID string) ([]repository.BoqItemRow, error)
 	GetBoqItemByID(ctx context.Context, id string) (*repository.BoqItemRow, error)
 	CreateBoqItem(ctx context.Context, in repository.CreateBoqItemInput) (*repository.BoqItemRow, error)
-	UpdateBoqItem(ctx context.Context, id string, in repository.UpdateBoqItemInput) (*repository.BoqItemRow, error)
+	UpdateBoqItem(ctx context.Context, id string, in repository.BoqItemPatch) (*repository.BoqItemRow, error)
 	DeleteBoqItem(ctx context.Context, id, changedBy string) (*repository.BoqItemRow, error)
 	InsertTemplateItems(ctx context.Context, templateID, clientPositionID, changedBy string) (*repository.TemplateInsertResult, error)
 	RecomputeLinkedMaterialsForWork(ctx context.Context, workID, changedBy string) (int, error)
@@ -85,7 +85,7 @@ func (s *BoqService) CreateBoqItem(
 func (s *BoqService) UpdateBoqItem(
 	ctx context.Context,
 	id string,
-	in repository.UpdateBoqItemInput,
+	in repository.BoqItemPatch,
 ) (*repository.BoqItemRow, error) {
 	item, err := s.repo.UpdateBoqItem(ctx, id, in)
 	if err != nil {

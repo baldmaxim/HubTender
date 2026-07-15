@@ -463,7 +463,7 @@ func TestETagIntegration_DerivedWriteKeepsUpdatedAt(t *testing.T) {
 
 	// §12.18 — a USER input edit DOES move updated_at.
 	boqRepo := NewBoqRepo(pool)
-	if _, err := boqRepo.UpdateBoqItem(ctx, itemID, UpdateBoqItemInput{Quantity: fptr(11)}); err != nil {
+	if _, err := boqRepo.UpdateBoqItem(ctx, itemID, BoqItemPatch{Quantity: fptr(11)}); err != nil {
 		t.Fatalf("user edit: %v", err)
 	}
 	if after := readUpdatedAt(); after.Equal(before) {

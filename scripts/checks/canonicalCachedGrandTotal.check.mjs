@@ -71,7 +71,7 @@ function* walk(dir, exts) {
     const code = stripComments(readFileSync(file, 'utf8'));
 
     const sqlCall = /recalculate_tender_grand_total/.exec(code);
-    if (sqlCall && !rel.endsWith('tender_recalc.go')) {
+    if (sqlCall && !rel.endsWith('tender_recalc.go') && rel !== 'backend/internal/readiness/acl.go') { // 2.4: read-only ACL verifier
       violations.push(`${rel}:${lineOf(code, sqlCall.index)} — production Go calls the retired SQL function`);
     }
     const skip = /skip_grand_total/.exec(code);

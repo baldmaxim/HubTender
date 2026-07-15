@@ -253,7 +253,10 @@ func TestDecimalBoundariesAndNoNaN(t *testing.T) { // 44-45
 
 // ─── §17.46: performance ─────────────────────────────────────────────────────
 
-func TestLargeComparisonNoQuadraticBehavior(t *testing.T) { // 46
+func TestLargeComparisonNoQuadraticBehavior(t *testing.T) {
+	if raceEnabled {
+		t.Skip("perf-порог не осмыслен под -race instrumentation")
+	} // 46
 	build := func(n int, tid string, ver int, shift bool) VersionData {
 		ps := make([]Position, 0, n/50+1)
 		items := make([]Item, 0, n)

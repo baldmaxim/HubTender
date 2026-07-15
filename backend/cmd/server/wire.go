@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,7 +23,9 @@ import (
 // deps carries every handler wired by buildDeps plus the recalc queue
 // (needed by the graceful-shutdown sequence in main.go).
 type deps struct {
-	recalcQueue *services.RecalcQueue
+	recalcQueue    *services.RecalcQueue
+	recalcRecovery *services.FinancialCalculationRecoveryService
+	recalcHealthH  *handlers.RecalcHealthHandler
 
 	healthH           *handlers.HealthHandler
 	meH               *handlers.MeHandler
@@ -137,6 +140,21 @@ func buildDeps(
 	recalcSvc := services.NewCommercialRecalcService(pool, inMemCache)
 	recalcQueue := services.NewRecalcQueue(rootCtx, recalcSvc, 1500*time.Millisecond, 4, logger)
 	recalcSvc.WithRequeue(recalcQueue)
+	// Этап 2.4 (§2): recovery-механизм; env-переопределения конфигурации.
+	recoveryCfg := services.DefaultRecoveryConfig()
+	if v := os.Getenv("RECALC_RECOVERY_ENABLED"); v == "false" {
+		recoveryCfg.Enabled = false
+	}
+	if v, err := time.ParseDuration(os.Getenv("RECALC_RECOVERY_SCAN_INTERVAL")); err == nil && v > 0 {
+		recoveryCfg.ScanInterval = v
+	}
+	if v, err := time.ParseDuration(os.Getenv("RECALC_RECOVERY_CALCULATING_TIMEOUT")); err == nil && v > 0 {
+		recoveryCfg.CalculatingTimeout = v
+	}
+	if v, err := strconv.Atoi(os.Getenv("RECALC_RECOVERY_BATCH_SIZE")); err == nil && v > 0 {
+		recoveryCfg.BatchSize = v
+	}
+	recalcRecovery := services.NewFinancialCalculationRecoveryService(pool, recalcQueue, recoveryCfg, logger)
 
 	userSvc := services.NewUserService(userRepo, inMemCache)
 	refSvc := services.NewReferenceService(refRepo, inMemCache)
@@ -198,7 +216,9 @@ func buildDeps(
 	ccvSvc := services.NewConstructionCostVolumesService(ccvRepo)
 
 	return &deps{
-		recalcQueue: recalcQueue,
+		recalcQueue:    recalcQueue,
+		recalcRecovery: recalcRecovery,
+		recalcHealthH:  handlers.NewRecalcHealthHandler(recalcRecovery),
 
 		healthH:           handlers.NewHealthHandler(pool, inMemCache),
 		meH:               handlers.NewMeHandler(userSvc),

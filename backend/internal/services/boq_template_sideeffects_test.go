@@ -33,7 +33,7 @@ func (f *fakeBoqRepo) GetBoqItemByID(context.Context, string) (*repository.BoqIt
 func (f *fakeBoqRepo) CreateBoqItem(context.Context, repository.CreateBoqItemInput) (*repository.BoqItemRow, error) {
 	panic("not used")
 }
-func (f *fakeBoqRepo) UpdateBoqItem(context.Context, string, repository.UpdateBoqItemInput) (*repository.BoqItemRow, error) {
+func (f *fakeBoqRepo) UpdateBoqItem(context.Context, string, repository.BoqItemPatch) (*repository.BoqItemRow, error) {
 	panic("not used")
 }
 func (f *fakeBoqRepo) DeleteBoqItem(context.Context, string, string) (*repository.BoqItemRow, error) {

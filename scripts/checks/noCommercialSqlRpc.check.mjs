@@ -145,6 +145,7 @@ for (const dir of SCAN_DIRS) {
     const rel = relative(ROOT, file).replace(/\\/g, '/');
     if (ALLOWED.has(rel)) continue;
     if (/_test\.go$/.test(rel)) continue; // retirement-verification tests may name the RPC
+    if (rel === 'backend/internal/readiness/acl.go') continue; // 2.4: read-only ACL verifier names the RPC, never calls it
     const text = readFileSync(file, 'utf8');
     const i = text.indexOf(FN);
     if (i >= 0) {

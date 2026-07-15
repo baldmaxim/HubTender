@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -64,7 +65,7 @@ type boqWriteServicer interface {
 	boqServicer
 	GetBoqItemByID(ctx context.Context, id string) (*repository.BoqItemRow, error)
 	CreateBoqItem(ctx context.Context, in repository.CreateBoqItemInput) (*repository.BoqItemRow, error)
-	UpdateBoqItem(ctx context.Context, id string, in repository.UpdateBoqItemInput) (*repository.BoqItemRow, error)
+	UpdateBoqItem(ctx context.Context, id string, in repository.BoqItemPatch) (*repository.BoqItemRow, error)
 	DeleteBoqItem(ctx context.Context, id, changedBy string) (*repository.BoqItemRow, error)
 	InsertTemplateItems(ctx context.Context, templateID, clientPositionID, changedBy string) (*repository.TemplateInsertResult, error)
 	RecomputeLinkedMaterialsForWork(ctx context.Context, workID, changedBy string) (int, error)
@@ -115,21 +116,57 @@ type updateBoqItemReq struct {
 	Description            *string  `json:"description"`
 	UnitCode               *string  `json:"unit_code"`
 	Quantity               *float64 `json:"quantity" validate:"omitempty,gte=0"`
-	BaseQuantity           *float64 `json:"base_quantity" validate:"omitempty,gt=0"`
-	ConversionCoefficient  *float64 `json:"conversion_coefficient" validate:"omitempty,gt=0"`
 	UnitRate               *float64 `json:"unit_rate" validate:"omitempty,gte=0"`
 	CurrencyType           *string  `json:"currency_type"`
 	DeliveryPriceType      *string  `json:"delivery_price_type"`
 	DeliveryAmount         *float64 `json:"delivery_amount" validate:"omitempty,gte=0"`
 	ConsumptionCoefficient *float64 `json:"consumption_coefficient" validate:"omitempty,gt=0"`
-	DetailCostCategoryID   *string  `json:"detail_cost_category_id" validate:"omitempty,uuid"`
-	MaterialNameID         *string  `json:"material_name_id" validate:"omitempty,uuid"`
-	WorkNameID             *string  `json:"work_name_id" validate:"omitempty,uuid"`
-	ParentWorkItemID       *string  `json:"parent_work_item_id" validate:"omitempty,uuid"`
 	SortNumber             *int     `json:"sort_number" validate:"omitempty,gte=0"`
 	QuoteLink              *string  `json:"quote_link"`
 	QuotePriceDate         *string  `json:"quote_price_date"`
 	QuoteValidUntil        *string  `json:"quote_valid_until"`
+
+	// Этап 2.4 (§6): tri-state — UI очищает эти nullable-поля явным null;
+	// absent / null / value различаются (validator их не видит — ручная
+	// проверка в validateTriState).
+	BaseQuantity          repository.OptionalNullable[float64] `json:"base_quantity"`
+	ConversionCoefficient repository.OptionalNullable[float64] `json:"conversion_coefficient"`
+	DetailCostCategoryID  repository.OptionalNullable[string]  `json:"detail_cost_category_id"`
+	MaterialNameID        repository.OptionalNullable[string]  `json:"material_name_id"`
+	WorkNameID            repository.OptionalNullable[string]  `json:"work_name_id"`
+	ParentWorkItemID      repository.OptionalNullable[string]  `json:"parent_work_item_id"`
+}
+
+var uuidPatchRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// validateTriState — ручная валидация tri-state полей (§6): значение, если
+// задано, обязано быть корректным; явный null всегда допустим (очистка).
+func validateTriState(req *updateBoqItemReq) string {
+	checkUUID := func(name string, v repository.OptionalNullable[string]) string {
+		if v.Present && v.Value != nil && !uuidPatchRe.MatchString(*v.Value) {
+			return name + ": ожидается UUID либо null"
+		}
+		return ""
+	}
+	if m := checkUUID("detail_cost_category_id", req.DetailCostCategoryID); m != "" {
+		return m
+	}
+	if m := checkUUID("material_name_id", req.MaterialNameID); m != "" {
+		return m
+	}
+	if m := checkUUID("work_name_id", req.WorkNameID); m != "" {
+		return m
+	}
+	if m := checkUUID("parent_work_item_id", req.ParentWorkItemID); m != "" {
+		return m
+	}
+	if req.BaseQuantity.Present && req.BaseQuantity.Value != nil && *req.BaseQuantity.Value <= 0 {
+		return "base_quantity: ожидается значение > 0 либо null"
+	}
+	if req.ConversionCoefficient.Present && req.ConversionCoefficient.Value != nil && *req.ConversionCoefficient.Value <= 0 {
+		return "conversion_coefficient: ожидается значение > 0 либо null"
+	}
+	return ""
 }
 
 // CreateBoqItem handles POST /api/v1/positions/:posId/items.
@@ -248,28 +285,32 @@ func (h *BoqWriteHandler) UpdateBoqItem(w http.ResponseWriter, r *http.Request) 
 		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
 		return
 	}
+	if msg := validateTriState(&req); msg != "" {
+		apierr.BadRequest("validation failed: " + msg).Render(w)
+		return
+	}
 
-	in := repository.UpdateBoqItemInput{
+	in := repository.BoqItemPatch{
 		BoqItemType:            req.BoqItemType,
 		MaterialType:           req.MaterialType,
 		Description:            req.Description,
 		UnitCode:               req.UnitCode,
 		Quantity:               req.Quantity,
-		BaseQuantity:           req.BaseQuantity,
-		ConversionCoefficient:  req.ConversionCoefficient,
 		UnitRate:               req.UnitRate,
 		CurrencyType:           req.CurrencyType,
 		DeliveryPriceType:      req.DeliveryPriceType,
 		DeliveryAmount:         req.DeliveryAmount,
 		ConsumptionCoefficient: req.ConsumptionCoefficient,
-		DetailCostCategoryID:   req.DetailCostCategoryID,
-		MaterialNameID:         req.MaterialNameID,
-		WorkNameID:             req.WorkNameID,
-		ParentWorkItemID:       req.ParentWorkItemID,
 		SortNumber:             req.SortNumber,
 		QuoteLink:              req.QuoteLink,
 		QuotePriceDate:         req.QuotePriceDate,
 		QuoteValidUntil:        req.QuoteValidUntil,
+		BaseQuantity:           req.BaseQuantity,
+		ConversionCoefficient:  req.ConversionCoefficient,
+		DetailCostCategoryID:   req.DetailCostCategoryID,
+		MaterialNameID:         req.MaterialNameID,
+		WorkNameID:             req.WorkNameID,
+		ParentWorkItemID:       req.ParentWorkItemID,
 		ChangedBy:              authUser.ID,
 	}
 

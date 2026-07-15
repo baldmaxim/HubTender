@@ -514,6 +514,9 @@ func TestImportMemoryIntegration_AliasSkipsAI(t *testing.T) {
 
 // W — 10 000 строк + 5 000 aliases + 100 profiles: без квадратичного поведения.
 func TestImportMemoryIntegration_Performance(t *testing.T) {
+	if raceEnabled {
+		t.Skip("perf-порог не осмыслен под -race instrumentation")
+	}
 	pool := newTestPool(t)
 	memCleanup(t, pool)
 	ctx := context.Background()

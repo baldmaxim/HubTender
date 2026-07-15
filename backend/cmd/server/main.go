@@ -191,6 +191,10 @@ func main() {
 		}
 	}()
 
+	// Этап 2.4 (§2): recovery потерянных enqueue / зависших calculating —
+	// один скан сразу после успешного startup, затем периодически.
+	go d.recalcRecovery.Run(rootCtx)
+
 	// Wait for OS signal or server error.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

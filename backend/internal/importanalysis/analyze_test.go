@@ -437,6 +437,9 @@ func TestIssueIDStableAndDeterministic(t *testing.T) { // 49-50, 53
 
 // §17.52: 10 000 строк × 30 колонок.
 func TestLargeWorkbookPerformance(t *testing.T) {
+	if raceEnabled {
+		t.Skip("perf-порог не осмыслен под -race instrumentation")
+	}
 	rows := make([][]any, 0, 10001)
 	header := make([]any, 30)
 	copy(header, stdHeader)
