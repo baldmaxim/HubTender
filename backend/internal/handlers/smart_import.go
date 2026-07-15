@@ -21,6 +21,7 @@ import (
 type smartImportServicer interface {
 	Analyze(ctx context.Context, tenderID, fileName string, data []byte, opts ia.Options) (*ia.Analysis, error)
 	Execute(ctx context.Context, tenderID, fileName string, data []byte, expectedFingerprint string, opts ia.Options, userID string) (*services.ExecuteResult, error)
+	SuggestNomenclature(ctx context.Context, tenderID, fileName string, data []byte, expectedFingerprint string, opts ia.Options, rowRefs []string, candidateLimit int) (*services.SuggestNomenclatureResult, error)
 }
 
 // SmartImportHandler — POST /api/v1/tenders/{id}/boq-import/{analyze|execute}.
@@ -85,6 +86,29 @@ func parseImportOptions(r *http.Request) ia.Options {
 	return opts
 }
 
+// parseSelections — этап 2.2 (§13): подтверждённые выборы номенклатуры;
+// source строго exact|ai_confirmed|manual — иное 400. Применяется и к analyze
+// (preview показывает разблокированные строки), и к execute.
+func (h *SmartImportHandler) parseSelections(w http.ResponseWriter, r *http.Request, opts *ia.Options) bool {
+	raw := r.FormValue("nomenclature_selections")
+	if raw == "" {
+		return true
+	}
+	var selections []services.NomenclatureSelection
+	if err := json.Unmarshal([]byte(raw), &selections); err != nil {
+		apierr.BadRequest("nomenclature_selections: неверный JSON").Render(w)
+		return false
+	}
+	ids, sources, err := services.ValidateSelections(selections)
+	if err != nil {
+		h.renderImportError(w, r, err)
+		return false
+	}
+	opts.NomenclatureSelections = ids
+	opts.SelectionSources = sources
+	return true
+}
+
 func (h *SmartImportHandler) renderImportError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, repository.ErrQualityTenderNotFound) {
 		apierr.NotFound("tender not found").Render(w)
@@ -123,6 +147,11 @@ func (h *SmartImportHandler) renderImportError(w http.ResponseWriter, r *http.Re
 		}).Render(w)
 		return
 	}
+	var selErr *services.InvalidSelectionError
+	if errors.As(err, &selErr) {
+		apierr.BadRequest(selErr.Reason).Render(w)
+		return
+	}
 	if renderMissingFXRate(w, err) {
 		return
 	}
@@ -144,7 +173,11 @@ func (h *SmartImportHandler) AnalyzeBoqImport(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	an, err := h.svc.Analyze(r.Context(), tenderID, fileName, data, parseImportOptions(r))
+	opts := parseImportOptions(r)
+	if !h.parseSelections(w, r, &opts) {
+		return
+	}
+	an, err := h.svc.Analyze(r.Context(), tenderID, fileName, data, opts)
 	if err != nil {
 		h.renderImportError(w, r, err)
 		return
@@ -174,8 +207,56 @@ func (h *SmartImportHandler) ExecuteBoqImport(w http.ResponseWriter, r *http.Req
 		apierr.BadRequest("workbook_fingerprint обязателен").Render(w)
 		return
 	}
+	opts := parseImportOptions(r)
+	if !h.parseSelections(w, r, &opts) {
+		return
+	}
 	result, err := h.svc.Execute(r.Context(), tenderID, fileName, data, fingerprint,
-		parseImportOptions(r), authUser.ID)
+		opts, authUser.ID)
+	if err != nil {
+		h.renderImportError(w, r, err)
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: result})
+}
+
+// SuggestNomenclature — POST /api/v1/tenders/{id}/boq-import/suggest-nomenclature
+// (§10): read-only, AI вызывается только по явному действию пользователя.
+func (h *SmartImportHandler) SuggestNomenclature(w http.ResponseWriter, r *http.Request) {
+	if middleware.UserFromContext(r.Context()) == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	tenderID := chi.URLParam(r, "id")
+	if tenderID == "" {
+		apierr.BadRequest("missing tender id").Render(w)
+		return
+	}
+	fileName, data, ok := readUpload(w, r)
+	if !ok {
+		return
+	}
+	fingerprint := r.FormValue("workbook_fingerprint")
+	if fingerprint == "" {
+		apierr.BadRequest("workbook_fingerprint обязателен").Render(w)
+		return
+	}
+	var rowRefs []string
+	if raw := r.FormValue("row_references"); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &rowRefs)
+	}
+	candidateLimit := 0
+	if raw := r.FormValue("candidate_limit"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil {
+			candidateLimit = v
+		}
+	}
+	opts := parseImportOptions(r)
+	if !h.parseSelections(w, r, &opts) { // уже подтверждённые строки не re-suggest
+		return
+	}
+	result, err := h.svc.SuggestNomenclature(r.Context(), tenderID, fileName, data,
+		fingerprint, opts, rowRefs, candidateLimit)
 	if err != nil {
 		h.renderImportError(w, r, err)
 		return

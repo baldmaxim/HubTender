@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	ainom "github.com/su10/hubtender/backend/internal/ai/nomenclature"
 	ia "github.com/su10/hubtender/backend/internal/importanalysis"
 	"github.com/su10/hubtender/backend/internal/repository"
 )
@@ -40,6 +41,11 @@ func (e *BlockersPresentError) Error() string {
 type SmartImportService struct {
 	refs     importRefsLoader
 	importer bulkImporter
+
+	// Этап 2.2 (optional AI): каталог + reranker; nil/Disabled — всё работает.
+	catalog  catalogLoader
+	reranker ainom.NomenclatureReranker
+	aiCfg    ainom.Config
 }
 
 // NewSmartImportService creates a SmartImportService.
@@ -66,12 +72,14 @@ func (s *SmartImportService) Analyze(
 	return an, nil
 }
 
-// ExecuteResult — существующий import report + normalization summary (§14).
+// ExecuteResult — существующий import report + normalization summary (§14) +
+// provenance номенклатуры этапа 2.2.
 type ExecuteResult struct {
 	Import        *repository.ImportResult `json:"import"`
 	Normalization ia.Summary               `json:"normalization"`
 	SkippedRows   int                      `json:"skipped_rows"`
 	Fingerprint   string                   `json:"workbook_fingerprint"`
+	Nomenclature  NomenclatureProvenance   `json:"nomenclature_provenance"`
 }
 
 // Execute — §4: повторный fingerprint, ПОВТОРНЫЙ серверный parse и анализ той
@@ -87,6 +95,13 @@ func (s *SmartImportService) Execute(
 	an, err := s.Analyze(ctx, tenderID, fileName, data, opts)
 	if err != nil {
 		return nil, err
+	}
+	// §13.8: ссылки selections должны указывать на реальные строки файла.
+	if len(opts.NomenclatureSelections) > 0 {
+		if err := resolveSelectionRefs(an, an.Result.SelectedSheet,
+			opts.NomenclatureSelections); err != nil {
+			return nil, err
+		}
 	}
 	if an.Result.Summary.RowsBlocked > 0 || an.Result.Summary.RequiredMappingsMissing > 0 {
 		return nil, &BlockersPresentError{
@@ -139,5 +154,6 @@ func (s *SmartImportService) Execute(
 		Normalization: an.Result.Summary,
 		SkippedRows:   an.Result.Summary.RowsSkipped,
 		Fingerprint:   expectedFingerprint,
+		Nomenclature:  buildProvenance(an, opts.SelectionSources),
 	}, nil
 }

@@ -245,6 +245,13 @@ type Options struct {
 	DefaultCurrency     string // подтверждённая валюта при отсутствии колонки
 	DefaultBoqType      string // подтверждённый тип при отсутствии колонки
 	AcceptParentIndent  bool   // подтверждение parent-предложений (не используется без надёжной колонки)
+
+	// Этап 2.2: подтверждённые пользователем выборы номенклатуры для
+	// unresolved-строк: row reference ("sheet|excelRow") → catalog ID.
+	// Источник (exact|ai_confirmed|manual) валидируется сервисом; сами ID
+	// повторно проверяются против справочника (§13).
+	NomenclatureSelections map[string]string
+	SelectionSources       map[string]string
 }
 
 // Refs — точные справочники для enrichment (§2C; батч-загрузка без N+1).
@@ -254,6 +261,8 @@ type Refs struct {
 	BoqTypes       map[string]string   // normalized alias → canonical enum
 	WorkNames      map[string][]string // normalized name → IDs (для exact/ambiguous)
 	MaterialNames  map[string][]string
+	WorkNameUnits  map[string]string // ID → unit (валидация выбора, этап 2.2)
+	MatNameUnits   map[string]string
 	DetailCats     map[string][]string // normalized "name" и "name|location" → IDs
 	Positions      map[string]string   // normalized position ref (номер/item_no) → position ID
 	PositionLabels map[string]string   // position ID → label

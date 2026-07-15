@@ -230,7 +230,38 @@ func (a *analyzer) extractRow(
 		nomSrc = ""
 	}
 	pr.Nomenclature = ""
-	if it.BoqItemType != "" && nomRaw != "" {
+	// Этап 2.2: подтверждённый выбор номенклатуры для этой строки.
+	rowRef := a.sheet.Name + "|" + itoa(excelRow)
+	if sel, hasSel := a.opts.NomenclatureSelections[rowRef]; hasSel && it.BoqItemType != "" {
+		isWork := strings.HasPrefix(it.BoqItemType, "раб") || strings.HasPrefix(it.BoqItemType, "суб-раб")
+		unitByID := a.refs.MatNameUnits
+		if isWork {
+			unitByID = a.refs.WorkNameUnits
+		}
+		catUnit, exists := unitByID[sel]
+		if !exists {
+			issue(Issue{Code: "NOMENCLATURE_SELECTION_INVALID", Severity: SeverityBlocker,
+				TargetField: FieldNomenclature, RawValue: sel,
+				Message: "Выбранная номенклатура не найдена в справочнике или не совпадает по типу",
+				FixHint: "Обновите анализ и выберите вариант заново"})
+		} else {
+			if isWork {
+				it.WorkNameID = &sel
+			} else {
+				it.MaterialNameID = &sel
+			}
+			source := a.opts.SelectionSources[rowRef]
+			if it.UnitCode != nil && catUnit != "" && normText(*it.UnitCode) != normText(catUnit) {
+				issue(Issue{Code: "NOMENCLATURE_SELECTION_UNIT_WARNING", Severity: SeverityWarning,
+					TargetField: FieldNomenclature, RawValue: catUnit, Normalized: *it.UnitCode,
+					Message: "Единица выбранной номенклатуры отличается от единицы строки — проверьте выбор"})
+			}
+			issue(Issue{Code: "NOMENCLATURE_SELECTED", Severity: SeverityInformation,
+				TargetField: FieldNomenclature, Normalized: sel,
+				Message: "Номенклатура подтверждена пользователем (" + source + ")"})
+			pr.Nomenclature = nomRaw
+		}
+	} else if it.BoqItemType != "" && nomRaw != "" {
 		byName := a.refs.MaterialNames
 		if strings.HasPrefix(it.BoqItemType, "раб") || strings.HasPrefix(it.BoqItemType, "суб-раб") {
 			byName = a.refs.WorkNames

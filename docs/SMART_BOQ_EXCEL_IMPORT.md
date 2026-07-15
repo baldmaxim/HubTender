@@ -137,9 +137,13 @@ import DTO не персистятся.
 
 ## 18. Backlog (следующий AI-этап — поверх детерминированного preview)
 
-AI-assisted column mapping · fuzzy nomenclature suggestions · пользовательские
-mapping-профили · PDF/КП extraction · multi-file import · автоматическая
-привязка документов · quote-даты в import DTO.
+AI-assisted column mapping · пользовательские mapping-профили · PDF/КП
+extraction · multi-file import · автоматическая привязка документов ·
+quote-даты в import DTO.
+
+**Реализовано этапом 2.2**: AI-подбор номенклатуры для unresolved-строк
+(двухэтапная модель, provider-neutral, execute-контракт `nomenclature_selections`)
+— см. [AI_NOMENCLATURE_MATCHING.md](AI_NOMENCLATURE_MATCHING.md).
 
 ## 19. Тесты и guard
 

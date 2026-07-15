@@ -76,6 +76,13 @@ export interface SmartAnalysis {
   issues: SmartIssue[];
 }
 
+// Этап 2.2: подтверждённый пользователем выбор номенклатуры (§13).
+export interface NomenclatureSelectionInput {
+  row_reference: string;
+  catalog_id: string;
+  selection_source: 'exact' | 'ai_confirmed' | 'manual';
+}
+
 export interface SmartImportOptions {
   sheet_name?: string;
   header_row?: number;
@@ -83,6 +90,17 @@ export interface SmartImportOptions {
   accept_formula_cached?: boolean;
   default_currency?: string;
   default_boq_type?: string;
+  nomenclature_selections?: NomenclatureSelectionInput[];
+}
+
+// Этап 2.2 (§14): provenance номенклатуры в ответе execute.
+export interface NomenclatureProvenance {
+  exact_nomenclature_matches: number;
+  ai_suggestions_confirmed: number;
+  manually_selected_nomenclature: number;
+  unresolved_nomenclature_rows: number;
+  candidate_generation_version: string;
+  prompt_version?: string;
 }
 
 export interface SmartExecuteResult {
@@ -96,6 +114,56 @@ export interface SmartExecuteResult {
   normalization: SmartAnalysis['summary'];
   skipped_rows: number;
   workbook_fingerprint: string;
+  nomenclature_provenance: NomenclatureProvenance;
+}
+
+// ─── Этап 2.2: AI-подбор номенклатуры (§10) ─────────────────────────────────
+
+export interface SmartAiCandidate {
+  id: string;
+  label: string;
+  type: 'material' | 'work' | string;
+  unit: string;
+  deterministic_score: number;
+  matched_tokens?: string[];
+  unmatched_significant_tokens?: string[];
+  unit_compatibility: 'exact' | 'unknown' | 'conflict' | string;
+  category_compatibility: string;
+  retrieval_reasons?: string[];
+  significant_token_conflict?: boolean;
+}
+
+export interface SmartSuggestionRow {
+  row_reference: string;
+  excel_row: number;
+  source_description: string;
+  source_type: string;
+  source_unit?: string;
+  status: 'suggested' | 'abstain' | 'no_candidates' | 'ai_invalid_response' | 'deterministic_only' | string;
+  confidence: 'high' | 'medium' | 'low' | 'abstain' | '' | string;
+  selected_candidate_id: string | null;
+  explanation?: string;
+  abstain_reason?: string;
+  matched_features?: string[];
+  conflicting_features?: string[];
+  candidates: SmartAiCandidate[];
+  ai_rank_by_id?: Record<string, number>;
+}
+
+export interface SmartSuggestResult {
+  workbook_fingerprint: string;
+  suggestion_schema_version: number;
+  candidate_generation_version: string;
+  prompt_version: string;
+  provider: {
+    status: 'available' | 'disabled' | 'timeout' | 'rate_limited' | 'unavailable' | 'invalid_response' | string;
+    provider?: string;
+    model?: string;
+    rows_requested: number;
+    rows_processed: number;
+    rows_abstained: number;
+  };
+  rows: SmartSuggestionRow[];
 }
 
 async function postMultipart<T>(path: string, form: FormData): Promise<T> {
@@ -130,6 +198,9 @@ function buildForm(file: File, opts: SmartImportOptions, extra?: Record<string, 
     default_currency: opts.default_currency ?? '',
     default_boq_type: opts.default_boq_type ?? '',
   }));
+  if ((opts.nomenclature_selections?.length ?? 0) > 0) {
+    form.append('nomenclature_selections', JSON.stringify(opts.nomenclature_selections));
+  }
   for (const [k, v] of Object.entries(extra ?? {})) form.append(k, v);
   return form;
 }
@@ -143,4 +214,16 @@ export async function executeBoqImport(
 ): Promise<SmartExecuteResult> {
   return postMultipart(`/api/v1/tenders/${tenderId}/boq-import/execute`,
     buildForm(file, opts, { workbook_fingerprint: fingerprint }));
+}
+
+/** Этап 2.2 (§10/§12): подбор номенклатуры для unresolved-строк — ТОЛЬКО по
+ *  явному действию пользователя; сервер повторно парсит тот же файл. */
+export async function suggestNomenclature(
+  tenderId: string, file: File, fingerprint: string, opts: SmartImportOptions,
+  rowRefs?: string[],
+): Promise<SmartSuggestResult> {
+  const extra: Record<string, string> = { workbook_fingerprint: fingerprint };
+  if (rowRefs && rowRefs.length > 0) extra.row_references = JSON.stringify(rowRefs);
+  return postMultipart(`/api/v1/tenders/${tenderId}/boq-import/suggest-nomenclature`,
+    buildForm(file, opts, extra));
 }

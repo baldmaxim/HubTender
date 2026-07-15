@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	ainom "github.com/su10/hubtender/backend/internal/ai/nomenclature"
 	ia "github.com/su10/hubtender/backend/internal/importanalysis"
 )
 
@@ -36,6 +37,8 @@ func (r *ImportAnalysisRepo) LoadRefs(ctx context.Context, tenderID string) (ia.
 		BoqTypes:       map[string]string{},
 		WorkNames:      map[string][]string{},
 		MaterialNames:  map[string][]string{},
+		WorkNameUnits:  map[string]string{},
+		MatNameUnits:   map[string]string{},
 		DetailCats:     map[string][]string{},
 		Positions:      map[string]string{},
 		PositionLabels: map[string]string{},
@@ -75,26 +78,27 @@ func (r *ImportAnalysisRepo) LoadRefs(ctx context.Context, tenderID string) (ia.
 	}
 
 	// Номенклатура работ/материалов.
-	load := func(table string, into map[string][]string) error {
-		rows, err := tx.Query(ctx, `SELECT id::text, name FROM public.`+table)
+	load := func(table string, into map[string][]string, units map[string]string) error {
+		rows, err := tx.Query(ctx, `SELECT id::text, name, COALESCE(unit, '') FROM public.`+table)
 		if err != nil {
 			return fmt.Errorf("importAnalysisRepo: %s: %w", table, err)
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var id, name string
-			if err := rows.Scan(&id, &name); err != nil {
+			var id, name, unit string
+			if err := rows.Scan(&id, &name, &unit); err != nil {
 				return err
 			}
 			key := normRefText(name)
 			into[key] = append(into[key], id)
+			units[id] = unit
 		}
 		return rows.Err()
 	}
-	if err := load("work_names", refs.WorkNames); err != nil {
+	if err := load("work_names", refs.WorkNames, refs.WorkNameUnits); err != nil {
 		return refs, err
 	}
-	if err := load("material_names", refs.MaterialNames); err != nil {
+	if err := load("material_names", refs.MaterialNames, refs.MatNameUnits); err != nil {
 		return refs, err
 	}
 
@@ -157,6 +161,35 @@ func (r *ImportAnalysisRepo) LoadRefs(ctx context.Context, tenderID string) (ia.
 		return refs, fmt.Errorf("importAnalysisRepo: commit: %w", err)
 	}
 	return refs, nil
+}
+
+// ListNomenclatureCatalog — весь справочник для candidate retrieval (этап 2.2
+// §4): 2 батч-запроса, без N+1. Archived-поля в схеме нет (аудит §1).
+func (r *ImportAnalysisRepo) ListNomenclatureCatalog(ctx context.Context) ([]ainom.CatalogEntry, error) {
+	out := make([]ainom.CatalogEntry, 0, 1024)
+	load := func(table, typ string) error {
+		rows, err := r.pool.Query(ctx, `SELECT id::text, name, COALESCE(unit, '') FROM public.`+table)
+		if err != nil {
+			return fmt.Errorf("importAnalysisRepo: catalog %s: %w", table, err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var e ainom.CatalogEntry
+			if err := rows.Scan(&e.ID, &e.Label, &e.Unit); err != nil {
+				return err
+			}
+			e.Type = typ
+			out = append(out, e)
+		}
+		return rows.Err()
+	}
+	if err := load("work_names", "work"); err != nil {
+		return nil, err
+	}
+	if err := load("material_names", "material"); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 var _ = errors.Is // keep errors import stable

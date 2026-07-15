@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
+	ainom "github.com/su10/hubtender/backend/internal/ai/nomenclature"
 	"github.com/su10/hubtender/backend/internal/cache"
 	"github.com/su10/hubtender/backend/internal/cbr"
 	"github.com/su10/hubtender/backend/internal/config"
@@ -170,7 +172,25 @@ func buildDeps(
 	actionPlanSvc := services.NewActionPlanService(actionPlanRepo)
 	changeImpactSvc := services.NewChangeImpactService(changeImpactRepo)
 	reviewPackSvc := services.NewReviewPackService(reviewPackRepo)
-	smartImportSvc := services.NewSmartImportService(importAnalysisRepo, importBoqSvc)
+	// Этап 2.2: AI-подбор номенклатуры. Одобренного provider в проекте нет —
+	// по умолчанию DisabledProvider; config-contract (владелец проекта):
+	//   AI_NOMENCLATURE_ENABLED, AI_NOMENCLATURE_PROVIDER, AI_NOMENCLATURE_MODEL,
+	//   AI_NOMENCLATURE_TIMEOUT_SECONDS. Реальный сетевой adapter добавляется
+	//   отдельным подтверждённым решением (docs/AI_NOMENCLATURE_MATCHING.md).
+	aiNomCfg := ainom.Config{
+		Enabled:       os.Getenv("AI_NOMENCLATURE_ENABLED") == "true",
+		Provider:      os.Getenv("AI_NOMENCLATURE_PROVIDER"),
+		Model:         os.Getenv("AI_NOMENCLATURE_MODEL"),
+		PromptVersion: ainom.PromptVersion,
+	}
+	var aiReranker ainom.NomenclatureReranker = ainom.DisabledProvider{}
+	if aiNomCfg.Enabled {
+		// Сетевой adapter не реализован до выбора провайдера владельцем:
+		// enabled без adapter честно остаётся disabled-поведением.
+		aiNomCfg.Enabled = false
+	}
+	smartImportSvc := services.NewSmartImportService(importAnalysisRepo, importBoqSvc).
+		WithNomenclatureAI(importAnalysisRepo, aiReranker, aiNomCfg)
 	ccvSvc := services.NewConstructionCostVolumesService(ccvRepo)
 
 	return &deps{

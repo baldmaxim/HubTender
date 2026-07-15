@@ -1,0 +1,41 @@
+{
+  "comment": "Синтетический обезличенный датасет строительной номенклатуры (этап 2.2 §18). Реальных клиентских данных нет.",
+  "catalog": [
+    {"id": "m-cable-25", "label": "Кабель ВВГнг-LS 3×2,5", "type": "material", "unit": "м"},
+    {"id": "m-cable-40", "label": "Кабель ВВГнг-LS 3×4", "type": "material", "unit": "м"},
+    {"id": "m-beton-150", "label": "Бетон М150", "type": "material", "unit": "м3"},
+    {"id": "m-beton-200", "label": "Бетон М200", "type": "material", "unit": "м3"},
+    {"id": "m-armatura-400", "label": "Арматура A400 Ø12", "type": "material", "unit": "т"},
+    {"id": "m-armatura-500", "label": "Арматура A500 Ø12", "type": "material", "unit": "т"},
+    {"id": "m-pipe-20", "label": "Труба стальная Ø20", "type": "material", "unit": "м"},
+    {"id": "m-pipe-25", "label": "Труба стальная Ø25", "type": "material", "unit": "м"},
+    {"id": "m-profil-10050", "label": "Профиль 100×50", "type": "material", "unit": "м"},
+    {"id": "m-profil-100100", "label": "Профиль 100×100", "type": "material", "unit": "м"},
+    {"id": "m-gkl", "label": "ГКЛ лист 12,5 мм", "type": "material", "unit": "м2"},
+    {"id": "m-kirpich", "label": "Кирпич керамический М150", "type": "material", "unit": "шт"},
+    {"id": "w-kladka", "label": "Кладка кирпичная стен", "type": "work", "unit": "м2"},
+    {"id": "w-beton", "label": "Бетонирование монолитных конструкций", "type": "work", "unit": "м3"},
+    {"id": "w-armirovanie", "label": "Армирование конструкций", "type": "work", "unit": "т"},
+    {"id": "w-montazh-gkl", "label": "Монтаж перегородок из ГКЛ", "type": "work", "unit": "м2"},
+    {"id": "w-cable", "label": "Прокладка кабеля", "type": "work", "unit": "м"},
+    {"id": "w-demontage", "label": "Демонтаж конструкций", "type": "work", "unit": "м3"}
+  ],
+  "cases": [
+    {"name": "exact-ish material", "description": "Кабель ВВГнг 3х2,5", "type": "мат", "unit": "м", "expect_top1": "m-cable-25", "expect_in_top3": true},
+    {"name": "size hard negative", "description": "Кабель ВВГнг 3х4", "type": "мат", "unit": "м", "expect_top1": "m-cable-40", "hard_negative": "m-cable-25"},
+    {"name": "mark m150", "description": "Бетон марки М150", "type": "мат", "unit": "м3", "expect_top1": "m-beton-150", "hard_negative": "m-beton-200"},
+    {"name": "mark m200", "description": "бетон м200", "type": "мат", "unit": "м3", "expect_top1": "m-beton-200", "hard_negative": "m-beton-150"},
+    {"name": "class a400 vs a500", "description": "Арматура А400 диаметр 12", "type": "мат", "unit": "т", "expect_top1": "m-armatura-400", "hard_negative": "m-armatura-500"},
+    {"name": "diameter 20 vs 25", "description": "Труба Ø20 стальная", "type": "мат", "unit": "м", "expect_top1": "m-pipe-20", "hard_negative": "m-pipe-25"},
+    {"name": "section 100x50", "description": "Профиль 100х50", "type": "мат", "unit": "м", "expect_top1": "m-profil-10050", "hard_negative": "m-profil-100100"},
+    {"name": "reordered tokens", "description": "стен кладка кирпичная", "type": "раб", "unit": "м2", "expect_top1": "w-kladka"},
+    {"name": "extra words", "description": "Кладка кирпичная стен внутренних толщиной 250 мм", "type": "раб", "unit": "м2", "expect_top1": "w-kladka"},
+    {"name": "typo", "description": "Кладка кирпичя стен", "type": "раб", "unit": "м2", "expect_in_top3_id": "w-kladka"},
+    {"name": "mixed lang", "description": "Монтаж ГКЛ перегородок (drywall)", "type": "раб", "unit": "м2", "expect_top1": "w-montazh-gkl"},
+    {"name": "work not material", "description": "Бетонирование конструкций", "type": "раб", "unit": "м3", "expect_top1": "w-beton", "forbidden_type": "material"},
+    {"name": "material not work", "description": "Бетон М150 товарный", "type": "мат", "unit": "м3", "expect_top1": "m-beton-150", "forbidden_type": "work"},
+    {"name": "unit mismatch soft", "description": "ГКЛ лист 12,5", "type": "мат", "unit": "шт", "expect_in_top3_id": "m-gkl", "expect_unit_conflict": true},
+    {"name": "no match abstain", "description": "Лифт пассажирский 1000 кг", "type": "мат", "unit": "шт", "expect_no_candidates": true},
+    {"name": "ambiguous profiles", "description": "Профиль 100", "type": "мат", "unit": "м", "expect_ambiguous": true}
+  ]
+}

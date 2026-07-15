@@ -14,6 +14,8 @@ import {
   filterPreviewRows, isExecuteReady, resultSummaryText, rowStatusDisplay,
   sheetNeedsConfirmation, unresolvedRequired,
 } from '../../../lib/quality/smartImportPolicy';
+import { SelectionsMap, selectionsForExecute } from '../../../lib/quality/aiNomenclaturePolicy';
+import NomenclatureSuggestPanel from './NomenclatureSuggestPanel';
 import { getErrorMessage } from '../../../utils/errors';
 
 const { Text } = Typography;
@@ -32,7 +34,10 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
   const [analysis, setAnalysis] = useState<SmartAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ inserted: number; mismatches: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{
+    inserted: number; mismatches: number; skipped: number;
+    provenance?: { exact: number; ai: number; manual: number; unresolved: number };
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [sheetName, setSheetName] = useState<string | undefined>();
@@ -41,6 +46,8 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
   const [defaultType, setDefaultType] = useState<string | undefined>();
   const [defaultCurrency, setDefaultCurrency] = useState<string | undefined>();
   const [rowFilter, setRowFilter] = useState('all');
+  // Этап 2.2 (§15-16): подтверждённые выборы номенклатуры. Auto-select запрещён.
+  const [selections, setSelections] = useState<SelectionsMap>({});
 
   const opts = useMemo((): SmartImportOptions => ({
     sheet_name: sheetName,
@@ -48,12 +55,14 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
     accept_formula_cached: formulaConfirmed,
     default_boq_type: defaultType,
     default_currency: defaultCurrency,
-  }), [sheetName, overrides, formulaConfirmed, defaultType, defaultCurrency]);
+    nomenclature_selections: selectionsForExecute(selections),
+  }), [sheetName, overrides, formulaConfirmed, defaultType, defaultCurrency, selections]);
 
   const reset = () => {
     setStep(0); setFile(null); setAnalysis(null); setResult(null); setError(null);
     setSheetName(undefined); setOverrides({}); setFormulaConfirmed(false);
     setDefaultType(undefined); setDefaultCurrency(undefined); setRowFilter('all');
+    setSelections({}); // §15: смена файла аннулирует подтверждения
   };
 
   const runAnalyze = async (f: File, extra?: Partial<SmartImportOptions>) => {
@@ -92,10 +101,17 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
     setError(null);
     try {
       const res = await executeBoqImport(tenderId, file, analysis.workbook_fingerprint, opts);
+      const prov = res.nomenclature_provenance;
       setResult({
         inserted: res.import.inserted_items_count,
         mismatches: res.import.total_mismatch_count,
         skipped: res.skipped_rows,
+        provenance: prov ? {
+          exact: prov.exact_nomenclature_matches,
+          ai: prov.ai_suggestions_confirmed,
+          manual: prov.manually_selected_nomenclature,
+          unresolved: prov.unresolved_nomenclature_rows,
+        } : undefined,
       });
       setStep(5);
       message.success('Импорт выполнен сервером');
@@ -279,6 +295,13 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
               )}
             />
           )}
+          {file && (
+            <NomenclatureSuggestPanel
+              tenderId={tenderId} file={file} analysis={analysis} opts={opts}
+              selections={selections} onSelectionsChange={setSelections}
+              onApply={() => reanalyze()}
+            />
+          )}
           <Table<SmartPreviewRow>
             rowKey="excel_row" size="small"
             columns={previewColumns}
@@ -334,6 +357,12 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
           <Alert type="success" showIcon
             message="Импорт выполнен"
             description={resultSummaryText(result.inserted, result.mismatches, result.skipped)} />
+          {result.provenance && (
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Номенклатура: точных {result.provenance.exact}, подтверждено AI {result.provenance.ai},
+              вручную {result.provenance.manual}, не разрешено {result.provenance.unresolved}
+            </Text>
+          )}
           <Button type="primary" onClick={() => { reset(); onClose(true); }}>Готово</Button>
         </Space>
       )}
