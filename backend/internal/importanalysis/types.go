@@ -13,6 +13,8 @@
 //     тот же файл, совпадение проверяется SHA-256 fingerprint.
 package importanalysis
 
+import importmemory "github.com/su10/hubtender/backend/internal/importmemory"
+
 // Лимиты workbook (§15) — выбраны после аудита типичных смет проекта
 // (сотни-тысячи строк, ≤30 колонок, единицы листов) с многократным запасом.
 const (
@@ -153,6 +155,7 @@ type Mapping struct {
 	Candidates        []MappingCandidate `json:"candidates,omitempty"`
 	FixedValue        string             `json:"fixed_value,omitempty"` // §8: фиксированный тип/валюта
 	DiagnosticOnly    bool               `json:"diagnostic_only,omitempty"`
+	Source            string             `json:"source,omitempty"` // saved_profile | "" (этап 2.3)
 }
 
 // Issue — проблема строки/файла (§11). ID стабилен:
@@ -180,6 +183,17 @@ type Transformation struct {
 	Message    string `json:"message"`
 }
 
+// AliasProvenance — происхождение alias-решения (этап 2.3 §6): строка
+// разрешена ранее подтверждённым соответствием пользователя.
+type AliasProvenance struct {
+	MatchMethod string `json:"match_method"` // user_approved_alias
+	AliasID     string `json:"alias_id"`
+	CatalogID   string `json:"catalog_id"`
+	SavedAt     string `json:"saved_at,omitempty"`
+	UseCount    int    `json:"use_count"`
+	SourceLabel string `json:"source_label"` // «Подтверждено вами ранее»
+}
+
 // PreviewRow — строка preview (§13).
 type PreviewRow struct {
 	ExcelRow        int               `json:"excel_row"`
@@ -196,6 +210,8 @@ type PreviewRow struct {
 	Raw             map[string]string `json:"raw,omitempty"`
 	Transformations []Transformation  `json:"transformations,omitempty"`
 	IssueIDs        []string          `json:"issue_ids,omitempty"`
+	// Этап 2.3: alias-происхождение (видимо пользователю, изменяемо).
+	AliasProvenance *AliasProvenance `json:"alias_provenance,omitempty"`
 }
 
 // Summary — счётчики analyze.
@@ -219,17 +235,20 @@ type DetectedFormats struct {
 
 // Result — полный результат analyze (§3).
 type Result struct {
-	WorkbookFingerprint string          `json:"workbook_fingerprint"`
-	FileName            string          `json:"file_name"`
-	Sheets              []SheetInfo     `json:"sheets"`
-	SelectedSheet       string          `json:"selected_sheet"`
-	SheetConfidence     string          `json:"sheet_confidence"`
-	DetectedHeaderRow   int             `json:"detected_header_row"` // 1-based Excel row
-	Mapping             []Mapping       `json:"mapping"`
-	DetectedFormats     DetectedFormats `json:"detected_formats"`
-	Summary             Summary         `json:"summary"`
-	PreviewRows         []PreviewRow    `json:"preview_rows"`
-	Issues              []Issue         `json:"issues"`
+	WorkbookFingerprint string      `json:"workbook_fingerprint"`
+	FileName            string      `json:"file_name"`
+	Sheets              []SheetInfo `json:"sheets"`
+	SelectedSheet       string      `json:"selected_sheet"`
+	SheetConfidence     string      `json:"sheet_confidence"`
+	DetectedHeaderRow   int         `json:"detected_header_row"` // 1-based Excel row
+	// Этап 2.3: raw-заголовки выбранного листа — вход для header signature
+	// профилей (структура шапки; значения строк сюда не входят).
+	RawHeaders      []string        `json:"-"`
+	Mapping         []Mapping       `json:"mapping"`
+	DetectedFormats DetectedFormats `json:"detected_formats"`
+	Summary         Summary         `json:"summary"`
+	PreviewRows     []PreviewRow    `json:"preview_rows"`
+	Issues          []Issue         `json:"issues"`
 }
 
 // Options — параметры analyze/execute.
@@ -252,6 +271,10 @@ type Options struct {
 	// повторно проверяются против справочника (§13).
 	NomenclatureSelections map[string]string
 	SelectionSources       map[string]string
+
+	// Этап 2.3: поля mapping, пришедшие из сохранённого профиля (source-метка
+	// «saved_profile» в ответе; пользовательский override всегда сильнее).
+	ProfileFields map[string]bool
 }
 
 // Refs — точные справочники для enrichment (§2C; батч-загрузка без N+1).
@@ -266,4 +289,7 @@ type Refs struct {
 	DetailCats     map[string][]string // normalized "name" и "name|location" → IDs
 	Positions      map[string]string   // normalized position ref (номер/item_no) → position ID
 	PositionLabels map[string]string   // position ID → label
+	// Этап 2.3: активные aliases ТЕКУЩЕГО пользователя (батч-загрузка,
+	// exact-match индекс; nil = память недоступна/пуста).
+	Aliases *importmemory.AliasIndex
 }

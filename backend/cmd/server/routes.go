@@ -154,6 +154,12 @@ func newRouter(
 		r.Post("/api/v1/tenders/{id}/boq-import/analyze", d.smartImportH.AnalyzeBoqImport)
 		r.Post("/api/v1/tenders/{id}/boq-import/execute", d.smartImportH.ExecuteBoqImport)
 		r.Post("/api/v1/tenders/{id}/boq-import/suggest-nomenclature", d.smartImportH.SuggestNomenclature)
+		// Этап 2.3: персональная память импорта (user-scoped, §10).
+		r.Get("/api/v1/boq-import/mapping-profiles", d.importMemoryH.ListMappingProfiles)
+		r.Patch("/api/v1/boq-import/mapping-profiles/{id}", d.importMemoryH.PatchMappingProfile)
+		r.Delete("/api/v1/boq-import/mapping-profiles/{id}", d.importMemoryH.DeleteMappingProfile)
+		r.Get("/api/v1/boq-import/nomenclature-aliases", d.importMemoryH.ListNomenclatureAliases)
+		r.Delete("/api/v1/boq-import/nomenclature-aliases/{id}", d.importMemoryH.DeleteNomenclatureAlias)
 
 		// Phase 5: version transfer (replaces public.execute_version_transfer RPC).
 		r.Post("/api/v1/tenders/{id}/versions/transfer", d.transferH.Transfer)

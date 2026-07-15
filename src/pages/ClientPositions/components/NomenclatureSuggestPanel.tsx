@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Button, Modal, Select, Space, Table, Tag, Tooltip, Typography, message,
+  Alert, Button, Checkbox, Modal, Select, Space, Table, Tag, Tooltip, Typography, message,
 } from 'antd';
 import { InfoCircleOutlined, RobotOutlined } from '@ant-design/icons';
 import {
@@ -14,6 +14,7 @@ import {
   providerStatusDisplay, selectionSummary, suggestionConfidenceDisplay,
   suggestionStatusText, suggestionsStale, unresolvedNomenclatureRefs,
 } from '../../../lib/quality/aiNomenclaturePolicy';
+import { REMEMBER_BULK_LABEL, REMEMBER_LABEL } from '../../../lib/quality/smartImportMemoryPolicy';
 import { getErrorMessage } from '../../../utils/errors';
 
 const { Text } = Typography;
@@ -98,16 +99,31 @@ export default function NomenclatureSuggestPanel({
   const bulkEligible = suggest ? bulkConfirmableRows(suggest.rows, selections) : [];
 
   const doBulkConfirm = () => {
+    // §7/§19.15: bulk-подтверждение НЕ подразумевает запоминание —
+    // отдельный checkbox, по умолчанию ВЫКЛЮЧЕН.
+    let rememberAll = false;
     Modal.confirm({
       title: 'Подтвердить предложения с высокой уверенностью?',
-      content: bulkConfirmDialogText(bulkEligible.length),
+      content: (
+        <Space direction="vertical" size={8}>
+          <span>{bulkConfirmDialogText(bulkEligible.length)}</span>
+          <Checkbox defaultChecked={false} onChange={(e) => { rememberAll = e.target.checked; }}>
+            {REMEMBER_BULK_LABEL}
+          </Checkbox>
+        </Space>
+      ),
       okText: 'Подтвердить',
       cancelText: 'Отмена',
       onOk: () => {
         const next = { ...selections };
         for (const row of bulkEligible) {
           const cand = candidateById(row, row.selected_candidate_id);
-          if (cand) next[row.row_reference] = { catalogId: cand.id, label: cand.label, source: 'ai_confirmed' };
+          if (cand) {
+            next[row.row_reference] = {
+              catalogId: cand.id, label: cand.label, source: 'ai_confirmed',
+              remember: rememberAll === true,
+            };
+          }
         }
         onSelectionsChange(next);
       },
@@ -153,6 +169,15 @@ export default function NomenclatureSuggestPanel({
             <Space direction="vertical" size={0}>
               <Tag color="green">подтверждено ({sel.source === 'manual' ? 'вручную' : 'AI + инженер'})</Tag>
               <Text style={{ fontSize: 12 }}>{sel.label}</Text>
+              <Checkbox
+                checked={sel.remember === true}
+                onChange={(e) => onSelectionsChange({
+                  ...selections,
+                  [row.row_reference]: { ...sel, remember: e.target.checked },
+                })}
+              >
+                <Text style={{ fontSize: 11 }}>{REMEMBER_LABEL}</Text>
+              </Checkbox>
             </Space>
           );
         }

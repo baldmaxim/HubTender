@@ -34,6 +34,9 @@ type NormalizedItem struct {
 	// Диагностический клиентский total (§5): передаётся существующему
 	// mismatch-report'у и НИКОГДА не персистится как результат.
 	ClientTotalDiagnostic *float64
+	// Этап 2.3: alias, разрешивший номенклатуру строки (для use-счётчиков
+	// ПОСЛЕ успешного импорта). Финансовых данных не несёт.
+	AliasID string
 }
 
 // Analysis — результат Analyze: API-Result + нормализованные строки для
@@ -111,6 +114,9 @@ func Analyze(wb *Workbook, opts Options, refs Refs) (*Analysis, error) {
 		return nil, &InvalidWorkbookError{Reason: "не удалось определить строку заголовков"}
 	}
 	res.DetectedHeaderRow = headerRow0 + 1
+	for _, hc := range sheet.Rows[headerRow0] {
+		res.RawHeaders = append(res.RawHeaders, hc.Raw)
+	}
 
 	a := &analyzer{wb: wb, sheet: sheet, opts: opts, refs: refs, headerRow0: headerRow0,
 		colByField: map[string]columnInfo{}, fixedByField: map[string]string{}}
@@ -239,6 +245,16 @@ func (a *analyzer) applyOverrides(mapping []Mapping, cols []columnInfo) {
 					mapping[i].ConfidencePercent = 100
 					mapping[i].Reasons = []string{"Колонка выбрана пользователем"}
 				}
+			}
+		}
+		// Этап 2.3 (§5): происхождение из сохранённого профиля явно видно;
+		// отсутствующая в файле колонка остаётся unresolved и не скрывается.
+		if a.opts.ProfileFields[mapping[i].TargetField] {
+			mapping[i].Source = "saved_profile"
+			if mapping[i].SourceColumn != "" || mapping[i].FixedValue != "" {
+				mapping[i].Reasons = []string{"Из сохранённого профиля («Подтверждено вами ранее»)"}
+			} else {
+				mapping[i].Reasons = []string{"Колонка из профиля не найдена в файле — требуется выбор"}
 			}
 		}
 	}

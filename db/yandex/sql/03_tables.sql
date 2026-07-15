@@ -586,3 +586,47 @@ CREATE TABLE IF NOT EXISTS public.tender_iterations (
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
+
+-- Этап 2.3: Smart Import Memory — персональные профили сопоставления колонок
+-- и подтверждённые номенклатурные aliases (только явные решения пользователя;
+-- без financial-полей, workbook bytes и AI prompt/response).
+CREATE TABLE IF NOT EXISTS public.boq_import_mapping_profiles (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL,
+    name text NOT NULL CHECK (length(btrim(name)) > 0),
+    normalized_header_signature text NOT NULL CHECK (length(normalized_header_signature) > 0),
+    mapping_schema_version integer NOT NULL,
+    normalization_version integer NOT NULL,
+    mapping jsonb NOT NULL DEFAULT '{}'::jsonb,
+    fixed_options jsonb NOT NULL DEFAULT '{}'::jsonb,
+    sheet_name_hint text,
+    header_row_hint integer,
+    is_active boolean NOT NULL DEFAULT true,
+    use_count integer NOT NULL DEFAULT 0,
+    last_used_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.nomenclature_import_aliases (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL,
+    catalog_kind text NOT NULL CHECK (catalog_kind IN ('material', 'work')),
+    material_name_id uuid,
+    work_name_id uuid,
+    normalized_source_text text NOT NULL CHECK (length(btrim(normalized_source_text)) > 0),
+    canonical_boq_item_type text NOT NULL CHECK (length(canonical_boq_item_type) > 0),
+    normalized_unit_code text,
+    detail_cost_category_id uuid,
+    normalization_version integer NOT NULL,
+    is_active boolean NOT NULL DEFAULT true,
+    use_count integer NOT NULL DEFAULT 0,
+    last_used_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT nomenclature_import_aliases_kind_fk_chk CHECK (
+        (catalog_kind = 'material' AND material_name_id IS NOT NULL AND work_name_id IS NULL)
+        OR
+        (catalog_kind = 'work' AND work_name_id IS NOT NULL AND material_name_id IS NULL)
+    )
+);

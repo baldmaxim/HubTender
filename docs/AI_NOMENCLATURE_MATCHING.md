@@ -170,3 +170,8 @@ request_hash (sha256-префикс). Без raw-текста строк и пр
 - категории у номенклатуры отсутствуют в схеме → `category_compatibility =
   unknown`;
 - живые метрики качества провайдера не собирались (нет провайдера).
+
+Этап 2.3 добавил поверх этого потока персональную память подтверждённых
+соответствий (user-approved aliases) и профили сопоставления колонок — см.
+[SMART_IMPORT_MEMORY.md](SMART_IMPORT_MEMORY.md); порядок сопоставления:
+exact -> alias -> deterministic candidates -> AI -> manual.

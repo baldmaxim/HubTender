@@ -31,6 +31,9 @@ type NomenclatureSelection struct {
 	RowReference    string `json:"row_reference"`
 	CatalogID       string `json:"catalog_id"`
 	SelectionSource string `json:"selection_source"` // exact | ai_confirmed | manual
+	// Этап 2.3 (§7): «Запомнить для следующих импортов». Default false;
+	// backend не доверяет флагу без успешной повторной проверки selection.
+	RememberSelection bool `json:"remember_selection"`
 }
 
 // InvalidSelectionError — недопустимый source/forged выбор (§13).
@@ -45,22 +48,28 @@ var allowedSelectionSources = map[string]bool{
 	"exact": true, "ai_confirmed": true, "manual": true,
 }
 
-// ValidateSelections — проверка source-контракта до анализа.
-func ValidateSelections(selections []NomenclatureSelection) (map[string]string, map[string]string, error) {
+// ValidateSelections — проверка source-контракта до анализа. remember-флаги
+// (этап 2.3 §7) возвращаются отдельно и применяются ТОЛЬКО после успешного
+// импорта и повторной валидации самой selection.
+func ValidateSelections(selections []NomenclatureSelection) (map[string]string, map[string]string, map[string]bool, error) {
 	ids := map[string]string{}
 	sources := map[string]string{}
+	remember := map[string]bool{}
 	for _, sel := range selections {
 		if !allowedSelectionSources[sel.SelectionSource] {
-			return nil, nil, &InvalidSelectionError{
+			return nil, nil, nil, &InvalidSelectionError{
 				Reason: "недопустимый selection_source «" + sel.SelectionSource + "»"}
 		}
 		if sel.RowReference == "" || sel.CatalogID == "" {
-			return nil, nil, &InvalidSelectionError{Reason: "пустой row_reference или catalog_id"}
+			return nil, nil, nil, &InvalidSelectionError{Reason: "пустой row_reference или catalog_id"}
 		}
 		ids[sel.RowReference] = sel.CatalogID
 		sources[sel.RowReference] = sel.SelectionSource
+		if sel.RememberSelection {
+			remember[sel.RowReference] = true
+		}
 	}
-	return ids, sources, nil
+	return ids, sources, remember, nil
 }
 
 // SuggestNomenclatureResult — ответ suggest (§10). Ничего не сохраняется.
@@ -77,14 +86,14 @@ type SuggestNomenclatureResult struct {
 // (preview от frontend не принимается) → unresolved-строки → deterministic
 // candidates → optional AI reranking. Read-only: без import session/мутаций.
 func (s *SmartImportService) SuggestNomenclature(
-	ctx context.Context, tenderID, fileName string, data []byte,
+	ctx context.Context, tenderID, userID, fileName string, data []byte,
 	expectedFingerprint string, opts ia.Options,
 	rowRefs []string, candidateLimit int,
 ) (*SuggestNomenclatureResult, error) {
 	if ia.Fingerprint(data) != expectedFingerprint {
 		return nil, &FingerprintMismatchError{}
 	}
-	an, err := s.Analyze(ctx, tenderID, fileName, data, opts)
+	an, err := s.Analyze(ctx, tenderID, userID, fileName, data, opts)
 	if err != nil {
 		return nil, err
 	}

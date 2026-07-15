@@ -226,3 +226,13 @@ DROP TRIGGER IF EXISTS update_works_library_updated_at ON public.works_library;
 CREATE TRIGGER update_works_library_updated_at
   BEFORE UPDATE ON public.works_library
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- Этап 2.3: Smart Import Memory — updated_at maintenance.
+DROP TRIGGER IF EXISTS trg_boq_import_mapping_profiles_updated_at ON public.boq_import_mapping_profiles;
+CREATE TRIGGER trg_boq_import_mapping_profiles_updated_at
+  BEFORE UPDATE ON public.boq_import_mapping_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+DROP TRIGGER IF EXISTS trg_nomenclature_import_aliases_updated_at ON public.nomenclature_import_aliases;
+CREATE TRIGGER trg_nomenclature_import_aliases_updated_at
+  BEFORE UPDATE ON public.nomenclature_import_aliases
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

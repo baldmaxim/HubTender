@@ -432,3 +432,35 @@ CREATE INDEX IF NOT EXISTS idx_tender_registry_construction_scope_id ON public.t
 CREATE INDEX IF NOT EXISTS idx_tender_registry_status_id ON public.tender_registry(status_id);
 CREATE INDEX IF NOT EXISTS idx_user_position_filters_position_id ON public.user_position_filters(position_id);
 CREATE INDEX IF NOT EXISTS idx_works_library_folder_id ON public.works_library(folder_id);
+
+-- Этап 2.3: Smart Import Memory
+ALTER TABLE public.boq_import_mapping_profiles ADD CONSTRAINT boq_import_mapping_profiles_pkey PRIMARY KEY (id);
+ALTER TABLE public.boq_import_mapping_profiles ADD CONSTRAINT boq_import_mapping_profiles_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_boq_import_mapping_profiles_user_sig
+    ON public.boq_import_mapping_profiles (user_id, normalized_header_signature) WHERE is_active;
+CREATE INDEX IF NOT EXISTS idx_boq_import_mapping_profiles_user
+    ON public.boq_import_mapping_profiles (user_id, updated_at DESC);
+
+ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_pkey PRIMARY KEY (id);
+ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+-- hard delete каталога не блокируем: alias уходит каскадом (без dangling ID).
+ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_material_fkey
+    FOREIGN KEY (material_name_id) REFERENCES public.material_names(id) ON DELETE CASCADE;
+ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_work_fkey
+    FOREIGN KEY (work_name_id) REFERENCES public.work_names(id) ON DELETE CASCADE;
+ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_dcc_fkey
+    FOREIGN KEY (detail_cost_category_id) REFERENCES public.detail_cost_categories(id) ON DELETE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_nomenclature_import_aliases_active_key
+    ON public.nomenclature_import_aliases (
+        user_id, catalog_kind, normalized_source_text, canonical_boq_item_type,
+        COALESCE(normalized_unit_code, ''),
+        COALESCE(detail_cost_category_id, '00000000-0000-0000-0000-000000000000'::uuid)
+    ) WHERE is_active;
+CREATE INDEX IF NOT EXISTS idx_nomenclature_import_aliases_user
+    ON public.nomenclature_import_aliases (user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_nomenclature_import_aliases_material
+    ON public.nomenclature_import_aliases (material_name_id) WHERE material_name_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_nomenclature_import_aliases_work
+    ON public.nomenclature_import_aliases (work_name_id) WHERE work_name_id IS NOT NULL;

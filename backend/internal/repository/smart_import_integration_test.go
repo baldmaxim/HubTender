@@ -43,7 +43,7 @@ func buildTestXLSX(t *testing.T, rows [][]any) []byte {
 // smartAnalyze — зеркало SmartImportService.Analyze (без import-cycle).
 func smartAnalyze(t *testing.T, pool *pgxpool.Pool, tenderID string, data []byte, opts ia.Options) *ia.Analysis {
 	t.Helper()
-	refs, err := NewImportAnalysisRepo(pool).LoadRefs(context.Background(), tenderID)
+	refs, err := NewImportAnalysisRepo(pool).LoadRefs(context.Background(), tenderID, rbActor)
 	if err != nil {
 		t.Fatalf("refs: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestSmartImportIntegration_InvalidAndLimits(t *testing.T) {
 func TestSmartImportIntegration_TenderNotFound(t *testing.T) {
 	pool := newTestPool(t)
 	_, err := NewImportAnalysisRepo(pool).LoadRefs(context.Background(),
-		"ffffffff-ffff-ffff-ffff-ffffffffffff")
+		"ffffffff-ffff-ffff-ffff-ffffffffffff", rbActor)
 	if !errors.Is(err, ErrQualityTenderNotFound) {
 		t.Fatalf("want not-found, got %v", err)
 	}

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	importmemory "github.com/su10/hubtender/backend/internal/importmemory"
 )
 
 // extractRow — нормализация одной data-строки (§8-§11). Каждая трансформация
@@ -230,6 +232,16 @@ func (a *analyzer) extractRow(
 		nomSrc = ""
 	}
 	pr.Nomenclature = ""
+	// Этап 2.3: контекст категории для alias-совпадения — вычисляем заранее
+	// (сама категория назначается ниже, в существующем блоке).
+	dcCell, dcSrc, hasDC := a.cellFor(row, FieldDetailCategory)
+	dcRaw := strings.TrimSpace(dcCell.Raw)
+	dcCtxID := ""
+	if hasDC && dcRaw != "" {
+		if ids := a.refs.DetailCats[normText(dcRaw)]; len(ids) == 1 {
+			dcCtxID = ids[0]
+		}
+	}
 	// Этап 2.2: подтверждённый выбор номенклатуры для этой строки.
 	rowRef := a.sheet.Name + "|" + itoa(excelRow)
 	if sel, hasSel := a.opts.NomenclatureSelections[rowRef]; hasSel && it.BoqItemType != "" {
@@ -267,9 +279,10 @@ func (a *analyzer) extractRow(
 			byName = a.refs.WorkNames
 		}
 		ids := MatchNomenclature(nomRaw, byName)
-		switch {
-		case len(ids) == 1:
-			if strings.HasPrefix(it.BoqItemType, "раб") || strings.HasPrefix(it.BoqItemType, "суб-раб") {
+		isWork := strings.HasPrefix(it.BoqItemType, "раб") || strings.HasPrefix(it.BoqItemType, "суб-раб")
+		if len(ids) == 1 {
+			// §6: exact canonical match всегда выше alias.
+			if isWork {
 				it.WorkNameID = &ids[0]
 			} else {
 				it.MaterialNameID = &ids[0]
@@ -278,12 +291,14 @@ func (a *analyzer) extractRow(
 			issue(Issue{Code: "NOMENCLATURE_EXACT_MATCH", Severity: SeverityInformation,
 				TargetField: FieldNomenclature, RawValue: nomRaw,
 				Message: "Точное совпадение с номенклатурой"})
-		case len(ids) > 1:
+		} else if a.tryAliasMatch(it, pr, issue, nomRaw, nomSrc, dcCtxID, isWork) {
+			// Этап 2.3: разрешено ранее подтверждённым alias пользователя.
+		} else if len(ids) > 1 {
 			issue(Issue{Code: "NOMENCLATURE_AMBIGUOUS", Severity: SeverityBlocker,
 				TargetField: FieldNomenclature, SourceColumn: nomSrc, RawValue: nomRaw,
 				Message: "Несколько записей номенклатуры точно совпадают — выбор неоднозначен",
 				FixHint: "Уточните наименование либо выберите номенклатуру вручную после импорта"})
-		default:
+		} else {
 			issue(Issue{Code: "NOMENCLATURE_NOT_FOUND", Severity: SeverityBlocker,
 				TargetField: FieldNomenclature, SourceColumn: nomSrc, RawValue: nomRaw,
 				Message: "Точное совпадение с номенклатурой не найдено (приблизительный подбор отключён)",
@@ -292,8 +307,6 @@ func (a *analyzer) extractRow(
 	}
 
 	// ── затрата на строительство ─────────────────────────────────────────────
-	dcCell, dcSrc, hasDC := a.cellFor(row, FieldDetailCategory)
-	dcRaw := strings.TrimSpace(dcCell.Raw)
 	if hasDC && dcRaw != "" {
 		ids := a.refs.DetailCats[normText(dcRaw)]
 		switch {
@@ -400,3 +413,69 @@ func trimFloat(v float64) string {
 }
 
 func itoa(v int) string { return fmt.Sprintf("%d", v) }
+
+// tryAliasMatch — этап 2.3 (§6): exact-применение ранее ПОДТВЕРЖДЁННОГО
+// пользователем соответствия. Вызывается только когда exact canonical match
+// не дал уникального результата; несколько целей → blocker-конфликт (система
+// никогда не выбирает сама); устаревшая нормализация → requires_review
+// warning, строка остаётся неразрешённой.
+func (a *analyzer) tryAliasMatch(
+	it *NormalizedItem, pr *PreviewRow, issue func(Issue),
+	nomRaw, nomSrc, dcCtxID string, isWork bool,
+) bool {
+	if a.refs.Aliases == nil {
+		return false
+	}
+	unit := ""
+	if it.UnitCode != nil {
+		unit = *it.UnitCode
+	}
+	res := a.refs.Aliases.Resolve(nomRaw, it.BoqItemType, unit, dcCtxID)
+	switch res.Status {
+	case importmemory.AliasMatched:
+		al := res.Alias
+		// Защита от недоступной цели: каталожная запись обязана существовать
+		// в текущих справочниках (§13; FK CASCADE делает это редким).
+		unitByID := a.refs.MatNameUnits
+		if isWork {
+			unitByID = a.refs.WorkNameUnits
+		}
+		if _, exists := unitByID[al.CatalogID]; !exists {
+			issue(Issue{Code: "NOMENCLATURE_ALIAS_TARGET_UNAVAILABLE", Severity: SeverityWarning,
+				TargetField: FieldNomenclature, SourceColumn: nomSrc, RawValue: nomRaw,
+				Message: "Сохранённое соответствие указывает на недоступную номенклатуру — выберите вариант заново",
+				FixHint: "Цель могла быть удалена или изменена; соответствие можно забыть в «Сохранённых настройках импорта»"})
+			return false
+		}
+		id := al.CatalogID
+		if isWork {
+			it.WorkNameID = &id
+		} else {
+			it.MaterialNameID = &id
+		}
+		it.AliasID = al.ID
+		pr.Nomenclature = nomRaw
+		pr.AliasProvenance = &AliasProvenance{
+			MatchMethod: "user_approved_alias", AliasID: al.ID, CatalogID: al.CatalogID,
+			SavedAt: al.SavedAt, UseCount: al.UseCount,
+			SourceLabel: "Подтверждено вами ранее",
+		}
+		issue(Issue{Code: "NOMENCLATURE_ALIAS_MATCH", Severity: SeverityInformation,
+			TargetField: FieldNomenclature, RawValue: nomRaw, Normalized: al.CatalogID,
+			Message: "Номенклатура подобрана по ранее подтверждённому соответствию («Подтверждено вами ранее»)"})
+		return true
+	case importmemory.AliasConflict:
+		issue(Issue{Code: "NOMENCLATURE_ALIAS_CONFLICT", Severity: SeverityBlocker,
+			TargetField: FieldNomenclature, SourceColumn: nomSrc, RawValue: nomRaw,
+			Message: "Несколько сохранённых соответствий указывают на разные номенклатуры — выберите вручную",
+			FixHint: "Деактивируйте неверное соответствие в «Сохранённых настройках импорта»"})
+		return true // строка обработана: конфликт требует решения пользователя
+	case importmemory.AliasRequiresReview:
+		issue(Issue{Code: "NOMENCLATURE_ALIAS_REQUIRES_REVIEW", Severity: SeverityWarning,
+			TargetField: FieldNomenclature, SourceColumn: nomSrc, RawValue: nomRaw,
+			Message: "Сохранённое соответствие создано в другой версии нормализации — подтвердите выбор заново"})
+		return false
+	default:
+		return false
+	}
+}

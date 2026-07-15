@@ -67,6 +67,7 @@ type deps struct {
 	changeImpactH     *handlers.ChangeImpactHandler
 	reviewPackH       *handlers.ReviewPackHandler
 	smartImportH      *handlers.SmartImportHandler
+	importMemoryH     *handlers.ImportMemoryHandler
 	ccvH              *handlers.ConstructionCostVolumesHandler
 	wsH               *handlers.WsHandler
 }
@@ -122,6 +123,7 @@ func buildDeps(
 	changeImpactRepo := repository.NewChangeImpactRepo(pool)
 	reviewPackRepo := repository.NewReviewPackRepo(pool)
 	importAnalysisRepo := repository.NewImportAnalysisRepo(pool)
+	importMemoryRepo := repository.NewImportMemoryRepo(pool)
 
 	// Commercial-cost auto-recalc — replaces the manual «Пересчитать» button.
 	// Mutation services Enqueue(tenderID) after changing a pricing input (BOQ
@@ -190,7 +192,9 @@ func buildDeps(
 		aiNomCfg.Enabled = false
 	}
 	smartImportSvc := services.NewSmartImportService(importAnalysisRepo, importBoqSvc).
-		WithNomenclatureAI(importAnalysisRepo, aiReranker, aiNomCfg)
+		WithNomenclatureAI(importAnalysisRepo, aiReranker, aiNomCfg).
+		WithImportMemory(importMemoryRepo)
+	importMemorySvc := services.NewImportMemoryService(importMemoryRepo)
 	ccvSvc := services.NewConstructionCostVolumesService(ccvRepo)
 
 	return &deps{
@@ -239,6 +243,7 @@ func buildDeps(
 		changeImpactH:     handlers.NewChangeImpactHandler(changeImpactSvc),
 		reviewPackH:       handlers.NewReviewPackHandler(reviewPackSvc),
 		smartImportH:      handlers.NewSmartImportHandler(smartImportSvc),
+		importMemoryH:     handlers.NewImportMemoryHandler(importMemorySvc),
 		ccvH:              handlers.NewConstructionCostVolumesHandler(ccvSvc),
 		wsH:               handlers.NewWsHandler(hub, verifyCfg, logger),
 	}

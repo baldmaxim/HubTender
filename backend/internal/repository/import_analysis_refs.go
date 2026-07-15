@@ -11,6 +11,7 @@ import (
 
 	ainom "github.com/su10/hubtender/backend/internal/ai/nomenclature"
 	ia "github.com/su10/hubtender/backend/internal/importanalysis"
+	importmemory "github.com/su10/hubtender/backend/internal/importmemory"
 )
 
 // ImportAnalysisRepo — батч-загрузка точных справочников для анализа импорта
@@ -28,9 +29,10 @@ func normRefText(s string) string {
 	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(s))), " ")
 }
 
-// LoadRefs — units, номенклатура (work/material), детальные категории и
-// позиции тендера как exact-нормализованные индексы.
-func (r *ImportAnalysisRepo) LoadRefs(ctx context.Context, tenderID string) (ia.Refs, error) {
+// LoadRefs — units, номенклатура (work/material), детальные категории,
+// позиции тендера и (этап 2.3) активные aliases ТЕКУЩЕГО пользователя как
+// exact-нормализованные индексы. userID == "" → память не загружается.
+func (r *ImportAnalysisRepo) LoadRefs(ctx context.Context, tenderID, userID string) (ia.Refs, error) {
 	refs := ia.Refs{
 		Units:          map[string]string{},
 		Currencies:     map[string]string{},
@@ -155,6 +157,46 @@ func (r *ImportAnalysisRepo) LoadRefs(ctx context.Context, tenderID string) (ia.
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return refs, err
+	}
+
+	// Этап 2.3: активные подтверждённые aliases пользователя (один запрос,
+	// индекс строится один раз — §21).
+	if userID != "" {
+		arows, err := tx.Query(ctx, `
+			SELECT id::text, catalog_kind,
+			       COALESCE(material_name_id::text, ''), COALESCE(work_name_id::text, ''),
+			       normalized_source_text, canonical_boq_item_type,
+			       COALESCE(normalized_unit_code, ''), COALESCE(detail_cost_category_id::text, ''),
+			       normalization_version, use_count, to_char(created_at, 'YYYY-MM-DD')
+			FROM public.nomenclature_import_aliases
+			WHERE user_id = $1::uuid AND is_active
+			ORDER BY id`, userID)
+		if err != nil {
+			return refs, fmt.Errorf("importAnalysisRepo: aliases: %w", err)
+		}
+		aliases := make([]importmemory.Alias, 0, 64)
+		for arows.Next() {
+			var al importmemory.Alias
+			var matID, workID string
+			if err := arows.Scan(&al.ID, &al.CatalogKind, &matID, &workID,
+				&al.NormalizedSourceText, &al.CanonicalBoqType,
+				&al.NormalizedUnitCode, &al.DetailCategoryID,
+				&al.NormalizationVersion, &al.UseCount, &al.SavedAt); err != nil {
+				arows.Close()
+				return refs, err
+			}
+			if al.CatalogKind == importmemory.KindWork {
+				al.CatalogID = workID
+			} else {
+				al.CatalogID = matID
+			}
+			aliases = append(aliases, al)
+		}
+		arows.Close()
+		if err := arows.Err(); err != nil {
+			return refs, err
+		}
+		refs.Aliases = importmemory.NewAliasIndex(aliases)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

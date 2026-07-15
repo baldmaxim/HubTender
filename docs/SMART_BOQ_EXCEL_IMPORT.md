@@ -145,6 +145,10 @@ quote-даты в import DTO.
 (двухэтапная модель, provider-neutral, execute-контракт `nomenclature_selections`)
 — см. [AI_NOMENCLATURE_MATCHING.md](AI_NOMENCLATURE_MATCHING.md).
 
+**Реализовано этапом 2.3**: персональная память импорта — профили сопоставления
+колонок и подтверждённые номенклатурные соответствия — см.
+[SMART_IMPORT_MEMORY.md](SMART_IMPORT_MEMORY.md).
+
 ## 19. Тесты и guard
 
 Юнит (53 пункта §17): листы/header, алиасы/конфликты/reasons, числа/валюты/

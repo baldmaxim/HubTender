@@ -15,7 +15,13 @@ import {
   sheetNeedsConfirmation, unresolvedRequired,
 } from '../../../lib/quality/smartImportPolicy';
 import { SelectionsMap, selectionsForExecute } from '../../../lib/quality/aiNomenclaturePolicy';
+import {
+  MEMORY_SAVE_FAILED_TEXT, importSucceededDespiteMemoryFailure, memorySummaryText,
+} from '../../../lib/quality/smartImportMemoryPolicy';
 import NomenclatureSuggestPanel from './NomenclatureSuggestPanel';
+import MappingProfileBanner, { ProfileSaveState } from './MappingProfileBanner';
+import ImportMemoryDrawer from './ImportMemoryDrawer';
+import AliasRowActions from './AliasRowActions';
 import { getErrorMessage } from '../../../utils/errors';
 
 const { Text } = Typography;
@@ -37,6 +43,8 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
   const [result, setResult] = useState<{
     inserted: number; mismatches: number; skipped: number;
     provenance?: { exact: number; ai: number; manual: number; unresolved: number };
+    memorySummary?: string;
+    memoryFailed?: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +56,10 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
   const [rowFilter, setRowFilter] = useState('all');
   // Этап 2.2 (§15-16): подтверждённые выборы номенклатуры. Auto-select запрещён.
   const [selections, setSelections] = useState<SelectionsMap>({});
+  // Этап 2.3 (§11): профиль применяется ТОЛЬКО явным действием пользователя.
+  const [profileId, setProfileId] = useState<string | undefined>();
+  const [profileSave, setProfileSave] = useState<ProfileSaveState>({ saveAsNew: false, saveOrUpdate: false, name: '' });
+  const [memoryOpen, setMemoryOpen] = useState(false);
 
   const opts = useMemo((): SmartImportOptions => ({
     sheet_name: sheetName,
@@ -56,13 +68,16 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
     default_boq_type: defaultType,
     default_currency: defaultCurrency,
     nomenclature_selections: selectionsForExecute(selections),
-  }), [sheetName, overrides, formulaConfirmed, defaultType, defaultCurrency, selections]);
+    mapping_profile_id: profileId,
+  }), [sheetName, overrides, formulaConfirmed, defaultType, defaultCurrency, selections, profileId]);
 
   const reset = () => {
     setStep(0); setFile(null); setAnalysis(null); setResult(null); setError(null);
     setSheetName(undefined); setOverrides({}); setFormulaConfirmed(false);
     setDefaultType(undefined); setDefaultCurrency(undefined); setRowFilter('all');
     setSelections({}); // §15: смена файла аннулирует подтверждения
+    setProfileId(undefined); // §19.19: и профиль/alias-состояние (этап 2.3)
+    setProfileSave({ saveAsNew: false, saveOrUpdate: false, name: '' });
   };
 
   const runAnalyze = async (f: File, extra?: Partial<SmartImportOptions>) => {
@@ -100,7 +115,12 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
     setImporting(true);
     setError(null);
     try {
-      const res = await executeBoqImport(tenderId, file, analysis.workbook_fingerprint, opts);
+      const res = await executeBoqImport(tenderId, file, analysis.workbook_fingerprint, opts, {
+        profile_id: profileId,
+        save_as_new: profileSave.saveAsNew,
+        save_or_update: profileSave.saveOrUpdate,
+        name: profileSave.name,
+      });
       const prov = res.nomenclature_provenance;
       setResult({
         inserted: res.import.inserted_items_count,
@@ -112,6 +132,8 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
           manual: prov.manually_selected_nomenclature,
           unresolved: prov.unresolved_nomenclature_rows,
         } : undefined,
+        memorySummary: memorySummaryText(res.memory),
+        memoryFailed: importSucceededDespiteMemoryFailure(res.memory),
       });
       setStep(5);
       message.success('Импорт выполнен сервером');
@@ -171,7 +193,12 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
       title: 'Статус', key: 'st', width: 140,
       render: (_: unknown, r0: SmartPreviewRow) => {
         const d = rowStatusDisplay(r0.status);
-        return <Tag color={d.color}>{d.label}{r0.skip_code ? ` (${r0.skip_code})` : ''}</Tag>;
+        return (
+          <Space size={2} direction="vertical">
+            <Tag color={d.color}>{d.label}{r0.skip_code ? ` (${r0.skip_code})` : ''}</Tag>
+            {r0.alias_provenance && <Tag color="cyan">Подтверждено вами ранее</Tag>}
+          </Space>
+        );
       },
     },
     { title: 'Позиция', dataIndex: 'position_ref', width: 140 },
@@ -237,6 +264,12 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
 
       {analysis && step === 2 && (
         <Space direction="vertical" style={{ width: '100%' }}>
+          <MappingProfileBanner
+            memory={analysis.memory} appliedProfileId={profileId} overrides={overrides}
+            saveState={profileSave} onSaveStateChange={setProfileSave}
+            onApply={async (id) => { setProfileId(id); await reanalyze({ mapping_profile_id: id }); }}
+            onReject={async () => { setProfileId(undefined); await reanalyze({ mapping_profile_id: undefined }); }}
+          />
           <Table<SmartMapping>
             rowKey="target_field" size="small" pagination={false}
             columns={mappingColumns} dataSource={analysis.mapping}
@@ -268,6 +301,7 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
         <Space direction="vertical" style={{ width: '100%' }}>
           <Space wrap>
             <Tag color="green">Готово: {summary.rows_ready}</Tag>
+            <Button size="small" onClick={() => setMemoryOpen(true)}>Сохранённые настройки</Button>
             <Tag color="orange">Предупреждений: {summary.rows_with_warnings}</Tag>
             <Tag color="red">Заблокировано: {summary.rows_blocked}</Tag>
             <Tag>Пропущено: {summary.rows_skipped}</Tag>
@@ -308,9 +342,21 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
             dataSource={filterPreviewRows(analysis.preview_rows, rowFilter)}
             pagination={{ pageSize: 8, showSizeChanger: false }}
             expandable={{
-              rowExpandable: (r0) => (r0.issue_ids?.length ?? 0) > 0 || (r0.transformations?.length ?? 0) > 0,
+              rowExpandable: (r0) => (r0.issue_ids?.length ?? 0) > 0 || (r0.transformations?.length ?? 0) > 0
+                || !!r0.alias_provenance,
               expandedRowRender: (r0) => (
                 <Space direction="vertical" size={2}>
+                  {r0.alias_provenance && (
+                    <AliasRowActions
+                      row={r0}
+                      rowReference={`${analysis.selected_sheet}|${r0.excel_row}`}
+                      onManualPick={async (ref, catalogId, label) => {
+                        setSelections((prev) => ({ ...prev, [ref]: { catalogId, label, source: 'manual' } }));
+                        await reanalyze();
+                      }}
+                      onForgotten={() => reanalyze()}
+                    />
+                  )}
                   {analysis.issues.filter((i) => r0.issue_ids?.includes(i.id)).map((i) => (
                     <Text key={i.id} style={{ fontSize: 12 }}>
                       <Tag color={i.severity === 'blocker' ? 'red' : i.severity === 'warning' ? 'orange' : 'blue'}>
@@ -352,6 +398,12 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
         </Space>
       )}
 
+      <ImportMemoryDrawer
+        open={memoryOpen}
+        onClose={() => setMemoryOpen(false)}
+        onChanged={() => { void reanalyze(); }}
+      />
+
       {result && step === 5 && (
         <Space direction="vertical" style={{ width: '100%' }}>
           <Alert type="success" showIcon
@@ -362,6 +414,12 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
               Номенклатура: точных {result.provenance.exact}, подтверждено AI {result.provenance.ai},
               вручную {result.provenance.manual}, не разрешено {result.provenance.unresolved}
             </Text>
+          )}
+          {result.memorySummary && (
+            <Text type="secondary" style={{ fontSize: 12 }}>Память импорта: {result.memorySummary}</Text>
+          )}
+          {result.memoryFailed && (
+            <Alert type="warning" showIcon message={MEMORY_SAVE_FAILED_TEXT} />
           )}
           <Button type="primary" onClick={() => { reset(); onClose(true); }}>Готово</Button>
         </Space>

@@ -80,7 +80,7 @@ const ENGINE_FILES = [
     if (!/if ia\.Fingerprint\(data\) != expectedFingerprint/.test(code)) {
       violations.push('services/smart_import.go — fingerprint check потерян');
     }
-    if (!/an, err := s\.Analyze\(ctx, tenderID, fileName, data, opts\)/.test(code)) {
+    if (!/an, err := s\.Analyze\(ctx, tenderID, (userID, )?fileName, data, opts\)/.test(code)) {
       violations.push('services/smart_import.go — execute больше не выполняет повторный серверный анализ');
     }
   }

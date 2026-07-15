@@ -19,9 +19,9 @@ import (
 )
 
 type smartImportServicer interface {
-	Analyze(ctx context.Context, tenderID, fileName string, data []byte, opts ia.Options) (*ia.Analysis, error)
-	Execute(ctx context.Context, tenderID, fileName string, data []byte, expectedFingerprint string, opts ia.Options, userID string) (*services.ExecuteResult, error)
-	SuggestNomenclature(ctx context.Context, tenderID, fileName string, data []byte, expectedFingerprint string, opts ia.Options, rowRefs []string, candidateLimit int) (*services.SuggestNomenclatureResult, error)
+	AnalyzeWithMemory(ctx context.Context, tenderID, userID, fileName string, data []byte, opts ia.Options, profileID string) (*ia.Analysis, *services.AnalyzeMemory, error)
+	Execute(ctx context.Context, tenderID, fileName string, data []byte, expectedFingerprint string, opts ia.Options, userID string, mem *services.MemoryRequest) (*services.ExecuteResult, error)
+	SuggestNomenclature(ctx context.Context, tenderID, userID, fileName string, data []byte, expectedFingerprint string, opts ia.Options, rowRefs []string, candidateLimit int) (*services.SuggestNomenclatureResult, error)
 }
 
 // SmartImportHandler — POST /api/v1/tenders/{id}/boq-import/{analyze|execute}.
@@ -89,24 +89,34 @@ func parseImportOptions(r *http.Request) ia.Options {
 // parseSelections — этап 2.2 (§13): подтверждённые выборы номенклатуры;
 // source строго exact|ai_confirmed|manual — иное 400. Применяется и к analyze
 // (preview показывает разблокированные строки), и к execute.
-func (h *SmartImportHandler) parseSelections(w http.ResponseWriter, r *http.Request, opts *ia.Options) bool {
+func (h *SmartImportHandler) parseSelections(w http.ResponseWriter, r *http.Request, opts *ia.Options) (map[string]bool, bool) {
 	raw := r.FormValue("nomenclature_selections")
 	if raw == "" {
-		return true
+		return nil, true
 	}
 	var selections []services.NomenclatureSelection
 	if err := json.Unmarshal([]byte(raw), &selections); err != nil {
 		apierr.BadRequest("nomenclature_selections: неверный JSON").Render(w)
-		return false
+		return nil, false
 	}
-	ids, sources, err := services.ValidateSelections(selections)
+	ids, sources, remember, err := services.ValidateSelections(selections)
 	if err != nil {
 		h.renderImportError(w, r, err)
-		return false
+		return nil, false
 	}
 	opts.NomenclatureSelections = ids
 	opts.SelectionSources = sources
-	return true
+	return remember, true
+}
+
+// parseMemoryRequest — этап 2.3 (§9): memory-часть execute-запроса.
+func parseMemoryRequest(r *http.Request, remember map[string]bool) *services.MemoryRequest {
+	mem := &services.MemoryRequest{RememberByRef: remember}
+	if raw := r.FormValue("mapping_profile"); raw != "" {
+		_ = json.Unmarshal([]byte(raw), mem)
+		mem.RememberByRef = remember
+	}
+	return mem
 }
 
 func (h *SmartImportHandler) renderImportError(w http.ResponseWriter, r *http.Request, err error) {
@@ -152,6 +162,10 @@ func (h *SmartImportHandler) renderImportError(w http.ResponseWriter, r *http.Re
 		apierr.BadRequest(selErr.Reason).Render(w)
 		return
 	}
+	if errors.Is(err, repository.ErrImportMemoryNotFound) {
+		apierr.NotFound("profile not found").Render(w) // чужой ID неотличим (§15)
+		return
+	}
 	if renderMissingFXRate(w, err) {
 		return
 	}
@@ -160,7 +174,8 @@ func (h *SmartImportHandler) renderImportError(w http.ResponseWriter, r *http.Re
 
 // AnalyzeBoqImport — POST /api/v1/tenders/{id}/boq-import/analyze (§3).
 func (h *SmartImportHandler) AnalyzeBoqImport(w http.ResponseWriter, r *http.Request) {
-	if middleware.UserFromContext(r.Context()) == nil {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
 		apierr.Unauthorized("missing auth context").Render(w)
 		return
 	}
@@ -174,15 +189,19 @@ func (h *SmartImportHandler) AnalyzeBoqImport(w http.ResponseWriter, r *http.Req
 		return
 	}
 	opts := parseImportOptions(r)
-	if !h.parseSelections(w, r, &opts) {
+	if _, ok := h.parseSelections(w, r, &opts); !ok {
 		return
 	}
-	an, err := h.svc.Analyze(r.Context(), tenderID, fileName, data, opts)
+	an, mem, err := h.svc.AnalyzeWithMemory(r.Context(), tenderID, authUser.ID, fileName, data,
+		opts, r.FormValue("mapping_profile_id"))
 	if err != nil {
 		h.renderImportError(w, r, err)
 		return
 	}
-	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: an.Result})
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: struct {
+		ia.Result
+		Memory *services.AnalyzeMemory `json:"memory,omitempty"`
+	}{an.Result, mem}})
 }
 
 // ExecuteBoqImport — POST /api/v1/tenders/{id}/boq-import/execute (§4):
@@ -208,11 +227,12 @@ func (h *SmartImportHandler) ExecuteBoqImport(w http.ResponseWriter, r *http.Req
 		return
 	}
 	opts := parseImportOptions(r)
-	if !h.parseSelections(w, r, &opts) {
+	remember, ok := h.parseSelections(w, r, &opts)
+	if !ok {
 		return
 	}
 	result, err := h.svc.Execute(r.Context(), tenderID, fileName, data, fingerprint,
-		opts, authUser.ID)
+		opts, authUser.ID, parseMemoryRequest(r, remember))
 	if err != nil {
 		h.renderImportError(w, r, err)
 		return
@@ -223,7 +243,8 @@ func (h *SmartImportHandler) ExecuteBoqImport(w http.ResponseWriter, r *http.Req
 // SuggestNomenclature — POST /api/v1/tenders/{id}/boq-import/suggest-nomenclature
 // (§10): read-only, AI вызывается только по явному действию пользователя.
 func (h *SmartImportHandler) SuggestNomenclature(w http.ResponseWriter, r *http.Request) {
-	if middleware.UserFromContext(r.Context()) == nil {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
 		apierr.Unauthorized("missing auth context").Render(w)
 		return
 	}
@@ -252,10 +273,10 @@ func (h *SmartImportHandler) SuggestNomenclature(w http.ResponseWriter, r *http.
 		}
 	}
 	opts := parseImportOptions(r)
-	if !h.parseSelections(w, r, &opts) { // уже подтверждённые строки не re-suggest
+	if _, ok := h.parseSelections(w, r, &opts); !ok { // уже подтверждённые строки не re-suggest
 		return
 	}
-	result, err := h.svc.SuggestNomenclature(r.Context(), tenderID, fileName, data,
+	result, err := h.svc.SuggestNomenclature(r.Context(), tenderID, authUser.ID, fileName, data,
 		fingerprint, opts, rowRefs, candidateLimit)
 	if err != nil {
 		h.renderImportError(w, r, err)

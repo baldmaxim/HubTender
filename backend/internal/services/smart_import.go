@@ -10,7 +10,7 @@ import (
 )
 
 type importRefsLoader interface {
-	LoadRefs(ctx context.Context, tenderID string) (ia.Refs, error)
+	LoadRefs(ctx context.Context, tenderID, userID string) (ia.Refs, error)
 }
 
 type bulkImporter interface {
@@ -46,6 +46,9 @@ type SmartImportService struct {
 	catalog  catalogLoader
 	reranker ainom.NomenclatureReranker
 	aiCfg    ainom.Config
+
+	// Этап 2.3 (import memory): nil = память выключена.
+	memory importMemoryStore
 }
 
 // NewSmartImportService creates a SmartImportService.
@@ -53,11 +56,12 @@ func NewSmartImportService(refs *repository.ImportAnalysisRepo, importer *Import
 	return &SmartImportService{refs: refs, importer: importer}
 }
 
-// Analyze — серверный анализ workbook (§3). Файл не сохраняется.
+// Analyze — серверный анализ workbook (§3). Файл не сохраняется. userID
+// нужен ТОЛЬКО для загрузки персональной памяти (этап 2.3, aliases).
 func (s *SmartImportService) Analyze(
-	ctx context.Context, tenderID, fileName string, data []byte, opts ia.Options,
+	ctx context.Context, tenderID, userID, fileName string, data []byte, opts ia.Options,
 ) (*ia.Analysis, error) {
-	refs, err := s.refs.LoadRefs(ctx, tenderID)
+	refs, err := s.refs.LoadRefs(ctx, tenderID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("smartImportService.Analyze: %w", err)
 	}
@@ -80,6 +84,8 @@ type ExecuteResult struct {
 	SkippedRows   int                      `json:"skipped_rows"`
 	Fingerprint   string                   `json:"workbook_fingerprint"`
 	Nomenclature  NomenclatureProvenance   `json:"nomenclature_provenance"`
+	// Этап 2.3 (§14): memory-сводка; ошибки памяти НЕ откатывают импорт.
+	Memory ExecuteMemory `json:"memory"`
 }
 
 // Execute — §4: повторный fingerprint, ПОВТОРНЫЙ серверный parse и анализ той
@@ -88,11 +94,18 @@ type ExecuteResult struct {
 func (s *SmartImportService) Execute(
 	ctx context.Context, tenderID, fileName string, data []byte,
 	expectedFingerprint string, opts ia.Options, userID string,
+	mem *MemoryRequest,
 ) (*ExecuteResult, error) {
 	if ia.Fingerprint(data) != expectedFingerprint {
 		return nil, &FingerprintMismatchError{}
 	}
-	an, err := s.Analyze(ctx, tenderID, fileName, data, opts)
+	// Этап 2.3: профиль применяется к opts тем же путём, что и в analyze,
+	// с повторной серверной валидацией (§8.2).
+	opts, memSignature, err := s.prepareExecuteMemory(ctx, tenderID, userID, fileName, data, opts, mem)
+	if err != nil {
+		return nil, err
+	}
+	an, err := s.Analyze(ctx, tenderID, userID, fileName, data, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -155,5 +168,8 @@ func (s *SmartImportService) Execute(
 		SkippedRows:   an.Result.Summary.RowsSkipped,
 		Fingerprint:   expectedFingerprint,
 		Nomenclature:  buildProvenance(an, opts.SelectionSources),
+		// §8: memory persistence СТРОГО после успешного импорта; сбой памяти
+		// не откатывает BOQ (policy A: warning + memory_saved=false).
+		Memory: s.finishExecuteMemory(ctx, userID, an, opts, mem, memSignature),
 	}, nil
 }

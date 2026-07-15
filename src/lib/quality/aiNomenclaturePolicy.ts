@@ -10,6 +10,9 @@ export interface NomenclatureSelectionState {
   catalogId: string;
   label: string;
   source: 'ai_confirmed' | 'manual';
+  // Этап 2.3 (§7): «Запомнить для следующих импортов». Default false;
+  // выставляется ТОЛЬКО явным действием пользователя.
+  remember?: boolean;
 }
 
 /** row_reference ("Лист|строка") → подтверждённый выбор. */
@@ -37,6 +40,7 @@ export function selectionsForExecute(selections: SelectionsMap): NomenclatureSel
     row_reference,
     catalog_id: s.catalogId,
     selection_source: s.source,
+    remember_selection: s.remember === true, // §7: default false
   }));
 }
 

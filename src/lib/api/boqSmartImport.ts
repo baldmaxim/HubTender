@@ -21,6 +21,7 @@ export interface SmartMapping {
   candidates?: SmartMappingCandidate[];
   fixed_value?: string;
   diagnostic_only?: boolean;
+  source?: 'saved_profile' | string; // этап 2.3 (§5)
 }
 
 export interface SmartIssue {
@@ -35,6 +36,16 @@ export interface SmartIssue {
   normalized_value?: string;
   message: string;
   fix_hint?: string;
+}
+
+// Этап 2.3 (§6): происхождение alias-решения.
+export interface SmartAliasProvenance {
+  match_method: 'user_approved_alias' | string;
+  alias_id: string;
+  catalog_id: string;
+  saved_at?: string;
+  use_count: number;
+  source_label: string; // «Подтверждено вами ранее»
 }
 
 export interface SmartPreviewRow {
@@ -52,6 +63,7 @@ export interface SmartPreviewRow {
   raw?: Record<string, string>;
   transformations?: { field: string; raw: string; normalized: string; code: string; message: string }[];
   issue_ids?: string[];
+  alias_provenance?: SmartAliasProvenance;
 }
 
 export interface SmartAnalysis {
@@ -74,6 +86,30 @@ export interface SmartAnalysis {
   };
   preview_rows: SmartPreviewRow[];
   issues: SmartIssue[];
+  memory?: SmartAnalyzeMemory; // этап 2.3 (§5)
+}
+
+// Этап 2.3: memory-блок ответа analyze.
+export interface SmartProfileSuggestion {
+  id: string;
+  name: string;
+  status: 'usable' | 'requires_review' | string;
+  use_count: number;
+  last_used_at?: string;
+  created_at?: string;
+  sheet_name_hint?: string;
+  header_row_hint?: number;
+  mapped_fields?: string[];
+}
+
+export interface SmartAnalyzeMemory {
+  header_signature: string;
+  profile_match: 'none' | 'one' | 'multiple' | string;
+  profiles?: SmartProfileSuggestion[];
+  applied_profile_id?: string;
+  applied_profile_status?: 'applied' | 'requires_review' | 'signature_mismatch' | string;
+  applied_fields?: string[];
+  skipped_fields?: string[];
 }
 
 // Этап 2.2: подтверждённый пользователем выбор номенклатуры (§13).
@@ -81,6 +117,9 @@ export interface NomenclatureSelectionInput {
   row_reference: string;
   catalog_id: string;
   selection_source: 'exact' | 'ai_confirmed' | 'manual';
+  // Этап 2.3 (§7): «Запомнить для следующих импортов». Default false —
+  // frontend не меняет его автоматически.
+  remember_selection?: boolean;
 }
 
 export interface SmartImportOptions {
@@ -91,6 +130,16 @@ export interface SmartImportOptions {
   default_currency?: string;
   default_boq_type?: string;
   nomenclature_selections?: NomenclatureSelectionInput[];
+  // Этап 2.3 (§5): явно выбранный пользователем профиль сопоставления.
+  mapping_profile_id?: string;
+}
+
+// Этап 2.3 (§9): memory-часть execute.
+export interface MappingProfileRequest {
+  profile_id?: string;
+  save_as_new?: boolean;
+  save_or_update?: boolean;
+  name?: string;
 }
 
 // Этап 2.2 (§14): provenance номенклатуры в ответе execute.
@@ -115,6 +164,29 @@ export interface SmartExecuteResult {
   skipped_rows: number;
   workbook_fingerprint: string;
   nomenclature_provenance: NomenclatureProvenance;
+  memory: SmartExecuteMemory; // этап 2.3 (§14)
+}
+
+// Этап 2.3 (§14): memory-сводка execute.
+export interface SmartExecuteMemory {
+  mapping_profile: {
+    applied: boolean;
+    profile_id?: string;
+    profile_name?: string;
+    saved: boolean;
+    updated: boolean;
+  };
+  nomenclature: {
+    exact_matches: number;
+    approved_alias_matches: number;
+    ai_confirmed_matches: number;
+    manual_matches: number;
+    aliases_requested_to_save: number;
+    aliases_saved: number;
+    aliases_failed: number;
+  };
+  warnings: string[];
+  memory_saved: boolean;
 }
 
 // ─── Этап 2.2: AI-подбор номенклатуры (§10) ─────────────────────────────────
@@ -201,6 +273,7 @@ function buildForm(file: File, opts: SmartImportOptions, extra?: Record<string, 
   if ((opts.nomenclature_selections?.length ?? 0) > 0) {
     form.append('nomenclature_selections', JSON.stringify(opts.nomenclature_selections));
   }
+  if (opts.mapping_profile_id) form.append('mapping_profile_id', opts.mapping_profile_id);
   for (const [k, v] of Object.entries(extra ?? {})) form.append(k, v);
   return form;
 }
@@ -211,9 +284,14 @@ export async function analyzeBoqImport(tenderId: string, file: File, opts: Smart
 
 export async function executeBoqImport(
   tenderId: string, file: File, fingerprint: string, opts: SmartImportOptions,
+  profile?: MappingProfileRequest,
 ): Promise<SmartExecuteResult> {
+  const extra: Record<string, string> = { workbook_fingerprint: fingerprint };
+  if (profile && (profile.profile_id || profile.save_as_new || profile.save_or_update)) {
+    extra.mapping_profile = JSON.stringify(profile);
+  }
   return postMultipart(`/api/v1/tenders/${tenderId}/boq-import/execute`,
-    buildForm(file, opts, { workbook_fingerprint: fingerprint }));
+    buildForm(file, opts, extra));
 }
 
 /** Этап 2.2 (§10/§12): подбор номенклатуры для unresolved-строк — ТОЛЬКО по
