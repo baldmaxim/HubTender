@@ -110,7 +110,11 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
       {/* Блок с фильтрами и информацией о тендере */}
       <div style={{
         // Свёрнуто: минимальный градиентный кант вокруг карточки фильтров.
-        padding: collapsed ? '6px 12px' : '8px 16px 16px 16px',
+        // Развёрнуто на телефоне: нижний padding прижат к 4px — именно он задаёт
+        // зазор до DeadlineBar (она сосед этого контейнера, а не его потомок).
+        padding: collapsed
+          ? '6px 12px'
+          : isPhoneDevice ? '6px 12px 4px' : '8px 16px 16px 16px',
         display: 'flex',
         gap: '8px',
         flexDirection: isPhoneDevice ? 'column' : 'row',
