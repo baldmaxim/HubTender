@@ -8,7 +8,7 @@ import { missingFXMessage } from '../../utils/boq/currencyGuard';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { buildPositionTabPath } from '../../lib/cache/workspaceTabsStorage';
-import { setRows as seedPositionRows } from '../../lib/cache/positionRowCache';
+import { setRow as seedPositionRow } from '../../lib/cache/positionRowCache';
 import { useCommerceData, useCommerceActions } from './hooks';
 import { TenderSelector, CommerceTable, CommerceCards, CommerceHeader, COMMERCE_TABLE_FIT_WIDTH } from './components';
 import CommerceTotalsBar from './components/CommerceTotalsBar';
@@ -177,12 +177,12 @@ export default function Commerce() {
   const handleNavigateToPosition = (positionId: string) => {
     if (!selectedTenderId) return;
     // Сеем строку в positionRowCache ПЕРЕД навигацией: useBoqItems гидратирует из него шапку
-    // синхронно, иначе PositionItems вернёт заглушку «Загрузка...» на весь round-trip
-    // /with-tender. Пишем ровно одну кликнутую строку, а не весь список: разрыв запись→чтение
-    // ~1 кадр (TTL 60 c нерелевантен), один ключ не бьёт квоту, и нет O(N) синхронных записей
-    // на каждый refetch.
+    // синхронно, иначе PositionItems вернёт скелетон на весь round-trip /with-tender.
+    // Именно setRow, а НЕ setRows([row]): setRows всегда зовёт pruneExpired — полный скан
+    // localStorage с JSON.parse каждой записи, и в обработчике клика это залипание перед
+    // переходом (регрессия, из-за которой залипли ОБЕ страницы, включая быстрые «Позиции»).
     const row = positions.find((p) => p.id === positionId);
-    if (row) seedPositionRows([row]);
+    if (row) seedPositionRow(row);
     openPositionTab({ positionId, tenderId: selectedTenderId, title: 'Позиция' });
     navigate(buildPositionTabPath(positionId, selectedTenderId));
   };

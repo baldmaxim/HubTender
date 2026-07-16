@@ -61,6 +61,32 @@ function pruneExpired(now: number): void {
   }
 }
 
+/**
+ * Точечная запись ОДНОЙ строки — сид перед навигацией на позицию.
+ *
+ * Намеренно без pruneExpired: тот сканирует весь localStorage и делает JSON.parse каждой
+ * записи (~10-17 мс на 500-1000 строк даже на десктопе, на телефоне кратно больше). В
+ * обработчике клика это залипание перед переходом — ради одного ключа скан не нужен.
+ * Границы кэша держат TTL на чтении (getRow удаляет протухшее) и bulk-setRows на загрузке
+ * списка позиций.
+ */
+export function setRow(row: ClientPosition): void {
+  const entry = JSON.stringify({ row, ts: Date.now() });
+  try {
+    localStorage.setItem(key(row.id), entry);
+  } catch {
+    // Квота — единственный случай, когда скан оправдан: чистим протухшее и пробуем ещё раз.
+    // В отличие от setRows НЕ зовём invalidateAll(): затирать весь namespace из-за одной
+    // строки нельзя — это обнулило бы гидратацию всех остальных позиций.
+    pruneExpired(Date.now());
+    try {
+      localStorage.setItem(key(row.id), entry);
+    } catch {
+      // Всё равно не влезло — тихо пропускаем: промах кэша даёт скелетон, а не поломку.
+    }
+  }
+}
+
 export function setRows(rows: ClientPosition[]): void {
   const now = Date.now();
   // Evict stale entries first so the cache can't grow without bound.
