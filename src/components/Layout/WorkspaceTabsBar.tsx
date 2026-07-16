@@ -6,6 +6,7 @@ import { useWorkspaceTabs, type WorkspaceTab } from '../../contexts/WorkspaceTab
 import { WORKSPACE_PAGES } from './workspacePages';
 import { PAGE_LABELS } from '../../lib/types/types';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 /**
  * Панель вкладок «рабочего стола»: по вкладке на каждую открытую страницу-якорь
@@ -21,6 +22,7 @@ const WorkspaceTabsBar: React.FC = () => {
   const location = useLocation();
   const { theme: currentTheme } = useTheme();
   const { token } = theme.useToken();
+  const { isPhoneDevice } = useIsMobile();
   const match = useMatch('/positions/:positionId/items');
   const currentPositionId = match?.params.positionId;
 
@@ -81,7 +83,10 @@ const WorkspaceTabsBar: React.FC = () => {
               // скрытых вкладок (портал в body получает hashId nested-темы) и делает его
               // прозрачным. Подложка активной вкладки — в MainLayout.css.
               horizontalMargin: '0',
-              titleFontSizeSM: 16,
+              // Телефон ловим хуком, а не media query: cssinjs-токен к @media не
+              // привязать, а isPhoneDevice считает короткую сторону вьюпорта и
+              // потому ловит ландшафтный телефон (ширина-брейкпоинты — нет).
+              titleFontSizeSM: isPhoneDevice ? 11 : 16,
               cardGutter: 4,
             },
           },
