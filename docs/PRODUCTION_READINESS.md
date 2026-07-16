@@ -3,6 +3,13 @@
 Воспроизводимый порядок подготовки и проверки деплоя HUBTender.
 Секретов в этом документе нет и быть не должно.
 
+> Этап 2.5: AI-администрирование OpenRouter
+> ([OPENROUTER_AI_ADMINISTRATION.md](OPENROUTER_AI_ADMINISTRATION.md)).
+> `OPENROUTER_API_KEY` — опциональный server secret: без него приложение
+> стартует, AI-статус `not_configured`. Пользовательские AI-вызовы выключены
+> rollout'ом до этапа 2.6 — деплой 2.5 не меняет поведение Smart Import для
+> пользователей. Guard: `openRouterAdministrationSafety.check.mjs`.
+
 ## 1. Порядок application rollout
 
 1. Прогнать локальные gates (см. §20 этапа): build/vet/tests/tsc/lint/guards.

@@ -18,6 +18,7 @@ REUSE_DIST=0
 PGPORT="${E2E_PG_PORT:-$((56000 + RANDOM % 1000))}"
 WEBPORT="${E2E_WEB_PORT:-$((8100 + RANDOM % 800))}"
 APIPORT="${E2E_API_PORT:-$((8901 + RANDOM % 90))}"
+ORPORT="${E2E_OPENROUTER_PORT:-$((8391 + RANDOM % 90))}"
 STAMP="$(date +%s)$RANDOM"
 CONTAINER="hubtender-e2e-test-$STAMP"
 DB="hubtender_e2e_test"
@@ -25,6 +26,7 @@ DSN="postgres://postgres:e2e@localhost:$PGPORT/$DB?sslmode=disable"
 TMPDIR_E2E="$(mktemp -d)"
 BACKEND_PID=""
 WEB_PID=""
+OR_PID=""
 
 case "$DSN" in *mdb.yandexcloud.net*|*supabase*) echo "FATAL: production DSN"; exit 1;; esac
 
@@ -32,6 +34,7 @@ cleanup() {
   local rc=$?
   echo "== cleanup (rc=$rc) =="
   [[ -n "$WEB_PID" ]] && kill "$WEB_PID" >/dev/null 2>&1 || true
+  [[ -n "$OR_PID" ]] && kill "$OR_PID" >/dev/null 2>&1 || true
   [[ -n "$BACKEND_PID" ]] && kill "$BACKEND_PID" >/dev/null 2>&1 || true
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
   rm -rf "$TMPDIR_E2E"
@@ -107,6 +110,12 @@ SQL
 echo "== app JWT ключ (ephemeral) =="
 openssl genrsa -out "$TMPDIR_E2E/jwt.pem" 2048 >/dev/null 2>&1
 
+echo "== fake OpenRouter (port $ORPORT) — этап 2.5, реальный API не используется =="
+node scripts/readiness/fake-openrouter-server.mjs "$ORPORT" > "$TMPDIR_E2E/openrouter.log" 2>&1 &
+OR_PID=$!
+sleep 1
+curl -fsS "http://127.0.0.1:$ORPORT/__stats" >/dev/null || fail "fake openrouter"
+
 echo "== backend (port $APIPORT, recovery scan 3s) =="
 (
   cd backend
@@ -116,6 +125,9 @@ echo "== backend (port $APIPORT, recovery scan 3s) =="
   APP_JWT_KEY_ID=e2e APP_JWT_PRIVATE_KEY_PATH="$TMPDIR_E2E/jwt.pem" \
   CORS_ORIGINS="http://127.0.0.1:$WEBPORT" \
   RECALC_RECOVERY_SCAN_INTERVAL=3s RECALC_RECOVERY_CALCULATING_TIMEOUT=30s \
+  OPENROUTER_API_KEY="sk-or-e2e-fake-not-a-real-key" \
+  OPENROUTER_API_BASE="http://127.0.0.1:$ORPORT" \
+  APP_ENV=development \
   LOG_LEVEL=warn \
   go run ./cmd/server > "$TMPDIR_E2E/backend.log" 2>&1
 ) &
@@ -138,9 +150,17 @@ WEB_PID=$!
 sleep 1
 curl -fsS "http://127.0.0.1:$WEBPORT/" >/dev/null || fail "static server"
 
+echo "== bundle secret check (§28): OPENROUTER-ключ не должен попасть в dist =="
+# ИМЯ переменной в UI-подсказке («задаётся как server secret …») легально и
+# требуется заданием §18.A; ищем ЗНАЧЕНИЕ ключа и VITE-инлайн.
+if grep -RIl "sk-or-e2e-fake-not-a-real-key\|VITE_OPENROUTER" dist/assets >/dev/null 2>&1; then
+  fail "OPENROUTER secret leaked into production bundle"
+fi
+
 echo "== playwright smoke =="
 E2E_BASE_URL="http://127.0.0.1:$WEBPORT" \
 E2E_PG_CONTAINER="$CONTAINER" \
+E2E_OPENROUTER_STATS="http://127.0.0.1:$ORPORT/__stats" \
 npx playwright test --config playwright.readiness.config.ts || {
   echo "== backend.log (tail) =="; tail -50 "$TMPDIR_E2E/backend.log"
   fail "browser smoke"

@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog"
 
 	ainom "github.com/su10/hubtender/backend/internal/ai/nomenclature"
+	"github.com/su10/hubtender/backend/internal/ai/openrouter"
 	"github.com/su10/hubtender/backend/internal/cache"
 	"github.com/su10/hubtender/backend/internal/cbr"
 	"github.com/su10/hubtender/backend/internal/config"
@@ -72,6 +73,7 @@ type deps struct {
 	smartImportH      *handlers.SmartImportHandler
 	importMemoryH     *handlers.ImportMemoryHandler
 	ccvH              *handlers.ConstructionCostVolumesHandler
+	aiAdminH          *handlers.AIAdminHandler
 	wsH               *handlers.WsHandler
 }
 
@@ -215,6 +217,56 @@ func buildDeps(
 	importMemorySvc := services.NewImportMemoryService(importMemoryRepo)
 	ccvSvc := services.NewConstructionCostVolumesService(ccvRepo)
 
+	// Этап 2.5: OpenRouter AI administration. API key — ТОЛЬКО server env
+	// (OPENROUTER_API_KEY); в БД/frontend/логи не попадает. Пустой ключ =
+	// not_configured, приложение работает. Base URL: в production — только
+	// allowlist официальных URL; кастомный base (fake-server интеграционные
+	// тесты) разрешён вне production. Rollout off: user-путь Smart Import
+	// выше остаётся на DisabledProvider — единственный live-вызов OpenRouter
+	// в 2.5 — админский synthetic model test.
+	orBase := cfg.OpenRouterAPIBase
+	if orBase != "" && !openrouter.AllowedBaseURLs[orBase] {
+		if cfg.AppEnv == "production" {
+			logger.Warn().
+				Str("operation", "openrouter_config").
+				Msg("OPENROUTER_API_BASE не входит в allowlist официальных base URL — игнорируется, используется официальный base")
+			orBase = ""
+		} else {
+			logger.Warn().
+				Str("operation", "openrouter_config").
+				Str("app_env", cfg.AppEnv).
+				Msg("OPENROUTER_API_BASE вне allowlist разрешён только вне production (fake-server тесты)")
+		}
+	}
+	orClient, orErr := openrouter.New(openrouter.Config{
+		APIKey:      cfg.OpenRouterAPIKey,
+		BaseURL:     orBase,
+		HTTPReferer: cfg.OpenRouterHTTPReferer,
+		AppTitle:    cfg.OpenRouterAppTitle,
+		Timeout:     time.Duration(cfg.OpenRouterTimeoutSeconds) * time.Second,
+	})
+	if orErr != nil {
+		// Невалидный base — не валим приложение: клиент без конфигурации.
+		logger.Warn().Err(orErr).Msg("openrouter client init failed; AI administration будет not_configured")
+		orClient, _ = openrouter.New(openrouter.Config{})
+	}
+	orCatalog := openrouter.NewCatalogCache(orClient, openrouter.CatalogTTL)
+	aiSettingsRepo := repository.NewAISettingsRepo(pool)
+	aiAdminSvc := services.NewAIAdminService(orClient, orCatalog, aiSettingsRepo)
+	// Startup redacted config summary (§22): без секретов.
+	baseLabel := "official"
+	if orBase != "" {
+		baseLabel = "custom-dev"
+	}
+	logger.Info().
+		Str("operation", "openrouter_config").
+		Bool("api_key_configured", orClient.Configured()).
+		Str("api_base", baseLabel).
+		Str("prompt_version", ainom.PromptVersion).
+		Str("adapter_version", openrouter.AdapterVersion).
+		Str("rollout_status", services.AIRolloutStatus).
+		Msg("openrouter AI administration wired")
+
 	return &deps{
 		recalcQueue:    recalcQueue,
 		recalcRecovery: recalcRecovery,
@@ -265,6 +317,7 @@ func buildDeps(
 		smartImportH:      handlers.NewSmartImportHandler(smartImportSvc),
 		importMemoryH:     handlers.NewImportMemoryHandler(importMemorySvc),
 		ccvH:              handlers.NewConstructionCostVolumesHandler(ccvSvc),
+		aiAdminH:          handlers.NewAIAdminHandler(aiAdminSvc),
 		wsH:               handlers.NewWsHandler(hub, verifyCfg, logger),
 	}
 }

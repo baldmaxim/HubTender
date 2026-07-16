@@ -24,6 +24,7 @@ import {
   ImportOutlined,
   SafetyCertificateOutlined,
   SafetyOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 
 /** Статическое дерево бокового меню. Фильтрация по правам/устройству — в MainLayout. */
@@ -188,6 +189,14 @@ export const menuItems: NonNullable<MenuProps['items']> = [
         key: '/admin/markup_constructor',
         icon: <PercentageOutlined />,
         label: 'Конструктор наценок',
+      },
+      {
+        type: 'divider',
+      },
+      {
+        key: '/admin/ai-settings',
+        icon: <RobotOutlined />,
+        label: 'AI и нейросети',
       },
     ],
   },

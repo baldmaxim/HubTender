@@ -94,7 +94,7 @@ docker run --rm --network "$NET" \
   -e CGO_ENABLED=1 -e GOFLAGS=-buildvcs=false \
   -e HUBTENDER_TEST_DATABASE_URL="$RACE_DSN" \
   "$GO_IMAGE" go test -race -p 1 -count=1 \
-    -run 'RecalcRecoveryIntegration|BoqPatchIntegration|BoqRelationIntegrity|ReadinessIntegration|Revision|SmartImportIntegration|ImportMemoryIntegration' \
+    -run 'RecalcRecoveryIntegration|BoqPatchIntegration|BoqRelationIntegrity|ReadinessIntegration|Revision|SmartImportIntegration|ImportMemoryIntegration|AiSettingsIntegration' \
     ./internal/repository/ ./internal/services/ ./internal/cache/ \
   || fail "targeted DB race suite"
 

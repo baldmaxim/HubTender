@@ -12,6 +12,7 @@ import (
 
 	"github.com/su10/hubtender/backend/internal/auth"
 	"github.com/su10/hubtender/backend/internal/config"
+	"github.com/su10/hubtender/backend/internal/handlers"
 	"github.com/su10/hubtender/backend/internal/middleware"
 )
 
@@ -316,6 +317,26 @@ func newRouter(
 		r.Post("/api/v1/project-monthly-completion", d.projectsH.CreateMonthlyCompletion)
 		r.Patch("/api/v1/project-monthly-completion/{id}", d.projectsH.UpdateMonthlyCompletion)
 
+		// Этап 2.5: AI-администрирование OpenRouter — настоящий server-side
+		// role-гейт (RequireRoles), не только frontend page-ACL. Non-admin
+		// получает 403 на все /api/v1/admin/ai/*.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireRoles(handlers.AIAdminRoles))
+
+			r.Get("/api/v1/admin/ai/openrouter/status", d.aiAdminH.OpenRouterStatus)
+			r.Post("/api/v1/admin/ai/openrouter/test-connection", d.aiAdminH.OpenRouterTestConnection)
+			r.Get("/api/v1/admin/ai/openrouter/models", d.aiAdminH.OpenRouterModels)
+			r.Post("/api/v1/admin/ai/openrouter/models/refresh", d.aiAdminH.OpenRouterModelsRefresh)
+			r.Get("/api/v1/admin/ai/nomenclature-settings", d.aiAdminH.GetNomenclatureSettings)
+			r.Put("/api/v1/admin/ai/nomenclature-settings", d.aiAdminH.PutNomenclatureSettings)
+			r.Post("/api/v1/admin/ai/nomenclature/test-model", d.aiAdminH.TestNomenclatureModel)
+			r.Post("/api/v1/admin/ai/nomenclature/activate", d.aiAdminH.ActivateNomenclature)
+			r.Post("/api/v1/admin/ai/nomenclature/deactivate", d.aiAdminH.DeactivateNomenclature)
+		})
+		// Capability — безопасное effective-состояние для ЛЮБОГО
+		// аутентифицированного пользователя (без secrets/settings).
+		r.Get("/api/v1/ai/nomenclature-capability", d.aiAdminH.NomenclatureCapability)
+
 		// Admin user / role management.
 		r.Get("/api/v1/admin/tenders-for-access", d.userAdminH.ListTendersForUserAccess)
 		r.Get("/api/v1/admin/access-users", d.userAdminH.ListAccessUsers)
@@ -401,8 +422,11 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 					w.Header().Set("Access-Control-Allow-Credentials", "true")
 					w.Header().Set(
 						"Access-Control-Allow-Headers",
-						"Authorization, Content-Type, X-Request-ID, If-Match, If-None-Match",
+						"Authorization, Content-Type, X-Request-ID, If-Match, If-None-Match, Cache-Control",
 					)
+					// Preflight cache: Chrome default is only 5s, so every
+					// realtime refetch would otherwise re-issue OPTIONS.
+					w.Header().Set("Access-Control-Max-Age", "600")
 					w.Header().Set(
 						"Access-Control-Allow-Methods",
 						"GET, POST, PUT, PATCH, DELETE, OPTIONS",

@@ -275,13 +275,28 @@ for (const rel of [
   }
 }
 
-// ─── 17: нет новых AI-таблиц/миграций ────────────────────────────────────────
+// ─── 17: нет persistent AI-хранилищ (кроме settings этапа 2.5) ──────────────
+// Этап 2.5 добавляет РОВНО одну разрешённую AI-миграцию: ai_feature_settings —
+// только конфигурация (выбранная модель/политика/результат теста), без raw
+// prompt/response/каталога/Excel. Любая другая AI-миграция и любое raw-поле
+// в разрешённой — нарушение.
 {
   const dir = join(ROOT, 'db/yandex/incremental');
+  const allowedAIMigration = '2026_07_ai_feature_settings.sql';
   if (existsSync(dir)) {
     for (const f of readdirSync(dir)) {
-      if (/ai|nomenclature_sugg|prompt|llm/i.test(f)) {
+      if (!/ai|nomenclature_sugg|prompt|llm/i.test(f)) continue;
+      if (f !== allowedAIMigration) {
         violations.push(`db/yandex/incremental/${f} — persistent AI-хранилище запрещено (§14/§17)`);
+        continue;
+      }
+      // Комментарии срезаем: правило смотрит на КОЛОНКИ/DDL, а не на пояснения.
+      const sql = readFileSync(join(dir, f), 'utf8').replace(/--[^\n]*/g, '');
+      if (/raw_prompt|raw_response|raw_completion|prompt_text|response_text|workbook|excel_bytes|models_catalog/i.test(sql)) {
+        violations.push(`db/yandex/incremental/${f} — raw prompt/response/каталог в settings-таблице запрещены (§14/§17, этап 2.5)`);
+      }
+      if (/api_key|apikey|secret/i.test(sql)) {
+        violations.push(`db/yandex/incremental/${f} — секреты в БД запрещены (этап 2.5 §3)`);
       }
     }
   }

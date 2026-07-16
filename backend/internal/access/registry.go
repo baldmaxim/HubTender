@@ -35,6 +35,7 @@ var AllPages = []string{
 	"/admin/users",
 	"/admin/roles",
 	"/admin/markup",
+	"/admin/ai-settings",
 	"/tasks",
 	"/tender-timeline",
 	"/projects",

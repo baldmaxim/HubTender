@@ -236,3 +236,9 @@ DROP TRIGGER IF EXISTS trg_nomenclature_import_aliases_updated_at ON public.nome
 CREATE TRIGGER trg_nomenclature_import_aliases_updated_at
   BEFORE UPDATE ON public.nomenclature_import_aliases
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- Этап 2.5: OpenRouter AI Administration — updated_at maintenance.
+DROP TRIGGER IF EXISTS trg_ai_feature_settings_updated_at ON public.ai_feature_settings;
+CREATE TRIGGER trg_ai_feature_settings_updated_at
+  BEFORE UPDATE ON public.ai_feature_settings
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

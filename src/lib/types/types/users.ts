@@ -98,6 +98,7 @@ export const ALL_PAGES = [
   '/users',
   '/admin/import-log',
   '/admin/insurance',
+  '/admin/ai-settings',
 ] as const;
 
 // Страницы по умолчанию для каждой роли
@@ -165,6 +166,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/admin/markup_constructor': 'Конструктор наценок',
   '/admin/import-log': 'Журнал импортов строк',
   '/admin/insurance': 'Страхование от судимостей',
+  '/admin/ai-settings': 'AI и нейросети',
   '/users': 'Пользователи',
   '/settings': 'Настройки',
   '/positions/:positionId/items': 'Работы и материалы',
@@ -203,7 +205,7 @@ export const PAGES_STRUCTURE = [
   },
   {
     title: 'Администрирование',
-    pages: ['/admin/tenders', '/admin/markup', '/admin/markup_constructor'],
+    pages: ['/admin/tenders', '/admin/markup', '/admin/markup_constructor', '/admin/ai-settings'],
   },
   {
     title: null, // Без группы

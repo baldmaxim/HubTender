@@ -630,3 +630,62 @@ CREATE TABLE IF NOT EXISTS public.nomenclature_import_aliases (
         (catalog_kind = 'work' AND work_name_id IS NOT NULL AND material_name_id IS NULL)
     )
 );
+
+-- Этап 2.5: OpenRouter AI Administration — персистентные настройки AI-фичи.
+-- API key OpenRouter здесь НЕ хранится (только server env); без raw
+-- prompt/response, без models catalog, без Excel/BOQ и финансовых данных.
+CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
+    feature_code text NOT NULL CHECK (length(btrim(feature_code)) > 0),
+    provider text NOT NULL DEFAULT 'openrouter' CHECK (provider IN ('openrouter')),
+    selected_model_id text,
+    selected_model_name text,
+    selected_model_context_length integer,
+    selected_model_max_completion_tokens integer,
+    selected_model_prompt_price text,
+    selected_model_completion_price text,
+    selected_model_expiration_date text,
+    selected_model_supported_parameters jsonb NOT NULL DEFAULT '[]'::jsonb,
+    prompt_version text NOT NULL DEFAULT 'nomenclature-rerank-v1',
+    provider_policy_version text NOT NULL DEFAULT 'openrouter-policy-v1',
+    require_zdr boolean NOT NULL DEFAULT true,
+    data_collection_policy text NOT NULL DEFAULT 'deny'
+        CHECK (data_collection_policy IN ('deny', 'allow')),
+    require_parameters boolean NOT NULL DEFAULT true,
+    allow_provider_fallbacks boolean NOT NULL DEFAULT false,
+    request_timeout_seconds integer NOT NULL DEFAULT 30
+        CHECK (request_timeout_seconds BETWEEN 5 AND 120),
+    max_output_tokens integer NOT NULL DEFAULT 2000
+        CHECK (max_output_tokens BETWEEN 128 AND 32000),
+    temperature numeric(3, 2) NOT NULL DEFAULT 0
+        CHECK (temperature >= 0 AND temperature <= 2),
+    candidate_limit integer NOT NULL DEFAULT 20
+        CHECK (candidate_limit BETWEEN 1 AND 50),
+    max_rows_per_request integer NOT NULL DEFAULT 200
+        CHECK (max_rows_per_request BETWEEN 1 AND 200),
+    max_concurrency integer NOT NULL DEFAULT 2
+        CHECK (max_concurrency BETWEEN 1 AND 3),
+    monthly_budget_usd numeric(10, 2)
+        CHECK (monthly_budget_usd IS NULL OR monthly_budget_usd >= 0),
+    model_test_status text NOT NULL DEFAULT 'required'
+        CHECK (model_test_status IN ('required', 'passed', 'failed')),
+    model_test_config_hash text,
+    model_tested_model_id text,
+    model_tested_at timestamp with time zone,
+    model_test_latency_ms integer,
+    model_test_input_tokens integer,
+    model_test_output_tokens integer,
+    model_test_estimated_cost text,
+    model_test_error_code text,
+    enabled boolean NOT NULL DEFAULT false,
+    needs_review_reason text,
+    updated_by uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT ai_feature_settings_enabled_requires_test CHECK (
+        NOT enabled OR (
+            selected_model_id IS NOT NULL
+            AND model_test_status = 'passed'
+            AND model_test_config_hash IS NOT NULL
+        )
+    )
+);

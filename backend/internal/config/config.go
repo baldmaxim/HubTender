@@ -67,6 +67,19 @@ type Config struct {
 	// CBRBaseURL is the Central Bank of Russia daily-rates XML endpoint used to
 	// auto-fill tender currency rates. Public URL, not a secret.
 	CBRBaseURL string
+
+	// OpenRouter (этап 2.5). OpenRouterAPIKey — server-only secret: НЕ хранится
+	// в БД, НЕ возвращается frontend'у, НЕ логируется. Пустой ключ допустим —
+	// приложение стартует, AI-статус = not_configured, ручной Smart Import
+	// работает. OpenRouterAPIBase в production обязан входить в allowlist
+	// официальных base URL (openrouter.AllowedBaseURLs); в
+	// development/staging разрешён кастомный base ТОЛЬКО для fake-server
+	// интеграционных тестов. Из request/frontend base URL не принимается.
+	OpenRouterAPIKey         string
+	OpenRouterAPIBase        string
+	OpenRouterHTTPReferer    string
+	OpenRouterAppTitle       string
+	OpenRouterTimeoutSeconds int
 }
 
 // Load reads configuration from environment variables via Viper.
@@ -86,6 +99,7 @@ func Load() (*Config, error) {
 	v.SetDefault("APP_ENV", "development")
 	v.SetDefault("SMTP_PORT", 587)
 	v.SetDefault("CBR_BASE_URL", "https://www.cbr.ru/scripts/XML_daily.asp")
+	v.SetDefault("OPENROUTER_TIMEOUT_SECONDS", 60)
 
 	dbURL := v.GetString("DATABASE_URL")
 	if dbURL == "" {
@@ -162,6 +176,12 @@ func Load() (*Config, error) {
 		SMTPPassword:         v.GetString("SMTP_PASSWORD"),
 		SMTPFrom:             v.GetString("SMTP_FROM"),
 		CBRBaseURL:           v.GetString("CBR_BASE_URL"),
+
+		OpenRouterAPIKey:         v.GetString("OPENROUTER_API_KEY"),
+		OpenRouterAPIBase:        strings.TrimSpace(v.GetString("OPENROUTER_API_BASE")),
+		OpenRouterHTTPReferer:    v.GetString("OPENROUTER_HTTP_REFERER"),
+		OpenRouterAppTitle:       v.GetString("OPENROUTER_APP_TITLE"),
+		OpenRouterTimeoutSeconds: v.GetInt("OPENROUTER_TIMEOUT_SECONDS"),
 	}
 
 	return cfg, nil

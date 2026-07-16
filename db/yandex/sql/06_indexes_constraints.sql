@@ -475,3 +475,8 @@ ALTER TABLE public.boq_items ADD CONSTRAINT boq_items_position_scope_fkey
 ALTER TABLE public.boq_items ADD CONSTRAINT boq_items_parent_scope_fkey
     FOREIGN KEY (parent_work_item_id, tender_id, client_position_id)
     REFERENCES public.boq_items (id, tender_id, client_position_id) ON DELETE CASCADE;
+
+-- Этап 2.5: OpenRouter AI Administration
+ALTER TABLE public.ai_feature_settings ADD CONSTRAINT ai_feature_settings_pkey PRIMARY KEY (feature_code);
+ALTER TABLE public.ai_feature_settings ADD CONSTRAINT ai_feature_settings_updated_by_fkey
+    FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL;
