@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Typography } from 'antd';
 import dayjs from 'dayjs';
 import type { Tender } from '../../../lib/types';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Text } = Typography;
 
@@ -11,6 +12,8 @@ interface DeadlineBarProps {
 }
 
 export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, currentTheme }) => {
+  // Только портрет телефона (<576px): в ландшафте ширины (844px) хватает на 14px.
+  const { isPhone } = useIsMobile();
   const [now, setNow] = useState(() => dayjs());
   const deadlineStr = selectedTender.submission_deadline;
   const isExpired = deadlineStr ? dayjs(deadlineStr).isBefore(now) : false;
@@ -41,6 +44,14 @@ export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, curren
 
   const percentage = Math.round(progress);
 
+  // Телефон: шрифт вдвое меньше дефолтных 14px AntD + nowrap — вся шкала в одну строку.
+  const barText: React.CSSProperties = {
+    color: 'white',
+    fontWeight: 600,
+    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+    ...(isPhone ? { fontSize: 7, whiteSpace: 'nowrap' as const } : null),
+  };
+
   return (
     <div style={{
       position: 'relative',
@@ -65,32 +76,20 @@ export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, curren
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: 24,
-        padding: '0 32px',
+        gap: isPhone ? 6 : 24,
+        padding: isPhone ? '0 8px' : '0 32px',
         zIndex: 1,
       }}>
-        <Text style={{
-          color: 'white',
-          fontWeight: 600,
-          textShadow: '0 1px 2px rgba(0,0,0,0.5)'
-        }}>
+        <Text style={barText}>
           {isExpired
             ? `Дедлайн истек ${now.diff(deadline, 'day')} дней назад`
             : `До дедлайна осталось ${Math.ceil(daysRemaining)} дней`
           }
         </Text>
-        <Text style={{
-          color: 'white',
-          fontWeight: 600,
-          textShadow: '0 1px 2px rgba(0,0,0,0.5)'
-        }}>
+        <Text style={barText}>
           Дедлайн: {deadline.format('DD MMMM YYYY, HH:mm')}
         </Text>
-        <Text style={{
-          color: 'white',
-          fontWeight: 600,
-          textShadow: '0 1px 2px rgba(0,0,0,0.5)'
-        }}>
+        <Text style={barText}>
           {`${percentage}%`}
         </Text>
       </div>

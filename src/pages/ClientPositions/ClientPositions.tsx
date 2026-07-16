@@ -54,6 +54,10 @@ const ClientPositions: React.FC = () => {
   const [tableScrollY, setTableScrollY] = useState(600);
   const [positionSearchQuery, setPositionSearchQuery] = useState('');
   const deferredPositionSearchQuery = useDeferredValue(positionSearchQuery);
+  // Телефон: шапка свёрнута при открытии страницы (максимум высоты под список позиций).
+  // Гейт по isPhoneDevice — на десктопе шапка всегда развёрнута.
+  const [headerCollapsed, setHeaderCollapsed] = useState(true);
+  const headerIsCollapsed = isPhoneDevice && headerCollapsed;
 
   // Hooks
   const {
@@ -398,7 +402,8 @@ const ClientPositions: React.FC = () => {
       <div style={{
         background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)',
         borderRadius: '8px',
-        marginTop: 8,
+        // Телефон: прижимаем шапку к строке вкладок (оставшиеся 8px — padding <Content>).
+        marginTop: isPhoneDevice ? 0 : 8,
       }}>
         <PositionToolbar
           selectedTender={selectedTender}
@@ -408,11 +413,16 @@ const ClientPositions: React.FC = () => {
           versions={versions}
           currentTheme={currentTheme}
           totalSum={effectiveTotalSum}
+          collapsible={isPhoneDevice}
+          collapsed={headerIsCollapsed}
+          onToggleCollapsed={() => setHeaderCollapsed((v) => !v)}
           onTenderTitleChange={handleTenderTitleChange}
           onVersionChange={handleVersionChange}
         />
 
-        <DeadlineBar selectedTender={selectedTender} currentTheme={currentTheme} />
+        {!headerIsCollapsed && (
+          <DeadlineBar selectedTender={selectedTender} currentTheme={currentTheme} />
+        )}
       </div>
 
       {/* Таблица позиций заказчика (на телефоне — карточный read-only список) */}
