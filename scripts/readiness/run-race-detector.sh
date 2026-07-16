@@ -53,7 +53,10 @@ wait_pg() {
 docker network create "$NET" >/dev/null
 
 echo "== postgres ($PG) =="
-docker run -d --name "$PG" --network "$NET" \
+# --restart on-failure: при OOM-kill во время долгого pass 1 контейнер
+# поднимается снова и DNS-имя в сети восстанавливается.
+docker run -d --name "$PG" --network "$NET" --restart on-failure \
+  --memory 512m --shm-size 256m \
   -e POSTGRES_PASSWORD=race -e POSTGRES_DB="$DB" postgres:17 >/dev/null
 wait_pg "$PG" "$DB" || fail "postgres not ready"
 
@@ -89,12 +92,14 @@ docker run --rm --network "$NET" \
   || fail "full unit race suite"
 
 echo "== pass 2: TARGETED DB concurrency race suite =="
+# PG мог быть перезапущен после OOM во время pass 1 — убеждаемся, что жив.
+wait_pg "$PG" "$DB" || fail "postgres not ready before pass 2"
 docker run --rm --network "$NET" \
   -v "$ROOT/backend:/src" -w /src \
   -e CGO_ENABLED=1 -e GOFLAGS=-buildvcs=false \
   -e HUBTENDER_TEST_DATABASE_URL="$RACE_DSN" \
   "$GO_IMAGE" go test -race -p 1 -count=1 \
-    -run 'RecalcRecoveryIntegration|BoqPatchIntegration|BoqRelationIntegrity|ReadinessIntegration|Revision|SmartImportIntegration|ImportMemoryIntegration|AiSettingsIntegration' \
+    -run 'RecalcRecoveryIntegration|BoqPatchIntegration|BoqRelationIntegrity|ReadinessIntegration|Revision|SmartImportIntegration|ImportMemoryIntegration|AiSettingsIntegration|AiRolloutIntegration' \
     ./internal/repository/ ./internal/services/ ./internal/cache/ \
   || fail "targeted DB race suite"
 

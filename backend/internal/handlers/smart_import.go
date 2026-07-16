@@ -20,7 +20,7 @@ import (
 
 type smartImportServicer interface {
 	AnalyzeWithMemory(ctx context.Context, tenderID, userID, fileName string, data []byte, opts ia.Options, profileID string) (*ia.Analysis, *services.AnalyzeMemory, error)
-	Execute(ctx context.Context, tenderID, fileName string, data []byte, expectedFingerprint string, opts ia.Options, userID string, mem *services.MemoryRequest) (*services.ExecuteResult, error)
+	Execute(ctx context.Context, tenderID, fileName string, data []byte, expectedFingerprint string, opts ia.Options, userID string, mem *services.MemoryRequest, aiRequestID string) (*services.ExecuteResult, error)
 	SuggestNomenclature(ctx context.Context, tenderID, userID, fileName string, data []byte, expectedFingerprint string, opts ia.Options, rowRefs []string, candidateLimit int) (*services.SuggestNomenclatureResult, error)
 }
 
@@ -231,8 +231,12 @@ func (h *SmartImportHandler) ExecuteBoqImport(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
+	// Этап 2.6 (§13): необязательная ссылка AI-запроса для финализации
+	// pilot-feedback ПОСЛЕ успешного импорта. Провайдер на execute не
+	// вызывается никогда.
+	aiRequestID := r.FormValue("ai_request_id")
 	result, err := h.svc.Execute(r.Context(), tenderID, fileName, data, fingerprint,
-		opts, authUser.ID, parseMemoryRequest(r, remember))
+		opts, authUser.ID, parseMemoryRequest(r, remember), aiRequestID)
 	if err != nil {
 		h.renderImportError(w, r, err)
 		return

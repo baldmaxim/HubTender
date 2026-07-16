@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/rs/zerolog/log"
+
 	ainom "github.com/su10/hubtender/backend/internal/ai/nomenclature"
 	ia "github.com/su10/hubtender/backend/internal/importanalysis"
 	"github.com/su10/hubtender/backend/internal/repository"
@@ -49,6 +51,24 @@ type SmartImportService struct {
 
 	// Этап 2.3 (import memory): nil = память выключена.
 	memory importMemoryStore
+
+	// Этап 2.6 (controlled rollout): live-gateway. nil = live AI выключен,
+	// deterministic/manual путь работает без изменений.
+	aiGateway aiLiveGateway
+}
+
+// aiLiveGateway — контракт controlled rollout (§12/§13): выдаёт live-сессию
+// ТОЛЬКО allowlisted-пилоту при пройденных гейтах и финализирует feedback
+// после успешного импорта.
+type aiLiveGateway interface {
+	AcquireLiveSession(ctx context.Context, userID string, rowsCount, candidatesCount int, requestHash string) (*AILiveSession, string, error)
+	FinalizeSuggestFeedback(ctx context.Context, userID, requestID string, finals []AIFinalSelection) error
+}
+
+// WithAIRolloutGateway — подключение gateway этапа 2.6.
+func (s *SmartImportService) WithAIRolloutGateway(g aiLiveGateway) *SmartImportService {
+	s.aiGateway = g
+	return s
 }
 
 // NewSmartImportService creates a SmartImportService.
@@ -86,15 +106,19 @@ type ExecuteResult struct {
 	Nomenclature  NomenclatureProvenance   `json:"nomenclature_provenance"`
 	// Этап 2.3 (§14): memory-сводка; ошибки памяти НЕ откатывают импорт.
 	Memory ExecuteMemory `json:"memory"`
+	// Этап 2.6 (§13): safe warning при сбое сохранения pilot-feedback.
+	AIFeedbackWarning *string `json:"ai_feedback_warning,omitempty"`
 }
 
 // Execute — §4: повторный fingerprint, ПОВТОРНЫЙ серверный parse и анализ той
 // же pure-границей (preview/normalized rows от frontend НЕ принимаются),
-// затем существующий authoritative import.
+// затем существующий authoritative import. AI-провайдер здесь НЕ вызывается
+// никогда (этап 2.2 §13.10 / этап 2.6 §12); aiRequestID нужен только для
+// финализации pilot-feedback ПОСЛЕ успешного импорта.
 func (s *SmartImportService) Execute(
 	ctx context.Context, tenderID, fileName string, data []byte,
 	expectedFingerprint string, opts ia.Options, userID string,
-	mem *MemoryRequest,
+	mem *MemoryRequest, aiRequestID string,
 ) (*ExecuteResult, error) {
 	if ia.Fingerprint(data) != expectedFingerprint {
 		return nil, &FingerprintMismatchError{}
@@ -171,5 +195,32 @@ func (s *SmartImportService) Execute(
 		// §8: memory persistence СТРОГО после успешного импорта; сбой памяти
 		// не откатывает BOQ (policy A: warning + memory_saved=false).
 		Memory: s.finishExecuteMemory(ctx, userID, an, opts, mem, memSignature),
+		// Этап 2.6 (§13): pilot-feedback СТРОГО после успешного импорта;
+		// сбой персистенса — только safe warning, импорт не откатывается.
+		AIFeedbackWarning: s.finishAIFeedback(ctx, userID, aiRequestID, opts),
 	}, nil
+}
+
+// finishAIFeedback — финализация outcome'ов пилота (§13). Возвращает safe
+// warning при сбое; nil = успех либо feedback не запрашивался.
+func (s *SmartImportService) finishAIFeedback(ctx context.Context, userID, aiRequestID string, opts ia.Options) *string {
+	if s.aiGateway == nil || aiRequestID == "" {
+		return nil
+	}
+	finals := make([]AIFinalSelection, 0, len(opts.NomenclatureSelections))
+	for ref, catalogID := range opts.NomenclatureSelections {
+		finals = append(finals, AIFinalSelection{
+			RowReference: ref,
+			CatalogID:    catalogID,
+			Source:       opts.SelectionSources[ref],
+		})
+	}
+	if err := s.aiGateway.FinalizeSuggestFeedback(ctx, userID, aiRequestID, finals); err != nil {
+		log.Warn().Err(err).
+			Str("operation", "ai_feedback_finalize_failed").
+			Msg("pilot feedback persistence failed; import is NOT rolled back")
+		w := "Обратная связь пилота не сохранена; импорт выполнен успешно."
+		return &w
+	}
+	return nil
 }

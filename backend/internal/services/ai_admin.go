@@ -32,10 +32,23 @@ type aiSettingsStore interface {
 //     разрешённый live-вызов — админский synthetic model test;
 //   - модель выбирается ТОЛЬКО из user-filtered каталога OpenRouter;
 //   - активация возможна только после PASS model test с совпадающим config hash.
+//
+// aiAdminStore — полный контракт хранилища: настройки этапа 2.5 + rollout
+// этапа 2.6 (реализация — repository.AISettingsRepo).
+type aiAdminStore interface {
+	aiSettingsStore
+	aiRolloutStore
+}
+
 type AIAdminService struct {
 	client   *openrouter.Client
 	catalog  *openrouter.CatalogCache
 	settings aiSettingsStore
+	rollout  aiRolloutStore
+
+	// liveTestEnabled — env OPENROUTER_LIVE_TEST=true (этап 2.6 §15):
+	// без него live evaluation не выполняется.
+	liveTestEnabled bool
 
 	// key status cache: «Проверить подключение» всегда делает fresh request,
 	// GET status может отдавать недавний результат.
@@ -51,8 +64,8 @@ type AIAdminService struct {
 const AIRolloutStatus = "off"
 
 // NewAIAdminService wires the admin AI service.
-func NewAIAdminService(client *openrouter.Client, catalog *openrouter.CatalogCache, settings aiSettingsStore) *AIAdminService {
-	return &AIAdminService{client: client, catalog: catalog, settings: settings, keyTTL: 5 * time.Minute}
+func NewAIAdminService(client *openrouter.Client, catalog *openrouter.CatalogCache, store aiAdminStore) *AIAdminService {
+	return &AIAdminService{client: client, catalog: catalog, settings: store, rollout: store, keyTTL: 5 * time.Minute}
 }
 
 // ── Typed domain errors (§20 задания) ────────────────────────────────────────
@@ -154,16 +167,9 @@ type AISettingsView struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-// AICapabilityView — безопасное effective-состояние для пользователей (§16):
-// без секретов и внутренних настроек.
-type AICapabilityView struct {
-	ProviderConfigured bool   `json:"provider_configured"`
-	ModelSelected      bool   `json:"model_selected"`
-	ModelTestPassed    bool   `json:"model_test_passed"`
-	ConfigurationState string `json:"configuration_state"` // not_configured|model_not_selected|test_required|ready
-	RolloutStatus      string `json:"rollout_status"`      // off
-	Status             string `json:"status"`              // disabled_by_rollout
-}
+// AICapabilityView (этап 2.5) заменён расширенной AIPilotCapabilityView
+// (этап 2.6, ai_rollout_ops.go): состояние ТЕКУЩЕГО пользователя, включая
+// pilot-membership, квоты и статусы деградации.
 
 // ── Connection status ────────────────────────────────────────────────────────
 

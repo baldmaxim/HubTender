@@ -16,7 +16,7 @@
 //  12. selection_source — строго exact|ai_confirmed|manual;
 //  13. forged catalog ID → blocker NOMENCLATURE_SELECTION_INVALID (re-validate);
 //  14. итоговый confidence считает backend (ComputeConfidence), не модель;
-//  15. cost-лимиты: batch 10-20, ≤200 строк, без retry-циклов;
+//  15. cost-лимиты: batch 5-20 (этап 2.6: live-гейт снизил до 8 — таймауты/токен-лимиты живых ZDR-endpoint'ов), ≤200 строк, без retry-циклов;
 //  16. дедупликация идентичных строк перед inference;
 //  17. без persistent-кэша/таблиц AI (ai-пакет без pgx; нет новых миграций ai);
 //  18. observability без raw-текста (лог только safe-поля + request hash);
@@ -244,8 +244,8 @@ for (const rel of [
   if (prov != null) {
     const code = stripComments(prov);
     const batch = code.match(/ProviderBatchSize\s*=\s*(\d+)/);
-    if (!batch || +batch[1] < 10 || +batch[1] > 20) {
-      violations.push('provider.go — ProviderBatchSize обязан быть 10-20 (§12)');
+    if (!batch || +batch[1] < 5 || +batch[1] > 20) {
+      violations.push('provider.go — ProviderBatchSize обязан быть 5-20 (§12, скорректировано live-гейтом 2.6)');
     }
     if (!/MaxRowsPerSuggestRequest\s*=\s*200/.test(code)) {
       violations.push('provider.go — лимит 200 строк на запрос изменён (§10/§12)');
@@ -282,11 +282,14 @@ for (const rel of [
 // в разрешённой — нарушение.
 {
   const dir = join(ROOT, 'db/yandex/incremental');
-  const allowedAIMigration = '2026_07_ai_feature_settings.sql';
+  const allowedAIMigrations = new Set([
+    '2026_07_ai_feature_settings.sql',      // этап 2.5: settings-only
+    '2026_07_ai_controlled_rollout.sql',    // этап 2.6: rollout/ledger/feedback (safe metadata)
+  ]);
   if (existsSync(dir)) {
     for (const f of readdirSync(dir)) {
       if (!/ai|nomenclature_sugg|prompt|llm/i.test(f)) continue;
-      if (f !== allowedAIMigration) {
+      if (!allowedAIMigrations.has(f)) {
         violations.push(`db/yandex/incremental/${f} — persistent AI-хранилище запрещено (§14/§17)`);
         continue;
       }
@@ -307,7 +310,10 @@ for (const rel of [
   const svc = read('backend/internal/services/smart_import_ai.go');
   if (svc != null) {
     const code = stripComments(svc);
-    const logBlock = code.slice(code.indexOf('log.Info()'), code.indexOf('Msg('));
+    const logStart = code.indexOf('log.Info()');
+    const logBlock = logStart >= 0
+      ? code.slice(logStart, code.indexOf('Msg(', logStart))
+      : '';
     if (logBlock.length > 0 && /[Dd]escription|Explanation|RawValue|SystemInstruction|prompt[^_]/.test(logBlock)) {
       violations.push('smart_import_ai.go — raw-текст строк/prompt в логах запрещён (§23)');
     }
@@ -367,6 +373,6 @@ console.log('  ok — provider payload минимален: без денег/в�
 console.log('  ok — статическая versioned инструкция; данные-как-данные; candidate-set-only валидация');
 console.log('  ok — AI только для unresolved; execute без провайдера; авто-создания номенклатуры нет');
 console.log('  ok — source whitelist; forged ID → blocker; confidence считает backend');
-console.log('  ok — батчи 10-20, лимит 200, дедуп, без retry-циклов; без persistent AI-хранилищ');
+console.log('  ok — батчи 5-20, лимит 200, дедуп, без retry-циклов; без persistent AI-хранилищ');
 console.log('  ok — логи без raw-текста (request hash); UI без auto-select, bulk через диалог');
 console.log('\naiNomenclatureSafety.check: passed (20 rules)');

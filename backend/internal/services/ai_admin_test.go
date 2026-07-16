@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/su10/hubtender/backend/internal/ai/aieval"
 	"github.com/su10/hubtender/backend/internal/ai/openrouter"
 	"github.com/su10/hubtender/backend/internal/repository"
 )
@@ -21,6 +22,8 @@ import (
 type fakeAIStore struct {
 	mu  sync.Mutex
 	row repository.AIFeatureSettings
+	// rs — rollout-состояние этапа 2.6 (ai_rollout_fake_test.go).
+	rs *fakeRolloutState
 }
 
 func newFakeAIStore() *fakeAIStore {
@@ -41,7 +44,16 @@ func newFakeAIStore() *fakeAIStore {
 		MaxConcurrency:         2,
 		ModelTestStatus:        repository.AITestRequired,
 		Enabled:                false,
-		UpdatedAt:              time.Now(),
+		// Этап 2.6: rollout-default'ы (зеркало DB-схемы).
+		RolloutMode:               repository.AIRolloutOff,
+		RolloutConfigVersion:      1,
+		DailyRequestLimit:         20,
+		DailyRowLimit:             400,
+		RequestMaxReservedCost:    "0.05",
+		CircuitFailureThreshold:   3,
+		CircuitCooldownSeconds:    300,
+		ReservationTimeoutSeconds: 120,
+		UpdatedAt:                 time.Now(),
 	}}
 }
 
@@ -145,19 +157,29 @@ type fakeOpenRouter struct {
 	models      []string // model IDs, отдаются как text→text модели
 	keyStatus   int      // 200 | 401 | 402 | 429 | 503
 	modelsCode  int
+	chatCode    int               // 0/200 | 429 | 500 ...
 	chatAnswers map[string]string // row_reference → selected id ("" = abstain)
 	keyCalls    int
 	modelCalls  int
 	chatCalls   int
+	// onChat — hook mid-call (этап 2.6 §20): выполняется ВНУТРИ обработки
+	// chat-запроса ДО ответа (kill switch/model change/pilot removal).
+	onChat func()
 }
 
 func newFakeOpenRouter(models ...string) *fakeOpenRouter {
-	return &fakeOpenRouter{models: models, keyStatus: 200, modelsCode: 200, chatAnswers: map[string]string{
+	answers := map[string]string{
+		// Синтетический model test этапа 2.5.
 		"synthetic|1": "syn-cable-3x2.5",
 		"synthetic|2": "syn-concrete-m200",
 		"synthetic|3": "",
 		"synthetic|4": "",
-	}}
+	}
+	// Evaluation-dataset этапа 2.6: идеальные ответы по expectations.
+	for _, cs := range aieval.SyntheticDataset().Cases {
+		answers[cs.Key] = cs.ExpectedID // "" = abstain
+	}
+	return &fakeOpenRouter{models: models, keyStatus: 200, modelsCode: 200, chatAnswers: answers}
 }
 
 func (f *fakeOpenRouter) handler() http.Handler {
@@ -208,7 +230,17 @@ func (f *fakeOpenRouter) handler() http.Handler {
 		f.mu.Lock()
 		f.chatCalls++
 		answers := f.chatAnswers
+		code := f.chatCode
+		hook := f.onChat
 		f.mu.Unlock()
+		if hook != nil {
+			hook()
+		}
+		if code != 0 && code != 200 {
+			w.WriteHeader(code)
+			_, _ = w.Write([]byte(`{"error":{"code":` + fmt.Sprint(code) + `,"message":"nope"}}`))
+			return
+		}
 		var body struct {
 			Messages []openrouter.ChatMessage `json:"messages"`
 		}
@@ -549,43 +581,26 @@ func TestAIConnectionStates(t *testing.T) {
 	}
 }
 
-// 71-75. Capability: состояния и rollout off всегда.
+// Capability (этап 2.6): rollout off по умолчанию — user-вызовы запрещены
+// независимо от готовности конфигурации.
 func TestAICapabilityStates(t *testing.T) {
 	ctx := context.Background()
 
-	// 71: not configured.
-	svc0, _, _ := newTestAIAdmin(t, newFakeOpenRouter(), "")
-	cap0, err := svc0.Capability(ctx)
-	if err != nil || cap0.ConfigurationState != "not_configured" || cap0.ProviderConfigured {
-		t.Fatalf("not_configured: %+v %v", cap0, err)
+	svc, _, _ := newTestAIAdmin(t, newFakeOpenRouter("prov/a"), "sk")
+	cap0, err := svc.PilotCapability(ctx, "u-1")
+	if err != nil || cap0.Status != AICapRolloutOff || cap0.RolloutMode != repository.AIRolloutOff {
+		t.Fatalf("default capability: %+v %v", cap0, err)
+	}
+	if cap0.IsPilot || cap0.IndividualSuggestionsAllowed || cap0.BulkConfirmationAllowed {
+		t.Fatalf("rollout off must not allow anything: %+v", cap0)
 	}
 
-	// 72: model not selected.
-	svc1, _, _ := newTestAIAdmin(t, newFakeOpenRouter("prov/a"), "sk")
-	cap1, _ := svc1.Capability(ctx)
-	if cap1.ConfigurationState != "model_not_selected" {
-		t.Fatalf("model_not_selected: %+v", cap1)
-	}
-
-	// 73: test required.
-	_, _ = svc1.SaveDraft(ctx, "prov/a", "u-1")
-	cap2, _ := svc1.Capability(ctx)
-	if cap2.ConfigurationState != "test_required" || !cap2.ModelSelected {
-		t.Fatalf("test_required: %+v", cap2)
-	}
-
-	// 74: ready.
-	_, _, _ = svc1.TestModel(ctx, "u-1")
-	cap3, _ := svc1.Capability(ctx)
-	if cap3.ConfigurationState != "ready" || !cap3.ModelTestPassed {
-		t.Fatalf("ready: %+v", cap3)
-	}
-
-	// 75: rollout off ВСЕГДА — независимо от готовности.
-	for _, c := range []*AICapabilityView{cap0, cap1, cap2, cap3} {
-		if c.RolloutStatus != "off" || c.Status != "disabled_by_rollout" {
-			t.Fatalf("rollout must stay off: %+v", c)
-		}
+	// Готовая конфигурация НЕ меняет rollout: всё ещё off.
+	_, _ = svc.SaveDraft(ctx, "prov/a", "u-1")
+	_, _, _ = svc.TestModel(ctx, "u-1")
+	cap1, _ := svc.PilotCapability(ctx, "u-1")
+	if cap1.Status != AICapRolloutOff {
+		t.Fatalf("ready config must stay rollout_off: %+v", cap1)
 	}
 }
 
@@ -624,7 +639,7 @@ func TestAIOnlyAdminTestCallsChat(t *testing.T) {
 	_, _ = svc.SaveDraft(ctx, "prov/a", "u-1")
 	_ = svc.Models(ctx, true)
 	_ = svc.TestConnection(ctx)
-	_, _ = svc.Capability(ctx)
+	_, _ = svc.PilotCapability(ctx, "u-1")
 	fake.mu.Lock()
 	before := fake.chatCalls
 	fake.mu.Unlock()

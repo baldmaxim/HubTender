@@ -112,8 +112,12 @@ const server = createServer((req, res) => {
       const results = [];
       for (const row of rows) {
         const ref = row?.row?.row_reference;
-        if (!(ref in ANSWERS)) continue;
-        const sel = ANSWERS[ref];
+        // Известные synthetic-ссылки — по скрипту; прочие (пилотный Smart
+        // Import) — детерминированный fallback: первый кандидат из ЗАПРОСА
+        // (чужой ID невозможен по построению).
+        const sel = (ref in ANSWERS)
+          ? ANSWERS[ref]
+          : (row?.candidates?.[0]?.id ?? null);
         results.push({
           row_reference: ref,
           selected_candidate_id: sel,

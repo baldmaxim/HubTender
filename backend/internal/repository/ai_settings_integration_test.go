@@ -216,9 +216,9 @@ func seedAIAdminUser(t *testing.T, repo *AISettingsRepo) string {
 		t.Fatalf("seed auth user: %v", err)
 	}
 	if _, err := repo.pool.Exec(ctx, `
-		INSERT INTO public.users (id, email, full_name, role_code, access_enabled)
-		VALUES ($1::uuid, 'ai-admin-test@example.com', 'AI Admin Test', 'administrator', true)
-		ON CONFLICT (id) DO NOTHING`, uid); err != nil {
+		INSERT INTO public.users (id, email, full_name, role_code, access_enabled, access_status)
+		VALUES ($1::uuid, 'ai-admin-test@example.com', 'AI Admin Test', 'administrator', true, 'approved')
+		ON CONFLICT (id) DO UPDATE SET access_enabled = true, access_status = 'approved'`, uid); err != nil {
 		t.Fatalf("seed admin user: %v", err)
 	}
 	return uid

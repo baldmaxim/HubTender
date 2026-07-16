@@ -236,30 +236,17 @@ func (s *AIAdminService) Deactivate(ctx context.Context, updatedBy string) (*AIS
 	return s.buildView(row, s.modelAvailability(ctx, row, false)), nil
 }
 
-// Capability — GET /api/v1/ai/nomenclature-capability (§16): безопасное
-// effective-состояние для любого аутентифицированного пользователя.
-// Rollout off всегда: user-вызовы OpenRouter не выполняются до этапа 2.6.
-func (s *AIAdminService) Capability(ctx context.Context) (*AICapabilityView, error) {
-	row, err := s.settings.GetFeatureSettings(ctx, repository.AIFeatureNomenclatureRerank)
-	if err != nil {
-		return nil, err
-	}
-	view := &AICapabilityView{
-		ProviderConfigured: s.client.Configured(),
-		ModelSelected:      row.SelectedModelID != nil,
-		ModelTestPassed:    row.ModelTestStatus == repository.AITestPassed,
-		RolloutStatus:      AIRolloutStatus,
-		Status:             "disabled_by_rollout",
-	}
+// ConfigurationState — вычисление готовности конфигурации (этап 2.5;
+// используется admin-view и PilotCapability-производными).
+func configurationState(configured, modelSelected, testPassed bool) string {
 	switch {
-	case !view.ProviderConfigured:
-		view.ConfigurationState = "not_configured"
-	case !view.ModelSelected:
-		view.ConfigurationState = "model_not_selected"
-	case !view.ModelTestPassed:
-		view.ConfigurationState = "test_required"
+	case !configured:
+		return "not_configured"
+	case !modelSelected:
+		return "model_not_selected"
+	case !testPassed:
+		return "test_required"
 	default:
-		view.ConfigurationState = "ready"
+		return "ready"
 	}
-	return view, nil
 }

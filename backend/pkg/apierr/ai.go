@@ -85,6 +85,54 @@ func AIActivationNotAllowed(detail string) *ProblemExtra {
 	return aiProblem(http.StatusConflict, "Conflict", detail, "AI_MODEL_ACTIVATION_NOT_ALLOWED")
 }
 
+// ── Этап 2.6: controlled rollout ─────────────────────────────────────────────
+
+// AIRolloutTransitionInvalid — недопустимый переход state machine.
+func AIRolloutTransitionInvalid() *ProblemExtra {
+	return aiProblem(http.StatusConflict, "Conflict",
+		"Недопустимый переход режима запуска. Разрешены только соседние шаги и переход в off.",
+		"AI_ROLLOUT_TRANSITION_INVALID")
+}
+
+// AIRolloutGateFailed — не пройдены гейты перехода.
+func AIRolloutGateFailed(detail string) *ProblemExtra {
+	p := aiProblem(http.StatusConflict, "Conflict",
+		"Гейты перехода не пройдены. Проверьте checklist в разделе «Контролируемый запуск».",
+		"AI_ROLLOUT_GATE_FAILED")
+	if detail != "" {
+		p.Extras["gates"] = detail
+	}
+	return p
+}
+
+// AIRolloutConfirmationMismatch — фраза подтверждения не совпала.
+func AIRolloutConfirmationMismatch() *ProblemExtra {
+	return aiProblem(http.StatusBadRequest, "Bad Request",
+		"Подтверждение не совпадает с целевым режимом.",
+		"AI_ROLLOUT_CONFIRMATION_MISMATCH")
+}
+
+// AIPilotSelfAddForbidden — самодобавление в пилот запрещено.
+func AIPilotSelfAddForbidden() *ProblemExtra {
+	return aiProblem(http.StatusForbidden, "Forbidden",
+		"Нельзя добавить самого себя в пилотную группу.",
+		"AI_PILOT_SELF_ADD_FORBIDDEN")
+}
+
+// AIPilotUserNotFound — пользователь не найден/неактивен.
+func AIPilotUserNotFound() *ProblemExtra {
+	return aiProblem(http.StatusNotFound, "Not Found",
+		"Пользователь не найден, неактивен или не входит в пилот.",
+		"AI_PILOT_USER_NOT_FOUND")
+}
+
+// AIEvalLiveGateNotMet — live evaluation запрещена (env/model/rollout gates).
+func AIEvalLiveGateNotMet() *ProblemExtra {
+	return aiProblem(http.StatusConflict, "Conflict",
+		"Live evaluation недоступна: требуются OPENROUTER_LIVE_TEST, настроенный ключ, протестированная модель, режим evaluation и подтверждение стоимости.",
+		"AI_EVAL_LIVE_GATE_NOT_MET")
+}
+
 // AIProviderError — безопасная оболочка ошибок OpenRouter (§20): наружу
 // уходит только стабильный safe-код (unauthorized/payment_required/…).
 func AIProviderError(safeCode string) *ProblemExtra {

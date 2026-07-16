@@ -228,7 +228,11 @@ live-вызовов: wire оставляет user-путь на `DisabledProvide
 тест). UI показывает: «Модель настроена. Пользовательские AI-запросы будут
 включены на этапе контролируемого запуска».
 
-## 24. Этап 2.6 (следующий)
+## 24. Этап 2.6 (реализован)
+
+Controlled rollout реализован — см. [CONTROLLED_AI_ROLLOUT.md](CONTROLLED_AI_ROLLOUT.md):
+state machine off→evaluation→pilot_individual→pilot_bulk, пилотная группа,
+квоты/бюджет/circuit/kill switch, live evaluation и runbook.
 
 Pilot allowlist пользователей, квоты/бюджеты, редактируемые пилотные лимиты,
 evaluation на живом трафике, controlled enablement (подключение

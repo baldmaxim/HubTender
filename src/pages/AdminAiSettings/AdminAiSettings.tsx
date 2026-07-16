@@ -5,10 +5,12 @@ import {
   AiCatalogView,
   AiConnectionView,
   AiModelTestReport,
+  AiRolloutView,
   AiSettingsView,
   activateAiNomenclature,
   deactivateAiNomenclature,
   fetchAiNomenclatureSettings,
+  fetchAiRollout,
   fetchOpenRouterModels,
   fetchOpenRouterStatus,
   refreshOpenRouterModels,
@@ -17,7 +19,9 @@ import {
   testOpenRouterConnection,
 } from '../../lib/api/adminAi';
 import { getErrorMessage } from '../../utils/errors';
-import { ConnectionSection, CatalogSection, SelectedModelSection } from './components';
+import {
+  ConnectionSection, CatalogSection, SelectedModelSection, RolloutSection, PilotOperationsSection,
+} from './components';
 
 const { Title, Paragraph } = Typography;
 
@@ -35,6 +39,7 @@ export default function AdminAiSettings() {
   const [connection, setConnection] = useState<AiConnectionView | null>(null);
   const [catalog, setCatalog] = useState<AiCatalogView | null>(null);
   const [settings, setSettings] = useState<AiSettingsView | null>(null);
+  const [rollout, setRollout] = useState<AiRolloutView | null>(null);
   const [lastReport, setLastReport] = useState<AiModelTestReport | null>(null);
   const [draftModelId, setDraftModelId] = useState<string | null>(null);
 
@@ -54,6 +59,11 @@ export default function AdminAiSettings() {
     }
     try {
       setConnection(await fetchOpenRouterStatus());
+    } catch (e) {
+      message.error(getErrorMessage(e));
+    }
+    try {
+      setRollout(await fetchAiRollout());
     } catch (e) {
       message.error(getErrorMessage(e));
     }
@@ -193,6 +203,15 @@ export default function AdminAiSettings() {
           onTestModel={handleTestModel}
           onActivate={handleActivate}
           onDeactivate={handleDeactivate}
+        />
+
+        {/* Этап 2.6: контролируемый запуск (state machine, пилот, usage,
+            evaluation, circuit, emergency off). */}
+        <RolloutSection rollout={rollout} onChanged={setRollout} />
+        <PilotOperationsSection
+          onRolloutChanged={() => {
+            fetchAiRollout().then(setRollout).catch(() => undefined);
+          }}
         />
       </Space>
     </div>

@@ -11,10 +11,10 @@ import (
 // noteViewerRoles mirrors NOTE_VIEWER_ROLES in src/lib/supabase/types.ts:
 // roles allowed to see every note of a tender.
 var noteViewerRoles = map[string]bool{
-	"administrator":     true,
-	"developer":         true,
-	"director":          true,
-	"senior_group":      true,
+	"administrator":      true,
+	"developer":          true,
+	"director":           true,
+	"senior_group":       true,
 	"veduschiy_inzhener": true,
 }
 

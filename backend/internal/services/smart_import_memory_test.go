@@ -246,7 +246,7 @@ func TestAliasResolvesRowAndBumpsAfterSuccess(t *testing.T) {
 
 	// Execute: импорт с alias-строкой, счётчик after success (§17.37).
 	res, err := svc.Execute(context.Background(), "t-1", "s.xlsx", data,
-		ia.Fingerprint(data), ia.Options{}, "u-1", nil)
+		ia.Fingerprint(data), ia.Options{}, "u-1", nil, "")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestAliasConflictBlocksExecute(t *testing.T) {
 	}
 	var blocked *BlockersPresentError
 	if _, err := svc.Execute(context.Background(), "t-1", "s.xlsx", data,
-		ia.Fingerprint(data), ia.Options{}, "u-1", nil); !errors.As(err, &blocked) {
+		ia.Fingerprint(data), ia.Options{}, "u-1", nil, ""); !errors.As(err, &blocked) {
 		t.Fatalf("conflict must block execute: %v", err)
 	}
 }
@@ -375,7 +375,7 @@ func executeWithSelection(t *testing.T, svc *SmartImportService, data []byte, re
 	if remember {
 		mem.RememberByRef = map[string]bool{"Смета|3": true}
 	}
-	return svc.Execute(context.Background(), "t-1", "s.xlsx", data, ia.Fingerprint(data), opts, "u-1", mem)
+	return svc.Execute(context.Background(), "t-1", "s.xlsx", data, ia.Fingerprint(data), opts, "u-1", mem, "")
 }
 
 func TestRememberSemantics(t *testing.T) {
@@ -426,7 +426,7 @@ func TestRememberSemantics(t *testing.T) {
 	svc = newMemTestService(&stubImporter{}, store, refsWithAlias(memAlias("a-1", "m-1")))
 	mem := &MemoryRequest{RememberByRef: map[string]bool{"Смета|3": true}}
 	if _, err := svc.Execute(context.Background(), "t-1", "s.xlsx", data,
-		ia.Fingerprint(data), ia.Options{}, "u-1", mem); err != nil {
+		ia.Fingerprint(data), ia.Options{}, "u-1", mem, ""); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	if len(store.savedEntries) != 0 {

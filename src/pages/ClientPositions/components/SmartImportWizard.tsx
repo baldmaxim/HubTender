@@ -103,6 +103,9 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
     if (a) setStep(1);
   };
 
+  // Этап 2.6 (§13): ссылка последнего AI-запроса пилота для feedback.
+  const [aiRequestId, setAiRequestId] = useState<string>('');
+
   const reanalyze = async (extra?: Partial<SmartImportOptions>) => {
     if (!file) return;
     await runAnalyze(file, extra);
@@ -120,7 +123,7 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
         save_as_new: profileSave.saveAsNew,
         save_or_update: profileSave.saveOrUpdate,
         name: profileSave.name,
-      });
+      }, aiRequestId || undefined);
       const prov = res.nomenclature_provenance;
       setResult({
         inserted: res.import.inserted_items_count,
@@ -334,6 +337,7 @@ export default function SmartImportWizard({ open, tenderId, onClose }: Props) {
               tenderId={tenderId} file={file} analysis={analysis} opts={opts}
               selections={selections} onSelectionsChange={setSelections}
               onApply={() => reanalyze()}
+              onAiRequest={setAiRequestId}
             />
           )}
           <Table<SmartPreviewRow>

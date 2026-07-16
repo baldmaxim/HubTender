@@ -7,8 +7,11 @@
 > ([OPENROUTER_AI_ADMINISTRATION.md](OPENROUTER_AI_ADMINISTRATION.md)).
 > `OPENROUTER_API_KEY` — опциональный server secret: без него приложение
 > стартует, AI-статус `not_configured`. Пользовательские AI-вызовы выключены
-> rollout'ом до этапа 2.6 — деплой 2.5 не меняет поведение Smart Import для
-> пользователей. Guard: `openRouterAdministrationSafety.check.mjs`.
+> rollout'ом (default off) — деплой 2.5/2.6 не меняет поведение Smart Import
+> для пользователей. Пилотное включение — ТОЛЬКО по runbook
+> [CONTROLLED_AI_ROLLOUT.md](CONTROLLED_AI_ROLLOUT.md) (production pilot
+> checklist §27). Guards: `openRouterAdministrationSafety.check.mjs`,
+> `controlledAiRolloutSafety.check.mjs`.
 
 ## 1. Порядок application rollout
 

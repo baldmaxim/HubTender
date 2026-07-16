@@ -7,6 +7,7 @@
 > Память и deterministic retrieval не зависят от AI-провайдера: настройка
 > OpenRouter (этап 2.5, [OPENROUTER_AI_ADMINISTRATION.md](OPENROUTER_AI_ADMINISTRATION.md))
 > ничего в этом контуре не меняет; exact/alias-совпадения провайдера не вызывают.
+> Пилотный live-путь этапа 2.6 — [CONTROLLED_AI_ROLLOUT.md](CONTROLLED_AI_ROLLOUT.md).
 
 ## 1-2. Цель и scope
 

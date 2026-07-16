@@ -69,7 +69,12 @@ const (
 	MaxRowsPerSuggestRequest = 200
 	DefaultCandidateLimit    = 20
 	MaxCandidateLimit        = 50
-	ProviderBatchSize        = 15
+	// Этап 2.6 (live-гейт): 15 строк на батч не проходят живые ZDR-endpoint'ы —
+	// у грамматика-провайдеров (DeepInfra/SiliconFlow) constrained-генерация
+	// ~10 ток/с и батч 15 не укладывается в 30s-таймаут политики, а у
+	// reasoning-моделей ответ на 15 строк упирается в max_output_tokens=2000.
+	// 8 строк ≈ ≤1100 токенов ответа — проходит с запасом по обоим лимитам.
+	ProviderBatchSize = 8
 	MaxProviderConcurrency   = 3
 	MaxExplanationChars      = 500
 	MaxRankedCandidates      = 3

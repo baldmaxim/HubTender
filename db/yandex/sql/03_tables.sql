@@ -678,6 +678,19 @@ CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
     model_test_error_code text,
     enabled boolean NOT NULL DEFAULT false,
     needs_review_reason text,
+    -- Этап 2.6: controlled rollout (off по умолчанию; general availability НЕТ).
+    rollout_mode text NOT NULL DEFAULT 'off'
+        CHECK (rollout_mode IN ('off', 'evaluation', 'pilot_individual', 'pilot_bulk')),
+    rollout_config_version integer NOT NULL DEFAULT 1 CHECK (rollout_config_version >= 1),
+    daily_request_limit integer NOT NULL DEFAULT 20 CHECK (daily_request_limit BETWEEN 1 AND 10000),
+    daily_row_limit integer NOT NULL DEFAULT 400 CHECK (daily_row_limit BETWEEN 1 AND 1000000),
+    request_max_reserved_cost numeric(14, 8) NOT NULL DEFAULT 0.05 CHECK (request_max_reserved_cost > 0),
+    circuit_failure_threshold integer NOT NULL DEFAULT 3 CHECK (circuit_failure_threshold BETWEEN 1 AND 100),
+    circuit_cooldown_seconds integer NOT NULL DEFAULT 300 CHECK (circuit_cooldown_seconds BETWEEN 10 AND 86400),
+    reservation_timeout_seconds integer NOT NULL DEFAULT 120 CHECK (reservation_timeout_seconds BETWEEN 10 AND 3600),
+    pilot_started_at timestamp with time zone,
+    pilot_ended_at timestamp with time zone,
+    last_live_evaluation_id uuid,
     updated_by uuid,
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -688,4 +701,92 @@ CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
             AND model_test_config_hash IS NOT NULL
         )
     )
+);
+
+-- Этап 2.6: пилотная группа, usage ledger, feedback, circuit, evaluation.
+-- В ledger/feedback НЕТ raw text/prompt/response/Excel/tender/финансовых данных.
+CREATE TABLE IF NOT EXISTS public.ai_pilot_users (
+    feature_code text NOT NULL,
+    user_id uuid NOT NULL,
+    is_active boolean NOT NULL DEFAULT true,
+    daily_request_limit_override integer
+        CHECK (daily_request_limit_override IS NULL OR daily_request_limit_override BETWEEN 1 AND 10000),
+    daily_row_limit_override integer
+        CHECK (daily_row_limit_override IS NULL OR daily_row_limit_override BETWEEN 1 AND 1000000),
+    bulk_confirmation_allowed boolean NOT NULL DEFAULT false,
+    expires_at timestamp with time zone,
+    added_by uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.ai_usage_requests (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    feature_code text NOT NULL,
+    user_id uuid,
+    model_id text NOT NULL,
+    prompt_version text NOT NULL,
+    config_hash text NOT NULL,
+    request_hash text NOT NULL,
+    rows_count integer NOT NULL CHECK (rows_count >= 0),
+    candidates_count integer NOT NULL DEFAULT 0 CHECK (candidates_count >= 0),
+    reservation_amount numeric(14, 8) NOT NULL CHECK (reservation_amount >= 0),
+    actual_provider_cost numeric(14, 8) CHECK (actual_provider_cost IS NULL OR actual_provider_cost >= 0),
+    estimated_cost numeric(14, 8) CHECK (estimated_cost IS NULL OR estimated_cost >= 0),
+    cost_source text CHECK (cost_source IS NULL OR cost_source IN ('provider_reported', 'catalog_estimate')),
+    prompt_tokens integer NOT NULL DEFAULT 0 CHECK (prompt_tokens >= 0),
+    completion_tokens integer NOT NULL DEFAULT 0 CHECK (completion_tokens >= 0),
+    total_tokens integer NOT NULL DEFAULT 0 CHECK (total_tokens >= 0),
+    provider_outcome text,
+    request_status text NOT NULL DEFAULT 'reserved'
+        CHECK (request_status IN ('reserved', 'completed', 'released', 'failed')),
+    reservation_underestimate boolean NOT NULL DEFAULT false,
+    latency_ms integer,
+    reservation_expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    completed_at timestamp with time zone
+);
+
+CREATE TABLE IF NOT EXISTS public.ai_row_feedback (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    request_id uuid NOT NULL,
+    user_id uuid,
+    row_context_hash text NOT NULL CHECK (length(row_context_hash) BETWEEN 8 AND 128),
+    confidence text NOT NULL DEFAULT '',
+    deterministic_top_catalog_id text,
+    ai_selected_catalog_id text,
+    final_selected_catalog_id text,
+    outcome text CHECK (outcome IS NULL OR outcome IN ('accepted', 'changed', 'manual', 'abstained', 'unresolved')),
+    selection_source text,
+    imported_successfully boolean NOT NULL DEFAULT false,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    completed_at timestamp with time zone
+);
+
+CREATE TABLE IF NOT EXISTS public.ai_circuit_state (
+    feature_code text NOT NULL,
+    circuit_state text NOT NULL DEFAULT 'closed'
+        CHECK (circuit_state IN ('closed', 'open', 'half_open')),
+    consecutive_failures integer NOT NULL DEFAULT 0 CHECK (consecutive_failures >= 0),
+    open_until timestamp with time zone,
+    last_failure_code text,
+    last_success_at timestamp with time zone,
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.ai_evaluation_summaries (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    feature_code text NOT NULL,
+    eval_mode text NOT NULL CHECK (eval_mode IN ('deterministic', 'mock', 'live')),
+    dataset_kind text NOT NULL CHECK (dataset_kind IN ('synthetic', 'approved_aliases')),
+    dataset_hash text NOT NULL,
+    dataset_size integer NOT NULL CHECK (dataset_size >= 0),
+    model_id text NOT NULL,
+    prompt_version text NOT NULL,
+    config_hash text NOT NULL,
+    metrics jsonb NOT NULL DEFAULT '{}'::jsonb,
+    gates_passed boolean NOT NULL DEFAULT false,
+    gate_details jsonb NOT NULL DEFAULT '{}'::jsonb,
+    executed_by uuid,
+    executed_at timestamp with time zone NOT NULL DEFAULT now()
 );

@@ -164,12 +164,18 @@ type ChatRequest struct {
 	Provider       *ProviderPrefs  `json:"provider,omitempty"`
 }
 
-// Usage — токены/стоимость ответа (для admin model test; в user-ответы не
-// попадает).
+// Usage — токены/стоимость ответа (для admin model test и usage-ledger
+// этапа 2.6; в user-ответы не попадает).
+//
+// Cost — provider-reported стоимость (официальное поле usage.cost).
+// Единица: кредиты OpenRouter; официальная документация GET /key указывает
+// usage «in USD» — кредиты деноминированы в USD. json.Number сохраняет
+// точное десятичное представление (учёт бюджета без binary float).
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens     int         `json:"prompt_tokens"`
+	CompletionTokens int         `json:"completion_tokens"`
+	TotalTokens      int         `json:"total_tokens"`
+	Cost             json.Number `json:"cost,omitempty"`
 }
 
 // ChatResponse — нормализованный ответ: только то, что нужно adapter'у.

@@ -63,7 +63,7 @@ func TestAIRaceSettingsReadUpdate(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, _ = svc.GetSettings(ctx)
-			_, _ = svc.Capability(ctx)
+			_, _ = svc.PilotCapability(ctx, "u-1")
 			_ = svc.Status(ctx)
 		}()
 	}

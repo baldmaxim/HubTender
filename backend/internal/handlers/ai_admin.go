@@ -156,14 +156,6 @@ func (h *AIAdminHandler) DeactivateNomenclature(w http.ResponseWriter, r *http.R
 	renderJSON(w, r, http.StatusOK, aiEnvelope{Data: view})
 }
 
-// NomenclatureCapability — GET /api/v1/ai/nomenclature-capability:
-// любой аутентифицированный пользователь; только безопасное effective
-// состояние (§16), без secrets/settings.
-func (h *AIAdminHandler) NomenclatureCapability(w http.ResponseWriter, r *http.Request) {
-	view, err := h.svc.Capability(r.Context())
-	if err != nil {
-		renderAIError(w, r, err)
-		return
-	}
-	renderJSON(w, r, http.StatusOK, aiEnvelope{Data: view})
-}
+// Capability endpoint этапа 2.5 заменён расширенным PilotCapability
+// (ai_rollout.go): состояние текущего пользователя с pilot/quota/circuit
+// статусами; secrets/allowlist/ledger по-прежнему не раскрываются.

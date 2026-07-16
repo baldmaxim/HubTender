@@ -74,6 +74,7 @@ type deps struct {
 	importMemoryH     *handlers.ImportMemoryHandler
 	ccvH              *handlers.ConstructionCostVolumesHandler
 	aiAdminH          *handlers.AIAdminHandler
+	aiHealthH         *handlers.AIHealthHandler
 	wsH               *handlers.WsHandler
 }
 
@@ -252,7 +253,22 @@ func buildDeps(
 	}
 	orCatalog := openrouter.NewCatalogCache(orClient, openrouter.CatalogTTL)
 	aiSettingsRepo := repository.NewAISettingsRepo(pool)
-	aiAdminSvc := services.NewAIAdminService(orClient, orCatalog, aiSettingsRepo)
+	aiAdminSvc := services.NewAIAdminService(orClient, orCatalog, aiSettingsRepo).
+		WithLiveTestFlag(os.Getenv("OPENROUTER_LIVE_TEST") == "true")
+	// Этап 2.6: live-gateway пилота. Rollout по умолчанию off (БД);
+	// non-pilot и любые exact/alias/execute пути провайдера не вызывают.
+	smartImportSvc.WithAIRolloutGateway(aiAdminSvc)
+	// Maintenance: reservation recovery + retention cleanup (§8/§21).
+	aiMaintCfg := services.DefaultAIMaintenanceConfig()
+	if v := os.Getenv("AI_ROLLOUT_MAINTENANCE_ENABLED"); v == "false" {
+		aiMaintCfg.Enabled = false
+	}
+	if v, err := time.ParseDuration(os.Getenv("AI_ROLLOUT_MAINTENANCE_SCAN_INTERVAL")); err == nil && v > 0 {
+		aiMaintCfg.ScanInterval = v
+	}
+	aiMaintenance := services.NewAIRolloutMaintenanceService(aiSettingsRepo, aiMaintCfg, logger)
+	aiMaintenance.Start(rootCtx)
+	aiHealthH := handlers.NewAIHealthHandler(aiAdminSvc, aiMaintenance)
 	// Startup redacted config summary (§22): без секретов.
 	baseLabel := "official"
 	if orBase != "" {
@@ -318,6 +334,7 @@ func buildDeps(
 		importMemoryH:     handlers.NewImportMemoryHandler(importMemorySvc),
 		ccvH:              handlers.NewConstructionCostVolumesHandler(ccvSvc),
 		aiAdminH:          handlers.NewAIAdminHandler(aiAdminSvc),
+		aiHealthH:         aiHealthH,
 		wsH:               handlers.NewWsHandler(hub, verifyCfg, logger),
 	}
 }

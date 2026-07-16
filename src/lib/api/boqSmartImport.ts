@@ -236,6 +236,11 @@ export interface SmartSuggestResult {
     rows_abstained: number;
   };
   rows: SmartSuggestionRow[];
+  // Этап 2.6 (§13): ссылка live-запроса и per-row feedback-токены; пусто,
+  // если live AI не вызывался (rollout off / non-pilot / квоты и т.д.).
+  ai_request_id?: string;
+  feedback_tokens?: Record<string, string>;
+  ai_capability_status?: string;
 }
 
 async function postMultipart<T>(path: string, form: FormData): Promise<T> {
@@ -285,11 +290,15 @@ export async function analyzeBoqImport(tenderId: string, file: File, opts: Smart
 export async function executeBoqImport(
   tenderId: string, file: File, fingerprint: string, opts: SmartImportOptions,
   profile?: MappingProfileRequest,
+  aiRequestId?: string,
 ): Promise<SmartExecuteResult> {
   const extra: Record<string, string> = { workbook_fingerprint: fingerprint };
   if (profile && (profile.profile_id || profile.save_as_new || profile.save_or_update)) {
     extra.mapping_profile = JSON.stringify(profile);
   }
+  // Этап 2.6 (§13): ссылка AI-запроса для финализации pilot-feedback ПОСЛЕ
+  // успешного импорта. Провайдер на execute не вызывается.
+  if (aiRequestId) extra.ai_request_id = aiRequestId;
   return postMultipart(`/api/v1/tenders/${tenderId}/boq-import/execute`,
     buildForm(file, opts, extra));
 }

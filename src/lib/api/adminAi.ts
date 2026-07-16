@@ -154,17 +154,149 @@ export interface AiModelTestReport {
   config_hash: string;
 }
 
+// Этап 2.6: расширенная capability текущего пользователя (§17/§19).
+export type AiCapabilityStatus =
+  | 'rollout_off'
+  | 'evaluation_only'
+  | 'not_allowed'
+  | 'available'
+  | 'user_quota_exhausted'
+  | 'row_quota_exhausted'
+  | 'budget_exhausted'
+  | 'key_limit_exhausted'
+  | 'circuit_open'
+  | 'provider_unavailable'
+  | 'rate_limited';
+
 export interface AiCapabilityView {
-  provider_configured: boolean;
-  model_selected: boolean;
-  model_test_passed: boolean;
-  configuration_state:
-    | 'not_configured'
-    | 'model_not_selected'
-    | 'test_required'
-    | 'ready';
-  rollout_status: string;
-  status: string;
+  status: AiCapabilityStatus;
+  rollout_mode: 'off' | 'evaluation' | 'pilot_individual' | 'pilot_bulk';
+  is_pilot: boolean;
+  individual_suggestions_allowed: boolean;
+  bulk_confirmation_allowed: boolean;
+  requests_remaining_today: number;
+  rows_remaining_today: number;
+  budget_status: 'ok' | 'exhausted' | 'not_set';
+  provider_status: string;
+  model_label: string;
+  prompt_version: string;
+}
+
+// ── Этап 2.6: controlled rollout (admin) ─────────────────────────────────────
+
+export interface AiGateCheck {
+  key: string;
+  title: string;
+  passed: boolean;
+  detail?: string;
+}
+
+export interface AiCircuitState {
+  feature_code: string;
+  state: 'closed' | 'open' | 'half_open';
+  consecutive_failures: number;
+  open_until: string | null;
+  last_failure_code: string | null;
+  last_success_at: string | null;
+  updated_at: string;
+}
+
+export interface AiEvaluationStatus {
+  id: string;
+  gates_passed: boolean;
+  current: boolean;
+  dataset_size: number;
+  dataset_hash: string;
+  executed_at: string;
+}
+
+export interface AiRolloutView {
+  feature_code: string;
+  rollout_mode: 'off' | 'evaluation' | 'pilot_individual' | 'pilot_bulk';
+  rollout_config_version: number;
+  current_config_hash: string;
+  selected_model_id: string | null;
+  model_test_status: string;
+  live_evaluation: AiEvaluationStatus | null;
+  daily_request_limit: number;
+  daily_row_limit: number;
+  monthly_budget_usd: number | null;
+  request_max_reserved_cost_usd: string;
+  circuit_failure_threshold: number;
+  circuit_cooldown_seconds: number;
+  reservation_timeout_seconds: number;
+  circuit: AiCircuitState | null;
+  pilot_users_count: number;
+  pilot_started_at: string | null;
+  pilot_ended_at: string | null;
+  next_transition_gates: Record<string, AiGateCheck[]>;
+  updated_by: string | null;
+  updated_at: string;
+  cost_unit: string;
+}
+
+export interface AiPilotUser {
+  feature_code: string;
+  user_id: string;
+  full_name: string;
+  email: string;
+  is_active: boolean;
+  daily_request_limit_override: number | null;
+  daily_row_limit_override: number | null;
+  bulk_confirmation_allowed: boolean;
+  expires_at: string | null;
+  added_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiUsageSummary {
+  requests_today: number;
+  requests_month: number;
+  rows_today: number;
+  rows_month: number;
+  tokens_month: number;
+  provider_cost_month_usd: string;
+  estimated_cost_month_usd: string;
+  reserved_active_amount_usd: string;
+  active_reservations: number;
+  oldest_reservation_age_seconds: number;
+  timeouts_month: number;
+  rate_limited_month: number;
+  invalid_month: number;
+  stale_discarded_month: number;
+  feedback_accepted: number;
+  feedback_changed: number;
+  feedback_manual: number;
+  feedback_abstained: number;
+  feedback_unresolved: number;
+  high_confidence_changed: number;
+  high_confidence_total: number;
+  successful_row_outcomes: number;
+}
+
+export interface AiEvaluationSummary {
+  id: string;
+  feature_code: string;
+  eval_mode: 'deterministic' | 'mock' | 'live';
+  dataset_kind: string;
+  dataset_hash: string;
+  dataset_size: number;
+  model_id: string;
+  prompt_version: string;
+  config_hash: string;
+  metrics: Record<string, unknown>;
+  gates_passed: boolean;
+  gate_details: AiGateCheck[];
+  executed_by: string | null;
+  executed_at: string;
+}
+
+export interface AiEvalRunResult {
+  mode: string;
+  metrics: Record<string, unknown>;
+  gates: AiGateCheck[];
+  gates_passed: boolean;
 }
 
 // ── Admin API ────────────────────────────────────────────────────────────────
@@ -243,5 +375,122 @@ export async function deactivateAiNomenclature(): Promise<AiSettingsView> {
 
 export async function fetchAiNomenclatureCapability(): Promise<AiCapabilityView> {
   const res = await apiFetch<{ data: AiCapabilityView }>('/api/v1/ai/nomenclature-capability');
+  return res.data;
+}
+
+// ── Этап 2.6: rollout admin API ──────────────────────────────────────────────
+
+export async function fetchAiRollout(): Promise<AiRolloutView> {
+  const res = await apiFetch<{ data: AiRolloutView }>('/api/v1/admin/ai/nomenclature/rollout');
+  return res.data;
+}
+
+export async function updateAiRolloutSettings(patch: {
+  daily_request_limit?: number;
+  daily_row_limit?: number;
+  monthly_budget_usd?: string;
+  request_max_reserved_cost?: string;
+  circuit_failure_threshold?: number;
+  circuit_cooldown_seconds?: number;
+  reservation_timeout_seconds?: number;
+}): Promise<AiRolloutView> {
+  const res = await apiFetch<{ data: AiRolloutView }>(
+    '/api/v1/admin/ai/nomenclature/rollout/settings',
+    { method: 'PUT', body: JSON.stringify(patch) }
+  );
+  return res.data;
+}
+
+/** Переход: подтверждение = точное имя целевого режима (§17). */
+export async function transitionAiRollout(
+  target: string, confirmation: string, reason?: string
+): Promise<AiRolloutView> {
+  const res = await apiFetch<{ data: AiRolloutView }>(
+    '/api/v1/admin/ai/nomenclature/rollout/transition',
+    { method: 'POST', body: JSON.stringify({ target, confirmation, reason: reason ?? '' }) }
+  );
+  return res.data;
+}
+
+/** Экстренное отключение: без гейтов, без OpenRouter (§11). */
+export async function emergencyOffAiRollout(reason?: string): Promise<AiRolloutView> {
+  const res = await apiFetch<{ data: AiRolloutView }>(
+    '/api/v1/admin/ai/nomenclature/rollout/emergency-off',
+    { method: 'POST', body: JSON.stringify({ reason: reason ?? '' }) }
+  );
+  return res.data;
+}
+
+export async function fetchAiPilotUsers(): Promise<AiPilotUser[]> {
+  const res = await apiFetch<{ data: AiPilotUser[] }>('/api/v1/admin/ai/nomenclature/pilot-users');
+  return res.data ?? [];
+}
+
+export async function addAiPilotUser(
+  userId: string, bulkAllowed: boolean, expiresAt?: string | null
+): Promise<AiPilotUser> {
+  const res = await apiFetch<{ data: AiPilotUser }>('/api/v1/admin/ai/nomenclature/pilot-users', {
+    method: 'POST',
+    body: JSON.stringify({
+      user_id: userId,
+      bulk_confirmation_allowed: bulkAllowed,
+      expires_at: expiresAt ?? null,
+    }),
+  });
+  return res.data;
+}
+
+export async function patchAiPilotUser(userId: string, patch: {
+  is_active?: boolean;
+  daily_request_limit_override?: number;
+  daily_row_limit_override?: number;
+  bulk_confirmation_allowed?: boolean;
+  expires_at?: string;
+  clear_expires_at?: boolean;
+}): Promise<AiPilotUser> {
+  const res = await apiFetch<{ data: AiPilotUser }>(
+    `/api/v1/admin/ai/nomenclature/pilot-users/${userId}`,
+    { method: 'PATCH', body: JSON.stringify(patch) }
+  );
+  return res.data;
+}
+
+export async function removeAiPilotUser(userId: string): Promise<void> {
+  await apiFetch(`/api/v1/admin/ai/nomenclature/pilot-users/${userId}`, { method: 'DELETE' });
+}
+
+export async function fetchAiUsage(): Promise<{ summary: AiUsageSummary; cost_unit: string }> {
+  const res = await apiFetch<{ data: { summary: AiUsageSummary; cost_unit: string } }>(
+    '/api/v1/admin/ai/nomenclature/usage'
+  );
+  return res.data;
+}
+
+export async function fetchAiEvaluations(): Promise<AiEvaluationSummary[]> {
+  const res = await apiFetch<{ data: AiEvaluationSummary[] }>(
+    '/api/v1/admin/ai/nomenclature/evaluations'
+  );
+  return res.data ?? [];
+}
+
+export async function runAiEvaluation(
+  mode: 'deterministic' | 'mock' | 'live', confirmCost: boolean
+): Promise<{ result: AiEvalRunResult; summary: AiEvaluationSummary | null }> {
+  const res = await apiFetch<{ data: { result: AiEvalRunResult; summary: AiEvaluationSummary | null } }>(
+    '/api/v1/admin/ai/nomenclature/evaluate',
+    {
+      method: 'POST',
+      body: JSON.stringify({ mode, confirm_live_provider_cost: confirmCost }),
+      timeoutMs: 320_000,
+    }
+  );
+  return res.data;
+}
+
+export async function resetAiCircuit(): Promise<AiCircuitState> {
+  const res = await apiFetch<{ data: AiCircuitState }>(
+    '/api/v1/admin/ai/nomenclature/circuit/reset',
+    { method: 'POST' }
+  );
   return res.data;
 }

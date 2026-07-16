@@ -65,6 +65,9 @@ type AIFeatureSettings struct {
 	MaxRowsPerRequest     int
 	MaxConcurrency        int
 	MonthlyBudgetUSD      *float64
+	// MonthlyBudgetText — тот же бюджет как numeric::text (exact decimal для
+	// учёта; *float64 остаётся только для отображения в admin UI).
+	MonthlyBudgetText *string
 
 	ModelTestStatus        string
 	ModelTestConfigHash    *string
@@ -78,9 +81,32 @@ type AIFeatureSettings struct {
 
 	Enabled           bool
 	NeedsReviewReason *string
-	UpdatedBy         *string
-	UpdatedAt         time.Time
+
+	// Этап 2.6: controlled rollout. RolloutMode: off | evaluation |
+	// pilot_individual | pilot_bulk (general availability НЕ существует).
+	RolloutMode               string
+	RolloutConfigVersion      int
+	DailyRequestLimit         int
+	DailyRowLimit             int
+	RequestMaxReservedCost    string // exact decimal (numeric::text)
+	CircuitFailureThreshold   int
+	CircuitCooldownSeconds    int
+	ReservationTimeoutSeconds int
+	PilotStartedAt            *time.Time
+	PilotEndedAt              *time.Time
+	LastLiveEvaluationID      *string
+
+	UpdatedBy *string
+	UpdatedAt time.Time
 }
+
+// Rollout modes (§3 этапа 2.6).
+const (
+	AIRolloutOff             = "off"
+	AIRolloutEvaluation      = "evaluation"
+	AIRolloutPilotIndividual = "pilot_individual"
+	AIRolloutPilotBulk       = "pilot_bulk"
+)
 
 const aiSettingsColumns = `
 	feature_code, provider,
@@ -91,11 +117,15 @@ const aiSettingsColumns = `
 	prompt_version, provider_policy_version,
 	require_zdr, data_collection_policy, require_parameters, allow_provider_fallbacks,
 	request_timeout_seconds, max_output_tokens, temperature::float8,
-	candidate_limit, max_rows_per_request, max_concurrency, monthly_budget_usd::float8,
+	candidate_limit, max_rows_per_request, max_concurrency, monthly_budget_usd::float8, monthly_budget_usd::text,
 	model_test_status, model_test_config_hash, model_tested_model_id, model_tested_at,
 	model_test_latency_ms, model_test_input_tokens, model_test_output_tokens,
 	model_test_estimated_cost, model_test_error_code,
-	enabled, needs_review_reason, updated_by::text, updated_at`
+	enabled, needs_review_reason,
+	rollout_mode, rollout_config_version, daily_request_limit, daily_row_limit,
+	request_max_reserved_cost::text, circuit_failure_threshold, circuit_cooldown_seconds,
+	reservation_timeout_seconds, pilot_started_at, pilot_ended_at, last_live_evaluation_id::text,
+	updated_by::text, updated_at`
 
 func scanAISettings(row pgx.Row) (*AIFeatureSettings, error) {
 	var s AIFeatureSettings
@@ -109,11 +139,15 @@ func scanAISettings(row pgx.Row) (*AIFeatureSettings, error) {
 		&s.PromptVersion, &s.ProviderPolicyVersion,
 		&s.RequireZDR, &s.DataCollectionPolicy, &s.RequireParameters, &s.AllowProviderFallbacks,
 		&s.RequestTimeoutSeconds, &s.MaxOutputTokens, &s.Temperature,
-		&s.CandidateLimit, &s.MaxRowsPerRequest, &s.MaxConcurrency, &s.MonthlyBudgetUSD,
+		&s.CandidateLimit, &s.MaxRowsPerRequest, &s.MaxConcurrency, &s.MonthlyBudgetUSD, &s.MonthlyBudgetText,
 		&s.ModelTestStatus, &s.ModelTestConfigHash, &s.ModelTestedModelID, &s.ModelTestedAt,
 		&s.ModelTestLatencyMs, &s.ModelTestInputTokens, &s.ModelTestOutputTokens,
 		&s.ModelTestEstimatedCost, &s.ModelTestErrorCode,
-		&s.Enabled, &s.NeedsReviewReason, &s.UpdatedBy, &s.UpdatedAt,
+		&s.Enabled, &s.NeedsReviewReason,
+		&s.RolloutMode, &s.RolloutConfigVersion, &s.DailyRequestLimit, &s.DailyRowLimit,
+		&s.RequestMaxReservedCost, &s.CircuitFailureThreshold, &s.CircuitCooldownSeconds,
+		&s.ReservationTimeoutSeconds, &s.PilotStartedAt, &s.PilotEndedAt, &s.LastLiveEvaluationID,
+		&s.UpdatedBy, &s.UpdatedAt,
 	); err != nil {
 		return nil, err
 	}
@@ -176,6 +210,9 @@ func (r *AISettingsRepo) SaveDraftModel(ctx context.Context, featureCode string,
 			enabled = false,
 			updated_by = $10::uuid`
 	if resetTest {
+		// Этап 2.6 (§4): значимое изменение конфигурации автоматически
+		// переводит rollout в off и инвалидирует live evaluation —
+		// pilot-гейты придётся проходить заново.
 		query += `,
 			model_test_status = 'required',
 			model_test_config_hash = NULL,
@@ -185,7 +222,11 @@ func (r *AISettingsRepo) SaveDraftModel(ctx context.Context, featureCode string,
 			model_test_input_tokens = NULL,
 			model_test_output_tokens = NULL,
 			model_test_estimated_cost = NULL,
-			model_test_error_code = NULL`
+			model_test_error_code = NULL,
+			rollout_mode = 'off',
+			rollout_config_version = rollout_config_version + 1,
+			last_live_evaluation_id = NULL,
+			pilot_ended_at = CASE WHEN rollout_mode <> 'off' THEN now() ELSE pilot_ended_at END`
 	}
 	query += `
 		WHERE feature_code = $1

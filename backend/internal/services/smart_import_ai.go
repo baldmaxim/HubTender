@@ -72,7 +72,8 @@ func ValidateSelections(selections []NomenclatureSelection) (map[string]string, 
 	return ids, sources, remember, nil
 }
 
-// SuggestNomenclatureResult — ответ suggest (§10). Ничего не сохраняется.
+// SuggestNomenclatureResult — ответ suggest (§10). Ничего не сохраняется
+// (этап 2.6 добавляет только safe ledger/feedback metadata, без raw text).
 type SuggestNomenclatureResult struct {
 	WorkbookFingerprint        string                `json:"workbook_fingerprint"`
 	SuggestionSchemaVersion    int                   `json:"suggestion_schema_version"`
@@ -80,6 +81,11 @@ type SuggestNomenclatureResult struct {
 	PromptVersion              string                `json:"prompt_version"`
 	Provider                   ainom.ProviderInfo    `json:"provider"`
 	Rows                       []ainom.SuggestionRow `json:"rows"`
+	// Этап 2.6 (§13): ссылка запроса и per-row feedback-токены (hash, без
+	// internal DB ID контекста строк). Пусто, если live AI не вызывался.
+	AIRequestID        string            `json:"ai_request_id,omitempty"`
+	FeedbackTokens     map[string]string `json:"feedback_tokens,omitempty"`
+	AICapabilityStatus string            `json:"ai_capability_status,omitempty"`
 }
 
 // SuggestNomenclature — §10: повторный fingerprint + повторный серверный parse
@@ -144,7 +150,46 @@ func (s *SmartImportService) SuggestNomenclature(
 	if reranker == nil {
 		reranker = ainom.DisabledProvider{}
 	}
-	res := ainom.Suggest(ctx, inputs, catalog, reranker, s.aiCfg, candidateLimit)
+	cfg := s.aiCfg
+
+	// Этап 2.6 (§12): live AI ТОЛЬКО через gateway — по явному действию
+	// пользователя, для allowlisted-пилота, при пройденных гейтах и
+	// успешной резервации. Отказ gateway безопасен: deterministic путь ниже
+	// выполняется в любом случае.
+	var liveSession *AILiveSession
+	aiCapStatus := ""
+	if s.aiGateway != nil && len(inputs) > 0 {
+		session, denial, gerr := s.aiGateway.AcquireLiveSession(
+			ctx, userID, len(inputs), candidateLimit, ainom.RequestHash(inputs))
+		switch {
+		case gerr != nil:
+			log.Warn().Err(gerr).
+				Str("operation", "ai_live_gateway_error").
+				Msg("live gateway failed; deterministic flow continues")
+			aiCapStatus = "provider_unavailable"
+		case session != nil:
+			liveSession = session
+			reranker = session
+			cfg = session.Config()
+		default:
+			aiCapStatus = denial
+		}
+	}
+
+	res := ainom.Suggest(ctx, inputs, catalog, reranker, cfg, candidateLimit)
+
+	aiRequestID := ""
+	var feedbackTokens map[string]string
+	if liveSession != nil {
+		tokens, outcome := liveSession.Finish(ctx, res.Rows)
+		aiRequestID = liveSession.RequestID
+		feedbackTokens = tokens
+		if liveSession.StaleDiscarded() {
+			aiCapStatus = "stale_discarded"
+		} else if outcome != "available" {
+			aiCapStatus = outcome
+		}
+	}
 
 	// Observability (§23): только безопасные поля, без raw-текста.
 	log.Info().
@@ -166,6 +211,9 @@ func (s *SmartImportService) SuggestNomenclature(
 		PromptVersion:              ainom.PromptVersion,
 		Provider:                   res.Provider,
 		Rows:                       res.Rows,
+		AIRequestID:                aiRequestID,
+		FeedbackTokens:             feedbackTokens,
+		AICapabilityStatus:         aiCapStatus,
 	}, nil
 }
 

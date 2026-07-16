@@ -15,6 +15,10 @@ import {
   suggestionStatusText, suggestionsStale, unresolvedNomenclatureRefs,
 } from '../../../lib/quality/aiNomenclaturePolicy';
 import { REMEMBER_BULK_LABEL, REMEMBER_LABEL } from '../../../lib/quality/smartImportMemoryPolicy';
+import { AiCapabilityView, fetchAiNomenclatureCapability } from '../../../lib/api/adminAi';
+import {
+  PILOT_DISCLOSURE_TEXT, bulkConfirmVisible, capabilityDisplay, pilotModelLabel, quotaLine,
+} from '../../../lib/quality/aiRolloutPolicy';
 import { getErrorMessage } from '../../../utils/errors';
 
 const { Text } = Typography;
@@ -29,12 +33,14 @@ interface Props {
   selections: SelectionsMap;
   onSelectionsChange: (next: SelectionsMap) => void;
   onApply: () => Promise<void>; // повторный анализ с подтверждениями
+  // Этап 2.6 (§13): пробрасывает ai_request_id для feedback при execute.
+  onAiRequest?: (id: string) => void;
 }
 
 /** Этап 2.2 (§15-16): подбор номенклатуры для unresolved-строк. Ничего не
  *  выбирается автоматически — каждое применение требует действия инженера. */
 export default function NomenclatureSuggestPanel({
-  tenderId, file, analysis, opts, selections, onSelectionsChange, onApply,
+  tenderId, file, analysis, opts, selections, onSelectionsChange, onApply, onAiRequest,
 }: Props) {
   const [suggest, setSuggest] = useState<SmartSuggestResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,6 +48,13 @@ export default function NomenclatureSuggestPanel({
   const [manualRef, setManualRef] = useState<string | null>(null);
   const [manualOptions, setManualOptions] = useState<{ work: ManualOption[]; material: ManualOption[] } | null>(null);
   const [manualLoading, setManualLoading] = useState(false);
+  // Этап 2.6 (§19): capability текущего пользователя — server-side решение;
+  // UI только отображает состояние.
+  const [capability, setCapability] = useState<AiCapabilityView | null>(null);
+
+  useEffect(() => {
+    fetchAiNomenclatureCapability().then(setCapability).catch(() => setCapability(null));
+  }, []);
 
   const unresolvedRefs = useMemo(
     () => unresolvedNomenclatureRefs(analysis.issues, analysis.selected_sheet),
@@ -62,6 +75,7 @@ export default function NomenclatureSuggestPanel({
         tenderId, file, analysis.workbook_fingerprint, opts,
       );
       setSuggest(res);
+      if (res.ai_request_id && onAiRequest) onAiRequest(res.ai_request_id);
     } catch (e) {
       message.error(getErrorMessage(e));
     } finally {
@@ -140,6 +154,12 @@ export default function NomenclatureSuggestPanel({
   };
 
   const providerAlert = suggest ? providerStatusDisplay(suggest.provider.status) : null;
+  // Этап 2.6: статус деградации live AI из suggest-ответа (квоты/circuit/
+  // stale) — ручной путь при этом полностью доступен.
+  const aiCapAlert = suggest?.ai_capability_status && suggest.ai_capability_status !== 'available'
+    ? capabilityDisplay({ status: suggest.ai_capability_status as AiCapabilityView['status'] })
+    : null;
+  const bulkAllowed = bulkConfirmVisible(capability);
   const summary = selectionSummary(selections);
 
   const isWorkRow = (row: SmartSuggestionRow) =>
@@ -275,7 +295,16 @@ export default function NomenclatureSuggestPanel({
             </Tooltip>
           </Space>
         )}
-        description={AI_DISCLOSURE_TEXT}
+        description={(
+          <Space direction="vertical" size={2}>
+            <span>{AI_DISCLOSURE_TEXT}</span>
+            {capability?.is_pilot && (
+              <Text type="secondary" style={{ fontSize: 12 }} data-testid="ai-pilot-disclosure">
+                {PILOT_DISCLOSURE_TEXT} {pilotModelLabel(capability)} {quotaLine(capability)}
+              </Text>
+            )}
+          </Space>
+        )}
         action={(
           <Button size="small" type="primary" loading={loading} onClick={runSuggest}
             disabled={unresolvedRefs.length === 0}>
@@ -284,13 +313,17 @@ export default function NomenclatureSuggestPanel({
         )}
       />
       {providerAlert && <Alert type={providerAlert.tone} showIcon message={providerAlert.text} />}
+      {aiCapAlert && <Alert type={aiCapAlert.tone} showIcon message={aiCapAlert.text} data-testid="ai-cap-status" />}
       {suggest && suggest.rows.length > 0 && (
         <>
           <Space wrap>
             <Tag color="blue">Подтверждено: {summary.total} (AI: {summary.ai}, вручную: {summary.manual})</Tag>
-            <Button size="small" disabled={bulkEligible.length === 0} onClick={doBulkConfirm}>
-              Подтвердить все с высокой уверенностью ({bulkEligible.length})
-            </Button>
+            {bulkAllowed && (
+              <Button size="small" disabled={bulkEligible.length === 0} onClick={doBulkConfirm}
+                data-testid="ai-bulk-confirm">
+                Подтвердить все с высокой уверенностью ({bulkEligible.length})
+              </Button>
+            )}
             <Button size="small" type="primary" loading={applying}
               disabled={summary.total === 0} onClick={applyConfirmed}>
               Применить подтверждения и пересчитать

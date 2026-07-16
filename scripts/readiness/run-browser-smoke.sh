@@ -75,7 +75,8 @@ echo "== seed (пользователь + тендер + номенклатур�
 psql_s <<'SQL' >/dev/null
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 INSERT INTO public.roles (code, name, color) VALUES
- ('administrator','Администратор','#f00'), ('general_director','Генеральный директор','#0a0')
+ ('administrator','Администратор','#f00'), ('general_director','Генеральный директор','#0a0'),
+ ('engineer','Инженер','#00f')
 ON CONFLICT (code) DO NOTHING;
 INSERT INTO public.units (code, name) VALUES
  ('м2','кв. метр'), ('м3','куб. метр'), ('шт','штука'), ('м','метр'), ('кг','килограмм')
@@ -97,6 +98,17 @@ VALUES ('e2e00000-0000-0000-0000-000000000002', 'e2e-gd@test.local', 'E2E Ген
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.work_names (name, unit) VALUES ('e2e работа', 'м2') ON CONFLICT DO NOTHING;
 INSERT INTO public.material_names (name, unit) VALUES ('e2e материал', 'шт') ON CONFLICT DO NOTHING;
+-- Этап 2.6: пилотный пользователь + неточная номенклатура для AI-подбора.
+INSERT INTO auth.users (id, email, encrypted_password)
+VALUES ('e2e00000-0000-0000-0000-000000000003', 'e2e-pilot@test.local', crypt('Test1234!', gen_salt('bf', 10)))
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.users (id, email, full_name, role_code, access_status, access_enabled, allowed_pages)
+VALUES ('e2e00000-0000-0000-0000-000000000003', 'e2e-pilot@test.local', 'E2E Пилот',
+        'engineer', 'approved', true, '[]'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.material_names (name, unit) VALUES
+ ('Кабель ВВГнг(А)-LS 3х2,5', 'м'), ('Кабель ВВГнг(А)-LS 3х4', 'м')
+ON CONFLICT DO NOTHING;
 INSERT INTO public.tenders (id, title, client_name, tender_number, version,
     usd_rate, eur_rate, cny_rate, financial_calculation_status)
 VALUES ('e2e00000-0000-0000-0000-0000000000e2', 'E2E Тендер', 'ООО Тест', 'E2E-1', 1,
@@ -127,6 +139,7 @@ echo "== backend (port $APIPORT, recovery scan 3s) =="
   RECALC_RECOVERY_SCAN_INTERVAL=3s RECALC_RECOVERY_CALCULATING_TIMEOUT=30s \
   OPENROUTER_API_KEY="sk-or-e2e-fake-not-a-real-key" \
   OPENROUTER_API_BASE="http://127.0.0.1:$ORPORT" \
+  OPENROUTER_LIVE_TEST=true \
   APP_ENV=development \
   LOG_LEVEL=warn \
   go run ./cmd/server > "$TMPDIR_E2E/backend.log" 2>&1

@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/su10/hubtender/backend/internal/ai/aieval"
 	"github.com/su10/hubtender/backend/internal/ai/openrouter"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
@@ -55,9 +55,44 @@ func (f *fakeORServer) handler() http.Handler {
 		f.mu.Lock()
 		f.chatN++
 		f.mu.Unlock()
+		var body struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		var payload struct {
+			Rows []struct {
+				Row struct {
+					RowReference string `json:"row_reference"`
+				} `json:"row"`
+			} `json:"rows"`
+		}
+		for _, m := range body.Messages {
+			if m.Role == "user" {
+				if i := strings.Index(m.Content, "{"); i >= 0 {
+					_ = json.Unmarshal([]byte(m.Content[i:]), &payload)
+				}
+			}
+		}
+		// Идеальные ответы: model test 2.5 + eval dataset 2.6.
+		answers := map[string]string{
+			"synthetic|1": "syn-cable-3x2.5",
+			"synthetic|2": "syn-concrete-m200",
+			"synthetic|3": "",
+			"synthetic|4": "",
+		}
+		for _, cs := range aieval.SyntheticDataset().Cases {
+			answers[cs.Key] = cs.ExpectedID
+		}
 		results := []map[string]any{}
-		for i, sel := range []string{"syn-cable-3x2.5", "syn-concrete-m200", "", ""} {
-			ref := fmt.Sprintf("synthetic|%d", i+1)
+		for _, row := range payload.Rows {
+			ref := row.Row.RowReference
+			sel, ok := answers[ref]
+			if !ok {
+				continue
+			}
 			res := map[string]any{
 				"row_reference": ref, "selected_candidate_id": nil,
 				"ranked_candidate_ids": []string{}, "confidence": "abstain",
@@ -86,6 +121,7 @@ func (f *fakeORServer) handler() http.Handler {
 type fakeStore struct {
 	mu  sync.Mutex
 	row repository.AIFeatureSettings
+	rs  *fakeRolloutState
 }
 
 func newFakeStore() *fakeStore {
@@ -96,6 +132,9 @@ func newFakeStore() *fakeStore {
 		RequestTimeoutSeconds: 30, MaxOutputTokens: 2000, CandidateLimit: 20,
 		MaxRowsPerRequest: 200, MaxConcurrency: 2,
 		ModelTestStatus: repository.AITestRequired, UpdatedAt: time.Now(),
+		RolloutMode: repository.AIRolloutOff, RolloutConfigVersion: 1,
+		DailyRequestLimit: 20, DailyRowLimit: 400, RequestMaxReservedCost: "0.05",
+		CircuitFailureThreshold: 3, CircuitCooldownSeconds: 300, ReservationTimeoutSeconds: 120,
 	}}
 }
 
@@ -175,7 +214,8 @@ func newAIAdminRouter(t *testing.T) (*chi.Mux, func(role string, req *http.Reque
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := services.NewAIAdminService(client, openrouter.NewCatalogCache(client, time.Minute), newFakeStore())
+	svc := services.NewAIAdminService(client, openrouter.NewCatalogCache(client, time.Minute), newFakeStore()).
+		WithLiveTestFlag(true) // fake-server live evaluation в тестах
 	h := NewAIAdminHandler(svc)
 
 	r := chi.NewRouter()
@@ -190,17 +230,35 @@ func newAIAdminRouter(t *testing.T) (*chi.Mux, func(role string, req *http.Reque
 		r.Post("/api/v1/admin/ai/nomenclature/test-model", h.TestNomenclatureModel)
 		r.Post("/api/v1/admin/ai/nomenclature/activate", h.ActivateNomenclature)
 		r.Post("/api/v1/admin/ai/nomenclature/deactivate", h.DeactivateNomenclature)
+		// Этап 2.6.
+		r.Get("/api/v1/admin/ai/nomenclature/rollout", h.RolloutState)
+		r.Put("/api/v1/admin/ai/nomenclature/rollout/settings", h.RolloutSettings)
+		r.Post("/api/v1/admin/ai/nomenclature/rollout/transition", h.RolloutTransition)
+		r.Post("/api/v1/admin/ai/nomenclature/rollout/emergency-off", h.RolloutEmergencyOff)
+		r.Get("/api/v1/admin/ai/nomenclature/pilot-users", h.PilotUsersList)
+		r.Post("/api/v1/admin/ai/nomenclature/pilot-users", h.PilotUsersAdd)
+		r.Patch("/api/v1/admin/ai/nomenclature/pilot-users/{userId}", h.PilotUsersPatch)
+		r.Delete("/api/v1/admin/ai/nomenclature/pilot-users/{userId}", h.PilotUsersRemove)
+		r.Get("/api/v1/admin/ai/nomenclature/usage", h.RolloutUsage)
+		r.Get("/api/v1/admin/ai/nomenclature/evaluations", h.RolloutEvaluations)
+		r.Post("/api/v1/admin/ai/nomenclature/evaluate", h.RolloutEvaluate)
+		r.Post("/api/v1/admin/ai/nomenclature/circuit/reset", h.CircuitReset)
 	})
-	r.Get("/api/v1/ai/nomenclature-capability", h.NomenclatureCapability)
+	r.Get("/api/v1/ai/nomenclature-capability", h.PilotCapability)
 
 	inject := func(role string, req *http.Request) *http.Request {
 		if role == "" {
 			return req // неаутентифицированный
 		}
-		u := &middleware.AuthUser{ID: "0b6a2d0e-8f4e-4f7a-9a3e-1b2c3d4e5f60", Email: "t@example.com", Role: role}
-		return req.WithContext(context.WithValue(req.Context(), middleware.CtxUser, u))
+		return injectAs(req, "0b6a2d0e-8f4e-4f7a-9a3e-1b2c3d4e5f60", role)
 	}
 	return r, inject
+}
+
+// injectAs — контекст AuthUser с произвольным ID (пилотные пользователи).
+func injectAs(req *http.Request, userID, role string) *http.Request {
+	u := &middleware.AuthUser{ID: userID, Email: userID + "@example.com", Role: role}
+	return req.WithContext(context.WithValue(req.Context(), middleware.CtxUser, u))
 }
 
 func doReq(t *testing.T, r http.Handler, inject func(string, *http.Request) *http.Request, role, method, path, body string) *httptest.ResponseRecorder {
@@ -319,7 +377,7 @@ func TestAIAdminFullFlowAndKeyRedaction(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &capEnv); err != nil {
 		t.Fatal(err)
 	}
-	if capEnv.Data["rollout_status"] != "off" || capEnv.Data["status"] != "disabled_by_rollout" {
+	if capEnv.Data["rollout_mode"] != "off" || capEnv.Data["status"] != "rollout_off" {
 		t.Fatalf("capability rollout: %v", capEnv.Data)
 	}
 	for _, forbidden := range []string{"selected_model_prompt_price", "config_hash", "base_host", "monthly_budget"} {

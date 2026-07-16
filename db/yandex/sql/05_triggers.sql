@@ -242,3 +242,13 @@ DROP TRIGGER IF EXISTS trg_ai_feature_settings_updated_at ON public.ai_feature_s
 CREATE TRIGGER trg_ai_feature_settings_updated_at
   BEFORE UPDATE ON public.ai_feature_settings
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- Этап 2.6: Controlled AI Rollout — updated_at maintenance.
+DROP TRIGGER IF EXISTS trg_ai_pilot_users_updated_at ON public.ai_pilot_users;
+CREATE TRIGGER trg_ai_pilot_users_updated_at
+  BEFORE UPDATE ON public.ai_pilot_users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+DROP TRIGGER IF EXISTS trg_ai_circuit_state_updated_at ON public.ai_circuit_state;
+CREATE TRIGGER trg_ai_circuit_state_updated_at
+  BEFORE UPDATE ON public.ai_circuit_state
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

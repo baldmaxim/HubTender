@@ -1,15 +1,17 @@
 import { expect, test } from '@playwright/test';
 
-// Этап 2.5 (§16/§28.14-15): финальная проверка rollout-off. Выполняется
-// ПОСЛЕДНЕЙ (zz-префикс): после admin-flow (1 model test) и полного Smart
-// Import прогона smoke.spec fake OpenRouter обязан насчитать РОВНО один
-// chat-вызов — админский synthetic test. Любой пользовательский suggest
-// с live-вызовом провайдера сломал бы этот счётчик.
+// Этапы 2.5/2.6 (§16/§28): финальная проверка провайдерского счётчика.
+// Выполняется ПОСЛЕДНЕЙ (zz-префикс). Ожидаемые chat-вызовы за весь прогон:
+//   1 — админский model test (ai-admin.spec);
+//   3 — live evaluation, 21 кейс → 3 батча по ProviderBatchSize=8 (ai-pilot.spec);
+//   1 — единственный пилотный suggest (ai-pilot.spec).
+// Итого РОВНО 5. Ни smoke.spec (обычный пользователь), ни действия после
+// emergency off не имеют права добавить ни одного вызова.
 
 const OR_STATS = process.env.E2E_OPENROUTER_STATS ?? '';
 
-test('rollout off: chat-вызовов ровно 1 (только админский model test)', async ({ request }) => {
+test('провайдерский счётчик: ровно 5 chat-вызовов (test+eval+pilot)', async ({ request }) => {
   test.skip(!OR_STATS, 'E2E_OPENROUTER_STATS не задан');
   const stats = await (await request.get(OR_STATS)).json();
-  expect(stats.chat, `fake OpenRouter chat calls: ${JSON.stringify(stats)}`).toBe(1);
+  expect(stats.chat, `fake OpenRouter chat calls: ${JSON.stringify(stats)}`).toBe(5);
 });

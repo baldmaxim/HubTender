@@ -45,6 +45,7 @@ func newRouter(
 	r.Get("/health/db", d.healthH.CheckDB)
 	r.Get("/health/cache", d.healthH.CacheStats)
 	r.Get("/health/recalc", d.recalcHealthH.Diagnostics)
+	r.Get("/health/ai", d.aiHealthH.Diagnostics)
 
 	// Public auth routes — login / register / refresh / forgot / reset do
 	// NOT require an existing JWT. JWKS is served public so any RP can
@@ -332,10 +333,25 @@ func newRouter(
 			r.Post("/api/v1/admin/ai/nomenclature/test-model", d.aiAdminH.TestNomenclatureModel)
 			r.Post("/api/v1/admin/ai/nomenclature/activate", d.aiAdminH.ActivateNomenclature)
 			r.Post("/api/v1/admin/ai/nomenclature/deactivate", d.aiAdminH.DeactivateNomenclature)
+
+			// Этап 2.6: controlled rollout (admin-only).
+			r.Get("/api/v1/admin/ai/nomenclature/rollout", d.aiAdminH.RolloutState)
+			r.Put("/api/v1/admin/ai/nomenclature/rollout/settings", d.aiAdminH.RolloutSettings)
+			r.Post("/api/v1/admin/ai/nomenclature/rollout/transition", d.aiAdminH.RolloutTransition)
+			r.Post("/api/v1/admin/ai/nomenclature/rollout/emergency-off", d.aiAdminH.RolloutEmergencyOff)
+			r.Get("/api/v1/admin/ai/nomenclature/pilot-users", d.aiAdminH.PilotUsersList)
+			r.Post("/api/v1/admin/ai/nomenclature/pilot-users", d.aiAdminH.PilotUsersAdd)
+			r.Patch("/api/v1/admin/ai/nomenclature/pilot-users/{userId}", d.aiAdminH.PilotUsersPatch)
+			r.Delete("/api/v1/admin/ai/nomenclature/pilot-users/{userId}", d.aiAdminH.PilotUsersRemove)
+			r.Get("/api/v1/admin/ai/nomenclature/usage", d.aiAdminH.RolloutUsage)
+			r.Get("/api/v1/admin/ai/nomenclature/evaluations", d.aiAdminH.RolloutEvaluations)
+			r.Post("/api/v1/admin/ai/nomenclature/evaluate", d.aiAdminH.RolloutEvaluate)
+			r.Post("/api/v1/admin/ai/nomenclature/circuit/reset", d.aiAdminH.CircuitReset)
 		})
 		// Capability — безопасное effective-состояние для ЛЮБОГО
 		// аутентифицированного пользователя (без secrets/settings).
-		r.Get("/api/v1/ai/nomenclature-capability", d.aiAdminH.NomenclatureCapability)
+		// Этап 2.6: расширенная pilot-capability текущего пользователя.
+		r.Get("/api/v1/ai/nomenclature-capability", d.aiAdminH.PilotCapability)
 
 		// Admin user / role management.
 		r.Get("/api/v1/admin/tenders-for-access", d.userAdminH.ListTendersForUserAccess)

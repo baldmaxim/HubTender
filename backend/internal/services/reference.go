@@ -11,11 +11,11 @@ import (
 
 // Cache TTLs per reference type.
 const (
-	rolesCacheTTL              = time.Hour
-	unitsCacheTTL              = 24 * time.Hour
-	materialNamesCacheTTL      = 15 * time.Minute
-	workNamesCacheTTL          = 15 * time.Minute
-	costCategoriesCacheTTL     = time.Hour
+	rolesCacheTTL                = time.Hour
+	unitsCacheTTL                = 24 * time.Hour
+	materialNamesCacheTTL        = 15 * time.Minute
+	workNamesCacheTTL            = 15 * time.Minute
+	costCategoriesCacheTTL       = time.Hour
 	detailCostCategoriesCacheTTL = time.Hour
 )
 

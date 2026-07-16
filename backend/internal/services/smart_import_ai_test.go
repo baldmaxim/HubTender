@@ -131,7 +131,7 @@ func TestExecuteUnconfirmedRowStaysBlocked(t *testing.T) {
 	svc := newAITestService(imp, ainom.DisabledProvider{}, ainom.Config{})
 	data := aiTestWorkbook(t)
 	_, err := svc.Execute(context.Background(), "t-1", "smeta.xlsx", data,
-		ia.Fingerprint(data), ia.Options{}, "u-1", nil)
+		ia.Fingerprint(data), ia.Options{}, "u-1", nil, "")
 	var blocked *BlockersPresentError
 	if !errors.As(err, &blocked) {
 		t.Fatalf("ожидался BlockersPresentError, получили %v", err)
@@ -153,7 +153,7 @@ func TestExecuteConfirmedSelectionImports(t *testing.T) {
 		ia.Fingerprint(data), ia.Options{
 			NomenclatureSelections: map[string]string{"Смета|3": "m-1"},
 			SelectionSources:       map[string]string{"Смета|3": "ai_confirmed"},
-		}, "u-1", nil)
+		}, "u-1", nil, "")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestExecuteManualSelectionAccepted(t *testing.T) {
 		ia.Fingerprint(data), ia.Options{
 			NomenclatureSelections: map[string]string{"Смета|3": "m-1"},
 			SelectionSources:       map[string]string{"Смета|3": "manual"},
-		}, "u-1", nil)
+		}, "u-1", nil, "")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestExecuteForgedCatalogIDBlocked(t *testing.T) {
 		SelectionSources:       map[string]string{"Смета|3": "ai_confirmed"},
 	}
 	_, err := svc.Execute(context.Background(), "t-1", "smeta.xlsx", data,
-		ia.Fingerprint(data), opts, "u-1", nil)
+		ia.Fingerprint(data), opts, "u-1", nil, "")
 	var blocked *BlockersPresentError
 	if !errors.As(err, &blocked) {
 		t.Fatalf("forged ID должен блокировать импорт: %v", err)
@@ -258,7 +258,7 @@ func TestExecuteTypeIncompatibleSelectionBlocked(t *testing.T) {
 		ia.Fingerprint(data), ia.Options{
 			NomenclatureSelections: map[string]string{"Смета|3": "w-1"}, // work для «мат»
 			SelectionSources:       map[string]string{"Смета|3": "manual"},
-		}, "u-1", nil)
+		}, "u-1", nil, "")
 	var blocked *BlockersPresentError
 	if !errors.As(err, &blocked) {
 		t.Fatalf("несовместимый тип должен блокировать: %v", err)
@@ -288,7 +288,7 @@ func TestExecuteUnitConflictSelectionWarns(t *testing.T) {
 		t.Fatal("ожидался warning NOMENCLATURE_SELECTION_UNIT_WARNING")
 	}
 	if _, err := svc.Execute(context.Background(), "t-1", "smeta.xlsx", data,
-		ia.Fingerprint(data), opts, "u-1", nil); err != nil {
+		ia.Fingerprint(data), opts, "u-1", nil, ""); err != nil {
 		t.Fatalf("unit warning не должен блокировать execute: %v", err)
 	}
 	if imp.last == nil {
@@ -305,7 +305,7 @@ func TestExecuteUnknownRowReferenceRejected(t *testing.T) {
 		ia.Fingerprint(data), ia.Options{
 			NomenclatureSelections: map[string]string{"Смета|999": "m-1"},
 			SelectionSources:       map[string]string{"Смета|999": "manual"},
-		}, "u-1", nil)
+		}, "u-1", nil, "")
 	var selErr *InvalidSelectionError
 	if !errors.As(err, &selErr) {
 		t.Fatalf("несуществующий row_reference должен быть отклонён: %v", err)
