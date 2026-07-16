@@ -24,7 +24,8 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     label: 'Тип',
     group: 'classification',
     editKey: 'boq_item_type',
-    pairKey: 'type',
+    rowKey: 'type',
+    rowKeyLandscape: 'cls',
     render: (ctx) => ctx.item.boq_item_type,
     toDraft: (ctx) => ctx.item.boq_item_type,
     control: {
@@ -41,7 +42,8 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     label: 'Вид',
     group: 'classification',
     editKey: 'material_type',
-    pairKey: 'type',
+    rowKey: 'type',
+    rowKeyLandscape: 'cls',
     render: (ctx) => ctx.item.material_type || DASH,
     toDraft: (ctx) => ctx.item.material_type || 'основн.',
     control: {
@@ -67,6 +69,10 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     label: 'Привязка',
     group: 'classification',
     editKey: 'parent_work_item_id',
+    // В портрете — своя строка (значение длинное). В ландшафте подтягивается к
+    // «Тип · Вид» через «Наименование»: toRows группирует по ключу, а не по
+    // соседству, поэтому переставлять дескрипторы не нужно.
+    rowKeyLandscape: 'cls',
     render: (ctx) => ctx.item.parent_work_name || 'Без привязки',
     toDraft: (ctx) => ctx.item.parent_work_item_id ?? null,
     control: { kind: 'parent' },
@@ -76,7 +82,8 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     label: 'К перев',
     group: 'quantity',
     editKey: 'conversion_coefficient',
-    pairKey: 'coef',
+    rowKey: 'coef',
+    rowKeyLandscape: 'qty4',
     // У непривязанного материала колонка очищена (null) — поле не показываем,
     // и пара 'coef' сама схлопывается до одного «К расх».
     visible: (ctx) => isLinked(ctx.item),
@@ -90,7 +97,8 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     label: 'К расх',
     group: 'quantity',
     editKey: 'consumption_coefficient',
-    pairKey: 'coef',
+    rowKey: 'coef',
+    rowKeyLandscape: 'qty4',
     render: (ctx) =>
       ctx.item.consumption_coefficient != null ? ctx.item.consumption_coefficient.toFixed(5) : DASH,
     toDraft: (ctx) => ctx.item.consumption_coefficient ?? 1,
@@ -102,7 +110,8 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     group: 'quantity',
     // Карандаш только у непривязанного: у привязанного это выход формулы.
     editKey: undefined,
-    pairKey: 'qty',
+    rowKey: 'qty',
+    rowKeyLandscape: 'qty4',
     render: (ctx) => (ctx.item.quantity != null ? ctx.item.quantity.toFixed(5) : DASH),
     toDraft: (ctx) => ctx.item.quantity ?? null,
     control: { kind: 'number', precision: 5 },
@@ -111,7 +120,8 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     key: 'unit_code',
     label: 'Ед. изм.',
     group: 'quantity',
-    pairKey: 'qty',
+    rowKey: 'qty',
+    rowKeyLandscape: 'qty4',
     render: (ctx) => ctx.item.unit_code || DASH,
   },
   {
@@ -119,7 +129,8 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     label: 'Цена за ед.',
     group: 'quantity',
     editKey: 'unit_rate',
-    pairKey: 'price',
+    rowKey: 'price',
+    rowKeyLandscape: 'price4',
     render: (ctx) =>
       ctx.item.unit_rate != null
         ? `${formatRu(ctx.item.unit_rate)} ${currencySymbols[ctx.item.currency_type || 'RUB']}`
@@ -132,7 +143,8 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     label: 'Валюта',
     group: 'quantity',
     editKey: 'currency_type',
-    pairKey: 'price',
+    rowKey: 'price',
+    rowKeyLandscape: 'price4',
     render: (ctx) => currencySymbols[ctx.item.currency_type || 'RUB'],
     toDraft: (ctx) => ctx.item.currency_type || 'RUB',
     control: { kind: 'currency' },
@@ -142,7 +154,8 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     label: 'Доставка',
     group: 'quantity',
     editKey: 'delivery_price_type',
-    pairKey: 'delivery',
+    rowKey: 'delivery',
+    rowKeyLandscape: 'price4',
     render: (ctx) => ctx.item.delivery_price_type || 'в цене',
     toDraft: (ctx) => ctx.item.delivery_price_type || 'в цене',
     control: {
@@ -159,7 +172,8 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     label: 'Сум. дост.',
     group: 'quantity',
     editKey: 'delivery_amount',
-    pairKey: 'delivery',
+    rowKey: 'delivery',
+    rowKeyLandscape: 'price4',
     // Вне режима «суммой» колонка не используется — пара схлопывается до «Доставки».
     visible: (ctx) => ctx.item.delivery_price_type === 'суммой',
     render: (ctx) => (ctx.item.delivery_amount != null ? formatRu(ctx.item.delivery_amount) : DASH),

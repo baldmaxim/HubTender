@@ -40,14 +40,15 @@ export const WORK_SHEET_FIELDS: SheetField[] = [
     toDraft: nameDraft,
     control: { kind: 'name', source: 'work' },
   },
-  // Порядок ниже задаёт парную раскладку: toRows() собирает пару только из
-  // непосредственных соседей, поэтому unit_rate стоит ПЕРЕД currency_type.
+  // Портрет: две пары («Кол-во · Ед. изм.», «Цена за ед. · Валюта»).
+  // Ландшафт: все четыре в одну строку — там хватает ширины.
   {
     key: 'quantity',
     label: 'Кол-во',
     group: 'quantity',
     editKey: 'quantity',
-    pairKey: 'qty',
+    rowKey: 'qty',
+    rowKeyLandscape: 'qty4',
     render: (ctx) => (ctx.item.quantity != null ? ctx.item.quantity.toFixed(5) : DASH),
     toDraft: (ctx) => ctx.item.quantity ?? null,
     control: { kind: 'number', precision: 5 },
@@ -56,7 +57,8 @@ export const WORK_SHEET_FIELDS: SheetField[] = [
     key: 'unit_code',
     label: 'Ед. изм.',
     group: 'quantity',
-    pairKey: 'qty',
+    rowKey: 'qty',
+    rowKeyLandscape: 'qty4',
     // Производное от номенклатуры — правится только через Наименование.
     render: (ctx) => ctx.item.unit_code || DASH,
   },
@@ -65,7 +67,8 @@ export const WORK_SHEET_FIELDS: SheetField[] = [
     label: 'Цена за ед.',
     group: 'quantity',
     editKey: 'unit_rate',
-    pairKey: 'price',
+    rowKey: 'price',
+    rowKeyLandscape: 'qty4',
     render: (ctx) =>
       ctx.item.unit_rate != null
         ? `${formatRu(ctx.item.unit_rate)} ${currencySymbols[ctx.item.currency_type || 'RUB']}`
@@ -78,7 +81,8 @@ export const WORK_SHEET_FIELDS: SheetField[] = [
     label: 'Валюта',
     group: 'quantity',
     editKey: 'currency_type',
-    pairKey: 'price',
+    rowKey: 'price',
+    rowKeyLandscape: 'qty4',
     render: (ctx) => currencySymbols[ctx.item.currency_type || 'RUB'],
     toDraft: (ctx) => ctx.item.currency_type || 'RUB',
     control: { kind: 'currency' },

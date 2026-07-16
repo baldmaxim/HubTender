@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Card, Space, Tag, Typography, Empty, Skeleton } from 'antd';
-import { LinkOutlined, RightOutlined } from '@ant-design/icons';
+import { LinkOutlined } from '@ant-design/icons';
 import type { BoqItemFull } from '../../../lib/types';
 import { currencySymbols, getBoqTypeTagStyle, isMaterialType } from './boqColors';
 import { formatRu } from '../../../utils/format/currency';
@@ -117,9 +117,6 @@ const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({
                   </div>
                 )}
               </div>
-              {onItemClick && (
-                <RightOutlined style={{ fontSize: 12, color: '#bbb', marginTop: 4, flex: '0 0 auto' }} />
-              )}
             </div>
 
             <Field label="Кол-во">

@@ -5,6 +5,7 @@ import type { CostCategoryOption } from '../editFormShared';
 import type { BoqItemFieldPatch } from '../../utils/boqFieldPatch';
 import { isWorkItemType } from '../../utils/boqFieldPatch';
 import { missingFXMessage } from '../../../../utils/boq/currencyGuard';
+import { useIsMobile } from '../../../../hooks/useIsMobile';
 import { formatRu } from '../../../../utils/format/currency';
 import { getBoqTypeTagStyle } from '../boqColors';
 import { useBoqFieldSave } from '../../hooks/useBoqFieldSave';
@@ -63,6 +64,10 @@ const BoqItemSheet: React.FC<BoqItemSheetProps> = ({
 }) => {
   const { token } = theme.useToken();
   const { message } = AntApp.useApp();
+  // Ориентацию лист спрашивает сам, а не получает пропом: он самодостаточный
+  // мобильный компонент, а хук и так реактивен на поворот (rAF-коалесинг +
+  // equality-guard внутри), поэтому лишним рендерам взяться неоткуда.
+  const { isLandscapePhone } = useIsMobile();
   const { editingKey, error, start, cancel, commit, stateOf } = useBoqFieldSave({
     itemId,
     onFieldSave,
@@ -135,7 +140,9 @@ const BoqItemSheet: React.FC<BoqItemSheetProps> = ({
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 4px' }}>
       <Text type="secondary">Итого</Text>
       <Text strong style={{ fontSize: 16, color: token.colorPrimary }}>
-        {item.total_amount == null ? '—' : formatRu(item.total_amount)}
+        {/* Округление ВНУТРИ non-null ветки: Math.round(null) === 0 съел бы прочерк
+            у строки без курса. Идиома та же, что в карточках и десктопном тулбаре. */}
+        {item.total_amount == null ? '—' : formatRu(Math.round(item.total_amount))}
       </Text>
     </div>
   ) : null;
@@ -148,8 +155,12 @@ const BoqItemSheet: React.FC<BoqItemSheetProps> = ({
       height="92%"
       zIndex={1200}
       destroyOnHidden
-      // Пока поле в редактировании — случайный тап по маске не должен терять ввод.
-      maskClosable={editingKey === null}
+      // Крестика нет — лист закрывается тапом по маске, и она закрывает ВСЕГДА.
+      // Гейт по editingKey убран намеренно: без крестика он оставлял пользователя
+      // без выхода при активном редакторе, а во время сохранения — совсем (там и
+      // «Отмена» в поле disabled). Недосохранённый черновик и так не был записан:
+      // в per-field модели значение уходит только по явному ✓.
+      closable={false}
       title={title}
       footer={footer}
       styles={{
@@ -174,7 +185,7 @@ const BoqItemSheet: React.FC<BoqItemSheetProps> = ({
                 <Divider plain style={{ margin: '4px 0', fontSize: 11 }}>
                   {SHEET_GROUP_LABEL[group]}
                 </Divider>
-                {toRows(groupFields).map((rowFields) => (
+                {toRows(groupFields, isLandscapePhone).map((rowFields) => (
                   <BoqSheetRow
                     key={rowFields.map((f) => f.key).join('+')}
                     fields={rowFields}
