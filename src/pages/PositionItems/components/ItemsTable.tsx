@@ -33,6 +33,10 @@ interface ItemsTableProps {
   /** «Плоский» read-only режим для оверлея: без scroll, без fixed-колонок,
    *  без колонок сортировки/действий и без раскрытия строк. */
   plain?: boolean;
+  /** Тап по строке → лист редактирования (ландшафтный телефон). В plain-режиме
+   *  колонка «Действия» вырезана, поэтому тап-цель — вся строка. Не задан ⇒
+   *  строки некликабельны (десктоп). */
+  onRowClick?: (record: BoqItemFull) => void;
 }
 
 const ItemsTable: React.FC<ItemsTableProps> = ({
@@ -50,6 +54,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
   isDeleteMode = false,
   selectedDeleteIds = EMPTY_DELETE_IDS,
   plain = false,
+  onRowClick,
 }) => {
   const getRowClassName = (record: BoqItemFull): string => {
     const itemType = record.boq_item_type;
@@ -508,6 +513,14 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       pagination={false}
       scroll={plain ? undefined : { y: 'calc(100vh - 500px)' }}
       size="small"
+      onRow={
+        onRowClick
+          ? (record) => ({
+              onClick: () => onRowClick(record),
+              style: { cursor: 'pointer', touchAction: 'manipulation' },
+            })
+          : undefined
+      }
       expandable={
         plain
           ? undefined

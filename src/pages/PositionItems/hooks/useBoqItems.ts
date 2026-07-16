@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { message } from 'antd';
 import type {
   ClientPosition,
@@ -69,6 +69,13 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
   const [workNames, setWorkNames] = useState<WorkName[]>([]);
   const [materialNames, setMaterialNames] = useState<MaterialName[]>([]);
   const [units, setUnits] = useState<Array<{ code: string; name: string }>>([]);
+
+  // Ленивая догрузка edit-справочников на телефоне (см. loadEditData).
+  // ref — источник истины для гонки параллельных тапов; state — для рендера.
+  const editDataRef = useRef<'idle' | 'loading' | 'ready'>('idle');
+  const [editDataState, setEditDataState] = useState<'idle' | 'loading' | 'ready' | 'error'>(
+    skipEditData ? 'idle' : 'ready',
+  );
 
   // Состояния для данных ГП
   const [gpVolume, setGpVolume] = useState<number>(0);
@@ -361,7 +368,9 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
     }
   };
 
-  const fetchCostCategories = async () => {
+  // Три fetch'а ниже возвращают признак успеха: телефонный loadEditData обязан
+  // отличить «загрузилось пусто» от «упало», иначе ✎ навсегда останется мёртвым.
+  const fetchCostCategories = async (): Promise<boolean> => {
     try {
       const data = await listDetailCostCategoriesWithCategory();
       const options = (data || []).map((item) => {
@@ -374,30 +383,60 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
         };
       });
       setCostCategories(options);
+      return true;
     } catch (error) {
       message.error('Ошибка загрузки категорий затрат: ' + getErrorMessage(error));
+      return false;
     }
   };
 
-  const fetchWorkNames = async () => {
+  const fetchWorkNames = async (): Promise<boolean> => {
     try {
       // Go отдаёт все work_names одним запросом; пагинация убрана.
       const data = await listWorkNames();
       const sorted = [...data].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setWorkNames(sorted as unknown as WorkName[]);
+      return true;
     } catch (error) {
       message.error('Ошибка загрузки наименований работ: ' + getErrorMessage(error));
+      return false;
     }
   };
 
-  const fetchMaterialNames = async () => {
+  const fetchMaterialNames = async (): Promise<boolean> => {
     try {
       const data = await listMaterialNames();
       const sorted = [...data].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setMaterialNames(sorted as unknown as MaterialName[]);
+      return true;
     } catch (error) {
       message.error('Ошибка загрузки наименований материалов: ' + getErrorMessage(error));
+      return false;
     }
+  };
+
+  /**
+   * Ленивая догрузка edit-справочников на телефоне (skipEditData их пропустил).
+   * Зовётся по первому тапу по карточке/строке — не на маунте: WorkspaceKeepAlive
+   * держит несколько PositionItems смонтированными разом, и «всегда на телефоне»
+   * умножило бы запросы на число вкладок.
+   *
+   * Нужны ровно три: units грузятся безусловно, курсы приходят из fetchPositionData,
+   * а работы для «Привязки» берутся из уже загруженных items.
+   */
+  const loadEditData = async (): Promise<void> => {
+    if (editDataRef.current !== 'idle') return;
+    editDataRef.current = 'loading';
+    setEditDataState('loading');
+    const results = await Promise.all([
+      fetchCostCategories(),
+      fetchWorkNames(),
+      fetchMaterialNames(),
+    ]);
+    const ok = results.every(Boolean);
+    // Провал → откатываем ref в idle, чтобы следующее открытие повторило попытку.
+    editDataRef.current = ok ? 'ready' : 'idle';
+    setEditDataState(ok ? 'ready' : 'error');
   };
 
   const fetchUnits = async () => {
@@ -481,5 +520,7 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
     getCurrencyRate,
     fetchPositionData,
     fetchItems,
+    loadEditData,
+    editDataState,
   };
 };

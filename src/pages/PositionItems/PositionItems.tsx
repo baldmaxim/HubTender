@@ -1,7 +1,7 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, memo, useEffect } from 'react';
 import { Card, Tabs, Alert, Skeleton } from 'antd';
 import { missingFXMessage } from '../../utils/boq/currencyGuard';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import WorkEditForm from './WorkEditForm';
 import MaterialEditForm from './MaterialEditForm';
 import { useBoqItems } from './hooks/useBoqItems';
@@ -17,11 +17,16 @@ import AddItemForm from './components/AddItemForm';
 import TemplateSelectModal from './components/TemplateSelectModal';
 import AuditHistoryTab from './components/AuditHistoryTab';
 import { BoqItemsImportModal } from './components/BoqItemsImportModal';
+import BoqItemSheet from './components/mobile/BoqItemSheet';
+import { useGpAutosave } from './hooks/useGpAutosave';
 import { useDeadlineCheck } from '../../hooks/useDeadlineCheck';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
+
+/** Стабильная пустышка вместо рефетча позиции (телефонный автосейв ГП). */
+const NOOP = () => {};
 
 interface PositionItemsProps {
   /** Передаётся из WorkspaceKeepAlive (несколько экземпляров смонтированы сразу —
@@ -32,6 +37,9 @@ interface PositionItemsProps {
 const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionId }) => {
   const params = useParams<{ positionId: string }>();
   const positionId = propPositionId ?? params.positionId;
+  // Этап 1.1 (deep links): ?itemId=… — прокрутить к строке BOQ и подсветить.
+  const [deepLinkParams] = useSearchParams();
+  const deepLinkItemId = deepLinkParams.get('itemId');
   const { user } = useAuth();
   const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
   const { theme } = useTheme();
@@ -47,6 +55,21 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
   const [isDeleteMode, setIsDeleteMode] = useState<boolean>(false);
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
+
+  // Deep-link подсветка: после загрузки строк прокручиваем к itemId из query
+  // и временно подсвечиваем строку (Ant Table рендерит data-row-key на <tr>).
+  useEffect(() => {
+    if (!deepLinkItemId) return;
+    const t = setTimeout(() => {
+      const row = document.querySelector(`[data-row-key="${deepLinkItemId}"]`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('boq-row-deeplink-highlight');
+        setTimeout(() => row.classList.remove('boq-row-deeplink-highlight'), 4000);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [deepLinkItemId]);
 
   const {
     position,
@@ -71,7 +94,18 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
     getCurrencyRate,
     fetchPositionData,
     fetchItems,
+    loadEditData,
+    editDataState,
   } = useBoqItems(positionId, isPhoneDevice);
+
+  // Телефонный лист редактирования (обе ориентации). Держим id, а не запись:
+  // лист сам находит её в items — так он переживает рефетч и поворот.
+  const [sheetItemId, setSheetItemId] = useState<string | null>(null);
+  const openSheet = (id: string) => {
+    setSheetItemId(id);
+    // Справочники на телефоне пропущены skipEditData — догружаем по первому тапу.
+    void loadEditData();
+  };
 
   // Обновление заголовка вкладки приложения для этой позиции
   usePositionTabTitle(positionId, position);
@@ -102,6 +136,7 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
     handleAddMaterial,
     handleAddTemplate,
     handleFormSave,
+    handleItemFieldSave,
     handleSaveGPData,
     handleSaveAdditionalWorkData,
     handleMoveItem,
@@ -149,14 +184,28 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
   };
   const onFormCancel = () => setExpandedRowKeys([]);
 
-  const onSaveGPData = async () => {
-    if (positionId) await handleSaveGPData(positionId, gpVolume, gpNote, fetchPositionData);
+  // Значения приходят аргументами, а не из замыкания: телефонный автосейв шлёт свой
+  // драфт, иначе WS-рефетч (fetchPositionData → setGpVolume) успел бы затереть его
+  // серверным значением до срабатывания debounce.
+  const onSaveGPData = async (volume: number, note: string, opts?: { refetch?: boolean }) => {
+    if (!positionId) return;
+    await handleSaveGPData(
+      positionId,
+      volume,
+      note,
+      opts?.refetch === false ? NOOP : fetchPositionData,
+    );
   };
   const onSaveAdditionalWorkData = async () => {
     if (positionId && position?.is_additional) {
       await handleSaveAdditionalWorkData(positionId, workName, unitCode, fetchPositionData);
     }
   };
+
+  // РОВНО один экземпляр на страницу: в ландшафте PositionHeader остаётся
+  // смонтированным под оверлеем, и хук внутри GpInlineFields дал бы два таймера.
+  const gp = useGpAutosave({ gpVolume, setGpVolume, gpNote, setGpNote, onSaveGPData });
+  const gpEditable = isPhoneDevice && !isReadOnlyByDeadline;
 
   const handleStartDelete = (id: string) => {
     setExpandedRowKeys([]);
@@ -195,19 +244,41 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
   // Тело карточки «Элементы позиции» в зависимости от устройства/ориентации
   const itemsBody = (() => {
     if (isPhone && !isLandscapePhone) {
-      return <ItemsMobileCards items={items} totalSum={totalSum} loading={loading} />;
+      return (
+        <ItemsMobileCards
+          items={items}
+          totalSum={totalSum}
+          loading={loading}
+          positionId={positionId}
+          onItemClick={(it) => openSheet(it.id)}
+        />
+      );
     }
     if (isLandscapePhone) {
       return (
-        <LandscapeTableOverlay theme={theme} fit="zoom" width={ITEMS_PLAIN_FIT_WIDTH}>
+        // fit="width" (transform:scale), а НЕ "zoom": CSS zoom смещает hit-тестинг в
+        // мобильных WebView — тап по строке попадал бы в пустоту. Прецедент: «Форма КП»
+        // и «Затраты» переехали на width ровно тогда, когда их строки стали кликабельными.
+        // Цена — sticky-шапка (она реализована только для .lto-fit-zoom).
+        <LandscapeTableOverlay theme={theme} fit="width" width={ITEMS_PLAIN_FIT_WIDTH}>
           <PositionLandscapeInfo
             position={position}
             gpVolume={gpVolume}
             gpNote={gpNote}
             workName={workName}
             unitCode={unitCode}
+            gpEditable={gpEditable}
+            gp={gp}
+            disabled={isReadOnlyByDeadline}
           />
-          <ItemsTable plain readOnly items={items} loading={loading} getCurrencyRate={getCurrencyRate} />
+          <ItemsTable
+            plain
+            readOnly
+            items={items}
+            loading={loading}
+            getCurrencyRate={getCurrencyRate}
+            onRowClick={(r) => openSheet(r.id)}
+          />
         </LandscapeTableOverlay>
       );
     }
@@ -286,6 +357,9 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
         onSaveGPData={onSaveGPData}
         onSaveAdditionalWorkData={onSaveAdditionalWorkData}
         isPhone={isPhoneDevice}
+        // В ландшафте шапка закрыта оверлеем — ГП там правится в PositionLandscapeInfo.
+        gpEditable={gpEditable && isPhone && !isLandscapePhone}
+        gp={gp}
       />
 
       <Tabs
@@ -383,6 +457,25 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
             // (вставка идёт по одному), иначе они не появятся до перезагрузки.
             fetchItems();
           }}
+        />
+      )}
+
+      {/* Телефонный лист редактирования — вне веток портрета/ландшафта, поэтому
+          переживает поворот (запись ищется по id в живом items). */}
+      {isPhoneDevice && (
+        <BoqItemSheet
+          itemId={sheetItemId}
+          items={items}
+          workNames={workNames}
+          materialNames={materialNames}
+          costCategories={costCategories}
+          units={units}
+          currencyRates={currencyRates}
+          gpVolume={gpVolume}
+          editDataState={editDataState}
+          canEdit={!isReadOnlyByDeadline}
+          onFieldSave={handleItemFieldSave}
+          onClose={() => setSheetItemId(null)}
         />
       )}
     </div>
