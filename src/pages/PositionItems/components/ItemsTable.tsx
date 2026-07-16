@@ -4,7 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { EditOutlined, DeleteOutlined, LinkOutlined, UpOutlined, DownOutlined } from '@ant-design/icons';
 import type { BoqItemFull, CurrencyType } from '../../../lib/types';
 import { currencySymbols, getBoqTypeTagStyle } from './boqColors';
-import { formatRu } from '../../../utils/format/currency';
+import { formatRu, formatRu2 } from '../../../utils/format/currency';
 
 /** Стабильная ссылка на пустой Set — дефолт для selectedDeleteIds, чтобы не ломать мемо. */
 const EMPTY_DELETE_IDS = new Set<string>();
@@ -269,7 +269,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       align: 'center',
       render: (value: number, record: BoqItemFull) => {
         const isMaterial = ['мат', 'суб-мат', 'мат-комп.'].includes(record.boq_item_type);
-        const displayValue = value?.toFixed(5) || '-';
+        const displayValue = value != null ? formatRu2(value) : '-';
 
         if (isMaterial && value) {
           let tooltipTitle = '';
@@ -278,7 +278,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
             const workQty = parentWork?.quantity || 0;
             const convCoef = record.conversion_coefficient || 1;
             const consCoef = record.consumption_coefficient || 1;
-            tooltipTitle = `Кол-во = ${workQty.toFixed(5)} (кол-во работы) × ${convCoef.toFixed(4)} (К перв) × ${consCoef.toFixed(4)} (К расх) = ${displayValue}`;
+            tooltipTitle = `Кол-во = ${workQty.toFixed(5)} (кол-во работы) × ${convCoef.toFixed(4)} (К перв) × ${consCoef.toFixed(4)} (К расх) = ${value.toFixed(5)}`;
           } else if (record.base_quantity) {
             const baseQty = record.base_quantity;
             const consCoef = record.consumption_coefficient || 1;
@@ -357,7 +357,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       align: 'center',
       render: (_: unknown, record: BoqItemFull) => {
         const total = calculateTotal(record);
-        const displayValue = total > 0 ? `${formatRu(total)}` : '-';
+        const displayValue = total > 0 ? `${formatRu2(total)}` : '-';
 
         if (total > 0) {
           const qty = record.quantity || 0;
