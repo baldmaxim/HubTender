@@ -12,8 +12,9 @@ interface DeadlineBarProps {
 }
 
 export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, currentTheme }) => {
-  // Только портрет телефона (<576px): в ландшафте ширины (844px) хватает на 14px.
-  const { isPhone } = useIsMobile();
+  // Телефон в любой ориентации: и в портрете, и в ландшафте шкала показывает
+  // только дату дедлайна — отсчёт и проценты остаются десктопу.
+  const { isPhoneDevice } = useIsMobile();
   const [now, setNow] = useState(() => dayjs());
   const deadlineStr = selectedTender.submission_deadline;
   const isExpired = deadlineStr ? dayjs(deadlineStr).isBefore(now) : false;
@@ -44,21 +45,21 @@ export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, curren
 
   const percentage = Math.round(progress);
 
-  // Телефон: 9px + nowrap — вся шкала в одну строку (~338px из 390px).
-  // lineHeight прижат к кеглю: от него напрямую зависит высота полосы ниже.
+  // Телефон: 12px + nowrap. Строка одна («Дедлайн: …» ≈ 208px из 390px),
+  // lineHeight прижат к кеглю — от него напрямую зависит высота полосы ниже.
   const barText: React.CSSProperties = {
     color: 'white',
     fontWeight: 600,
     textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-    ...(isPhone ? { fontSize: 9, lineHeight: '12px', whiteSpace: 'nowrap' as const } : null),
+    ...(isPhoneDevice ? { fontSize: 12, lineHeight: '16px', whiteSpace: 'nowrap' as const } : null),
   };
 
   return (
     <div style={{
       position: 'relative',
       marginTop: 0,
-      // Телефон: 12px строка + по 2px сверху/снизу — минимальный отступ до края шкалы.
-      height: isPhone ? 16 : 40,
+      // Телефон: 16px строка + по 2px сверху/снизу — минимальный отступ до края шкалы.
+      height: isPhoneDevice ? 20 : 40,
       borderRadius: '0 0 8px 8px',
       overflow: 'hidden',
       background: currentTheme === 'dark' ? '#0a5348' : '#ccfbf1',
@@ -78,22 +79,32 @@ export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, curren
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: isPhone ? 6 : 24,
-        padding: isPhone ? '0 8px' : '0 32px',
+        gap: isPhoneDevice ? 6 : 24,
+        padding: isPhoneDevice ? '0 8px' : '0 32px',
         zIndex: 1,
       }}>
-        <Text style={barText}>
-          {isExpired
-            ? `Дедлайн истек ${now.diff(deadline, 'day')} дней назад`
-            : `До дедлайна осталось ${Math.ceil(daysRemaining)} дней`
-          }
-        </Text>
-        <Text style={barText}>
-          Дедлайн: {deadline.format('DD MMMM YYYY, HH:mm')}
-        </Text>
-        <Text style={barText}>
-          {`${percentage}%`}
-        </Text>
+        {/* Телефон: только дата. Отсчёт и проценты съедали ширину, а прогресс и так
+            читается по красной заливке (включая просрочку — она на все 100%). */}
+        {isPhoneDevice ? (
+          <Text style={barText}>
+            Дедлайн: {deadline.format('DD MMMM YYYY, HH:mm')}
+          </Text>
+        ) : (
+          <>
+            <Text style={barText}>
+              {isExpired
+                ? `Дедлайн истек ${now.diff(deadline, 'day')} дней назад`
+                : `До дедлайна осталось ${Math.ceil(daysRemaining)} дней`
+              }
+            </Text>
+            <Text style={barText}>
+              Дедлайн: {deadline.format('DD MMMM YYYY, HH:mm')}
+            </Text>
+            <Text style={barText}>
+              {`${percentage}%`}
+            </Text>
+          </>
+        )}
       </div>
     </div>
   );

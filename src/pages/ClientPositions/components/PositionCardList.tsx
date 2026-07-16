@@ -24,8 +24,14 @@ interface PositionCardListProps {
  * Иерархия кодируется цветом левого бордера (лист — зелёный, раздел — красный)
  * и отступом для ДОП-строк вместо fixed-колонок таблицы.
  * Действия строки (копирование/удаление/фильтр) на телефоне скрыты — только просмотр.
+ *
+ * memo обязателен: сворачивание шапки (`setHeaderCollapsed` в ClientPositions) иначе
+ * перестраивает все отрендеренные карточки — а их по мере скролла набирается 40/80/120
+ * (см. useIncrementalRender), и тап начинает ощутимо тормозить. Все пропы стабильны,
+ * поэтому от переключения шапки список теперь не перерисовывается вовсе. На собственный
+ * state (порции useIncrementalRender) memo не влияет — подгрузка по скроллу работает.
  */
-export const PositionCardList: React.FC<PositionCardListProps> = ({
+const PositionCardListInner: React.FC<PositionCardListProps> = ({
   clientPositions,
   selectedTender,
   loading,
@@ -151,3 +157,5 @@ export const PositionCardList: React.FC<PositionCardListProps> = ({
     </div>
   );
 };
+
+export const PositionCardList = React.memo(PositionCardListInner);
