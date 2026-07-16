@@ -131,11 +131,14 @@ export async function bulkInsertPositions(
   return res.data.inserted;
 }
 
-/** Одна позиция + tenders(usd_rate,eur_rate,cny_rate) embed. */
+/** Одна позиция + tenders(usd_rate,eur_rate,cny_rate) embed.
+ *  cacheKey → If-None-Match: renderJSON на бэке считает ETag от тела, поэтому 304 приходит
+ *  только когда строка реально не менялась — протухание невозможно и ручная инвалидация
+ *  не нужна. Экономит тело на повторном открытии позиции (заметно на сотовой сети). */
 export async function getPositionWithTender(positionId: string): Promise<Record<string, unknown>> {
   const res = await apiFetch<{ data: Record<string, unknown> }>(
     `/api/v1/positions/${encodeURIComponent(positionId)}/with-tender`,
-    { cache: 'no-store' },
+    { cacheKey: `position:${positionId}` },
   );
   return res.data;
 }

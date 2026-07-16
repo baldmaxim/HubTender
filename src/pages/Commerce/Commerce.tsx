@@ -5,9 +5,10 @@
 import { Card, Spin, Empty, Alert, message } from 'antd';
 import { useEffect, useRef, useMemo } from 'react';
 import { missingFXMessage } from '../../utils/boq/currencyGuard';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { buildPositionTabPath } from '../../lib/cache/workspaceTabsStorage';
+import { setRows as seedPositionRows } from '../../lib/cache/positionRowCache';
 import { useCommerceData, useCommerceActions } from './hooks';
 import { TenderSelector, CommerceTable, CommerceCards, CommerceHeader, COMMERCE_TABLE_FIT_WIDTH } from './components';
 import CommerceTotalsBar from './components/CommerceTotalsBar';
@@ -19,6 +20,11 @@ import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTabl
 
 export default function Commerce() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Под keep-alive страница остаётся смонтированной, когда открыта вкладка позиции
+  // (WorkspaceKeepAlive скрывает через display:none, а не размонтирует). URL — источник
+  // истины активной вкладки; Commerce рендерится только на этом якоре.
+  const isTabActive = location.pathname === '/commerce/proposal';
   const { openPositionTab } = useWorkspaceTabActions();
   const { isPhone, isLandscapePhone } = useIsMobile();
   const { theme: currentTheme } = useTheme();
@@ -49,7 +55,7 @@ export default function Commerce() {
     syncTenderMarkupTactic,
     referenceTotal,
     insuranceTotal,
-  } = useCommerceData();
+  } = useCommerceData(isTabActive);
 
   const {
     handleApplyTactic
@@ -68,7 +74,9 @@ export default function Commerce() {
 
   useEffect(() => {
     const refreshIfNeeded = () => {
-      if (!selectedTenderId || loading || calculating) {
+      // Скрытая вкладка не рефетчит: под keep-alive эти слушатели живут и пока пользователь
+      // работает во вкладке позиции, и тянули бы весь loadPositions ей в конкуренты.
+      if (!isTabActive || !selectedTenderId || loading || calculating) {
         return;
       }
 
@@ -98,7 +106,7 @@ export default function Commerce() {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [selectedTenderId, loading, calculating, loadPositions]);
+  }, [isTabActive, selectedTenderId, loading, calculating, loadPositions]);
 
   // Обработка выбора наименования тендера
   const handleTenderTitleChange = (title: string) => {
@@ -168,6 +176,13 @@ export default function Commerce() {
   // остаётся смонтированной вкладкой и сохраняет состояние.
   const handleNavigateToPosition = (positionId: string) => {
     if (!selectedTenderId) return;
+    // Сеем строку в positionRowCache ПЕРЕД навигацией: useBoqItems гидратирует из него шапку
+    // синхронно, иначе PositionItems вернёт заглушку «Загрузка...» на весь round-trip
+    // /with-tender. Пишем ровно одну кликнутую строку, а не весь список: разрыв запись→чтение
+    // ~1 кадр (TTL 60 c нерелевантен), один ключ не бьёт квоту, и нет O(N) синхронных записей
+    // на каждый refetch.
+    const row = positions.find((p) => p.id === positionId);
+    if (row) seedPositionRows([row]);
     openPositionTab({ positionId, tenderId: selectedTenderId, title: 'Позиция' });
     navigate(buildPositionTabPath(positionId, selectedTenderId));
   };

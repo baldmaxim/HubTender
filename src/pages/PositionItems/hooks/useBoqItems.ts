@@ -44,6 +44,12 @@ interface Template {
   detail_cost_category_full?: string | null;
 }
 
+interface TenderRates {
+  usd: number;
+  eur: number;
+  cny: number;
+}
+
 /**
  * @param skipEditData когда true (телефон в любой ориентации — UI редактирования не
  *   рендерится), не грузим edit-only справочники (works/materials/templates/
@@ -86,8 +92,9 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
     }
   };
 
-  const fetchPositionData = async () => {
-    if (!positionId) return;
+  /** Возвращает курсы тендера, чтобы fetchItems не перезапрашивал ту же строку. */
+  const fetchPositionData = async (): Promise<TenderRates | null> => {
+    if (!positionId) return null;
     try {
       const data = (await getPositionWithTender(positionId)) as unknown as
         (ClientPosition & {
@@ -104,14 +111,18 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
       }
 
       if (data.tenders) {
-        setCurrencyRates({
+        const next = {
           usd: data.tenders.usd_rate || 0,
           eur: data.tenders.eur_rate || 0,
           cny: data.tenders.cny_rate || 0,
-        });
+        };
+        setCurrencyRates(next);
+        return next;
       }
+      return null;
     } catch (error) {
       message.error('Ошибка загрузки позиции: ' + getErrorMessage(error));
+      return null;
     }
   };
 
@@ -152,26 +163,24 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
     return result;
   };
 
-  const fetchItems = async () => {
+  /**
+   * @param ratesSource курсы (или промис курсов) от уже летящего fetchPositionData. Раньше
+   *   fetchItems сам звал getPositionWithTender и ЖДАЛ его перед listBoqItemsFullByPosition:
+   *   это был дубль запроса, который fetchPositionData делает в том же тике, да ещё и
+   *   сериализованный впереди единственного запроса, наполняющего таблицу (≈2× до появления
+   *   строк на мобильной сети). Без аргумента (standalone-вызовы из мутаций) курсы
+   *   догружаются самостоятельно, но уже параллельно строкам.
+   */
+  const fetchItemsWithRates = async (ratesSource?: Promise<TenderRates | null>) => {
     if (!positionId) return;
     setLoading(true);
     try {
-      let rates = currencyRates;
-
-      // Go: одна запросом одновременно с rates (positions/{id}/with-tender)
-      const positionFull = (await getPositionWithTender(positionId)) as unknown as {
-        tenders?: { usd_rate?: number; eur_rate?: number; cny_rate?: number } | null;
-      };
-      const tenderRates = positionFull.tenders ?? null;
-
-      if (tenderRates) {
-        rates = {
-          usd: tenderRates.usd_rate || 0,
-          eur: tenderRates.eur_rate || 0,
-          cny: tenderRates.cny_rate || 0,
-        };
-        setCurrencyRates(rates);
-      }
+      const ratesPromise: Promise<TenderRates | null> =
+        ratesSource ??
+        getPositionWithTender(positionId).then((p) => {
+          const t = (p as { tenders?: { usd_rate?: number; eur_rate?: number; cny_rate?: number } | null }).tenders;
+          return t ? { usd: t.usd_rate || 0, eur: t.eur_rate || 0, cny: t.cny_rate || 0 } : null;
+        });
 
       // Loose shape mirroring the Go nested-embed JSON; field-by-field
       // access below preserves the original supabase-PostgREST mapping.
@@ -190,7 +199,18 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
         } | null;
         [k: string]: unknown;
       };
-      const data = (await listBoqItemsFullByPosition(positionId)) as unknown as RawBoqItemJoin[];
+      // Курсы и строки — параллельно: курсы нужны только на маппинге safeTotalAmount ниже.
+      const [rawData, resolvedRates] = await Promise.all([
+        listBoqItemsFullByPosition(positionId),
+        ratesPromise,
+      ]);
+      const data = rawData as unknown as RawBoqItemJoin[];
+
+      let rates = currencyRates;
+      if (resolvedRates) {
+        rates = resolvedRates;
+        setCurrencyRates(rates);
+      }
 
       // Fallback-ставка нужна ТОЛЬКО для строк без сохранённого unit_rate. Раньше
       // полные библиотеки тянулись всегда, когда были material/work-строки, —
@@ -277,6 +297,11 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
       setLoading(false);
     }
   };
+
+  // Публичная сигнатура без аргументов: fetchItems уходит в useItemActions /
+  // useItemBulkActions как `() => Promise<void>` и зовётся из колбэков — лишний
+  // позиционный аргумент там стал бы event-объектом.
+  const fetchItems = () => fetchItemsWithRates();
 
   const fetchWorks = async () => {
     try {
@@ -388,9 +413,9 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
   useEffect(() => {
     if (!positionId) return;
 
-    // Hydrate header instantly from the row cache populated on the parent
-    // ClientPositions tab. fetchPositionData below still runs to refresh and
-    // load currency rates from the joined tenders row.
+    // Мгновенная гидратация шапки из row-кэша: call-site'ы («Позиции», «Форма КП») сеют
+    // кликнутую строку прямо перед навигацией, поэтому попадание здесь — норма, а не удача.
+    // fetchPositionData ниже всё равно освежает строку и приносит курсы из join'а tenders.
     const cached = getCachedPositionRow(positionId);
     if (cached) {
       setPosition(cached);
@@ -402,8 +427,10 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
       }
     }
 
-    fetchPositionData();
-    fetchItems();
+    // Один /with-tender на оба потребителя: fetchPositionData ставит шапку и отдаёт курсы,
+    // fetchItems их ждёт вместо повторного запроса — и стартует listBoqItemsFullByPosition
+    // немедленно, а не за вторым RTT.
+    void fetchItemsWithRates(fetchPositionData());
     fetchUnits();
 
     // Edit-only справочники: на телефоне UI редактирования не рендерится —
@@ -426,8 +453,8 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
   useRealtimeRefetch(
     position?.tender_id ? `tender:${position.tender_id}` : null,
     () => {
-      void fetchItems();
-      void fetchPositionData();
+      // Тот же дедуп, что и на маунте: один /with-tender вместо двух на каждое WS-событие.
+      void fetchItemsWithRates(fetchPositionData());
     },
   );
 

@@ -1,5 +1,5 @@
 import { useState, useMemo, memo } from 'react';
-import { Card, Tabs, Alert } from 'antd';
+import { Card, Tabs, Alert, Skeleton } from 'antd';
 import { missingFXMessage } from '../../utils/boq/currencyGuard';
 import { useParams } from 'react-router-dom';
 import WorkEditForm from './WorkEditForm';
@@ -175,14 +175,27 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
     setSelectedDeleteIds(new Set());
   };
 
+  // Обычно сюда не попадаем: call-site'ы («Позиции», «Форма КП») сеют строку в
+  // positionRowCache перед навигацией, и useBoqItems гидратирует position синхронно.
+  // Остаётся на промах кэша (deep-link, F5, переход из места без сида) — скелетон, а не
+  // белый экран, чтобы промах деградировал мягко.
   if (!position) {
-    return <div>Загрузка...</div>;
+    return (
+      <div style={{ padding: '0 8px' }}>
+        <Card style={{ marginBottom: 16 }}>
+          <Skeleton active paragraph={{ rows: 2 }} />
+        </Card>
+        <Card>
+          <Skeleton active paragraph={{ rows: 6 }} title={false} />
+        </Card>
+      </div>
+    );
   }
 
   // Тело карточки «Элементы позиции» в зависимости от устройства/ориентации
   const itemsBody = (() => {
     if (isPhone && !isLandscapePhone) {
-      return <ItemsMobileCards items={items} totalSum={totalSum} />;
+      return <ItemsMobileCards items={items} totalSum={totalSum} loading={loading} />;
     }
     if (isLandscapePhone) {
       return (

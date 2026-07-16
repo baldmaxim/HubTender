@@ -2,7 +2,7 @@
  * Хук для загрузки и управления данными коммерции
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { message } from 'antd';
 import type { Tender, BoqItem, CurrencyType } from '../../../lib/types';
 import type { PositionWithCommercialCost, MarkupTactic } from '../types';
@@ -251,7 +251,15 @@ async function loadInsuranceTotal(tenderId: string): Promise<number> {
   return computeInsuranceTotal(data);
 }
 
-export function useCommerceData() {
+/**
+ * @param isActive вкладка «Форма КП» — активная. Под keep-alive страница остаётся
+ *   смонтированной, пока пользователь работает во вкладке позиции, и на каждое
+ *   `tender:{id}`-событие (в т.ч. на СОБСТВЕННЫЕ правки BOQ из позиции — self-echo здесь
+ *   намеренно не подавляется) гоняла бы полный loadPositions: ~8 запросов + синхронный
+ *   проход по ценообразованию над всеми boq_items тендера, конкурируя с активной вкладкой
+ *   за коннект и main thread. В фоне помечаем данные как устаревшие и догружаем при возврате.
+ */
+export function useCommerceData(isActive = true) {
   const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [calculating, setCalculating] = useState(false);
   const [tenders, setTenders] = useState<Tender[]>([]);
@@ -304,13 +312,29 @@ export function useCommerceData() {
   // Native WS hub — подтягиваем материализованные коммерческие стоимости после
   // серверного авто-пересчёта (смена тактики/наценок шлёт NOTIFY в tender:{id}).
   // Эхо здесь желаемое (recalc асинхронный), поэтому self-echo guard не нужен.
+  // Подписку НЕ отключаем в фоне (иначе сигнал потеряется) — только откладываем рефетч.
+  const staleRef = useRef(false);
   useRealtimeTopic(
     selectedTenderId ? `tender:${selectedTenderId}` : null,
     () => {
-      if (selectedTenderId) void loadPositions(selectedTenderId);
+      if (!selectedTenderId) return;
+      if (!isActive) {
+        staleRef.current = true;
+        return;
+      }
+      void loadPositions(selectedTenderId);
     },
     !!selectedTenderId,
   );
+
+  // Возврат на вкладку — догружаем, если пока были скрыты пришли события.
+  useEffect(() => {
+    if (isActive && staleRef.current && selectedTenderId) {
+      staleRef.current = false;
+      void loadPositions(selectedTenderId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, selectedTenderId]);
 
   const loadTenders = async () => {
     try {

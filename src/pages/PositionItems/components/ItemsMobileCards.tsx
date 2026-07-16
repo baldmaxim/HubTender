@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Card, Space, Tag, Typography, Empty } from 'antd';
+import { Card, Space, Tag, Typography, Empty, Skeleton } from 'antd';
 import { LinkOutlined } from '@ant-design/icons';
 import type { BoqItemFull } from '../../../lib/types';
 import { currencySymbols, getBoqTypeTagStyle, isMaterialType } from './boqColors';
@@ -11,6 +11,10 @@ const { Text } = Typography;
 interface ItemsMobileCardsProps {
   items: BoqItemFull[];
   totalSum: number | null;
+  /** Пока строки летят, показываем скелетон, а не «Нет элементов»: шапка гидратируется из
+   *  positionRowCache мгновенно, поэтому без этого гейта пользователь видел бы уверенное
+   *  «позиция пуста» + «Итого: —» на всё время загрузки. */
+  loading?: boolean;
 }
 
 const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
@@ -21,7 +25,7 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
 );
 
 /** Портретный телефонный read-only список элементов позиции (вместо широкой таблицы). */
-const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({ items, totalSum }) => {
+const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({ items, totalSum, loading = false }) => {
   // Индекс id → элемент: убирает O(n²) (items.find на каждую карточку).
   const itemById = useMemo(() => {
     const map = new Map<string, BoqItemFull>();
@@ -31,6 +35,10 @@ const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({ items, totalSum }) 
 
   // Инкрементальный рендер: на крупной позиции не строим все карточки разом.
   const { visible, sentinelRef, hasMore } = useIncrementalRender(items);
+
+  if (loading && items.length === 0) {
+    return <Skeleton active paragraph={{ rows: 6 }} title={false} />;
+  }
 
   if (items.length === 0) {
     return <Empty description="Нет элементов" image={Empty.PRESENTED_IMAGE_SIMPLE} />;

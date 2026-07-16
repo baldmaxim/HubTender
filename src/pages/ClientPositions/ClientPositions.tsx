@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { buildPositionTabPath } from '../../lib/cache/workspaceTabsStorage';
+import { setRows as seedPositionRows } from '../../lib/cache/positionRowCache';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClientPositions } from './hooks/useClientPositions';
 import { usePositionActions } from './hooks/usePositionActions';
@@ -307,6 +308,13 @@ const ClientPositions: React.FC = () => {
   const handleRowClick = useCallback((record: { id: string; position_number?: number }) => {
     const isLeaf = leafPositionIndices.has(record.id);
     if (isLeaf && selectedTender) {
+      // Ре-стемп кликнутой строки перед навигацией. Массовый setRows на загрузке списка
+      // (useClientPositions) ставит метку один раз и не обновляет её на чтении, а TTL 60 c —
+      // значит клик позже минуты попадал в промах и давал ту же заглушку «Загрузка...», что и
+      // из «Формы КП». Здесь разрыв запись→чтение ~1 кадр, поэтому быстрый путь перестаёт
+      // зависеть от времени, проведённого на списке.
+      const row = clientPositions.find((p) => p.id === record.id);
+      if (row) seedPositionRows([row]);
       openPositionTab({
         positionId: record.id,
         tenderId: selectedTender.id,
@@ -314,7 +322,7 @@ const ClientPositions: React.FC = () => {
       });
       navigate(buildPositionTabPath(record.id, selectedTender.id));
     }
-  }, [leafPositionIndices, selectedTender, openPositionTab, navigate]);
+  }, [leafPositionIndices, selectedTender, clientPositions, openPositionTab, navigate]);
 
 
   // Обработчик клика по карточке тендера
