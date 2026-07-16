@@ -5,6 +5,8 @@ import {
   FileTextOutlined,
   QuestionCircleOutlined,
   FolderOutlined,
+  DownOutlined,
+  UpOutlined,
 } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import { useIsMobile } from '../../../hooks/useIsMobile';
@@ -25,6 +27,11 @@ interface PositionToolbarProps {
   versions: { value: number; label: string }[];
   currentTheme: string;
   totalSum: number;
+  /** Телефон: показывать ярлык сворачивания сверху по центру. */
+  collapsible?: boolean;
+  /** Свёрнутое состояние: видимы только ярлык и фильтр (Тендер/Версия). */
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
   onTenderTitleChange: (title: string) => void;
   onVersionChange: (version: number) => void;
 }
@@ -37,6 +44,9 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
   versions,
   currentTheme,
   totalSum,
+  collapsible = false,
+  collapsed = false,
+  onToggleCollapsed,
   onTenderTitleChange,
   onVersionChange,
 }) => {
@@ -101,8 +111,52 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
 
   return (
     <>
+      {/* Ярлык сворачивания — сверху по центру шапки (телефон). */}
+      {collapsible && (
+        <div
+          role="button"
+          tabIndex={0}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Развернуть шапку' : 'Свернуть шапку'}
+          onClick={onToggleCollapsed}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onToggleCollapsed?.();
+            }
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 22,
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 44,
+            height: 16,
+            borderRadius: 8,
+            background: 'rgba(255, 255, 255, 0.35)',
+            color: '#fff',
+            fontSize: 10,
+            lineHeight: 1,
+          }}>
+            {collapsed ? <DownOutlined /> : <UpOutlined />}
+          </div>
+        </div>
+      )}
+
       {/* Блок с фильтрами и информацией о тендере */}
-      <div style={{ padding: '8px 16px 16px 16px', display: 'flex', gap: '8px', flexDirection: isPhoneDevice ? 'column' : 'row' }}>
+      <div style={{
+        padding: collapsed ? '0 12px 8px' : '8px 16px 16px 16px',
+        display: 'flex',
+        gap: '8px',
+        flexDirection: isPhoneDevice ? 'column' : 'row',
+      }}>
         {/* Левый и средний блоки объединены */}
         <Card
           bordered={false}
@@ -142,14 +196,20 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
             </Col>
 
             {/* Средний блок: Информация о тендере */}
+            {!collapsed && (
             <Col xs={24} lg={15}>
               {selectedTender ? (
-                <div style={{ textAlign: isPhone ? 'left' : 'right' }}>
-                  {/* Строка 1: Название и заказчик */}
+                <div style={{ textAlign: isPhone ? 'center' : 'right' }}>
+                  {/* Строка 1: Заказчик (на телефоне без названия тендера — оно
+                      дублирует селект «Тендер» и съедает две строки) */}
                   <div style={{ marginBottom: 4, fontSize: isPhone ? 12 : 14 }}>
-                    <Text strong style={txt}>Название: </Text>
-                    <Text style={txt}>{selectedTender.title}</Text>
-                    {vDivider}
+                    {!isPhone && (
+                      <>
+                        <Text strong style={txt}>Название: </Text>
+                        <Text style={txt}>{selectedTender.title}</Text>
+                        {vDivider}
+                      </>
+                    )}
                     <Text strong style={txt}>Заказчик: </Text>
                     <Text style={txt}>{selectedTender.client_name}</Text>
                   </div>
@@ -242,13 +302,22 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                 </div>
               )}
             </Col>
+            )}
           </Row>
         </Card>
 
         {/* Правый блок: Общая стоимость */}
+        {!collapsed && (
         <Card
           bordered={false}
-          bodyStyle={{ padding: '16px', display: 'flex', minHeight: isPhoneDevice ? '72px' : '120px' }}
+          // Телефон (портрет и ландшафт): вертикаль ужата до минимума — padding 16→4,
+          // minHeight снят, межстрочные интервалы прижаты к кеглю (было 28/26px «воздуха»
+          // на шрифтах 14/23px). ~90px → ~48px, экран отдаём списку позиций.
+          bodyStyle={{
+            padding: isPhoneDevice ? '4px 12px' : '16px',
+            display: 'flex',
+            minHeight: isPhoneDevice ? 'auto' : '120px',
+          }}
           style={{ borderRadius: '8px', width: isPhoneDevice ? '100%' : '180px', flexShrink: 0 }}
         >
           {selectedTender ? (
@@ -259,18 +328,19 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '4px',
+                gap: isPhoneDevice ? 0 : '4px',
               }}
             >
-              <div style={{ fontSize: 14, color: currentTheme === 'dark' ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.65)', lineHeight: '28px' }}>
+              <div style={{ fontSize: 14, color: currentTheme === 'dark' ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.65)', lineHeight: isPhoneDevice ? '16px' : '28px' }}>
                 Общая стоимость
               </div>
-              <div style={{ fontSize: 23, fontWeight: 600, color: currentTheme === 'dark' ? '#52c41a' : '#389e0d', letterSpacing: '0.5px', lineHeight: '26px' }}>
+              <div style={{ fontSize: 23, fontWeight: 600, color: currentTheme === 'dark' ? '#52c41a' : '#389e0d', letterSpacing: '0.5px', lineHeight: isPhoneDevice ? '24px' : '26px' }}>
                 {Math.round(totalSum).toLocaleString('ru-RU')}
               </div>
             </div>
           ) : null}
         </Card>
+        )}
       </div>
     </>
   );

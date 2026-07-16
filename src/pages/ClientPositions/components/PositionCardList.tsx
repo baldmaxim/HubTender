@@ -36,7 +36,13 @@ export const PositionCardList: React.FC<PositionCardListProps> = ({
   onRowClick,
 }) => {
   // Инкрементальный рендер: на крупном тендере не строим все карточки позиций разом.
-  const { visible, sentinelRef, hasMore } = useIncrementalRender(clientPositions);
+  // resetKey — тендер+поиск, а не идентичность массива: realtime-рефетч отдаёт новый
+  // массив с той же выборкой, и на идентичности прокрутку сбрасывало бы к первой порции.
+  const { visible, sentinelRef, hasMore } = useIncrementalRender(
+    clientPositions,
+    40,
+    `${selectedTender?.id ?? ''}|${searchQuery}`
+  );
 
   return (
     <div style={{ marginTop: 16 }}>
