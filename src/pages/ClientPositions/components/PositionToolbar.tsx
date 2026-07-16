@@ -5,8 +5,6 @@ import {
   FileTextOutlined,
   QuestionCircleOutlined,
   FolderOutlined,
-  DownOutlined,
-  UpOutlined,
 } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import { useIsMobile } from '../../../hooks/useIsMobile';
@@ -27,11 +25,11 @@ interface PositionToolbarProps {
   versions: { value: number; label: string }[];
   currentTheme: string;
   totalSum: number;
-  /** Телефон: показывать ярлык сворачивания сверху по центру. */
-  collapsible?: boolean;
-  /** Свёрнутое состояние: видимы только ярлык и фильтр (Тендер/Версия). */
+  /**
+   * Свёрнутое состояние (только телефон): видим лишь фильтр Тендер/Версия.
+   * Тоггл живёт на градиентной обёртке в ClientPositions — тап по всей шапке.
+   */
   collapsed?: boolean;
-  onToggleCollapsed?: () => void;
   onTenderTitleChange: (title: string) => void;
   onVersionChange: (version: number) => void;
 }
@@ -44,9 +42,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
   versions,
   currentTheme,
   totalSum,
-  collapsible = false,
   collapsed = false,
-  onToggleCollapsed,
   onTenderTitleChange,
   onVersionChange,
 }) => {
@@ -111,48 +107,10 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
 
   return (
     <>
-      {/* Ярлык сворачивания — сверху по центру шапки (телефон). */}
-      {collapsible && (
-        <div
-          role="button"
-          tabIndex={0}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Развернуть шапку' : 'Свернуть шапку'}
-          onClick={onToggleCollapsed}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onToggleCollapsed?.();
-            }
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 22,
-            cursor: 'pointer',
-          }}
-        >
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 44,
-            height: 16,
-            borderRadius: 8,
-            background: 'rgba(255, 255, 255, 0.35)',
-            color: '#fff',
-            fontSize: 10,
-            lineHeight: 1,
-          }}>
-            {collapsed ? <DownOutlined /> : <UpOutlined />}
-          </div>
-        </div>
-      )}
-
       {/* Блок с фильтрами и информацией о тендере */}
       <div style={{
-        padding: collapsed ? '0 12px 8px' : '8px 16px 16px 16px',
+        // Свёрнуто: минимальный градиентный кант вокруг карточки фильтров.
+        padding: collapsed ? '6px 12px' : '8px 16px 16px 16px',
         display: 'flex',
         gap: '8px',
         flexDirection: isPhoneDevice ? 'column' : 'row',
@@ -160,17 +118,24 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
         {/* Левый и средний блоки объединены */}
         <Card
           bordered={false}
-          bodyStyle={{ padding: '16px' }}
+          // Свёрнуто: тёмная карточка облегает селекты, лишней высоты не остаётся.
+          bodyStyle={{ padding: collapsed ? '6px 12px' : '16px' }}
           style={{ borderRadius: '8px', flex: 1 }}
         >
           <Row gutter={8}>
-            {/* Левый блок: Фильтры */}
-            <Col xs={24} lg={9}>
+            {/* Левый блок: Фильтры.
+                stopPropagation — тап по селекту не должен схлопывать шапку
+                (тоггл висит на градиентной обёртке в ClientPositions).
+                Подписи «Тендер:»/«Версия:» на телефоне скрыты: их роль берут на себя
+                плейсхолдеры селектов, а высота нужнее списку позиций. */}
+            <Col xs={24} lg={9} onClick={(e) => e.stopPropagation()}>
               <Row gutter={8}>
                 <Col span={16}>
-                  <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000', fontSize: 14 }}>Тендер:</Text>
+                  {!isPhoneDevice && (
+                    <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000', fontSize: 14 }}>Тендер:</Text>
+                  )}
                   <Select
-                    style={{ width: '100%', marginTop: 6 }}
+                    style={{ width: '100%', marginTop: isPhoneDevice ? 0 : 6 }}
                     placeholder="Выберите тендер..."
                     value={selectedTenderTitle}
                     onChange={onTenderTitleChange}
@@ -182,9 +147,11 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                   />
                 </Col>
                 <Col span={8}>
-                  <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000', fontSize: 14 }}>Версия:</Text>
+                  {!isPhoneDevice && (
+                    <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000', fontSize: 14 }}>Версия:</Text>
+                  )}
                   <Select
-                    style={{ width: '100%', marginTop: 6 }}
+                    style={{ width: '100%', marginTop: isPhoneDevice ? 0 : 6 }}
                     placeholder="Выберите..."
                     disabled={!selectedTenderTitle}
                     value={selectedVersion}
@@ -232,8 +199,12 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                     <div style={deskRow}>{metrics.rateUsd}{vDivider}{metrics.rateEur}{vDivider}{metrics.rateCny}</div>
                   )}
 
-                  {/* Строка 4: Кнопки */}
-                  <div style={{ display: 'flex', justifyContent: isPhone ? 'flex-start' : 'flex-end' }}>
+                  {/* Строка 4: Кнопки. stopPropagation — переход по ссылке не должен
+                      попутно сворачивать шапку. */}
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ display: 'flex', justifyContent: isPhone ? 'center' : 'flex-end' }}
+                  >
                     <Space wrap size="small">
                       {selectedTender.upload_folder && (
                         <Button
@@ -334,7 +305,9 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
               <div style={{ fontSize: 14, color: currentTheme === 'dark' ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.65)', lineHeight: isPhoneDevice ? '16px' : '28px' }}>
                 Общая стоимость
               </div>
-              <div style={{ fontSize: 23, fontWeight: 600, color: currentTheme === 'dark' ? '#52c41a' : '#389e0d', letterSpacing: '0.5px', lineHeight: isPhoneDevice ? '24px' : '26px' }}>
+              {/* Телефон: кегль 23 → 15 (в 1,5 раза), lineHeight следом за ним — иначе
+                  под мелким шрифтом снова копится мёртвая высота. */}
+              <div style={{ fontSize: isPhoneDevice ? 15 : 23, fontWeight: 600, color: currentTheme === 'dark' ? '#52c41a' : '#389e0d', letterSpacing: '0.5px', lineHeight: isPhoneDevice ? '16px' : '26px' }}>
                 {Math.round(totalSum).toLocaleString('ru-RU')}
               </div>
             </div>

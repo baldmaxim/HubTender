@@ -44,19 +44,21 @@ export const DeadlineBar: React.FC<DeadlineBarProps> = ({ selectedTender, curren
 
   const percentage = Math.round(progress);
 
-  // Телефон: шрифт вдвое меньше дефолтных 14px AntD + nowrap — вся шкала в одну строку.
+  // Телефон: 9px + nowrap — вся шкала в одну строку (~338px из 390px).
+  // lineHeight прижат к кеглю: от него напрямую зависит высота полосы ниже.
   const barText: React.CSSProperties = {
     color: 'white',
     fontWeight: 600,
     textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-    ...(isPhone ? { fontSize: 7, whiteSpace: 'nowrap' as const } : null),
+    ...(isPhone ? { fontSize: 9, lineHeight: '12px', whiteSpace: 'nowrap' as const } : null),
   };
 
   return (
     <div style={{
       position: 'relative',
       marginTop: 0,
-      height: 40,
+      // Телефон: 12px строка + по 2px сверху/снизу — минимальный отступ до края шкалы.
+      height: isPhone ? 16 : 40,
       borderRadius: '0 0 8px 8px',
       overflow: 'hidden',
       background: currentTheme === 'dark' ? '#0a5348' : '#ccfbf1',

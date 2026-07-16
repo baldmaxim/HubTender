@@ -407,12 +407,19 @@ const ClientPositions: React.FC = () => {
   return (
     <div style={{ padding: 0 }}>
       {/* Блок с названием тендера, кнопками, фильтрами и информацией */}
-      <div style={{
-        background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)',
-        borderRadius: '8px',
-        // Телефон: прижимаем шапку к строке вкладок (оставшиеся 8px — padding <Content>).
-        marginTop: isPhoneDevice ? 0 : 8,
-      }}>
+      <div
+        // Телефон: тап по всей шапке сворачивает/разворачивает её — отдельной кнопки нет.
+        // Селекты и кнопки-ссылки гасят всплытие у себя (см. PositionToolbar).
+        onClick={isPhoneDevice ? () => setHeaderCollapsed((v) => !v) : undefined}
+        aria-expanded={isPhoneDevice ? !headerIsCollapsed : undefined}
+        style={{
+          background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)',
+          borderRadius: '8px',
+          // Телефон: прижимаем шапку к строке вкладок (оставшиеся 8px — padding <Content>).
+          marginTop: isPhoneDevice ? 0 : 8,
+          cursor: isPhoneDevice ? 'pointer' : undefined,
+        }}
+      >
         <PositionToolbar
           selectedTender={selectedTender}
           selectedTenderTitle={selectedTenderTitle}
@@ -421,9 +428,7 @@ const ClientPositions: React.FC = () => {
           versions={versions}
           currentTheme={currentTheme}
           totalSum={effectiveTotalSum}
-          collapsible={isPhoneDevice}
           collapsed={headerIsCollapsed}
-          onToggleCollapsed={() => setHeaderCollapsed((v) => !v)}
           onTenderTitleChange={handleTenderTitleChange}
           onVersionChange={handleVersionChange}
         />
