@@ -1,131 +1,72 @@
-import { useEffect, useRef, useState } from 'react';
-import { Spin, Typography, theme } from 'antd';
-import {
-  CheckOutlined,
-  CloseOutlined,
-  EditOutlined,
-  LoadingOutlined,
-} from '@ant-design/icons';
-import { validateField } from '../../utils/boqFieldPatch';
-import IconTagButton from './IconTagButton';
-import SheetControl from './SheetControl';
-import { toPatchCtx } from './sheetFieldTypes';
+import { theme } from 'antd';
+import BoqSheetCell from './BoqSheetCell';
 import type { FieldState, SheetCtx, SheetField } from './sheetFieldTypes';
 
-const { Text } = Typography;
-
 interface BoqSheetRowProps {
-  field: SheetField;
+  /** 1–2 ячейки: пары собирает toRows() по pairKey. */
+  fields: SheetField[];
   ctx: SheetCtx;
-  state: FieldState;
+  stateOf: (key: string) => FieldState;
+  /** Ключ поля, которое сейчас правится (на весь лист — один). */
+  editingKey: string | null;
   error: string | null;
-  /** Дедлайн не истёк и FX-гейт пропускает это поле. */
+  /** Дедлайн не истёк. FX-гейт накладывается отдельно, на каждое поле. */
   canEdit: boolean;
-  /** Редактируется другое поле → ✎ этого disabled (один редактор за раз). */
-  locked: boolean;
-  onStart: () => void;
+  fxBlocked: boolean;
+  onStart: (key: string) => void;
   onCancel: () => void;
-  onCommit: (draft: unknown) => void;
+  onCommit: (field: SheetField, draft: unknown) => void;
 }
 
 /**
- * Строка листа: двухэтажная (метка + ✎ сверху, значение/контрол на всю ширину
- * снизу). На 390px «Затрата на строительство» в одну линию оставила бы полю
- * ~150px — стек отдаёт все ~366px.
+ * Строка листа: разделитель снизу и 1–2 ячейки в ряд.
+ *
+ * Пара из одной ячейки — норма, а не вырожденный случай: toRows() строит строки
+ * из уже отфильтрованных по visible полей, поэтому «К перев» у непривязанного
+ * материала и «Сум. дост.» вне режима «суммой» просто не доезжают сюда, и строка
+ * честно занимает половину ширины.
  */
 const BoqSheetRow: React.FC<BoqSheetRowProps> = ({
-  field,
+  fields,
   ctx,
-  state,
+  stateOf,
+  editingKey,
   error,
   canEdit,
-  locked,
+  fxBlocked,
   onStart,
   onCancel,
   onCommit,
 }) => {
   const { token } = theme.useToken();
-  const editing = state === 'editing' || state === 'saving';
-  const saving = state === 'saving';
-
-  const [draft, setDraft] = useState<unknown>(null);
-  const wasEditing = useRef(false);
-
-  // Драфт сеется ОДИН раз — на входе в редактирование. Пересев на каждый ctx
-  // затирал бы ввод пользователя рефетчем items (он идёт после каждого save).
-  useEffect(() => {
-    if (editing && !wasEditing.current) setDraft(field.toDraft ? field.toDraft(ctx) : null);
-    wasEditing.current = editing;
-    // ctx намеренно вне deps: см. выше.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing]);
-
-  const refsPending = !!field.needsRefs && ctx.editDataState !== 'ready';
-  const editable = !!field.editKey && canEdit;
-  const invalid = field.editKey ? validateField(field.editKey, draft, toPatchCtx(ctx)) : null;
-
-  const refsHint =
-    ctx.editDataState === 'error'
-      ? 'Справочники не загрузились, откройте карточку снова'
-      : 'Загрузка справочников…';
 
   return (
-    <div style={{ padding: '8px 0', borderBottom: `1px solid ${token.colorSplit}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 24 }}>
-        <Text style={{ fontSize: 12, color: token.colorTextTertiary, flex: 1 }}>{field.label}</Text>
-
-        {refsPending && editable && !editing && <Spin size="small" />}
-
-        {editable && !editing && (
-          <IconTagButton
-            icon={state === 'saved' ? <CheckOutlined /> : <EditOutlined />}
-            tone={state === 'saved' ? 'primary' : 'neutral'}
-            label={refsPending ? refsHint : `Редактировать: ${field.label}`}
-            disabled={locked || refsPending}
-            onClick={onStart}
-          />
-        )}
-
-        {editing && (
-          // gap 20: хитбоксы 44px иначе перекрываются на 12px.
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <IconTagButton
-              icon={saving ? <LoadingOutlined /> : <CheckOutlined />}
-              tone="primary"
-              label="Сохранить"
-              disabled={saving || !!invalid}
-              onClick={() => onCommit(draft)}
-            />
-            <IconTagButton
-              icon={<CloseOutlined />}
-              label="Отмена"
-              disabled={saving}
-              onClick={onCancel}
-            />
-          </div>
-        )}
-      </div>
-
-      <div style={{ marginTop: 4 }}>
-        {editing && field.control ? (
-          <SheetControl
-            spec={field.control}
-            draft={draft}
-            setDraft={setDraft}
+    <div
+      style={{
+        padding: '8px 0',
+        borderBottom: `1px solid ${token.colorSplit}`,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 12,
+      }}
+    >
+      {fields.map((field) => (
+        // minWidth: 0 обязателен — иначе длинное значение распирает flex-колонку.
+        <div key={field.key} style={{ flex: 1, minWidth: 0 }}>
+          <BoqSheetCell
+            field={field}
             ctx={ctx}
-            onCommit={() => !invalid && onCommit(draft)}
-            disabled={saving}
+            state={stateOf(field.key)}
+            error={editingKey === field.key ? error : null}
+            // Курс не задан → сервер уронит любой патч; чинится только сменой валюты.
+            canEdit={canEdit && (!fxBlocked || field.key === 'currency_type')}
+            locked={editingKey !== null && editingKey !== field.key}
+            onStart={() => onStart(field.key)}
+            onCancel={onCancel}
+            onCommit={(draft) => onCommit(field, draft)}
           />
-        ) : (
-          <Text strong style={{ fontSize: 14, wordBreak: 'break-word' }}>
-            {field.render(ctx)}
-          </Text>
-        )}
-      </div>
-
-      {editing && (invalid || error) && (
-        <div style={{ marginTop: 4, fontSize: 12, color: token.colorError }}>{invalid || error}</div>
-      )}
+        </div>
+      ))}
     </div>
   );
 };

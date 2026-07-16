@@ -57,12 +57,34 @@ export interface SheetField {
   /** Полю нужны догружаемые справочники (наименования / затраты). */
   needsRefs?: boolean;
   visible?: (ctx: SheetCtx) => boolean;
+  /**
+   * Соседние ВИДИМЫЕ поля с одинаковым pairKey встают в одну строку двумя
+   * колонками. Группировка идёт ПОСЛЕ фильтра visible, поэтому пара сама
+   * схлопывается в одну ячейку там, где второе поле скрыто: «К перев» у
+   * непривязанного материала и «Сум. дост.» вне режима «суммой».
+   */
+  pairKey?: string;
   /** Значение в режиме просмотра. */
   render: (ctx: SheetCtx) => React.ReactNode;
   /** Начальный драфт при входе в редактирование. */
   toDraft?: (ctx: SheetCtx) => unknown;
   control?: SheetControlSpec;
 }
+
+/**
+ * Плоский список УЖЕ отфильтрованных по visible полей → строки по 1–2 ячейки.
+ * Пара собирается только из непосредственных соседей: если между ними что-то
+ * вклинилось или второе поле скрыто, строка остаётся одиночной.
+ */
+export const toRows = (fields: SheetField[]): SheetField[][] => {
+  const rows: SheetField[][] = [];
+  for (const f of fields) {
+    const last = rows[rows.length - 1];
+    if (f.pairKey && last?.length === 1 && last[0].pairKey === f.pairKey) last.push(f);
+    else rows.push([f]);
+  }
+  return rows;
+};
 
 /** SheetCtx → FieldPatchCtx: buildFieldPatch не знает про UI-справочники. */
 export const toPatchCtx = (ctx: SheetCtx): FieldPatchCtx => ({

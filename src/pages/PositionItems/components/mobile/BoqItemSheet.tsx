@@ -11,7 +11,7 @@ import { useBoqFieldSave } from '../../hooks/useBoqFieldSave';
 import BoqSheetRow from './BoqSheetRow';
 import { WORK_SHEET_FIELDS } from './workSheetFields';
 import { materialFieldsFor } from './materialSheetFields';
-import { SHEET_GROUP_LABEL } from './sheetFieldTypes';
+import { SHEET_GROUP_LABEL, toRows } from './sheetFieldTypes';
 import type { SheetCtx, SheetGroup } from './sheetFieldTypes';
 
 const { Text } = Typography;
@@ -174,18 +174,19 @@ const BoqItemSheet: React.FC<BoqItemSheetProps> = ({
                 <Divider plain style={{ margin: '4px 0', fontSize: 11 }}>
                   {SHEET_GROUP_LABEL[group]}
                 </Divider>
-                {groupFields.map((field) => (
+                {toRows(groupFields).map((rowFields) => (
                   <BoqSheetRow
-                    key={field.key}
-                    field={field}
+                    key={rowFields.map((f) => f.key).join('+')}
+                    fields={rowFields}
                     ctx={ctx}
-                    state={stateOf(field.key)}
-                    error={editingKey === field.key ? error : null}
-                    canEdit={canEdit && (!fxBlocked || field.key === 'currency_type')}
-                    locked={editingKey !== null && editingKey !== field.key}
-                    onStart={() => start(field.key)}
+                    stateOf={stateOf}
+                    editingKey={editingKey}
+                    error={error}
+                    canEdit={canEdit}
+                    fxBlocked={fxBlocked}
+                    onStart={start}
                     onCancel={cancel}
-                    onCommit={(draft) => void commit(field, draft, ctx)}
+                    onCommit={(field, draft) => void commit(field, draft, ctx)}
                   />
                 ))}
               </div>
