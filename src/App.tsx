@@ -23,7 +23,7 @@ import MarkupPercentages from './pages/Admin/MarkupPercentages/MarkupPercentages
 import Library from './pages/Library';
 import Templates from './pages/Library/Templates';
 import ClientPositions from './pages/ClientPositions/ClientPositions';
-import PositionItems from './pages/PositionItems/PositionItems';
+import PositionItemsRoute from './pages/PositionItems/PositionItemsRoute';
 import ImportLog from './pages/Admin/ImportLog/ImportLog';
 import Insurance from './pages/Admin/Insurance/Insurance';
 import Commerce from './pages/Commerce';
@@ -76,7 +76,7 @@ function AppContent() {
             <Route path="tender-timeline" element={<TenderTimeline />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="positions" element={<ClientPositions />} />
-            <Route path="positions/:positionId/items" element={<PositionItems />} />
+            <Route path="positions/:positionId/items" element={<PositionItemsRoute />} />
             <Route path="commerce/proposal" element={<Commerce />} />
             <Route path="commerce/redistribution" element={<CostRedistribution />} />
             <Route path="commerce" element={<Navigate to="/commerce/proposal" replace />} />

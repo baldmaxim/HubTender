@@ -1,7 +1,6 @@
 import { useState, useMemo, memo, useEffect } from 'react';
 import { Card, Tabs, Alert, Skeleton } from 'antd';
 import { missingFXMessage } from '../../utils/boq/currencyGuard';
-import { useParams, useSearchParams } from 'react-router-dom';
 import WorkEditForm from './WorkEditForm';
 import MaterialEditForm from './MaterialEditForm';
 import { useBoqItems } from './hooks/useBoqItems';
@@ -30,16 +29,14 @@ const NOOP = () => {};
 
 interface PositionItemsProps {
   /** Передаётся из WorkspaceKeepAlive (несколько экземпляров смонтированы сразу —
-   *  нельзя полагаться на useParams). Fallback на useParams для прямого роутинга. */
-  positionId?: string;
+   *  нельзя полагаться на useParams). Для прямого роутинга есть PositionItemsRoute. */
+  positionId: string;
+  /** ?itemId=… из URL. Приходит пропом, а НЕ из useSearchParams: см. memo ниже.
+   *  WorkspaceKeepAlive отдаёт его только активной вкладке. */
+  deepLinkItemId?: string | null;
 }
 
-const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionId }) => {
-  const params = useParams<{ positionId: string }>();
-  const positionId = propPositionId ?? params.positionId;
-  // Этап 1.1 (deep links): ?itemId=… — прокрутить к строке BOQ и подсветить.
-  const [deepLinkParams] = useSearchParams();
-  const deepLinkItemId = deepLinkParams.get('itemId');
+const PositionItems: React.FC<PositionItemsProps> = ({ positionId, deepLinkItemId = null }) => {
   const { user } = useAuth();
   const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
   const { theme } = useTheme();
@@ -546,6 +543,17 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleElement);
 }
 
-// memo: в keep-alive смонтировано несколько экземпляров (по вкладке на позицию);
-// positionId стабилен, поэтому скрытые вкладки не перерендериваются при open/close.
+/**
+ * memo: в keep-alive смонтировано несколько экземпляров (по вкладке на позицию), и без него
+ * КАЖДАЯ скрытая вкладка перестраивала бы весь свой список на каждую навигацию.
+ *
+ * Держится только пока компонент не подписан на роутер. Раньше memo не работал вовсе:
+ * useParams()/useSearchParams() подписывают на RouteContext/LocationContext, а те меняются
+ * на каждую навигацию — то есть мемоизация была фиктивной, несмотря на стабильный
+ * positionId. Поэтому positionId и deepLinkItemId приходят ПРОПАМИ, а роутер читает тонкая
+ * обёртка PositionItemsRoute (для прямого роутинга) и WorkspaceKeepAlive (для вкладок).
+ *
+ * НЕ добавлять сюда useParams/useSearchParams/useLocation/useNavigate — это молча вернёт
+ * шторм перерисовок, который ничем себя не выдаёт, кроме подтормаживания на телефоне.
+ */
 export default memo(PositionItems);

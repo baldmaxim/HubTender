@@ -61,7 +61,15 @@ const WorkspaceKeepAlive: React.FC = () => {
         }
         return (
           <div key={tab.key} style={{ display: isActive ? 'block' : 'none' }}>
-            <PositionItems positionId={tab.positionId} />
+            {/* deepLinkItemId — только активной вкладке. Во-первых, memo(PositionItems)
+                держится лишь на стабильных пропах: отдай мы ?itemId= всем, он менялся бы у
+                каждой вкладки на любой переход. Во-вторых, подсветка ищет строку через
+                document.querySelector — глобально, так что скрытые вкладки перехватывали бы
+                deep-link на себя. */}
+            <PositionItems
+              positionId={tab.positionId}
+              deepLinkItemId={isActive ? searchParams.get('itemId') : null}
+            />
           </div>
         );
       })}
