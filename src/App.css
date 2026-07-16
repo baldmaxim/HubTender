@@ -170,12 +170,3 @@
     height: 100vh !important;
   }
 }
-
-/* Всплывающий календарь с временем (DatePicker showTime) на телефоне:
-   уменьшаем на ~22%, чтобы вписать по ширине экрана */
-@media (max-width: 575px) {
-  .datetime-popup-mobile {
-    transform: scale(0.78) !important;
-    transform-origin: top left;
-  }
-}
