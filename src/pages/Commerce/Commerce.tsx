@@ -3,7 +3,7 @@
  */
 
 import { Card, Spin, Empty, Alert, message } from 'antd';
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { missingFXMessage } from '../../utils/boq/currencyGuard';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
@@ -20,6 +20,10 @@ import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTabl
 
 export default function Commerce() {
   const navigate = useNavigate();
+  // См. handleNavigateToPosition: navigate пересоздаётся на каждую навигацию — держим в ref,
+  // чтобы обработчик оставался стабильным пропом для мемоизированного CommerceCards.
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const location = useLocation();
   // Под keep-alive страница остаётся смонтированной, когда открыта вкладка позиции
   // (WorkspaceKeepAlive скрывает через display:none, а не размонтирует). URL — источник
@@ -174,7 +178,11 @@ export default function Commerce() {
 
   // Навигация к позиции — открываем внутренней вкладкой приложения (keep-alive), «Форма КП»
   // остаётся смонтированной вкладкой и сохраняет состояние.
-  const handleNavigateToPosition = (positionId: string) => {
+  //
+  // useCallback + navigateRef: обработчик уходит пропом в мемоизированный CommerceCards, а
+  // react-router пересоздаёт navigate на каждую навигацию — без ref идентичность обработчика
+  // менялась бы и пробивала memo, обнуляя смысл мемоизации списка.
+  const handleNavigateToPosition = useCallback((positionId: string) => {
     if (!selectedTenderId) return;
     // Сеем строку в positionRowCache ПЕРЕД навигацией: useBoqItems гидратирует из него шапку
     // синхронно, иначе PositionItems вернёт скелетон на весь round-trip /with-tender.
@@ -184,8 +192,8 @@ export default function Commerce() {
     const row = positions.find((p) => p.id === positionId);
     if (row) seedPositionRow(row);
     openPositionTab({ positionId, tenderId: selectedTenderId, title: 'Позиция' });
-    navigate(buildPositionTabPath(positionId, selectedTenderId));
-  };
+    navigateRef.current(buildPositionTabPath(positionId, selectedTenderId));
+  }, [selectedTenderId, positions, openPositionTab]);
 
   // Если тендер не выбран, показываем только выбор тендера
   if (!selectedTenderId) {

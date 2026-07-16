@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } from 'react';
+import { Input } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
@@ -37,6 +39,10 @@ interface TenderOption {
 const ClientPositions: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  // См. handleRowClick: react-router пересоздаёт navigate на каждую навигацию, поэтому
+  // держим его в ref — иначе обработчик клика меняет идентичность и пробивает memo списка.
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const { openPositionTab } = useWorkspaceTabActions();
   const { theme: currentTheme } = useTheme();
   const { isPhoneDevice } = useIsMobile();
@@ -304,7 +310,17 @@ const ClientPositions: React.FC = () => {
     }
   };
 
-  // Обработчик клика по строке — открываем позицию внутренней вкладкой приложения
+  // Обработчик клика по строке — открываем позицию внутренней вкладкой приложения.
+  //
+  // navigate держим в ref и НЕ включаем в deps: react-router мемоизирует его с
+  // locationPathname в зависимостях, поэтому на КАЖДУЮ навигацию он новый → новый
+  // handleRowClick → пробивает React.memo у PositionCardList → полная перерисовка списка
+  // на текущем count (а count растёт со скроллом и не сбрасывается). Это и есть тормоз
+  // при переключении/открытии вкладок. Ref безопасен: зовём только из обработчика
+  // события, где .current всегда актуален, а не во время рендера.
+  //
+  // clientPositions/leafPositionIndices оставляем в deps: они навигационно-стабильны, а
+  // ref сделал бы поиск строки для seedPositionRow протухшим.
   const handleRowClick = useCallback((record: { id: string; position_number?: number }) => {
     const isLeaf = leafPositionIndices.has(record.id);
     if (isLeaf && selectedTender) {
@@ -322,9 +338,9 @@ const ClientPositions: React.FC = () => {
         tenderId: selectedTender.id,
         title: record.position_number != null ? `№ ${record.position_number}` : 'Позиция',
       });
-      navigate(buildPositionTabPath(record.id, selectedTender.id));
+      navigateRef.current(buildPositionTabPath(record.id, selectedTender.id));
     }
-  }, [leafPositionIndices, selectedTender, clientPositions, openPositionTab, navigate]);
+  }, [leafPositionIndices, selectedTender, clientPositions, openPositionTab]);
 
 
   // Обработчик клика по карточке тендера
@@ -442,16 +458,30 @@ const ClientPositions: React.FC = () => {
 
       {/* Таблица позиций заказчика (на телефоне — карточный read-only список) */}
       {selectedTender && isPhoneDevice && (
-        <PositionCardList
-          clientPositions={searchedPositions}
-          selectedTender={selectedTender}
-          loading={loading || filterLoading}
-          positionCounts={positionCounts}
-          leafPositionIndices={leafPositionIndices}
-          searchQuery={positionSearchQuery}
-          onSearchQueryChange={setPositionSearchQuery}
-          onRowClick={handleRowClick}
-        />
+        <div style={{ marginTop: 16 }}>
+          {/* Поле поиска живёт ЗДЕСЬ, а не внутри PositionCardList: контролируемому Input
+              нужно недеферренное значение, и, находясь внутри мемоизированного списка, оно
+              пробивало memo на каждый символ — список перерисовывался целиком на текущем
+              (выросшем со скроллом) count, полностью обнуляя useDeferredValue ниже.
+              Держим его вне ветки loading/empty, иначе поле исчезает на пустой выдаче. */}
+          <Input
+            allowClear
+            value={positionSearchQuery}
+            onChange={(event) => setPositionSearchQuery(event.target.value)}
+            placeholder="Поиск по номеру и наименованию"
+            prefix={<SearchOutlined />}
+            style={{ width: '100%', marginBottom: 12 }}
+          />
+          <PositionCardList
+            clientPositions={searchedPositions}
+            selectedTender={selectedTender}
+            loading={loading || filterLoading}
+            positionCounts={positionCounts}
+            leafPositionIndices={leafPositionIndices}
+            searchKey={deferredPositionSearchQuery}
+            onRowClick={handleRowClick}
+          />
+        </div>
       )}
 
       {selectedTender && !isPhoneDevice && (

@@ -1,6 +1,5 @@
 import React from 'react';
-import { Card, Tag, Typography, Empty, Spin, Space, Input } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { Card, Tag, Typography, Empty, Spin, Space } from 'antd';
 import type { ClientPosition, Tender } from '../../../lib/types';
 import { formatRu } from '../../../utils/format/currency';
 import { useIncrementalRender } from '../../../hooks/useIncrementalRender';
@@ -14,8 +13,10 @@ interface PositionCardListProps {
   loading: boolean;
   positionCounts: Record<string, { works: number; materials: number; total: number }>;
   leafPositionIndices: Set<string>;
-  searchQuery: string;
-  onSearchQueryChange: (value: string) => void;
+  /** Только для resetKey инкрементального рендера. ДЕФЕРРЕННЫЙ запрос — не значение Input:
+   *  само поле живёт в ClientPositions, иначе недеферренное значение пробивало бы memo на
+   *  каждый символ. Ключ должен меняться в том же проходе, что и отфильтрованный список. */
+  searchKey: string;
   onRowClick: (record: ClientPosition, index: number) => void;
 }
 
@@ -25,11 +26,18 @@ interface PositionCardListProps {
  * и отступом для ДОП-строк вместо fixed-колонок таблицы.
  * Действия строки (копирование/удаление/фильтр) на телефоне скрыты — только просмотр.
  *
- * memo обязателен: сворачивание шапки (`setHeaderCollapsed` в ClientPositions) иначе
- * перестраивает все отрендеренные карточки — а их по мере скролла набирается 40/80/120
- * (см. useIncrementalRender), и тап начинает ощутимо тормозить. Все пропы стабильны,
- * поэтому от переключения шапки список теперь не перерисовывается вовсе. На собственный
- * state (порции useIncrementalRender) memo не влияет — подгрузка по скроллу работает.
+ * memo обязателен: любой рендер ClientPositions иначе перестраивает все отрендеренные
+ * карточки — а их по мере скролла набирается 40/80/120 (useIncrementalRender только растит
+ * count и никогда не размонтирует уехавшее), и тап начинает ощутимо тормозить.
+ *
+ * ВСЕ пропы обязаны быть стабильными, иначе memo бесполезен. Два места, где это легко
+ * сломать (и где уже ломалось):
+ *   - `onRowClick`: в ClientPositions он на useCallback БЕЗ `navigate` в deps — react-router
+ *     пересоздаёт navigate на каждую навигацию, поэтому он держится в ref. Иначе список
+ *     перерисовывался на каждое переключение/открытие вкладки.
+ *   - `searchKey`: только ДЕФЕРРЕННЫЙ запрос. Поле поиска живёт в ClientPositions; когда
+ *     Input был здесь, недеферренное значение пробивало memo на каждый символ.
+ * На собственный state (порции useIncrementalRender) memo не влияет — подгрузка работает.
  */
 const PositionCardListInner: React.FC<PositionCardListProps> = ({
   clientPositions,
@@ -37,8 +45,7 @@ const PositionCardListInner: React.FC<PositionCardListProps> = ({
   loading,
   positionCounts,
   leafPositionIndices,
-  searchQuery,
-  onSearchQueryChange,
+  searchKey,
   onRowClick,
 }) => {
   // Инкрементальный рендер: на крупном тендере не строим все карточки позиций разом.
@@ -47,20 +54,11 @@ const PositionCardListInner: React.FC<PositionCardListProps> = ({
   const { visible, sentinelRef, hasMore } = useIncrementalRender(
     clientPositions,
     40,
-    `${selectedTender?.id ?? ''}|${searchQuery}`
+    `${selectedTender?.id ?? ''}|${searchKey}`
   );
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <Input
-        allowClear
-        value={searchQuery}
-        onChange={(event) => onSearchQueryChange(event.target.value)}
-        placeholder="Поиск по номеру и наименованию"
-        prefix={<SearchOutlined />}
-        style={{ width: '100%', marginBottom: 12 }}
-      />
-
+    <div>
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
       ) : clientPositions.length === 0 ? (

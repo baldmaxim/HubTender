@@ -4,9 +4,11 @@
  * покрыта тестом консистентности, её summary не трогаем.
  */
 
+import { memo } from 'react';
 import { Card, Tag, Typography, Empty, Space } from 'antd';
 import type { PositionWithCommercialCost } from '../types';
 import { formatCommercialCost } from '../../../utils/markupCalculator';
+import { useIncrementalRender } from '../../../hooks/useIncrementalRender';
 
 const { Text } = Typography;
 
@@ -29,16 +31,23 @@ const Metric: React.FC<{ label: string; value: string; color?: string; strong?: 
   </div>
 );
 
-export default function CommerceCards({
+function CommerceCardsInner({
   positions,
   insuranceTotal = 0,
   onNavigateToPosition,
   selectedTenderId,
 }: CommerceCardsProps) {
-  if (!positions.length) {
-    return <Empty description="Нет позиций заказчика" />;
-  }
+  // Инкрементальный рендер: единственный список КП, у которого не было НИКАКОЙ границы —
+  // голый .map по всем позициям тендера (сотни карточек в первый кадр).
+  // resetKey — selectedTenderId, а не идентичность массива: Commerce намеренно не глушит
+  // self-echo (см. useCommerceData), поэтому loadPositions срабатывает на каждую правку BOQ
+  // и на идентичности выкидывало бы к первым 40 посреди прокрутки.
+  // Хук вызываем ДО раннего return — правила хуков.
+  const { visible, sentinelRef, hasMore } = useIncrementalRender(positions, 40, selectedTenderId);
 
+  // ВАЖНО: итоги и insShare считаются по ПОЛНОМУ массиву, а не по visible. Резать можно
+  // только .map ниже — иначе доля страхования в каждой карточке и весь блок «Итого»
+  // молча посчитаются по видимой части и покажут неверные ДЕНЬГИ, а не просто лаг.
   let totalWorks = 0;
   let totalBase = 0;
   let totalMaterials = 0;
@@ -56,9 +65,13 @@ export default function CommerceCards({
   const totalWorksWithIns = totalWorks + insuranceTotal;
   const totalCommercialWithIns = totalCommercial + insuranceTotal;
 
+  if (!positions.length) {
+    return <Empty description="Нет позиций заказчика" />;
+  }
+
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
-      {positions.map((record) => {
+      {visible.map((record) => {
         const isLeaf = record.is_leaf ?? true;
         const itemNoColor = isLeaf ? '#52c41a' : '#ff7875';
         const ins = insShare(record);
@@ -105,6 +118,12 @@ export default function CommerceCards({
         );
       })}
 
+      {hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
+
+      {/* Итоги показываем только когда список дорендерен целиком: иначе блок «Итого» всплыл
+          бы сразу после 40-й карточки, изображая конец списка, и уезжал вниз по мере
+          подгрузки. Так поведение совпадает с прежним — итоги в самом низу. */}
+      {!hasMore && (
       <Card size="small" styles={{ body: { padding: 12 } }} style={{ borderLeft: '3px solid #10b981' }}>
         <Text strong style={{ display: 'block', marginBottom: 8 }}>Итого:</Text>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
@@ -118,6 +137,15 @@ export default function CommerceCards({
           <Metric label="Коэфф." value={(totalBase > 0 ? totalCommercialWithIns / totalBase : 1).toFixed(4)} strong />
         </div>
       </Card>
+      )}
     </Space>
   );
 }
+
+/**
+ * memo: под keep-alive «Форма КП» остаётся смонтированной, пока пользователь работает во
+ * вкладке позиции, и перерисовывалась на каждую навигацию — вместе со всем списком карточек.
+ * Держится только пока onNavigateToPosition стабилен (в Commerce.tsx он на useCallback с
+ * navigate в ref — см. комментарий там).
+ */
+export default memo(CommerceCardsInner);
