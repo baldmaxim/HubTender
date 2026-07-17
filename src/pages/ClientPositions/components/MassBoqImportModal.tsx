@@ -17,7 +17,7 @@ interface MassBoqImportModalProps {
   onClose: (success: boolean) => void;
 }
 
-export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
+const MassBoqImportModalInner: React.FC<MassBoqImportModalProps> = ({
   open,
   tenderId,
   tenderTitle,
@@ -298,3 +298,7 @@ export const MassBoqImportModal: React.FC<MassBoqImportModalProps> = ({
     </Modal>
   );
 };
+
+// memo: модалка всегда смонтирована на странице позиций и без границы перерендеривалась
+// бы на каждый символ поиска; пропсы стабилизированы в ClientPositions (useCallback).
+export const MassBoqImportModal = React.memo(MassBoqImportModalInner);

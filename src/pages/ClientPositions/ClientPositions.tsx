@@ -240,8 +240,9 @@ const ClientPositions: React.FC = () => {
     setPositionSearchQuery('');
   }, [selectedTenderId]);
 
-  // Обработка выбора наименования тендера
-  const handleTenderTitleChange = (title: string) => {
+  // Обработка выбора наименования тендера. useCallback — пропсы PositionToolbar
+  // должны быть стабильны на вводе в поиск, иначе его memo пробивается на каждый символ.
+  const handleTenderTitleChange = useCallback((title: string) => {
     setSelectedTenderTitle(title);
     // Автоматически выбираем последнюю версию нового тендера
     const versionsOfTitle = tenders
@@ -261,10 +262,10 @@ const ClientPositions: React.FC = () => {
       setClientPositions([]);
       setSearchParams({});
     }
-  };
+  }, [tenders, shouldFilterArchived, setSelectedTender, setClientPositions, fetchClientPositions, setSearchParams]);
 
   // Обработка выбора версии тендера
-  const handleVersionChange = (version: number) => {
+  const handleVersionChange = useCallback((version: number) => {
     setSelectedVersion(version);
     const tender = tenders.find(t => t.title === selectedTenderTitle && t.version === version);
     if (tender) {
@@ -273,7 +274,7 @@ const ClientPositions: React.FC = () => {
       fetchClientPositions(tender.id);
       setSearchParams({ tenderId: tender.id });
     }
-  };
+  }, [tenders, selectedTenderTitle, setSelectedTender, fetchClientPositions, setSearchParams]);
 
   // Автоматический выбор тендера из URL параметров
   useEffect(() => {
@@ -299,7 +300,7 @@ const ClientPositions: React.FC = () => {
     setAdditionalModalOpen(true);
   }, []);
 
-  const handleAdditionalSuccess = (newPositionId: string) => {
+  const handleAdditionalSuccess = useCallback((newPositionId: string) => {
     setAdditionalModalOpen(false);
     setSelectedParentId(null);
     if (selectedTenderId) {
@@ -308,7 +309,21 @@ const ClientPositions: React.FC = () => {
     if (isFilterActive) {
       addPositionToFilter(newPositionId);
     }
-  };
+  }, [selectedTenderId, isFilterActive, fetchClientPositions, addPositionToFilter]);
+
+  const handleAdditionalCancel = useCallback(() => {
+    setAdditionalModalOpen(false);
+    setSelectedParentId(null);
+  }, []);
+
+  const handleMassImportClose = useCallback(() => {
+    setMassImportModalOpen(false);
+    // Обновляем всегда: при частичной/ошибочной загрузке уже
+    // закоммиченные строки иначе не появятся до ручной перезагрузки.
+    if (selectedTenderId) {
+      fetchClientPositions(selectedTenderId);
+    }
+  }, [selectedTenderId, fetchClientPositions]);
 
   // Обработчик клика по строке — открываем позицию внутренней вкладкой приложения.
   //
@@ -558,10 +573,7 @@ const ClientPositions: React.FC = () => {
         parentPositionId={selectedParentId}
         tenderId={selectedTenderId || ''}
         disabled={isReadOnlyByDeadline}
-        onCancel={() => {
-          setAdditionalModalOpen(false);
-          setSelectedParentId(null);
-        }}
+        onCancel={handleAdditionalCancel}
         onSuccess={handleAdditionalSuccess}
       />
 
@@ -570,14 +582,7 @@ const ClientPositions: React.FC = () => {
         open={massImportModalOpen}
         tenderId={selectedTenderId || ''}
         tenderTitle={selectedTender?.title || ''}
-        onClose={() => {
-          setMassImportModalOpen(false);
-          // Обновляем всегда: при частичной/ошибочной загрузке уже
-          // закоммиченные строки иначе не появятся до ручной перезагрузки.
-          if (selectedTenderId) {
-            fetchClientPositions(selectedTenderId);
-          }
-        }}
+        onClose={handleMassImportClose}
       />
     </div>
   );
