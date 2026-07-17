@@ -31,7 +31,8 @@ import {
 import { parseNumberInput, formatNumberInput } from '../../../utils/numberFormat';
 import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 import { SubcontractGrowthTab } from './SubcontractGrowthTab';
-import { getVersionColorByTitle } from '../../../utils/versionColor';
+import { TenderTileCard } from '../../../components/TenderTileCard';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 
 const { Title, Text } = Typography;
 
@@ -43,6 +44,7 @@ interface TenderOption {
 
 const MarkupPercentages: React.FC = () => {
   const [form] = Form.useForm();
+  const { isPhone, isPhoneDevice } = useIsMobile();
   const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [saving, setSaving] = useState(false);
   const [tenders, setTenders] = useState<Tender[]>([]);
@@ -280,15 +282,18 @@ const MarkupPercentages: React.FC = () => {
     return (
       <Card bordered={false} style={{ height: '100%' }}>
         <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <Title level={4} style={{ marginBottom: 24 }}>
-            Проценты наценок
-          </Title>
+          {/* На телефоне заголовок уже есть в шапке (pageTitle) — здесь не дублируем. */}
+          {!isPhoneDevice && (
+            <Title level={4} style={{ marginBottom: 24 }}>
+              Проценты наценок
+            </Title>
+          )}
           <Text type="secondary" style={{ fontSize: 16, marginBottom: 24, display: 'block' }}>
             Выберите тендер для корректирования процентов
           </Text>
           <Select
             className="tender-select"
-            style={{ width: 400, marginBottom: 32 }}
+            style={{ width: isPhone ? '100%' : 400, maxWidth: '100%', marginBottom: 32 }}
             placeholder="Выберите тендер"
             value={selectedTenderTitle}
             onChange={handleTenderTitleChange}
@@ -303,7 +308,7 @@ const MarkupPercentages: React.FC = () => {
 
           {selectedTenderTitle && (
             <Select
-              style={{ width: 200, marginBottom: 32, marginLeft: 16 }}
+              style={{ width: isPhone ? '100%' : 200, maxWidth: '100%', marginBottom: 32, marginLeft: isPhone ? 0 : 16 }}
               placeholder="Выберите версию"
               value={selectedVersion}
               onChange={handleVersionChange}
@@ -318,18 +323,12 @@ const MarkupPercentages: React.FC = () => {
               <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
                 Или выберите из списка:
               </Text>
-              <Row gutter={[16, 16]} justify="center">
+              <Row gutter={isPhoneDevice ? [8, 8] : [16, 16]} justify="center">
                 {tenders.filter(t => !t.is_archived).slice(0, 6).map(tender => (
                   <Col key={tender.id}>
-                    <Card
-                      hoverable
-                      style={{
-                        width: 200,
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        borderColor: '#10b981',
-                        borderWidth: 1,
-                      }}
+                    <TenderTileCard
+                      tender={tender}
+                      allTenders={tenders}
                       onClick={async () => {
                         setSelectedTenderId(tender.id);
                         setSelectedTenderTitle(tender.title);
@@ -340,38 +339,8 @@ const MarkupPercentages: React.FC = () => {
                         }
                         fetchMarkupData(tender.id);
                       }}
-                      onAuxClick={(e) => {
-                        if (e.button === 1) {
-                          e.preventDefault();
-                          window.open(`/admin/markup?tenderId=${tender.id}`, '_blank');
-                        }
-                      }}
-                    >
-                      <div style={{ marginBottom: 8 }}>
-                        <Tag color="#10b981">{tender.tender_number}</Tag>
-                      </div>
-                      <div style={{
-                        marginBottom: 8,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexWrap: 'nowrap',
-                        gap: 4
-                      }}>
-                        <Text strong style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          maxWidth: 140
-                        }}>
-                          {tender.title}
-                        </Text>
-                        <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
-                      </div>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {tender.client_name}
-                      </Text>
-                    </Card>
+                      deepLinkUrl={`/admin/markup?tenderId=${tender.id}`}
+                    />
                   </Col>
                 ))}
               </Row>

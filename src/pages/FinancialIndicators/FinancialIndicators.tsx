@@ -4,7 +4,6 @@ import { formatFXUnavailable } from '../../utils/boq/currencyGuard';
 import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { getVersionColorByTitle } from '../../utils/versionColor';
 import { getTenderById, approveFinancial } from '../../lib/api/fi';
 import { adminPatchTender } from '../../lib/api/tenders';
 import { getErrorMessage } from '../../utils/errors';
@@ -21,7 +20,7 @@ import {
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { AutoFitText } from '../../components/AutoFitText';
+import { TenderTileCard } from '../../components/TenderTileCard';
 import { useFinancialData } from './hooks/useFinancialData';
 import { IndicatorsCharts } from './components/IndicatorsCharts';
 import { IndicatorsTable, INDICATORS_TABLE_FIT_WIDTH } from './components/IndicatorsTable';
@@ -240,72 +239,17 @@ const FinancialIndicators: React.FC = () => {
                 <Row gutter={isPhoneDevice ? [8, 8] : [16, 16]} justify="center">
                   {tenders.filter(t => !t.is_archived).slice(0, 6).map(tender => (
                     <Col key={tender.id}>
-                      <Card
-                        hoverable
-                        size={isPhoneDevice ? 'small' : 'default'}
-                        styles={{ body: { padding: isPhoneDevice ? '8px 10px' : '12px 16px' } }}
-                        style={{
-                          width: isPhoneDevice ? 160 : 200,
-                          textAlign: 'center',
-                          cursor: 'pointer',
-                          borderColor: '#10b981',
-                          borderWidth: 1,
-                        }}
+                      <TenderTileCard
+                        tender={tender}
+                        allTenders={tenders}
+                        desktopBodyPadding="12px 16px"
                         onClick={() => {
                           setSelectedTenderTitle(tender.title);
                           setSelectedVersion(tender.version || 1);
                           setSelectedTenderId(tender.id);
                         }}
-                        onAuxClick={(e) => {
-                          if (e.button === 1) {
-                            e.preventDefault();
-                            window.open(`/financial-indicators?tenderId=${tender.id}`, '_blank');
-                          }
-                        }}
-                      >
-                        {isPhoneDevice ? (
-                          <>
-                            {/* Телефон: номер тендера убран; версия стоит вплотную справа от наименования (по центру). */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', gap: 6, marginBottom: 4 }}>
-                              <Text strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100, fontSize: 12 }}>
-                                {tender.title}
-                              </Text>
-                              <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
-                            </div>
-                            <AutoFitText maxFontSize={11} minFontSize={7} align="center">
-                              {tender.client_name}
-                            </AutoFitText>
-                          </>
-                        ) : (
-                          <>
-                            {/* Десктоп/планшет: фиксированная ширина 200, как на «Позициях заказчика». */}
-                            <div style={{ marginBottom: 8 }}>
-                              <Tag color="#10b981" style={{ margin: 0 }}>{tender.tender_number}</Tag>
-                            </div>
-                            <div style={{
-                              marginBottom: 8,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexWrap: 'nowrap',
-                              gap: 4,
-                            }}>
-                              <Text strong style={{
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                maxWidth: 140,
-                              }}>
-                                {tender.title}
-                              </Text>
-                              <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
-                            </div>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              {tender.client_name}
-                            </Text>
-                          </>
-                        )}
-                      </Card>
+                        deepLinkUrl={`/financial-indicators?tenderId=${tender.id}`}
+                      />
                     </Col>
                   ))}
                 </Row>
