@@ -1,3 +1,4 @@
+import { lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, theme, App as AntApp } from 'antd';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
@@ -7,35 +8,42 @@ import ProtectedRoute from './components/Auth/ProtectedRoute';
 import MainLayout from './components/Layout/MainLayout';
 import ErrorFallback from './components/ErrorFallback';
 import { Sentry } from './lib/sentry';
+// Страницы аутентификации — статически: нужны на первом рендере неавторизованному пользователю.
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import ForgotPassword from './pages/Auth/ForgotPassword';
 import ResetPassword from './pages/Auth/ResetPassword';
-import Dashboard from './pages/Dashboard/Dashboard';
-import Tasks from './pages/Tasks';
-import Nomenclatures from './pages/Admin/Nomenclatures/Nomenclatures';
-import AdminTenders from './pages/Admin/Tenders/Tenders';
-import Tenders from './pages/Tenders/Tenders';
-import ConstructionCost from './pages/Admin/ConstructionCost/ConstructionCost';
-import ConstructionCostNew from './pages/Admin/ConstructionCostNew';
-import MarkupConstructor from './pages/Admin/MarkupConstructor/MarkupConstructor';
-import MarkupPercentages from './pages/Admin/MarkupPercentages/MarkupPercentages';
-import Library from './pages/Library';
-import Templates from './pages/Library/Templates';
+// Keep-alive страницы «рабочего стола» — статически: их уже статически импортирует
+// MainLayout (workspacePages/WorkspaceKeepAlive), dynamic import их из бандла не вынесет.
 import ClientPositions from './pages/ClientPositions/ClientPositions';
 import PositionItemsRoute from './pages/PositionItems/PositionItemsRoute';
-import ImportLog from './pages/Admin/ImportLog/ImportLog';
-import Insurance from './pages/Admin/Insurance/Insurance';
 import Commerce from './pages/Commerce';
-import CostRedistribution from './pages/CostRedistribution';
-import Bsm from './pages/Bsm/Bsm';
-import ObjectComparison from './pages/Analytics/ObjectComparison';
-import FinancialIndicators from './pages/FinancialIndicators/FinancialIndicators';
-import Users from './pages/Users/Users';
-import Projects from './pages/Projects';
-import ProjectDetail from './pages/Projects/ProjectDetail';
-import TenderTimeline from './pages/TenderTimeline';
+import ConstructionCostNew from './pages/Admin/ConstructionCostNew';
 import './App.css';
+
+// Остальные страницы — lazy-чанки: клик по меню перестаёт синхронно монтировать
+// страницу из монолитного бандла (INP), чанк догружается в startTransition-навигации
+// react-router v7 (старый экран висит до готовности, Suspense-фолбэк — в MainLayout).
+const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
+const Tasks = lazy(() => import('./pages/Tasks'));
+const Nomenclatures = lazy(() => import('./pages/Admin/Nomenclatures/Nomenclatures'));
+const AdminTenders = lazy(() => import('./pages/Admin/Tenders/Tenders'));
+const Tenders = lazy(() => import('./pages/Tenders/Tenders'));
+const ConstructionCost = lazy(() => import('./pages/Admin/ConstructionCost/ConstructionCost'));
+const MarkupConstructor = lazy(() => import('./pages/Admin/MarkupConstructor/MarkupConstructor'));
+const MarkupPercentages = lazy(() => import('./pages/Admin/MarkupPercentages/MarkupPercentages'));
+const Library = lazy(() => import('./pages/Library'));
+const Templates = lazy(() => import('./pages/Library/Templates'));
+const ImportLog = lazy(() => import('./pages/Admin/ImportLog/ImportLog'));
+const Insurance = lazy(() => import('./pages/Admin/Insurance/Insurance'));
+const CostRedistribution = lazy(() => import('./pages/CostRedistribution'));
+const Bsm = lazy(() => import('./pages/Bsm/Bsm'));
+const ObjectComparison = lazy(() => import('./pages/Analytics/ObjectComparison'));
+const FinancialIndicators = lazy(() => import('./pages/FinancialIndicators/FinancialIndicators'));
+const Users = lazy(() => import('./pages/Users/Users'));
+const Projects = lazy(() => import('./pages/Projects'));
+const ProjectDetail = lazy(() => import('./pages/Projects/ProjectDetail'));
+const TenderTimeline = lazy(() => import('./pages/TenderTimeline'));
 
 function AppContent() {
   const { theme: currentTheme } = useTheme();
