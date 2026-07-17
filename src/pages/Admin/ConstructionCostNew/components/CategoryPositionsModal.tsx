@@ -82,7 +82,6 @@ const CategoryPositionsModal: React.FC<CategoryPositionsModalProps> = ({
       title: <div style={{ textAlign: 'center' }}>Наименование</div>,
       dataIndex: 'work_name',
       key: 'work_name',
-      width: 320,
       render: (value: string, record: CategoryPositionRow) => (
         <Link onClick={() => openPosition(record)} style={{ textDecoration: 'underline' }}>
           {value}
