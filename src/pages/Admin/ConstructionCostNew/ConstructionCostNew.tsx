@@ -215,6 +215,7 @@ const ConstructionCostNew: React.FC = () => {
           <LandscapeTableOverlay
             theme={currentTheme}
             fit="width"
+            stickyHeader
             width={COST_TABLE_FIT_WIDTH[effectiveViewMode]}
             footer={
               <CostTotalsBar
