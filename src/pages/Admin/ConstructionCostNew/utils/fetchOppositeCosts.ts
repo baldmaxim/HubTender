@@ -1,93 +1,37 @@
 import { listBoqItemsFullByTender } from '../../../../lib/api/positions';
-
-export interface OppositeCosts {
-  materials: number;
-  works: number;
-  subMaterials: number;
-  subWorks: number;
-  materialsComp: number;
-  worksComp: number;
-}
+import {
+  loadLiveCommercialCalculationContext,
+  resetLiveCommercialCalculationCache,
+} from '../../../../utils/boq/liveCommercialCalculation';
+import { formatFXUnavailable } from '../../../../utils/boq/currencyGuard';
+import { aggregateBoqCosts } from './aggregateBoqCosts';
+import type { BoqItemForCost, CostSums } from '../types';
 
 /**
- * Получает данные для противоположного типа затрат
+ * Получает суммы затрат противоположного типа (по detail_cost_category_id).
+ *
+ * Использует тот же конвейер, что и страница (loadLiveCommercialCalculationContext
+ * + aggregateBoqCosts): live-расчёт по действующей markup-тактике, FX-пересчёт и
+ * распределение по колонкам «материалы/работы». Собственная упрощённая агрегация
+ * здесь недопустима — она расходилась с экраном.
  */
 export async function fetchOppositeCosts(
   tenderId: string,
   currentCostType: 'base' | 'commercial'
-): Promise<Map<string, OppositeCosts>> {
+): Promise<Map<string, CostSums>> {
   const oppositeType = currentCostType === 'base' ? 'commercial' : 'base';
 
-  const oppositeBOQItems = await listBoqItemsFullByTender(tenderId);
+  const calculationContext = await loadLiveCommercialCalculationContext(tenderId);
+  resetLiveCommercialCalculationCache();
 
-  const oppositeCostMap = new Map<string, OppositeCosts>();
+  const boqItems = (await listBoqItemsFullByTender(tenderId)) as unknown as BoqItemForCost[];
 
-  type OppItem = { detail_cost_category_id: string | null; boq_item_type: string | null; total_amount?: number | null; total_commercial_material_cost?: number | null; total_commercial_work_cost?: number | null };
-  (oppositeBOQItems as unknown as OppItem[]).forEach((item) => {
-    const catId = item.detail_cost_category_id;
-    if (!catId) return;
+  const result = aggregateBoqCosts(boqItems, oppositeType, calculationContext);
 
-    if (!oppositeCostMap.has(catId)) {
-      oppositeCostMap.set(catId, {
-        materials: 0,
-        works: 0,
-        subMaterials: 0,
-        subWorks: 0,
-        materialsComp: 0,
-        worksComp: 0,
-      });
-    }
+  // Fail-closed: нет курса валюты → не отдаём частичные суммы.
+  if (result.value === null) {
+    throw new Error(formatFXUnavailable(result.missingCurrencies));
+  }
 
-    const costs = oppositeCostMap.get(catId)!;
-
-    if (oppositeType === 'base') {
-      const amount = item.total_amount || 0;
-      switch (item.boq_item_type) {
-        case 'мат':
-          costs.materials += amount;
-          break;
-        case 'суб-мат':
-          costs.subMaterials += amount;
-          break;
-        case 'мат-комп.':
-          costs.materialsComp += amount;
-          break;
-        case 'раб':
-          costs.works += amount;
-          break;
-        case 'суб-раб':
-          costs.subWorks += amount;
-          break;
-        case 'раб-комп.':
-          costs.worksComp += amount;
-          break;
-      }
-    } else {
-      const materialCost = item.total_commercial_material_cost || 0;
-      const workCost = item.total_commercial_work_cost || 0;
-
-      switch (item.boq_item_type) {
-        case 'мат':
-          costs.materials += materialCost;
-          break;
-        case 'суб-мат':
-          costs.subMaterials += materialCost;
-          break;
-        case 'мат-комп.':
-          costs.materialsComp += materialCost;
-          break;
-        case 'раб':
-          costs.works += workCost;
-          break;
-        case 'суб-раб':
-          costs.subWorks += workCost;
-          break;
-        case 'раб-комп.':
-          costs.worksComp += workCost;
-          break;
-      }
-    }
-  });
-
-  return oppositeCostMap;
+  return result.value;
 }

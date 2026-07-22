@@ -167,7 +167,12 @@ export async function exportConstructionCostToExcel(
     const oppositeCostMap = await fetchOppositeCosts(selectedTenderId, costType);
 
     // Формируем данные для экспорта
-    const { data: exportData, rowTypes } = buildExportData(filteredData, oppositeCostMap, areaSp);
+    const { data: exportData, rowTypes } = buildExportData(
+      filteredData,
+      oppositeCostMap,
+      areaSp,
+      costType
+    );
 
     // Создаем рабочую книгу и лист
     const wb = XLSX.utils.book_new();
