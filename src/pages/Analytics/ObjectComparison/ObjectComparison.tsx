@@ -1,9 +1,8 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Card, Typography, Select, Table, Space, Statistic, Row, Col, Button, Spin, Segmented, Alert } from 'antd';
+import { Card, Typography, Table, Space, Row, Col, Button, Spin, Segmented, Alert } from 'antd';
 import { formatFXUnavailable } from '../../../utils/boq/currencyGuard';
-import { BarChartOutlined, ReloadOutlined, DownloadOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons';
+import { BarChartOutlined, DownloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import dayjs from 'dayjs';
 import { useComparisonData } from './hooks/useComparisonData';
 import type { ComparisonRow, CostType, ViewMode } from './types';
 import { exportComparisonToExcel } from './utils/exportComparisonToExcel';
@@ -12,7 +11,9 @@ import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../../components/responsive/LandscapeTableOverlay';
 import { DiffCell, DiffPerUnitCell, NoteCell } from './components/comparisonCells';
-import { formatNum, formatPerUnit, tenderLabel, getDiff } from './utils/comparisonFormat';
+import { ComparisonHeader } from './components/ComparisonHeader';
+import { formatNum, formatPerUnit, tenderLabel, getDiff, sumLeafWidths } from './utils/comparisonFormat';
+import { useTableScrollY } from './hooks/useTableScrollY';
 
 const { Text } = Typography;
 
@@ -40,7 +41,7 @@ const ObjectComparison: React.FC = () => {
   } = useComparisonData();
 
   const [viewMode, setViewMode] = useState<ViewMode>('detailed');
-  const { isPhone, isLandscapePhone, isMobile, isPhoneDevice, screens } = useIsMobile();
+  const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
   const { theme: currentTheme } = useTheme();
   // На телефоне страница read-only (примечания правятся на десктопе) и в портрете
   // принудительно упрощённый вид (узкий экран).
@@ -50,9 +51,10 @@ const ObjectComparison: React.FC = () => {
   const loadedCount = loadedInfos.length;
   const isMultiTender = loadedCount > 2;
   const effectiveViewMode: ViewMode = isPhone ? 'simplified' : viewMode;
-  const isDetailed = !isMultiTender && effectiveViewMode === 'detailed';
-  // В ландшафте телефона мульти-тендер (без редактируемых примечаний) показываем оверлеем.
-  const useOverlay = isLandscapePhone && isMultiTender;
+  // В ландшафте телефона узкие варианты таблицы (мульти-тендер и упрощённый вид, ≤ ~1300px)
+  // показываем полноэкранным оверлеем. Детальный вид (~2700px) там вписался бы масштабом ~0.3 —
+  // нечитаемо, поэтому остаётся обычной таблицей с горизонтальным скроллом.
+  const useOverlay = isLandscapePhone && (isMultiTender || viewMode === 'simplified');
   const costLabel = costType === 'commercial' ? 'Коммерческие' : 'Прямые';
   const validCount = selectedTenders.filter(Boolean).length;
 
@@ -155,9 +157,15 @@ const ObjectComparison: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenderInfos, effectiveViewMode, handleNoteBlur, loadedCount, readOnly, useOverlay, categoryWidth]);
 
-  const scrollX = isMultiTender
-    ? categoryWidth + loadedCount * 250
-    : isDetailed ? 2930 : 1230;
+  // Ширина таблицы = точная сумма ширин колонок (иначе шапка и тело расходятся по границам).
+  const scrollX = useMemo(() => sumLeafWidths(columns), [columns]);
+
+  // Десктоп/планшет: страница фиксирована по высоте экрана, скроллится только тело таблицы
+  // (шапка закреплена внутри таблицы) — как на «Затратах на строительство».
+  const { ref: tableWrapRef, scrollY: tableScrollY } = useTableScrollY(
+    !isPhoneDevice,
+    `${loadedCount}-${selectedTenders.length}-${effectiveViewMode}-${comparisonData.length}-${fxMissing.length}`,
+  );
 
   // Stats for 2-tender diff
   const diffValue = loadedCount === 2 ? (tenderTotals[1] || 0) - (tenderTotals[0] || 0) : 0;
@@ -213,6 +221,10 @@ const ObjectComparison: React.FC = () => {
         // margin, чтобы контент дошёл до края экрана. В портрете у Content боков нет.
         marginLeft: isLandscapePhone ? -16 : 0,
         marginRight: isLandscapePhone ? -16 : 0,
+        // Десктоп/планшет: страница ровно по высоте экрана (64 шапка + 2×16 padding Content),
+        // сама не скроллится — скроллится тело таблицы со своей полосой.
+        height: isPhoneDevice ? 'auto' : 'calc(100vh - 96px)',
+        overflow: isPhoneDevice ? undefined : 'hidden',
       }}
     >
       {loadedTenderIds.map((id) => (
@@ -221,120 +233,23 @@ const ObjectComparison: React.FC = () => {
       {fxMissing.length > 0 && (
         <Alert type="error" showIcon message={formatFXUnavailable(fxMissing)} style={{ marginBottom: 12 }} />
       )}
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        {(() => {
-          const selectionCard = (
-            <Card>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-                {selectedTenders.map((val, idx) => {
-                  const info = val ? tenders.find(t => t.id === val) || null : null;
-                  return (
-                    <div key={idx} style={{ flex: isPhone ? '1 1 100%' : '0 0 210px', minWidth: isPhone ? 0 : 168 }}>
-                      <Space direction="vertical" style={{ width: '100%' }}>
-                        <Space align="center">
-                          <Text strong>Тендер {idx + 1}</Text>
-                          {selectedTenders.length > 2 && (
-                            <Button
-                              type="text"
-                              size="small"
-                              icon={<CloseOutlined />}
-                              danger
-                              onClick={() => removeTender(idx)}
-                            />
-                          )}
-                        </Space>
-                        <Select
-                          style={{ width: '100%' }}
-                          placeholder={`Выберите тендер ${idx + 1}`}
-                          value={val}
-                          onChange={(v) => setSelectedTender(idx, v ?? null)}
-                          showSearch
-                          optionFilterProp="label"
-                          allowClear
-                          options={tenders.map(t => ({ value: t.id, label: `${t.title} (v${t.version || 1})` }))}
-                        />
-                        {info && (
-                          <Text type="secondary" style={{ fontSize: '12px' }}>
-                            Создан: {dayjs(info.created_at).format('DD.MM.YYYY')}
-                          </Text>
-                        )}
-                      </Space>
-                    </div>
-                  );
-                })}
-                <div style={{ flex: isPhone ? '1 1 100%' : '0 0 auto', minWidth: isPhone ? 0 : 240 }}>
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <Space align="center" style={{ visibility: 'hidden' }}>
-                      <Text strong>Тендер</Text>
-                    </Space>
-                    <Space wrap>
-                      <Button icon={<PlusOutlined />} onClick={addTender}>
-                        Добавить объект
-                      </Button>
-                      <Button
-                        type="primary"
-                        icon={<ReloadOutlined />}
-                        onClick={loadComparisonData}
-                        loading={loading}
-                        disabled={validCount < 2}
-                      >
-                        Загрузить сравнение
-                      </Button>
-                    </Space>
-                  </Space>
-                </div>
-              </div>
-            </Card>
-          );
-
-          const statsCard = comparisonData.length > 0 ? (
-            <Card
-              title={`Общая статистика (${costLabel.toLowerCase()} затраты)`}
-              style={{ height: '100%' }}
-              styles={{ body: { padding: isPhone ? '8px 12px' : '8px 16px', display: 'flex', alignItems: 'center', minHeight: isPhone ? undefined : 72 } }}
-            >
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: isPhone ? 'space-around' : 'flex-start', gap: isPhone ? 8 : 24, width: '100%' }}>
-                {loadedInfos.map((info, i: number) => (
-                  <div key={i} style={{ padding: isPhone ? '0 4px' : '0 12px', textAlign: 'center' }}>
-                    <Statistic
-                      title={<span style={{ whiteSpace: 'nowrap', fontSize: isPhone ? 11 : 12 }}>{`Итого: ${tenderLabel(info, `Тендер ${i + 1}`)}`}</span>}
-                      value={tenderTotals[i] || 0}
-                      precision={0}
-                      suffix="₽"
-                      valueStyle={{ fontSize: isPhone ? 16 : 18 }}
-                    />
-                  </div>
-                ))}
-                {loadedCount === 2 && (
-                  <div style={{ padding: isPhone ? '0 4px' : '0 12px', textAlign: 'center' }}>
-                    <Statistic
-                      title={<span style={{ whiteSpace: 'nowrap', fontSize: isPhone ? 11 : 12 }}>Разница</span>}
-                      value={diffValue}
-                      precision={0}
-                      suffix="₽"
-                      prefix={diffValue >= 0 ? '+' : ''}
-                      valueStyle={{ fontSize: isPhone ? 16 : 18, color: diffValue >= 0 ? '#52c41a' : '#ff4d4f', fontWeight: 600 }}
-                    />
-                  </div>
-                )}
-              </div>
-            </Card>
-          ) : null;
-
-          const showStatsBeside = screens.lg && !isMultiTender && comparisonData.length > 0;
-
-          return showStatsBeside ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'stretch' }}>
-              <div style={{ flex: '0 1 auto', minWidth: 0 }}>{selectionCard}</div>
-              <div style={{ flex: '1 1 320px', minWidth: 280 }}>{statsCard}</div>
-            </div>
-          ) : (
-            <>
-              {selectionCard}
-              {statsCard}
-            </>
-          );
-        })()}
+      <Space direction="vertical" size={isPhoneDevice ? 'small' : 'large'} style={{ width: '100%' }}>
+        <ComparisonHeader
+          tenders={tenders}
+          selectedTenders={selectedTenders}
+          setSelectedTender={setSelectedTender}
+          addTender={addTender}
+          removeTender={removeTender}
+          loadComparisonData={loadComparisonData}
+          loading={loading}
+          validCount={validCount}
+          loadedInfos={loadedInfos}
+          tenderTotals={tenderTotals}
+          diffValue={diffValue}
+          costLabel={costLabel}
+          hasData={comparisonData.length > 0}
+          isMultiTender={isMultiTender}
+        />
 
         {/* Таблица сравнения */}
         {loading ? (
@@ -349,7 +264,7 @@ const ObjectComparison: React.FC = () => {
         ) : comparisonData.length > 0 ? (
           <Card title={comparisonCardTitle} styles={{ body: { padding: 0 } }}>
             {useOverlay ? (
-              <LandscapeTableOverlay theme={currentTheme} fit="zoom" width={scrollX}>
+              <LandscapeTableOverlay theme={currentTheme} fit="width" stickyHeader width={scrollX}>
                 <Table
                   columns={columns}
                   dataSource={comparisonData}
@@ -362,18 +277,22 @@ const ObjectComparison: React.FC = () => {
                 />
               </LandscapeTableOverlay>
             ) : (
-              <Table
-                columns={columns}
-                dataSource={comparisonData}
-                rowKey="key"
-                pagination={false}
-                scroll={{ x: scrollX }}
-                sticky
-                bordered
-                size="small"
-                expandable={{ defaultExpandAllRows: false }}
-                rowClassName={(record) => record.is_main_category ? 'comparison-category-row' : ''}
-              />
+              <div ref={tableWrapRef}>
+                <Table
+                  columns={columns}
+                  dataSource={comparisonData}
+                  rowKey="key"
+                  pagination={false}
+                  // Десктоп/планшет: шапка закреплена внутри таблицы (scroll.y), как на «Затратах».
+                  // Телефон: прежнее поведение — шапка липнет к верху окна, скроллится страница.
+                  scroll={isPhoneDevice ? { x: scrollX } : { x: scrollX, y: tableScrollY }}
+                  sticky={isPhoneDevice}
+                  bordered
+                  size="small"
+                  expandable={{ defaultExpandAllRows: false }}
+                  rowClassName={(record) => record.is_main_category ? 'comparison-category-row' : ''}
+                />
+              </div>
             )}
           </Card>
         ) : (
