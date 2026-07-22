@@ -266,9 +266,15 @@ const ObjectComparison: React.FC = () => {
             </div>
           </Card>
         ) : comparisonData.length > 0 ? (
+          <>
+          {/* Ландшафт: подпись и фильтры вынесены из шапки карточки, чтобы уезжать
+              вверх вместе с выбором объектов — прилипает только таблица с шапкой колонок. */}
+          {pinTable && (
+            <Card styles={{ body: { padding: '8px 10px' } }}>{comparisonCardTitle}</Card>
+          )}
           <div style={pinTable ? { position: 'sticky', top: 0, height: tableAvailH, zIndex: 2 } : undefined}>
             <Card
-              title={comparisonCardTitle}
+              title={pinTable ? undefined : comparisonCardTitle}
               styles={{ body: { padding: 0 } }}
               style={pinTable ? { height: '100%' } : undefined}
             >
@@ -305,6 +311,7 @@ const ObjectComparison: React.FC = () => {
               )}
             </Card>
           </div>
+          </>
         ) : (
           <Card>
             <div style={{ textAlign: 'center', padding: '40px' }}>
