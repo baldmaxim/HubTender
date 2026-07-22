@@ -162,9 +162,13 @@ const ObjectComparison: React.FC = () => {
 
   // Десктоп/планшет: страница фиксирована по высоте экрана, скроллится только тело таблицы
   // (шапка закреплена внутри таблицы) — как на «Затратах на строительство».
-  const { ref: tableWrapRef, scrollY: tableScrollY } = useTableScrollY(
-    !isPhoneDevice,
+  // Ландшафт телефона: страница скроллится, но карточка таблицы липкая — доскроллив,
+  // пользователь получает таблицу на весь экран с закреплённой шапкой колонок.
+  const pinTable = isLandscapePhone && !useOverlay;
+  const { ref: tableWrapRef, scrollY: tableScrollY, availH: tableAvailH } = useTableScrollY(
+    !isPhone && !useOverlay,
     `${loadedCount}-${selectedTenders.length}-${effectiveViewMode}-${comparisonData.length}-${fxMissing.length}`,
+    pinTable ? { pinned: true, minBody: 96 } : undefined,
   );
 
   // Stats for 2-tender diff
@@ -262,39 +266,45 @@ const ObjectComparison: React.FC = () => {
             </div>
           </Card>
         ) : comparisonData.length > 0 ? (
-          <Card title={comparisonCardTitle} styles={{ body: { padding: 0 } }}>
-            {useOverlay ? (
-              <LandscapeTableOverlay theme={currentTheme} fit="width" stickyHeader width={scrollX}>
-                <Table
-                  columns={columns}
-                  dataSource={comparisonData}
-                  rowKey="key"
-                  pagination={false}
-                  bordered
-                  size="small"
-                  expandable={{ defaultExpandAllRows: false }}
-                  rowClassName={(record) => record.is_main_category ? 'comparison-category-row' : ''}
-                />
-              </LandscapeTableOverlay>
-            ) : (
-              <div ref={tableWrapRef}>
-                <Table
-                  columns={columns}
-                  dataSource={comparisonData}
-                  rowKey="key"
-                  pagination={false}
-                  // Десктоп/планшет: шапка закреплена внутри таблицы (scroll.y), как на «Затратах».
-                  // Телефон: прежнее поведение — шапка липнет к верху окна, скроллится страница.
-                  scroll={isPhoneDevice ? { x: scrollX } : { x: scrollX, y: tableScrollY }}
-                  sticky={isPhoneDevice}
-                  bordered
-                  size="small"
-                  expandable={{ defaultExpandAllRows: false }}
-                  rowClassName={(record) => record.is_main_category ? 'comparison-category-row' : ''}
-                />
-              </div>
-            )}
-          </Card>
+          <div style={pinTable ? { position: 'sticky', top: 0, height: tableAvailH, zIndex: 2 } : undefined}>
+            <Card
+              title={comparisonCardTitle}
+              styles={{ body: { padding: 0 } }}
+              style={pinTable ? { height: '100%' } : undefined}
+            >
+              {useOverlay ? (
+                <LandscapeTableOverlay theme={currentTheme} fit="width" stickyHeader width={scrollX}>
+                  <Table
+                    columns={columns}
+                    dataSource={comparisonData}
+                    rowKey="key"
+                    pagination={false}
+                    bordered
+                    size="small"
+                    expandable={{ defaultExpandAllRows: false }}
+                    rowClassName={(record) => record.is_main_category ? 'comparison-category-row' : ''}
+                  />
+                </LandscapeTableOverlay>
+              ) : (
+                <div ref={tableWrapRef}>
+                  <Table
+                    columns={columns}
+                    dataSource={comparisonData}
+                    rowKey="key"
+                    pagination={false}
+                    // Десктоп/планшет и ландшафт телефона: шапка закреплена внутри таблицы (scroll.y),
+                    // как на «Затратах». Портрет: прежнее поведение — шапка липнет к верху окна.
+                    scroll={isPhone ? { x: scrollX } : { x: scrollX, y: tableScrollY }}
+                    sticky={isPhone}
+                    bordered
+                    size="small"
+                    expandable={{ defaultExpandAllRows: false }}
+                    rowClassName={(record) => record.is_main_category ? 'comparison-category-row' : ''}
+                  />
+                </div>
+              )}
+            </Card>
+          </div>
         ) : (
           <Card>
             <div style={{ textAlign: 'center', padding: '40px' }}>

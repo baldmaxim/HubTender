@@ -57,8 +57,11 @@ export const ComparisonHeader: React.FC<ComparisonHeaderProps> = ({
   const cardBodyPadding = isPhoneDevice ? '8px 10px' : undefined;
   const controlSize = isPhoneDevice ? ('small' as const) : ('middle' as const);
 
-  const titleFontSize = isPhone ? 10 : isPhoneDevice ? 11 : 12;
-  const valueFontSize = isPhone ? 13 : isPhoneDevice ? 15 : 18;
+  // В ландшафте на плитку остаётся ~100px: шрифт сумм на 30% меньше и без знака ₽,
+  // иначе миллиардные суммы обрезаются (валюта на странице всё равно одна).
+  const titleFontSize = isPhone ? 10 : isLandscapePhone ? 9 : 12;
+  const valueFontSize = isPhone ? 13 : isLandscapePhone ? 10.5 : 18;
+  const valueSuffix = isLandscapePhone ? undefined : '₽';
   // На телефоне плитки делят ширину поровну и обрезают длинное имя тендера —
   // так сводка остаётся одной строкой без горизонтальной прокрутки.
   const tileStyle: React.CSSProperties = isPhoneDevice
@@ -80,7 +83,8 @@ export const ComparisonHeader: React.FC<ComparisonHeaderProps> = ({
             title={<span style={titleStyle}>{`Итого: ${tenderLabel(info, `Тендер ${i + 1}`)}`}</span>}
             value={tenderTotals[i] || 0}
             precision={0}
-            suffix="₽"
+            groupSeparator=" "
+            suffix={valueSuffix}
             valueStyle={{ fontSize: valueFontSize, whiteSpace: 'nowrap' }}
           />
         </div>
@@ -91,7 +95,8 @@ export const ComparisonHeader: React.FC<ComparisonHeaderProps> = ({
             title={<span style={titleStyle}>Разница</span>}
             value={diffValue}
             precision={0}
-            suffix="₽"
+            groupSeparator=" "
+            suffix={valueSuffix}
             prefix={diffValue >= 0 ? '+' : ''}
             valueStyle={{ fontSize: valueFontSize, whiteSpace: 'nowrap', color: diffValue >= 0 ? '#52c41a' : '#ff4d4f', fontWeight: 600 }}
           />
