@@ -13,6 +13,7 @@ import {
   useCategoryPositions,
   type CategoryPositionRow,
 } from '../hooks/useCategoryPositions';
+import './CategoryPositionsModal.css';
 
 const { Text, Link } = Typography;
 
@@ -141,13 +142,21 @@ const CategoryPositionsModal: React.FC<CategoryPositionsModalProps> = ({
           pagination={false}
           size="small"
           bordered
-          scroll={{ x: 1214, y: 'calc(100vh - 320px)' }}
+          className="ccn-positions-table"
+          // Без scroll.y: rc-table рендерит одну общую <table> вместо трёх (шапка/тело/итоги),
+          // поэтому границы колонок не расходятся. Скролл и sticky — в CSS-файле рядом.
+          scroll={{ x: 1214 }}
           summary={() => (
             <Table.Summary fixed>
               <Table.Summary.Row>
-                <Table.Summary.Cell index={0} colSpan={3}>
+                {/* Отдельные ячейки вместо colSpan={3}: закреплённой остаётся только
+                    70px-колонка «№ п/п», как в строках тела — иначе объединённая ячейка
+                    прилипает слева и закрывает суммы при горизонтальной прокрутке. */}
+                <Table.Summary.Cell index={0}>
                   <Text strong>Итого:</Text>
                 </Table.Summary.Cell>
+                <Table.Summary.Cell index={1} />
+                <Table.Summary.Cell index={2} />
                 <Table.Summary.Cell index={3} align="center">
                   <Text strong>{fmt(totals.subWorks)}</Text>
                 </Table.Summary.Cell>

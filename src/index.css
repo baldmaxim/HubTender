@@ -77,6 +77,19 @@ body {
   scrollbar-gutter: stable;
 }
 
+/* Antd ставит .ant-table свой scrollbar-color, из-за чего Chrome игнорирует наш
+   ::-webkit-scrollbar{width:8px} на теле таблицы и рисует нативный (~15-16px).
+   Ширину скроллбара rc-table меряет отдельным зондом, на котором тот же
+   ::-webkit-scrollbar может сработать, — тогда в шапке резервируется 8px вместо 16,
+   и границы колонок шапки/итогов (при scroll.y это отдельные <table>) уезжают
+   относительно тела. Возврат к auto включает наш 8px-скроллбар, одинаковый для зонда
+   и для тела, и заодно приводит скроллбары таблиц к общему стилю приложения. */
+.ant-table-wrapper .ant-table,
+.ant-table-wrapper .ant-table-body {
+  scrollbar-color: auto;
+  scrollbar-width: auto;
+}
+
 /* Стабилизация layout таблицы с виртуализацией */
 .ant-table-wrapper {
   transform: translateZ(0); /* GPU acceleration для плавного рендера */
