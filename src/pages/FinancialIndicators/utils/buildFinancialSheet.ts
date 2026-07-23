@@ -117,7 +117,7 @@ export function buildFinancialSheet(input: SheetInput): XLSX.WorkSheet {
   // ── Строка 2: дата (A2, крем) + объём (B2:F2, зелёный жирный) ──
   const now = input.today ?? new Date();
   const dateSerial = Math.round((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(1899, 11, 30)) / 86400000);
-  set(1, 0, { t: 'n', v: dateSerial, z: 'dd.mm.yyyy', s: { font: { bold: true }, fill: { fgColor: { rgb: CREAM } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER } });
+  set(1, 0, { t: 'n', v: dateSerial, z: 'dd.mm.yyyy', s: { numFmt: 'dd.mm.yyyy', font: { bold: true }, fill: { fgColor: { rgb: CREAM } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER } });
   set(1, 1, { t: 's', v: volumeTitle || '', s: { font: { bold: true, sz: 14, color: { rgb: RED } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER } });
   for (let c = 2; c <= 5; c++) set(1, c, { t: 's', v: '', s: { border: BORDER } });
 
@@ -132,13 +132,17 @@ export function buildFinancialSheet(input: SheetInput): XLSX.WorkSheet {
     const rExcel = i + 4;
     const isMarkup = num(row.coeff_pct) > 0 && (LITERAL_BASE.has(row.calc_key || '') || Boolean(FORMULA_BASES[row.calc_key || '']));
 
+    // numFmt задаём и через .z, и внутри стиля (.s.numFmt) — xlsx-js-style строит
+    // xf из стиля, поэтому формат обязан лежать в .s, иначе колонка = «Общий».
+    const fmtStyle = (col: number, fmt: string) => ({ ...rowStyle(row, col), numFmt: fmt });
+
     set(rIdx, 0, { t: 'n', v: row.row_number, s: rowStyle(row, 0) });
     set(rIdx, 1, { t: 's', v: row.indicator_name, s: rowStyle(row, 1) });
     set(rIdx, 2, isMarkup
-      ? { t: 'n', v: num(row.coeff_pct) / 100, z: PCT_FMT, s: rowStyle(row, 2) }
+      ? { t: 'n', v: num(row.coeff_pct) / 100, z: PCT_FMT, s: fmtStyle(2, PCT_FMT) }
       : { t: 's', v: row.coefficient || '', s: rowStyle(row, 2) });
-    set(rIdx, 3, spTotal > 0 ? { t: 'n', f: `F${rExcel}/${spTotal}`, z: MONEY_FMT, s: rowStyle(row, 3) } : { t: 'n', v: 0, z: MONEY_FMT, s: rowStyle(row, 3) });
-    set(rIdx, 4, customerTotal > 0 ? { t: 'n', f: `F${rExcel}/${customerTotal}`, z: MONEY_FMT, s: rowStyle(row, 4) } : { t: 'n', v: 0, z: MONEY_FMT, s: rowStyle(row, 4) });
+    set(rIdx, 3, spTotal > 0 ? { t: 'n', f: `F${rExcel}/${spTotal}`, z: MONEY_FMT, s: fmtStyle(3, MONEY_FMT) } : { t: 'n', v: 0, z: MONEY_FMT, s: fmtStyle(3, MONEY_FMT) });
+    set(rIdx, 4, customerTotal > 0 ? { t: 'n', f: `F${rExcel}/${customerTotal}`, z: MONEY_FMT, s: fmtStyle(4, MONEY_FMT) } : { t: 'n', v: 0, z: MONEY_FMT, s: fmtStyle(4, MONEY_FMT) });
 
     let fCell: Record<string, unknown>;
     if (row.calc_key === 'direct_costs' && keyRow['subcontract_work'] && keyRow['warranty']) {
@@ -156,7 +160,7 @@ export function buildFinancialSheet(input: SheetInput): XLSX.WorkSheet {
     } else {
       fCell = { t: 'n', v: num(row.total_cost), z: MONEY_FMT };
     }
-    fCell.s = rowStyle(row, 5);
+    fCell.s = fmtStyle(5, MONEY_FMT);
     set(rIdx, 5, fCell);
   });
 
