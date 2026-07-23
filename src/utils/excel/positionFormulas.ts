@@ -40,25 +40,34 @@ export function buildItemFormulas(
   const linked = !!row.parentWorkItemId;
   const hasConv = !!row.conversionCoeff && row.conversionCoeff !== 0;
   const hasCons = !!row.consumptionCoeff && row.consumptionCoeff !== 0;
+  // Ссылаемся на ячейку только когда она реально числовая. Пустое значение
+  // (напр. доставка «в цене» ⇒ пустая строка) в арифметике Excel = #ЗНАЧ!.
+  const hasPrice = row.unitPrice != null; // P
+  const hasQty = row.gpVolume != null; // L
+  const hasDelivery = row.deliveryCost != null; // O
   const out: ItemFormulas = {};
 
-  // Итоговая сумма
-  if (isWork(row.boqItemType)) {
-    out.total = `${L}${r}*${P}${r}${fx}`;
-  } else {
-    const priceDelivery = `(${P}${r}${fx}+${O}${r})`;
-    out.total = linked
-      ? `${L}${r}*${priceDelivery}`
-      : `${L}${r}${hasCons ? `*${K}${r}` : ''}*${priceDelivery}`;
+  // Итоговая сумма — только когда базовые операнды (L и P) числовые.
+  if (hasQty && hasPrice) {
+    const price = `${P}${r}${fx}`;
+    if (isWork(row.boqItemType)) {
+      out.total = `${L}${r}*${price}`;
+    } else {
+      // Слагаемое доставки включаем только когда ячейка O числовая (не «в цене»).
+      const base = hasDelivery ? `(${price}+${O}${r})` : price;
+      out.total = linked
+        ? `${L}${r}*${base}`
+        : `${L}${r}${hasCons ? `*${K}${r}` : ''}*${base}`;
+    }
   }
 
-  // Стоимость доставки «не в цене» = цена·курс·0.03
-  if (row.deliveryPriceType === 'не в цене') {
+  // Стоимость доставки «не в цене» = цена·курс·0.03 (только если цена задана)
+  if (row.deliveryPriceType === 'не в цене' && hasPrice) {
     out.delivery = `${P}${r}${fx}*0.03`;
   }
 
   // Кол-во ГП линк-материала = работа.ГП × перевод × расход
-  if (linked && parentWorkRow) {
+  if (linked && parentWorkRow && hasQty) {
     out.gp = `${L}${parentWorkRow}${hasConv ? `*${J}${r}` : ''}${hasCons ? `*${K}${r}` : ''}`;
   }
 
