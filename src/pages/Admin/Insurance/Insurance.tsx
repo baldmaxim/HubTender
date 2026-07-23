@@ -385,30 +385,24 @@ export default function Insurance() {
           </Card>
         </Col>
         <Col xs={24} sm={24} lg={9} style={{ display: 'flex', alignItems: 'center' }}>
-          <Space direction="vertical" size={4} style={{ width: '100%' }}>
-            <Tooltip
-              title={
-                formData.distribute_to_rows
-                  ? 'Сумма страхования равномерно раскидывается во все строки заказчика на «Перераспределении» и «Форме КП». Нажмите, чтобы отключить.'
-                  : 'Сумма страхования НЕ раскидывается в строки заказчика, но входит в итог на странице «Финансовые показатели». Нажмите, чтобы включить разнесение.'
-              }
+          <Tooltip
+            title={
+              formData.distribute_to_rows
+                ? 'Сумма страхования равномерно раскидывается во все строки заказчика на «Перераспределении» и «Форме КП». Нажмите, чтобы отключить.'
+                : 'Сумма страхования НЕ раскидывается в строки заказчика, но входит в итог на странице «Финансовые показатели». Нажмите, чтобы включить распределение.'
+            }
+          >
+            <Button
+              type={formData.distribute_to_rows ? 'primary' : 'default'}
+              size="small"
+              icon={<DeploymentUnitOutlined style={{ fontSize: 10 }} />}
+              onClick={handleToggleDistribute}
+              disabled={!selectedTenderId || isAreaOnly}
+              style={{ fontSize: 10, height: 20, padding: '0 6px', lineHeight: 1 }}
             >
-              <Button
-                type={formData.distribute_to_rows ? 'primary' : 'default'}
-                icon={<DeploymentUnitOutlined />}
-                onClick={handleToggleDistribute}
-                disabled={!selectedTenderId || isAreaOnly}
-                block
-              >
-                Распределить во все строки
-              </Button>
-            </Tooltip>
-            <Text type="secondary" style={{ fontSize: 11 }}>
-              {formData.distribute_to_rows
-                ? 'Разносится по строкам заказчика'
-                : 'Не разносится · учтено в итоге «Финансовых показателей»'}
-            </Text>
-          </Space>
+              Распределить во все строки
+            </Button>
+          </Tooltip>
         </Col>
       </Row>
 
