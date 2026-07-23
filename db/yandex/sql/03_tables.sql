@@ -485,6 +485,18 @@ CREATE TABLE IF NOT EXISTS public.cost_redistribution_results (
     created_by uuid
 );
 
+-- Снижение коммерческой стоимости на «Финансовых показателях».
+-- Хранятся только параметры (enabled + rules); суммы пересчитываются на загрузке.
+CREATE TABLE IF NOT EXISTS public.tender_fi_discounts (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tender_id uuid NOT NULL,
+    enabled boolean NOT NULL DEFAULT false,
+    rules jsonb NOT NULL DEFAULT '[]'::jsonb,
+    created_by uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
 -- ----- LEVEL 5 --------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS public.projects (

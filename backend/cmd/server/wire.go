@@ -48,6 +48,7 @@ type deps struct {
 	libraryH          *handlers.LibraryHandler
 	redistributionH   *handlers.RedistributionHandler
 	insuranceH        *handlers.InsuranceHandler
+	fiDiscountsH      *handlers.FIDiscountsHandler
 	positionFiltersH  *handlers.PositionFiltersHandler
 	notificationsH    *handlers.NotificationsHandler
 	tenderRegistryH   *handlers.TenderRegistryHandler
@@ -95,6 +96,7 @@ func buildDeps(
 	libraryRepo := repository.NewLibraryRepo(pool)
 	redistributionRepo := repository.NewRedistributionRepo(pool)
 	insuranceRepo := repository.NewInsuranceRepo(pool)
+	fiDiscountsRepo := repository.NewFIDiscountsRepo(pool)
 	positionFiltersRepo := repository.NewPositionFiltersRepo(pool)
 	notificationsRepo := repository.NewNotificationsRepo(pool)
 	tenderRegistryRepo := repository.NewTenderRegistryRepo(pool)
@@ -135,6 +137,7 @@ func buildDeps(
 	librarySvc := services.NewLibraryService(libraryRepo, inMemCache)
 	redistributionSvc := services.NewRedistributionService(redistributionRepo, inMemCache)
 	insuranceSvc := services.NewInsuranceService(insuranceRepo, inMemCache)
+	fiDiscountsSvc := services.NewFIDiscountsService(fiDiscountsRepo, inMemCache)
 	positionFiltersSvc := services.NewPositionFiltersService(positionFiltersRepo)
 	notificationsSvc := services.NewNotificationsService(notificationsRepo)
 	tenderRegistrySvc := services.NewTenderRegistryService(tenderRegistryRepo)
@@ -176,6 +179,7 @@ func buildDeps(
 		libraryH:          handlers.NewLibraryHandler(librarySvc),
 		redistributionH:   handlers.NewRedistributionHandler(redistributionSvc),
 		insuranceH:        handlers.NewInsuranceHandler(insuranceSvc),
+		fiDiscountsH:      handlers.NewFIDiscountsHandler(fiDiscountsSvc),
 		positionFiltersH:  handlers.NewPositionFiltersHandler(positionFiltersSvc),
 		notificationsH:    handlers.NewNotificationsHandler(notificationsSvc),
 		tenderRegistryH:   handlers.NewTenderRegistryHandler(tenderRegistrySvc),

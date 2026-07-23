@@ -19,6 +19,9 @@ export const useFinancialData = () => {
     vatCoefficient,
     fxMissing,
     fetchFinancialIndicators,
+    discountContext,
+    discountSettings,
+    getDiscountWorkspace,
   } = useFinancialCalculations();
 
   return {
@@ -32,5 +35,8 @@ export const useFinancialData = () => {
     fxMissing,
     loadTenders,
     fetchFinancialIndicators,
+    discountContext,
+    discountSettings,
+    getDiscountWorkspace,
   };
 };

@@ -52,6 +52,12 @@ CREATE TRIGGER trigger_update_cost_redistribution_results_updated_at
   BEFORE UPDATE ON public.cost_redistribution_results
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
+-- ----- tender_fi_discounts --------------------------------------------------
+DROP TRIGGER IF EXISTS trigger_update_tender_fi_discounts_updated_at ON public.tender_fi_discounts;
+CREATE TRIGGER trigger_update_tender_fi_discounts_updated_at
+  BEFORE UPDATE ON public.tender_fi_discounts
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
 -- ----- detail_cost_categories ----------------------------------------------
 DROP TRIGGER IF EXISTS update_detail_cost_categories_updated_at ON public.detail_cost_categories;
 CREATE TRIGGER update_detail_cost_categories_updated_at

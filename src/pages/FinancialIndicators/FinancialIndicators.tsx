@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, Drawer, Space, Popconfirm, message, Alert } from 'antd';
 import { formatFXUnavailable } from '../../utils/boq/currencyGuard';
-import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons';
+import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined, FallOutlined } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getTenderById, approveFinancial } from '../../lib/api/fi';
@@ -25,6 +25,8 @@ import { useFinancialData } from './hooks/useFinancialData';
 import { IndicatorsCharts } from './components/IndicatorsCharts';
 import { IndicatorsTable, INDICATORS_TABLE_FIT_WIDTH } from './components/IndicatorsTable';
 import { IndicatorsFilters } from './components/IndicatorsFilters';
+import { DiscountTab } from './discount/components/DiscountTab';
+import { DiscountSummaryCard } from './discount/components/DiscountSummaryCard';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 import './FinancialIndicators.css';
 
@@ -62,12 +64,15 @@ const FinancialIndicators: React.FC = () => {
     fxMissing,
     loadTenders,
     fetchFinancialIndicators,
+    discountContext,
+    discountSettings,
+    getDiscountWorkspace,
   } = useFinancialData();
 
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
   const [selectedTenderTitle, setSelectedTenderTitle] = useState<string>('');
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'table' | 'charts'>('charts');
+  const [activeTab, setActiveTab] = useState<'table' | 'charts' | 'discount'>('charts');
   const [editingVolumeTitle, setEditingVolumeTitle] = useState(false);
   const [volumeTitle, setVolumeTitle] = useState('Полный объём строительства');
   const [tempVolumeTitle, setTempVolumeTitle] = useState('Полный объём строительства');
@@ -261,6 +266,13 @@ const FinancialIndicators: React.FC = () => {
     );
   }
 
+  // Экспорт выгружает уже сниженные строки — без этой пометки в файле нельзя
+  // отличить снижённый расчёт от обычного.
+  const discountNote = discountContext
+    ? `Применено снижение: ${formatNumber(discountContext.appliedAmount)} руб. ` +
+      `(до снижения: ${formatNumber(discountContext.baseGrandTotal)} руб.)`
+    : null;
+
   const indicatorsTableNode = (
     <IndicatorsTable
       data={data}
@@ -276,6 +288,7 @@ const FinancialIndicators: React.FC = () => {
       onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
       readOnly={readOnly}
       fxMissing={fxMissing}
+      discountNote={discountNote}
     />
   );
 
@@ -296,6 +309,7 @@ const FinancialIndicators: React.FC = () => {
       onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
       readOnly={readOnly}
       fxMissing={fxMissing}
+      discountNote={discountNote}
       fitToScreen
     />
   );
@@ -388,11 +402,17 @@ const FinancialIndicators: React.FC = () => {
           </div>
         </div>
 
+        {/* Сводка снижения — только когда оно включено и применено. При
+            выключенном тумблере страница выглядит ровно как раньше. */}
+        {discountContext && (
+          <DiscountSummaryCard discount={discountContext} isPhone={isPhone} />
+        )}
+
         <Spin spinning={loading}>
           <Tabs
             activeKey={activeTab}
             onChange={(key) => {
-              setActiveTab(key as 'table' | 'charts');
+              setActiveTab(key as 'table' | 'charts' | 'discount');
             }}
             items={[
               {
@@ -411,6 +431,7 @@ const FinancialIndicators: React.FC = () => {
                     selectedTenderId={selectedTenderId}
                     isVatInConstructor={isVatInConstructor}
                     vatCoefficient={vatCoefficient}
+                    itemScale={discountContext?.itemScale ?? null}
                   />
                 ),
               },
@@ -444,6 +465,29 @@ const FinancialIndicators: React.FC = () => {
                   </>
                 ),
               },
+              // Настройка снижения — только для тех, кто может редактировать
+              // (ГД и телефоны страницу лишь просматривают). Данные вкладки
+              // грузятся лениво, при первом её открытии.
+              ...(readOnly || !selectedTenderId
+                ? []
+                : [{
+                    key: 'discount',
+                    label: (
+                      <span>
+                        <FallOutlined style={{ marginRight: 8 }} />
+                        Снижение
+                      </span>
+                    ),
+                    children: (
+                      <DiscountTab
+                        tenderId={selectedTenderId}
+                        settings={discountSettings}
+                        getDiscountWorkspace={getDiscountWorkspace}
+                        onSaved={() => fetchFinancialIndicators(selectedTenderId)}
+                        isPhone={isPhone}
+                      />
+                    ),
+                  }]),
             ]}
           />
         </Spin>

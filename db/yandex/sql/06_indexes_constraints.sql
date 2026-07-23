@@ -57,6 +57,7 @@ ALTER TABLE public.template_items                ADD CONSTRAINT template_items_p
 ALTER TABLE public.user_position_filters         ADD CONSTRAINT user_position_filters_pkey PRIMARY KEY (id);
 ALTER TABLE public.comparison_notes              ADD CONSTRAINT comparison_notes_pkey PRIMARY KEY (id);
 ALTER TABLE public.cost_redistribution_results   ADD CONSTRAINT cost_redistribution_results_pkey PRIMARY KEY (id);
+ALTER TABLE public.tender_fi_discounts           ADD CONSTRAINT tender_fi_discounts_pkey PRIMARY KEY (id);
 ALTER TABLE public.projects                      ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
 ALTER TABLE public.project_additional_agreements ADD CONSTRAINT project_additional_agreements_pkey PRIMARY KEY (id);
 ALTER TABLE public.project_monthly_completion    ADD CONSTRAINT project_monthly_completion_pkey PRIMARY KEY (id);
@@ -85,6 +86,8 @@ ALTER TABLE public.project_monthly_completion ADD CONSTRAINT project_monthly_com
 ALTER TABLE public.comparison_notes ADD CONSTRAINT comparison_notes_tender_id_1_tender_id_2_cost_category_name_key UNIQUE (tender_id_1, tender_id_2, cost_category_name, detail_category_key);
 ALTER TABLE public.tender_documents ADD CONSTRAINT unique_tender_section_file UNIQUE (tender_id, section_type, original_filename);
 ALTER TABLE public.cost_redistribution_results ADD CONSTRAINT uq_cost_redistribution_results_tender_tactic_boq UNIQUE (tender_id, markup_tactic_id, boq_item_id);
+-- Одна строка настроек снижения на тендер: на этот UNIQUE опирается UPSERT в FIDiscountsRepo.
+ALTER TABLE public.tender_fi_discounts ADD CONSTRAINT uq_tender_fi_discounts_tender UNIQUE (tender_id);
 ALTER TABLE public.user_position_filters ADD CONSTRAINT unique_user_tender_position UNIQUE (user_id, tender_id, position_id);
 
 -- ===========================================================================
@@ -249,6 +252,11 @@ ALTER TABLE public.cost_redistribution_results ADD CONSTRAINT cost_redistributio
 ALTER TABLE public.cost_redistribution_results ADD CONSTRAINT cost_redistribution_results_boq_item_id_fkey FOREIGN KEY (boq_item_id) REFERENCES public.boq_items(id) ON DELETE CASCADE;
 ALTER TABLE public.cost_redistribution_results ADD CONSTRAINT cost_redistribution_results_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
 
+-- tender_fi_discounts (снижение на «Финансовых показателях»)
+ALTER TABLE public.tender_fi_discounts ADD CONSTRAINT tender_fi_discounts_tender_id_fkey FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
+ALTER TABLE public.tender_fi_discounts ADD CONSTRAINT tender_fi_discounts_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
+ALTER TABLE public.tender_fi_discounts ADD CONSTRAINT tender_fi_discounts_rules_is_array CHECK (jsonb_typeof(rules) = 'array');
+
 -- projects
 ALTER TABLE public.projects ADD CONSTRAINT projects_tender_id_fkey FOREIGN KEY (tender_id) REFERENCES public.tenders(id);
 ALTER TABLE public.projects ADD CONSTRAINT projects_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
@@ -301,6 +309,9 @@ CREATE INDEX IF NOT EXISTS idx_cost_categories_unit ON public.cost_categories US
 -- cost_redistribution_results
 CREATE INDEX IF NOT EXISTS idx_redistribution_boq_item ON public.cost_redistribution_results USING btree (boq_item_id);
 CREATE INDEX IF NOT EXISTS idx_redistribution_tender_tactic ON public.cost_redistribution_results USING btree (tender_id, markup_tactic_id);
+
+-- tender_fi_discounts (tender_id уже покрыт UNIQUE-констрейнтом)
+CREATE INDEX IF NOT EXISTS idx_tender_fi_discounts_created_by ON public.tender_fi_discounts USING btree (created_by);
 
 -- detail_cost_categories
 CREATE INDEX IF NOT EXISTS idx_detail_cost_categories_category_id ON public.detail_cost_categories USING btree (cost_category_id);

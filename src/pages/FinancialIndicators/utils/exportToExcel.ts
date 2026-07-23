@@ -11,7 +11,9 @@ export function exportFinancialIndicatorsToExcel(
   spTotal: number,
   customerTotal: number,
   tenderTitle: string,
-  tenderVersion: number
+  tenderVersion: number,
+  /** Примечание о применённом снижении; строки таблицы уже содержат сниженные суммы. */
+  discountNote?: string | null
 ) {
   if (data.length === 0) {
     message.warning('Нет данных для экспорта');
@@ -59,8 +61,14 @@ export function exportFinancialIndicatorsToExcel(
     ];
   });
 
-  // Создаем массив данных
-  const sheetData = [headers, ...rows];
+  // Создаем массив данных. Примечание о снижении идёт ПОСЛЕ строк показателей:
+  // цикл стилизации ниже адресуется в data по индексу строки, и вставка сверху
+  // сдвинула бы всю раскраску.
+  const sheetData = [
+    headers,
+    ...rows,
+    ...(discountNote ? [[], ['', discountNote]] : []),
+  ];
 
   // Создаем рабочий лист
   const ws = XLSX.utils.aoa_to_sheet(sheetData);

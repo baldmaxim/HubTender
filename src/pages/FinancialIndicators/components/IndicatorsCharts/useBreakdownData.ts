@@ -9,7 +9,7 @@ import { getTenderById } from '../../../../lib/api/fi';
 import { listBoqItemsFullByTender } from '../../../../lib/api/positions';
 import { listDetailCostCategoriesWithCategory } from '../../../../lib/api/costs';
 import { listConstructionCostVolumes } from '../../../../lib/api/constructionCostVolumes';
-import type { CategoryBreakdown, ReferenceInfo, TenderRates } from './types';
+import type { BoqItemScale, CategoryBreakdown, ReferenceInfo, TenderRates } from './types';
 import { hasDetailedBreakdown } from './drillDownRows';
 
 /**
@@ -21,10 +21,12 @@ export const useBreakdownData = ({
   selectedTenderId,
   isVatInConstructor,
   vatCoefficient,
+  itemScale,
 }: {
   selectedTenderId: string | null;
   isVatInConstructor: boolean;
   vatCoefficient: number;
+  itemScale?: BoqItemScale | null;
 }) => {
   const [selectedIndicator, setSelectedIndicator] = useState<number | null>(null);
   const [breakdownData, setBreakdownData] = useState<CategoryBreakdown[]>([]);
@@ -84,6 +86,8 @@ export const useBreakdownData = ({
       const allBoqItems = await listBoqItemsFullByTender(selectedTenderId);
       const typeSet = new Set(boqItemTypes);
       const boqItems = (allBoqItems as unknown as Array<{
+        client_position_id: string | null;
+        material_type: string | null;
         boq_item_type: string | null;
         total_amount: number | null;
         quantity: number | null;
@@ -120,7 +124,11 @@ export const useBreakdownData = ({
         const vatMultiplier = (isVatInConstructor && vatCoefficient > 0) ? (1 + vatCoefficient / 100) : 1;
         const baseFX = totalAmountFX(item as unknown as Parameters<typeof totalAmountFX>[0], tenderRates);
         if (baseFX.value === null) return;
-        const amount = baseFX.value * vatMultiplier;
+        // Снижение: детализация должна складываться в то же ИТОГО, что и таблица.
+        const scale = itemScale
+          ? itemScale(item.client_position_id, item.boq_item_type, item.material_type)
+          : 1;
+        const amount = baseFX.value * vatMultiplier * scale;
         const isWork = item.boq_item_type === 'раб' || item.boq_item_type === 'суб-раб' || item.boq_item_type === 'раб-комп.';
 
         // Для строки 4 (запас на сдачу) группируем по виду затрат

@@ -34,6 +34,8 @@ interface IndicatorsTableProps {
   fitToScreen?: boolean;
   /** Валюты без курса: экспорт заблокирован, чтобы не выгрузить частичные значения */
   fxMissing?: CurrencyType[];
+  /** Примечание о снижении для Excel; строки таблицы уже сниженные */
+  discountNote?: string | null;
 }
 
 export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
@@ -51,6 +53,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
   readOnly,
   fitToScreen,
   fxMissing,
+  discountNote,
 }) => {
   const [editingSp, setEditingSp] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
@@ -63,7 +66,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
       message.error(formatFXUnavailable(fxMissing));
       return;
     }
-    exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion);
+    exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion, discountNote);
   };
 
   const handleUpdateArea = async (field: 'area_sp' | 'area_client', value: number) => {

@@ -201,6 +201,10 @@ func newRouter(
 		r.Get("/api/v1/tenders/{id}/insurance", d.insuranceH.Get)
 		r.Put("/api/v1/tenders/{id}/insurance", d.insuranceH.Put)
 
+		// Снижение коммерческой стоимости на «Финансовых показателях».
+		r.Get("/api/v1/tenders/{id}/fi-discounts", d.fiDiscountsH.Get)
+		r.Put("/api/v1/tenders/{id}/fi-discounts", d.fiDiscountsH.Put)
+
 		// User position filters (per-user, per-tender).
 		r.Get("/api/v1/tenders/{id}/position-filters", d.positionFiltersH.List)
 		r.Put("/api/v1/tenders/{id}/position-filters", d.positionFiltersH.Replace)

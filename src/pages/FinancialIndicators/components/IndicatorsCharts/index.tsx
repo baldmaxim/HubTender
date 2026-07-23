@@ -21,6 +21,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
   selectedTenderId,
   isVatInConstructor,
   vatCoefficient,
+  itemScale,
 }) => {
   const { theme: currentTheme } = useTheme();
   const { isPhone, isPhoneDevice } = useIsMobile();
@@ -36,7 +37,7 @@ export const IndicatorsCharts: React.FC<IndicatorsChartsProps> = ({
     referenceInfo,
     fetchCategoryBreakdown,
     fetchReferenceInfo,
-  } = useBreakdownData({ selectedTenderId, isVatInConstructor, vatCoefficient });
+  } = useBreakdownData({ selectedTenderId, isVatInConstructor, vatCoefficient, itemScale });
 
   const { handlePieClick, handleBarClick } = useChartDrillDown({
     data,

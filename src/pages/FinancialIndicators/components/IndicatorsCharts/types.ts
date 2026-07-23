@@ -1,4 +1,12 @@
 import type { IndicatorRow } from '../../hooks/useFinancialData';
+import type { DiscountContext } from '../../discount/types';
+
+/**
+ * Множитель прямых затрат BOQ-элемента после снижения (0..1).
+ * Детализация по категориям грузит boq_items своим запросом, поэтому скидку
+ * ей надо передать явно — иначе сумма разбивки разойдётся с ИТОГО.
+ */
+export type BoqItemScale = DiscountContext['itemScale'];
 
 export interface IndicatorsChartsProps {
   data: IndicatorRow[];
@@ -7,6 +15,8 @@ export interface IndicatorsChartsProps {
   selectedTenderId: string | null;
   isVatInConstructor: boolean;
   vatCoefficient: number;
+  /** null/undefined — снижение выключено, масштабирование не применяется. */
+  itemScale?: BoqItemScale | null;
 }
 
 export interface CategoryBreakdown {
