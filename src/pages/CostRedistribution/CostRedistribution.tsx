@@ -469,7 +469,7 @@ const CostRedistribution: React.FC = () => {
         onTacticChange={handleTacticChange}
         loading={loading}
         totals={preparedResults?.totals}
-        insuranceTotal={insuranceTotal}
+        insuranceTotal={distributeToRows ? insuranceTotal : 0}
         hasResults={hasAnyRedistribution}
         onExport={handleExport}
         saving={saving}

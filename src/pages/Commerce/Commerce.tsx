@@ -62,6 +62,11 @@ export default function Commerce() {
     distributeToRows,
   } = useCommerceData(isTabActive);
 
+  // Когда распределение по строкам выключено — страхование не показываем на
+  // «Форме КП» вообще (ни в строках, ни в итогах/сводке): оно учитывается только
+  // в итоге «Финансовых показателей». При включённом флаге — полная сумма.
+  const effInsurance = distributeToRows ? insuranceTotal : 0;
+
   const {
     handleApplyTactic
   } = useCommerceActions(
@@ -161,7 +166,7 @@ export default function Commerce() {
       message.error(fxMsg);
       return;
     }
-    exportCommerceToExcel(positions, selectedTender, insuranceTotal, distributeToRows);
+    exportCommerceToExcel(positions, selectedTender, effInsurance, distributeToRows);
   };
 
   // Единый Alert об отсутствующем курсе валюты (P0): считаем по загруженным
@@ -247,7 +252,7 @@ export default function Commerce() {
               positions={positions}
               selectedTenderId={selectedTenderId}
               onNavigateToPosition={handleNavigateToPosition}
-              insuranceTotal={insuranceTotal}
+              insuranceTotal={effInsurance}
               distributeToRows={distributeToRows}
             />
           ) : isLandscapePhone ? (
@@ -257,8 +262,8 @@ export default function Commerce() {
               width={COMMERCE_TABLE_FIT_WIDTH}
               footer={
                 <CommerceTotalsBar
-                  totals={computeCommerceTotals(positions, insuranceTotal, referenceTotal)}
-                  insuranceTotal={insuranceTotal}
+                  totals={computeCommerceTotals(positions, effInsurance, referenceTotal)}
+                  insuranceTotal={effInsurance}
                 />
               }
             >
@@ -267,7 +272,7 @@ export default function Commerce() {
                 selectedTenderId={selectedTenderId}
                 onNavigateToPosition={handleNavigateToPosition}
                 referenceTotal={referenceTotal}
-                insuranceTotal={insuranceTotal}
+                insuranceTotal={effInsurance}
                 distributeToRows={distributeToRows}
                 fitToScreen
               />
@@ -278,7 +283,7 @@ export default function Commerce() {
               selectedTenderId={selectedTenderId}
               onNavigateToPosition={handleNavigateToPosition}
               referenceTotal={referenceTotal}
-              insuranceTotal={insuranceTotal}
+              insuranceTotal={effInsurance}
               distributeToRows={distributeToRows}
             />
           )}

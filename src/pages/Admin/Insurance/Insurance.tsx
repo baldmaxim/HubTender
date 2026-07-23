@@ -394,11 +394,10 @@ export default function Insurance() {
           >
             <Button
               type={formData.distribute_to_rows ? 'primary' : 'default'}
-              size="small"
-              icon={<DeploymentUnitOutlined style={{ fontSize: 10 }} />}
+              icon={<DeploymentUnitOutlined style={{ fontSize: 20 }} />}
               onClick={handleToggleDistribute}
               disabled={!selectedTenderId || isAreaOnly}
-              style={{ fontSize: 10, height: 20, padding: '0 6px', lineHeight: 1 }}
+              style={{ fontSize: 20, height: 40, padding: '0 16px', lineHeight: 1 }}
             >
               Распределить во все строки
             </Button>
