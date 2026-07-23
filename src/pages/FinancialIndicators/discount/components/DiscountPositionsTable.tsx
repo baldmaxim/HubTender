@@ -26,16 +26,31 @@ function DiscountPositionsTableImpl({
   disabled,
   onSelectionChange,
 }: DiscountPositionsTableProps) {
-  // Выбирать нечего в строках, где снижаемая стоимость исчерпана: они дают
-  // нулевой вклад в потолок и только путали бы при подсчёте выбранного.
-  // Set, а не массив: getCheckboxProps зовётся на каждую отрисованную строку.
-  const selectableIds = useMemo(
-    () =>
-      new Set(
-        rows.filter((row) => row.reducible - row.alreadyReduced > 0.01).map((row) => row.positionId),
-      ),
-    [rows],
-  );
+  // Что можно выбрать. Set, а не массив: getCheckboxProps зовётся на каждую строку.
+  //
+  // Листовые строки — только с ненулёвой остаточной снижаемой стоимостью:
+  // выбирать полностью снижённую или чисто-материальную строку смысла нет.
+  //
+  // Нелистовые строки (разделы) собственных BOQ-элементов не имеют, их
+  // reducible = 0. Но раздел должен быть кликабельным, если внутри его
+  // подчинения есть хоть одна снижаемая строка — тогда клик выберет их все,
+  // как на «Перераспределении» (тот же collectSectionDescendants).
+  const selectableIds = useMemo(() => {
+    const directlyReducible = new Set(
+      rows.filter((row) => row.reducible - row.alreadyReduced > 0.01).map((row) => row.positionId),
+    );
+    const set = new Set(directlyReducible);
+    for (const row of rows) {
+      if (row.isLeaf) continue;
+      for (const id of collectSectionDescendants(positions, row.positionId)) {
+        if (directlyReducible.has(id)) {
+          set.add(row.positionId);
+          break;
+        }
+      }
+    }
+    return set;
+  }, [rows, positions]);
 
   const allSelected =
     selectableIds.size > 0 && [...selectableIds].every((id) => selectedIds.has(id));
