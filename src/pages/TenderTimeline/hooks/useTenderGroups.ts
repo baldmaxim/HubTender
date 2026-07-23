@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { listTimelineTenderGroups } from '../../../lib/api/timeline';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import type {
@@ -32,8 +32,14 @@ interface UseTenderGroupsResult {
   groups: TimelineGroupItem[];
   loading: boolean;
   error: string | null;
-  refetch: () => Promise<void>;
+  refetch: (opts?: { background?: boolean }) => Promise<void>;
 }
+
+// Модульный кэш групп по tenderId. Живёт в пределах вкладки (как etagCache),
+// сбрасывается только при полной перезагрузке страницы. Даёт мгновенный
+// повторный разворот карточки: данные показываются сразу, ревалидация идёт
+// в фоне без мигания скелетона.
+const groupsCache = new Map<string, TimelineGroupItem[]>();
 
 function getQualityScore(qualityLevel: number | null | undefined): number {
   if (!qualityLevel || qualityLevel <= 0) {
@@ -71,18 +77,34 @@ function getGroupStatus(iterations: GroupIterationRow[]): ApprovalStatus {
 }
 
 export function useTenderGroups(tenderId: string | null): UseTenderGroupsResult {
-  const [groups, setGroups] = useState<TimelineGroupItem[]>([]);
+  const [groups, setGroups] = useState<TimelineGroupItem[]>(
+    () => (tenderId ? groupsCache.get(tenderId) ?? [] : []),
+  );
   const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refetch = useCallback(async () => {
+  // Гидрация в рендере при смене tenderId (getDerivedStateFromProps-паттерн):
+  // сразу подставляем кэш нового тендера, чтобы не показать кадр с группами
+  // предыдущего тендера, пока эффект ещё не отработал.
+  const lastTenderIdRef = useRef(tenderId);
+  if (lastTenderIdRef.current !== tenderId) {
+    lastTenderIdRef.current = tenderId;
+    setGroups(tenderId ? groupsCache.get(tenderId) ?? [] : []);
+  }
+
+  const refetch = useCallback(async (opts?: { background?: boolean }) => {
     if (!tenderId) {
       setGroups([]);
       setError(null);
       return;
     }
 
-    setLoading(true);
+    // Фон, если явно попросили или в кэше уже есть данные по этому тендеру —
+    // тогда скелетон не поднимаем, данные меняем тихо.
+    const background = opts?.background ?? groupsCache.has(tenderId);
+    if (!background) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -113,13 +135,21 @@ export function useTenderGroups(tenderId: string | null): UseTenderGroupsResult 
         };
       });
 
+      groupsCache.set(tenderId, normalized);
       setGroups(normalized);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Не удалось загрузить группы тендера';
-      setError(message);
-      setGroups([]);
+      // Фоновую ошибку не показываем поверх уже отрендеренных данных —
+      // оставляем кэш видимым; ошибку и сброс делаем только для видимой загрузки.
+      if (!background) {
+        const message = err instanceof Error ? err.message : 'Не удалось загрузить группы тендера';
+        setError(message);
+        groupsCache.delete(tenderId);
+        setGroups([]);
+      }
     } finally {
-      setLoading(false);
+      if (!background) {
+        setLoading(false);
+      }
     }
   }, [tenderId, setLoading]);
 

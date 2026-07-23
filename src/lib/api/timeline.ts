@@ -26,6 +26,7 @@ export async function listTimelineTenders(): Promise<{ registry: unknown[]; tend
 export async function listTimelineTenderGroups(tenderId: string): Promise<unknown[]> {
   const res = await apiFetch<{ data: unknown[] }>(
     `/api/v1/timeline/tenders/${encodeURIComponent(tenderId)}/groups`,
+    { cacheKey: `timeline:groups:${tenderId}` },
   );
   return res.data ?? [];
 }
