@@ -256,6 +256,8 @@ ALTER TABLE public.cost_redistribution_results ADD CONSTRAINT cost_redistributio
 ALTER TABLE public.tender_fi_discounts ADD CONSTRAINT tender_fi_discounts_tender_id_fkey FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
 ALTER TABLE public.tender_fi_discounts ADD CONSTRAINT tender_fi_discounts_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
 ALTER TABLE public.tender_fi_discounts ADD CONSTRAINT tender_fi_discounts_rules_is_array CHECK (jsonb_typeof(rules) = 'array');
+ALTER TABLE public.tender_fi_discounts ADD CONSTRAINT tender_fi_discounts_mode_check CHECK (mode IN ('discount', 'zeroing'));
+ALTER TABLE public.tender_fi_discounts ADD CONSTRAINT tender_fi_discounts_zeroed_is_array CHECK (jsonb_typeof(zeroed_position_ids) = 'array');
 
 -- projects
 ALTER TABLE public.projects ADD CONSTRAINT projects_tender_id_fkey FOREIGN KEY (tender_id) REFERENCES public.tenders(id);

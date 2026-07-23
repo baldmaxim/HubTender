@@ -3,7 +3,7 @@ import type { getTenderById, BoqItemWithPosition } from '../../../../lib/api/fi'
 import type { DirectCostTotals, MarkupCoefficients } from '../../types';
 import { buildGrowthExclusionSets } from '../../utils/aggregateDirectCosts';
 import type { listSubcontractGrowthExclusions } from '../../../../lib/api/fi';
-import { buildReduciblePositionTotals, toPositionReducibles } from './positionTotals';
+import { buildReduciblePositionTotals, buildFullPositionTotals, toPositionReducibles } from './positionTotals';
 import { createReduciblePredicate } from './reducibleItems';
 import { computeMarkupMultipliers, commercialOf, type MarkupMultipliers } from './markupMultipliers';
 import type { PositionReducible } from '../types';
@@ -18,6 +18,8 @@ type SubcontractExclusions = Awaited<ReturnType<typeof listSubcontractGrowthExcl
 export interface DiscountWorkspace {
   /** Снижаемые прямые затраты + коммерческий эквивалент по позициям. */
   reducibles: Map<string, PositionReducible>;
+  /** ПОЛНЫЕ прямые затраты по позициям (для режима «Обнуление»). */
+  fullByPosition: Map<string, DirectCostTotals>;
   /** Множители «рубль прямых затрат корзины → рублей ИТОГО». */
   multipliers: MarkupMultipliers;
   /** Сколько всего можно снять по тендеру — потолок для UI. */
@@ -57,6 +59,7 @@ export const buildDiscountWorkspace = async (
   const excluded = buildGrowthExclusionSets(exclusions);
 
   const totalsByPosition = buildReduciblePositionTotals(boqItems, tender, excluded, distribution);
+  const fullByPosition = buildFullPositionTotals(boqItems, tender, excluded);
   const multipliers = computeMarkupMultipliers(coeffs);
   const reducibles = toPositionReducibles(totalsByPosition, (totals: DirectCostTotals) =>
     commercialOf(totals, multipliers),
@@ -69,6 +72,7 @@ export const buildDiscountWorkspace = async (
 
   return {
     reducibles,
+    fullByPosition,
     multipliers,
     totalReducible,
     isReducible: createReduciblePredicate(distribution),

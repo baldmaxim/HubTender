@@ -493,6 +493,8 @@ CREATE TABLE IF NOT EXISTS public.tender_fi_discounts (
     tender_id uuid NOT NULL,
     enabled boolean NOT NULL DEFAULT false,
     rules jsonb NOT NULL DEFAULT '[]'::jsonb,
+    mode text NOT NULL DEFAULT 'discount',
+    zeroed_position_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
     created_by uuid,
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now()

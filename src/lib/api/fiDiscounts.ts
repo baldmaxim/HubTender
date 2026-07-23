@@ -13,20 +13,33 @@ export interface FiDiscountRule {
   positionIds: string[];
 }
 
+/** Активный режим корректировки. Режимы взаимоисключающие. */
+export type FiDiscountMode = 'discount' | 'zeroing';
+
 export interface FiDiscountSettings {
   /** Тумблер «Применять снижение». false → страница считает как обычно. */
   enabled: boolean;
-  /** Итерации применяются последовательно, каждая — от уже сниженного состояния. */
+  /** Активный режим: снижение суммой ('discount') или обнуление строк ('zeroing'). */
+  mode: FiDiscountMode;
+  /** Итерации снижения (режим 'discount'). Применяются последовательно. */
   rules: FiDiscountRule[];
+  /** Полностью обнуляемые позиции заказчика (режим 'zeroing'). */
+  zeroedPositionIds: string[];
 }
 
-export const EMPTY_FI_DISCOUNTS: FiDiscountSettings = { enabled: false, rules: [] };
+export const EMPTY_FI_DISCOUNTS: FiDiscountSettings = {
+  enabled: false,
+  mode: 'discount',
+  rules: [],
+  zeroedPositionIds: [],
+};
 
 function normalize(data: Partial<FiDiscountSettings> | null | undefined): FiDiscountSettings {
-  if (!data) return { ...EMPTY_FI_DISCOUNTS };
+  if (!data) return { ...EMPTY_FI_DISCOUNTS, rules: [], zeroedPositionIds: [] };
   const rules = Array.isArray(data.rules) ? data.rules : [];
   return {
     enabled: Boolean(data.enabled),
+    mode: data.mode === 'zeroing' ? 'zeroing' : 'discount',
     rules: rules
       .map((rule) => ({
         amount: Number(rule?.amount) || 0,
@@ -35,6 +48,9 @@ function normalize(data: Partial<FiDiscountSettings> | null | undefined): FiDisc
       // Итерация без суммы или без позиций ничего не делает — отбрасываем,
       // иначе она копилась бы в UI как «пустая» строка.
       .filter((rule) => rule.amount > 0 && rule.positionIds.length > 0),
+    zeroedPositionIds: Array.isArray(data.zeroedPositionIds)
+      ? data.zeroedPositionIds.filter(Boolean)
+      : [],
   };
 }
 

@@ -8,8 +8,7 @@ export const MONEY_FMT = '#,##0';
 export const PCT_FMT = '0.##%';
 
 // Цвета (заливки — из файла образца; шрифты title/объём/снижение — со скриншота).
-const RED = 'FF0000'; // «Река 4»
-const GREEN = '548235'; // «Генподряд»
+const RED = 'FF0000'; // название тендера + объём строительства
 const BLUE = '0070C0'; // строка снижения
 const HEADER_FILL = 'C6D9F1'; // шапка
 const CREAM = 'FFF9E6'; // страхование + дата
@@ -35,7 +34,8 @@ export const LITERAL_BASE = new Set(['growth_sub_work', 'growth_sub_mat']);
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const num = (n: number | undefined) => (typeof n === 'number' && isFinite(n) ? n : 0);
 
-const THIN = { style: 'thin', color: { rgb: 'D3D3D3' } };
+// Тёмная граница — чтобы линии были чётко видны (светлый D3D3D3 сливался с фоном).
+const THIN = { style: 'thin', color: { rgb: '000000' } };
 const MEDIUM = { style: 'medium', color: { rgb: '000000' } };
 const BORDER = { top: THIN, bottom: THIN, left: THIN, right: THIN };
 
@@ -55,11 +55,16 @@ function markupFormula(row: IndicatorRow, rExcel: number, keyRow: Record<string,
   return `(${refs.join('+')})*${coeffCell}`;
 }
 
+// Строки, чьё наименование выравнивается по правому краю: дочерние прямых затрат
+// (Субподряд работы … Гарантийный период) и итоговые «Работы»/«Материалы».
+const nameRightAligned = (row: IndicatorRow): boolean =>
+  row.is_indented === true || row.calc_key === 'row_works' || row.calc_key === 'row_materials';
+
 // Стиль ячейки данных: границы всегда; жирный у «Прямые»/ИТОГО; крем у страхования.
 function rowStyle(row: IndicatorRow, col: number): Record<string, unknown> {
   const bold = row.is_total || row.calc_key === 'direct_costs';
   const cream = row.calc_key === 'insurance';
-  const horizontal = col === 1 ? (row.is_indented ? 'center' : 'left') : 'center';
+  const horizontal = col === 1 ? (nameRightAligned(row) ? 'right' : 'left') : 'center';
   const border = row.is_total ? { top: MEDIUM, bottom: MEDIUM, left: THIN, right: THIN } : BORDER;
   const s: Record<string, unknown> = {
     alignment: { horizontal, vertical: 'center', wrapText: true },
@@ -112,8 +117,8 @@ export function buildFinancialSheet(input: SheetInput): XLSX.WorkSheet {
   // ── Строка 2: дата (A2, крем) + объём (B2:F2, зелёный жирный) ──
   const now = input.today ?? new Date();
   const dateSerial = Math.round((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(1899, 11, 30)) / 86400000);
-  set(1, 0, { t: 'n', v: dateSerial, z: 'dd.mm.yyyy', s: { fill: { fgColor: { rgb: CREAM } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER } });
-  set(1, 1, { t: 's', v: volumeTitle || '', s: { font: { bold: true, color: { rgb: GREEN } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER } });
+  set(1, 0, { t: 'n', v: dateSerial, z: 'dd.mm.yyyy', s: { font: { bold: true }, fill: { fgColor: { rgb: CREAM } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER } });
+  set(1, 1, { t: 's', v: volumeTitle || '', s: { font: { bold: true, sz: 14, color: { rgb: RED } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER } });
   for (let c = 2; c <= 5; c++) set(1, c, { t: 's', v: '', s: { border: BORDER } });
 
   // ── Строка 3: шапка ──

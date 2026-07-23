@@ -26,6 +26,7 @@ import {
   type BuildWorkspaceInput,
 } from '../discount/utils/buildWorkspace';
 import { applyDiscountRules } from '../discount/utils/applyDiscount';
+import { applyZeroing } from '../discount/utils/applyZeroing';
 import type { DiscountContext } from '../discount/types';
 
 // Обратная совместимость: IndicatorRow переехал в ../types.ts,
@@ -54,7 +55,7 @@ const loadDiscountSettings = async (tenderId: string): Promise<FiDiscountSetting
     return await getFiDiscounts(tenderId);
   } catch (error) {
     console.error('Ошибка загрузки настроек снижения:', error);
-    return { enabled: false, rules: [] };
+    return { enabled: false, mode: 'discount', rules: [], zeroedPositionIds: [] };
   }
 };
 
@@ -203,28 +204,54 @@ export const useFinancialCalculations = () => {
 
       let calcTotals = totals;
       let discount: DiscountContext | null = null;
+      // Режим обнуления: снятую сумму знаем только после основного каскада.
+      let zeroingActive = false;
 
-      if (settings.enabled && settings.rules.length > 0) {
-        const workspace = await getDiscountWorkspace();
-        if (workspace) {
-          const applied = applyDiscountRules(totals, settings.rules, workspace.reducibles, workspace.multipliers);
-          calcTotals = applied.reducedTotals;
-          const { alphaByPosition } = applied;
-          discount = {
-            baseGrandTotal: computeIndicators(totals, coeffs, insuranceCost, { quiet: true }).grandTotal,
-            reducedGrandTotal: 0, // проставляется ниже, когда посчитан основной каскад
-            appliedAmount: applied.appliedAmount,
-            alphaByPosition,
-            errorsByRule: applied.errorsByRule,
-            itemScale: (positionId, boqItemType, materialType) => {
-              if (!positionId) return 1;
-              const alpha = alphaByPosition.get(positionId);
-              if (!alpha) return 1;
-              // Нереснижаемые элементы (база основных материалов) не масштабируем —
-              // ровно как в самом расчёте снижения.
-              return workspace.isReducible(boqItemType, materialType) ? 1 - alpha : 1;
-            },
-          };
+      if (settings.enabled) {
+        const baseGrandTotal = () => computeIndicators(totals, coeffs, insuranceCost, { quiet: true }).grandTotal;
+
+        if (settings.mode === 'discount' && settings.rules.length > 0) {
+          const workspace = await getDiscountWorkspace();
+          if (workspace) {
+            const applied = applyDiscountRules(totals, settings.rules, workspace.reducibles, workspace.multipliers);
+            calcTotals = applied.reducedTotals;
+            const { alphaByPosition } = applied;
+            discount = {
+              mode: 'discount',
+              baseGrandTotal: baseGrandTotal(),
+              reducedGrandTotal: 0, // проставляется ниже, когда посчитан основной каскад
+              appliedAmount: applied.appliedAmount,
+              alphaByPosition,
+              errorsByRule: applied.errorsByRule,
+              itemScale: (positionId, boqItemType, materialType) => {
+                if (!positionId) return 1;
+                const alpha = alphaByPosition.get(positionId);
+                if (!alpha) return 1;
+                // Нереснижаемые элементы (база основных материалов) не масштабируем —
+                // ровно как в самом расчёте снижения.
+                return workspace.isReducible(boqItemType, materialType) ? 1 - alpha : 1;
+              },
+            };
+          }
+        } else if (settings.mode === 'zeroing' && settings.zeroedPositionIds.length > 0) {
+          const workspace = await getDiscountWorkspace();
+          if (workspace) {
+            const applied = applyZeroing(totals, settings.zeroedPositionIds, workspace.fullByPosition);
+            calcTotals = applied.reducedTotals;
+            const zeroedSet = new Set(settings.zeroedPositionIds);
+            zeroingActive = true;
+            discount = {
+              mode: 'zeroing',
+              baseGrandTotal: baseGrandTotal(),
+              reducedGrandTotal: 0,
+              appliedAmount: 0, // = base − reduced, проставляется ниже
+              // Обнулённые позиции убраны целиком → доля «снижения» = 1.
+              alphaByPosition: new Map(settings.zeroedPositionIds.map((id) => [id, 1])),
+              errorsByRule: new Map(),
+              // Элементы обнулённых позиций не участвуют в drill-down (масштаб 0).
+              itemScale: (positionId) => (positionId && zeroedSet.has(positionId) ? 0 : 1),
+            };
+          }
         }
       }
 
@@ -233,6 +260,9 @@ export const useFinancialCalculations = () => {
 
       if (discount) {
         discount.reducedGrandTotal = calc.grandTotal;
+        if (zeroingActive) {
+          discount.appliedAmount = discount.baseGrandTotal - calc.grandTotal;
+        }
       }
       setDiscountContext(discount);
 

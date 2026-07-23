@@ -33,6 +33,8 @@ export interface FiDiscountValidationError {
  * null — снижение выключено или не настроено: страница считает как обычно.
  */
 export interface DiscountContext {
+  /** Активный режим — для подписи сводки («Снижение» / «Обнулено»). */
+  mode: 'discount' | 'zeroing';
   /** ИТОГО без снижения — левая колонка сводки «Было». */
   baseGrandTotal: number;
   /** ИТОГО после снижения — правая колонка сводки «Стало». */

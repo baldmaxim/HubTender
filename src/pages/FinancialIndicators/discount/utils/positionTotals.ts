@@ -49,6 +49,31 @@ export const buildReduciblePositionTotals = (
 };
 
 /**
+ * ПОЛНЫЕ прямые затраты в разрезе позиций Заказчика (все типы BOQ, работы +
+ * материалы, без фильтра снижаемости) — для режима «Обнуление»: вычитаем полный
+ * `DirectCostTotals` выбранных позиций из агрегата тендера. Сумма по всем
+ * позициям = общий агрегат тендера (aggregateDirectCosts), поэтому вычет точен.
+ */
+export const buildFullPositionTotals = (
+  boqItems: BoqItemWithPosition[] | null | undefined,
+  tender: TenderFI,
+  excluded: GrowthExclusionSets,
+): Map<string, DirectCostTotals> => {
+  const byPosition = new Map<string, DirectCostTotals>();
+  boqItems?.forEach(item => {
+    const positionId = item.client_position_id;
+    if (!positionId) return;
+    let acc = byPosition.get(positionId);
+    if (!acc) {
+      acc = emptyDirectCostTotals();
+      byPosition.set(positionId, acc);
+    }
+    accumulateDirectCost(acc, item, tender, excluded);
+  });
+  return byPosition;
+};
+
+/**
  * Достроить коммерческую стоимость к каждому набору прямых затрат.
  * `commercialOf` — обычно свёртка через вектор множителей каскада
  * (см. markupMultipliers.ts).

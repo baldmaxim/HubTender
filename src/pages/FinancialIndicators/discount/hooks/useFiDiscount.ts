@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { message } from 'antd';
-import { saveFiDiscounts, type FiDiscountRule, type FiDiscountSettings } from '../../../../lib/api/fiDiscounts';
+import { saveFiDiscounts, type FiDiscountMode, type FiDiscountRule, type FiDiscountSettings } from '../../../../lib/api/fiDiscounts';
 import { markRealtimeMutation } from '../../../../lib/realtime/useRealtimeRefetch';
 import { getErrorMessage } from '../../../../utils/errors';
 import { emptyDirectCostTotals } from '../../utils/aggregateDirectCosts';
@@ -22,7 +22,7 @@ interface UseFiDiscountArgs {
   onSaved: () => void;
 }
 
-const EMPTY_SETTINGS: FiDiscountSettings = { enabled: false, rules: [] };
+const EMPTY_SETTINGS: FiDiscountSettings = { enabled: false, mode: 'discount', rules: [], zeroedPositionIds: [] };
 
 export function useFiDiscount({
   tenderId,
@@ -31,9 +31,12 @@ export function useFiDiscount({
   onSaved,
 }: UseFiDiscountArgs) {
   const [enabled, setEnabled] = useState(false);
+  const [mode, setModeState] = useState<FiDiscountMode>('discount');
   const [rules, setRules] = useState<FiDiscountRule[]>([]);
   const [amount, setAmount] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  // Обнуляемые позиции (режим 'zeroing'). Само множество = набор к сохранению.
+  const [zeroedIds, setZeroedIdsState] = useState<Set<string>>(() => new Set());
   const [workspace, setWorkspace] = useState<DiscountWorkspace | null>(null);
   const [loadingWorkspace, setLoadingWorkspace] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,7 +56,9 @@ export function useFiDiscount({
     lastHydratedRef.current = settings;
     const next = settings ?? EMPTY_SETTINGS;
     setEnabled(next.enabled);
+    setModeState(next.mode);
     setRules(next.rules);
+    setZeroedIdsState(new Set(next.zeroedPositionIds));
   }, [settings, dirty]);
 
   // settings в зависимостях намеренно: его ссылка обновляется после каждой
@@ -155,27 +160,42 @@ export function useFiDiscount({
     setDirty(true);
   }, []);
 
+  const setMode = useCallback((next: FiDiscountMode) => {
+    setModeState(next);
+    setDirty(true);
+  }, []);
+
+  const setZeroedIds = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setZeroedIdsState((prev) => (typeof updater === 'function' ? updater(new Set(prev)) : new Set(updater)));
+      setDirty(true);
+    },
+    [],
+  );
+
   const save = useCallback(async () => {
     setSaving(true);
     try {
-      await saveFiDiscounts(tenderId, { enabled, rules });
+      await saveFiDiscounts(tenderId, { enabled, mode, rules, zeroedPositionIds: Array.from(zeroedIds) });
       // Подавляем self-echo: запись породит NOTIFY → WS-эхо в этой же вкладке.
       markRealtimeMutation(`tender:${tenderId}`);
       setDirty(false);
-      message.success('Настройки снижения сохранены');
+      message.success('Настройки сохранены');
       onSaved();
     } catch (error) {
-      message.error('Не удалось сохранить снижение: ' + getErrorMessage(error));
+      message.error('Не удалось сохранить: ' + getErrorMessage(error));
     } finally {
       setSaving(false);
     }
-  }, [tenderId, enabled, rules, onSaved]);
+  }, [tenderId, enabled, mode, rules, zeroedIds, onSaved]);
 
   return {
     enabled,
+    mode,
     rules,
     amount,
     selectedIds,
+    zeroedIds,
     workspace,
     loadingWorkspace,
     saving,
@@ -186,6 +206,8 @@ export function useFiDiscount({
     totalDiscount,
     setAmount,
     setSelectedIds,
+    setZeroedIds,
+    setMode,
     toggleEnabled,
     applyIteration,
     removeIteration,

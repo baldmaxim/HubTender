@@ -25,11 +25,17 @@ type FIDiscountRule struct {
 // FIDiscountsRow mirrors public.tender_fi_discounts.
 //
 // Enabled=false (дефолт, и он же для тендера без строки в таблице) означает
-// «считать ровно как раньше»; Rules при этом сохраняются, чтобы выключение
-// тумблера не стирало настроенные итерации.
+// «считать ровно как раньше»; Rules/ZeroedPositionIDs при этом сохраняются,
+// чтобы выключение тумблера или смена режима не стирали настройки.
+//
+// Mode — активный режим корректировки: "discount" (снижение суммой) или
+// "zeroing" (полное обнуление строк). Режимы взаимоисключающие: применяется
+// только активный, но наборы обоих хранятся.
 type FIDiscountsRow struct {
-	Enabled bool             `json:"enabled"`
-	Rules   []FIDiscountRule `json:"rules"`
+	Enabled           bool             `json:"enabled"`
+	Mode              string           `json:"mode"`
+	Rules             []FIDiscountRule `json:"rules"`
+	ZeroedPositionIDs []string         `json:"zeroedPositionIds"`
 }
 
 // FIDiscountsRepo handles tender_fi_discounts reads + upserts.
@@ -48,17 +54,19 @@ func NewFIDiscountsRepo(pool *pgxpool.Pool) *FIDiscountsRepo {
 // вызывающему не нужен.
 func (r *FIDiscountsRepo) Get(ctx context.Context, tenderID string) (*FIDiscountsRow, error) {
 	var (
-		enabled  bool
-		rawRules []byte
+		enabled   bool
+		mode      string
+		rawRules  []byte
+		rawZeroed []byte
 	)
 	err := r.pool.QueryRow(ctx, `
-		SELECT enabled, rules
+		SELECT enabled, mode, rules, zeroed_position_ids
 		FROM public.tender_fi_discounts
 		WHERE tender_id = $1
-	`, tenderID).Scan(&enabled, &rawRules)
+	`, tenderID).Scan(&enabled, &mode, &rawRules, &rawZeroed)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return &FIDiscountsRow{Enabled: false, Rules: []FIDiscountRule{}}, nil
+			return &FIDiscountsRow{Enabled: false, Mode: "discount", Rules: []FIDiscountRule{}, ZeroedPositionIDs: []string{}}, nil
 		}
 		return nil, fmt.Errorf("fiDiscountsRepo.Get: %w", err)
 	}
@@ -67,7 +75,11 @@ func (r *FIDiscountsRepo) Get(ctx context.Context, tenderID string) (*FIDiscount
 	if err != nil {
 		return nil, fmt.Errorf("fiDiscountsRepo.Get: %w", err)
 	}
-	return &FIDiscountsRow{Enabled: enabled, Rules: rules}, nil
+	zeroed, err := decodeStringArray(rawZeroed)
+	if err != nil {
+		return nil, fmt.Errorf("fiDiscountsRepo.Get: %w", err)
+	}
+	return &FIDiscountsRow{Enabled: enabled, Mode: mode, Rules: rules, ZeroedPositionIDs: zeroed}, nil
 }
 
 // Upsert writes the settings for the tender. Conflict target is tender_id
@@ -87,6 +99,18 @@ func (r *FIDiscountsRepo) Upsert(
 	if err != nil {
 		return nil, fmt.Errorf("fiDiscountsRepo.Upsert marshal: %w", err)
 	}
+	zeroed := in.ZeroedPositionIDs
+	if zeroed == nil {
+		zeroed = []string{}
+	}
+	encodedZeroed, err := json.Marshal(zeroed)
+	if err != nil {
+		return nil, fmt.Errorf("fiDiscountsRepo.Upsert marshal zeroed: %w", err)
+	}
+	mode := in.Mode
+	if mode != "zeroing" {
+		mode = "discount"
+	}
 
 	// Пустая строка userID → NULL, иначе FK на auth.users(id) отвалится.
 	var createdBy any
@@ -96,16 +120,20 @@ func (r *FIDiscountsRepo) Upsert(
 
 	var (
 		outEnabled bool
+		outMode    string
 		outRules   []byte
+		outZeroed  []byte
 	)
 	err = r.pool.QueryRow(ctx, `
-		INSERT INTO public.tender_fi_discounts (tender_id, enabled, rules, created_by)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO public.tender_fi_discounts (tender_id, enabled, mode, rules, zeroed_position_ids, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (tender_id) DO UPDATE SET
-			enabled = EXCLUDED.enabled,
-			rules   = EXCLUDED.rules
-		RETURNING enabled, rules
-	`, tenderID, in.Enabled, encoded, createdBy).Scan(&outEnabled, &outRules)
+			enabled             = EXCLUDED.enabled,
+			mode                = EXCLUDED.mode,
+			rules               = EXCLUDED.rules,
+			zeroed_position_ids = EXCLUDED.zeroed_position_ids
+		RETURNING enabled, mode, rules, zeroed_position_ids
+	`, tenderID, in.Enabled, mode, encoded, encodedZeroed, createdBy).Scan(&outEnabled, &outMode, &outRules, &outZeroed)
 	if err != nil {
 		return nil, fmt.Errorf("fiDiscountsRepo.Upsert: %w", err)
 	}
@@ -114,7 +142,11 @@ func (r *FIDiscountsRepo) Upsert(
 	if err != nil {
 		return nil, fmt.Errorf("fiDiscountsRepo.Upsert: %w", err)
 	}
-	return &FIDiscountsRow{Enabled: outEnabled, Rules: persisted}, nil
+	persistedZeroed, err := decodeStringArray(outZeroed)
+	if err != nil {
+		return nil, fmt.Errorf("fiDiscountsRepo.Upsert: %w", err)
+	}
+	return &FIDiscountsRow{Enabled: outEnabled, Mode: outMode, Rules: persisted, ZeroedPositionIDs: persistedZeroed}, nil
 }
 
 // decodeRules unmarshals the rules jsonb column, normalising SQL NULL and the
@@ -132,4 +164,20 @@ func decodeRules(raw []byte) ([]FIDiscountRule, error) {
 		return []FIDiscountRule{}, nil
 	}
 	return rules, nil
+}
+
+// decodeStringArray unmarshals a jsonb array of strings (обнулённые позиции),
+// нормализуя SQL NULL/пустоту в пустой слайс.
+func decodeStringArray(raw []byte) ([]string, error) {
+	if len(raw) == 0 {
+		return []string{}, nil
+	}
+	var out []string
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("decode string array: %w", err)
+	}
+	if out == nil {
+		return []string{}, nil
+	}
+	return out, nil
 }

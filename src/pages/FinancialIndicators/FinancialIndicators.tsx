@@ -270,8 +270,9 @@ const FinancialIndicators: React.FC = () => {
   // Экспорт выгружает уже сниженные строки — без этой пометки в файле нельзя
   // отличить снижённый расчёт от обычного.
   const discountNote = discountContext
-    ? `Применено снижение: ${formatNumber(discountContext.appliedAmount)} руб. ` +
-      `(до снижения: ${formatNumber(discountContext.baseGrandTotal)} руб.)`
+    ? `${discountContext.mode === 'zeroing' ? 'Применено обнуление' : 'Применено снижение'}: ` +
+      `${formatNumber(discountContext.appliedAmount)} руб. ` +
+      `(до ${discountContext.mode === 'zeroing' ? 'обнуления' : 'снижения'}: ${formatNumber(discountContext.baseGrandTotal)} руб.)`
     : null;
 
   const indicatorsTableNode = (

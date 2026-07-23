@@ -47,3 +47,31 @@ export const buildDiscountPositionRows = (
       alreadyReduced: reducible * alpha,
     };
   });
+
+/** Строка таблицы выбора на вкладке «Обнуление» (полная стоимость строки). */
+export interface ZeroingPositionRow {
+  key: string;
+  positionId: string;
+  positionNumber: number;
+  itemNo: string | null;
+  workName: string;
+  isAdditional: boolean;
+  isLeaf: boolean;
+  /** Полная коммерческая стоимость строки (уйдёт при обнулении). */
+  commercial: number;
+}
+
+export const buildZeroingPositionRows = (
+  positions: PositionWithCostsRow[],
+  commercialByPosition: Map<string, number>,
+): ZeroingPositionRow[] =>
+  positions.map((position, index) => ({
+    key: position.id,
+    positionId: position.id,
+    positionNumber: position.position_number,
+    itemNo: position.item_no,
+    workName: position.work_name,
+    isAdditional: Boolean(position.is_additional),
+    isLeaf: isLeafPosition(index, positions),
+    commercial: commercialByPosition.get(position.id) ?? 0,
+  }));

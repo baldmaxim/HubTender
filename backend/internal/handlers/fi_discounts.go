@@ -80,6 +80,14 @@ func (h *FIDiscountsHandler) Put(w http.ResponseWriter, r *http.Request) {
 		apierr.BadRequest(msg).Render(w)
 		return
 	}
+	if in.Mode != "" && in.Mode != "discount" && in.Mode != "zeroing" {
+		apierr.BadRequest("mode must be 'discount' or 'zeroing'").Render(w)
+		return
+	}
+	if len(in.ZeroedPositionIDs) > maxFIDiscountPositionIDs {
+		apierr.BadRequest("too many zeroed positions").Render(w)
+		return
+	}
 
 	row, err := h.svc.Upsert(r.Context(), tenderID, in, authUser.ID)
 	if err != nil {

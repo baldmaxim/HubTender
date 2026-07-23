@@ -22,6 +22,9 @@ function DiscountSummaryCardImpl({ discount, isPhone }: DiscountSummaryCardProps
   const { baseGrandTotal, reducedGrandTotal, appliedAmount } = discount;
   const percent = baseGrandTotal > 0 ? (appliedAmount / baseGrandTotal) * 100 : 0;
   const failedRules = discount.errorsByRule.size;
+  const isZeroing = discount.mode === 'zeroing';
+  const changeTitle = isZeroing ? 'Обнулено' : 'Снижение';
+  const afterTitle = isZeroing ? 'Стоимость после обнуления' : 'Стоимость после снижения';
 
   return (
     <Card
@@ -32,14 +35,14 @@ function DiscountSummaryCardImpl({ discount, isPhone }: DiscountSummaryCardProps
       <Row gutter={[16, 12]} align="middle">
         <Col xs={24} sm={8}>
           <Statistic
-            title="Стоимость до снижения"
+            title={isZeroing ? 'Стоимость до обнуления' : 'Стоимость до снижения'}
             value={formatMoney(baseGrandTotal)}
             valueStyle={{ fontSize: isPhone ? 18 : 22 }}
           />
         </Col>
         <Col xs={24} sm={8}>
           <Statistic
-            title="Снижение"
+            title={changeTitle}
             value={formatMoney(appliedAmount)}
             prefix={<ArrowDownOutlined />}
             suffix={<Text type="secondary" style={{ fontSize: 13 }}>{`${percent.toFixed(2)} %`}</Text>}
@@ -48,7 +51,7 @@ function DiscountSummaryCardImpl({ discount, isPhone }: DiscountSummaryCardProps
         </Col>
         <Col xs={24} sm={8}>
           <Statistic
-            title="Стоимость после снижения"
+            title={afterTitle}
             value={formatMoney(reducedGrandTotal)}
             valueStyle={{ fontSize: isPhone ? 18 : 22, color: '#10b981' }}
           />
