@@ -36,7 +36,10 @@ interface DiscountTabProps {
   settings: FiDiscountSettings | null;
   getDiscountWorkspace: () => Promise<DiscountWorkspace | null>;
   onSaved: () => void;
+  /** Портрет телефона — карточный список позиций, Save полной ширины. */
   isPhone: boolean;
+  /** Ландшафт телефона — колонки, но поджатая высота таблиц. */
+  isLandscapePhone: boolean;
 }
 
 export const DiscountTab: React.FC<DiscountTabProps> = ({
@@ -45,6 +48,7 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
   getDiscountWorkspace,
   onSaved,
   isPhone,
+  isLandscapePhone,
 }) => {
   const {
     enabled,
@@ -253,29 +257,39 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
             selectedIds={selectedIds}
             disabled={saving}
             onSelectionChange={setSelectedIds}
+            isPhone={isPhone}
+            isLandscapePhone={isLandscapePhone}
           />
         </>
       ) : (
-        <ZeroingPositionsTable
-          rows={zeroingRows}
-          positions={positions}
-          selectedIds={zeroedIds}
-          disabled={saving}
-          onSelectionChange={setZeroedIds}
-          extra={
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              size="small"
-              loading={saving}
-              disabled={!dirty}
-              onClick={save}
-              style={{ width: isPhone ? 120 : 130 }}
-            >
-              {dirty ? 'Сохранить' : 'Сохранено'}
-            </Button>
-          }
-        />
+        <>
+          {/* Портрет: в шапке карточки Save не помещается — выносим полной шириной. */}
+          {isPhone && <div style={{ display: 'flex', width: '100%' }}>{saveButton}</div>}
+          <ZeroingPositionsTable
+            rows={zeroingRows}
+            positions={positions}
+            selectedIds={zeroedIds}
+            disabled={saving}
+            onSelectionChange={setZeroedIds}
+            isPhone={isPhone}
+            isLandscapePhone={isLandscapePhone}
+            extra={
+              isPhone ? undefined : (
+                <Button
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  size="small"
+                  loading={saving}
+                  disabled={!dirty}
+                  onClick={save}
+                  style={{ width: 130 }}
+                >
+                  {dirty ? 'Сохранить' : 'Сохранено'}
+                </Button>
+              )
+            }
+          />
+        </>
       )}
     </Space>
   );

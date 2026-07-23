@@ -50,6 +50,9 @@ const FinancialIndicators: React.FC = () => {
   const { isPhone, isLandscapePhone, isPhoneDevice, isMobile, screens } = useIsMobile();
   // Генеральный директор и телефоны (в любой ориентации) — только просмотр (без обновления и редактирования)
   const readOnly = user?.role_code === 'general_director' || isMobile || isLandscapePhone;
+  // Вкладка «Снижение/Обнуление» редактируется и на телефоне (адаптивно);
+  // недоступна только генеральному директору.
+  const canEditDiscount = user?.role_code !== 'general_director';
   // Кнопка/зум на весь экран нужны там, где широкая таблица может не помещаться,
   // но это не телефон (на телефоне — карточный вид или зум inline): настоящие планшеты, узкие ноуты.
   const showFullscreenTable = !isPhoneDevice && !screens.lg;
@@ -469,12 +472,11 @@ const FinancialIndicators: React.FC = () => {
                   </>
                 ),
               },
-              // Настройка снижения — только для тех, кто может редактировать
-              // (ГД и телефоны страницу лишь просматривают). Данные вкладки
-              // грузятся лениво, при первом её открытии.
-              ...(readOnly || !selectedTenderId
-                ? []
-                : [{
+              // Настройка снижения — для всех, кроме генерального директора
+              // (телефоны редактируют адаптивно). Данные вкладки грузятся
+              // лениво, при первом её открытии.
+              ...(canEditDiscount && selectedTenderId
+                ? [{
                     key: 'discount',
                     label: (
                       <span>
@@ -489,9 +491,11 @@ const FinancialIndicators: React.FC = () => {
                         getDiscountWorkspace={getDiscountWorkspace}
                         onSaved={() => fetchFinancialIndicators(selectedTenderId)}
                         isPhone={isPhone}
+                        isLandscapePhone={isLandscapePhone}
                       />
                     ),
-                  }]),
+                  }]
+                : []),
             ]}
           />
         </Spin>

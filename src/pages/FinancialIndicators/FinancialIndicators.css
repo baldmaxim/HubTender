@@ -7,6 +7,32 @@
   overflow-x: hidden;
 }
 
+/* Карточное представление строки Заказчика (телефон, портрет).
+   Рендерится только при isPhone, поэтому скоуп-класса .fi-positions--phone
+   достаточно — на десктопе таких узлов нет. */
+.financial-indicators-page .fi-position-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0;
+}
+.financial-indicators-page .fi-position-card__head {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.financial-indicators-page .fi-position-card__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.financial-indicators-page .fi-position-card__line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
 /* Планшеты (iPad portrait, landscape-телефоны) */
 @media (max-width: 991px) {
   .financial-indicators-page .ant-card-body {
@@ -54,5 +80,29 @@
   /* Заголовки карточек графиков компактнее */
   .financial-indicators-page .ant-card-head-title {
     font-size: 14px;
+  }
+
+  /* Таблицы выбора позиций (Снижение/Обнуление) в карточном режиме:
+     крупнее чекбокс под палец, шапка-тулбар переносится, а не переполняется. */
+  .financial-indicators-page .fi-positions--phone .ant-table-selection-column .ant-checkbox {
+    transform: scale(1.3);
+  }
+  .financial-indicators-page .fi-positions--phone .ant-card-head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .financial-indicators-page .fi-positions--phone .ant-table-tbody .ant-table-cell {
+    padding: 6px 8px;
+  }
+}
+
+/* Ландшафт-телефон (короткий по высоте, тач): поджимаем вертикальные отступы,
+   чтобы таблица снижения и её футер помещались без выталкивания страницы. */
+@media (max-height: 575px) and (pointer: coarse) {
+  .financial-indicators-page .fi-zeroing-positions .ant-card-body,
+  .financial-indicators-page .fi-discount-positions .ant-card-body {
+    padding: 0;
   }
 }

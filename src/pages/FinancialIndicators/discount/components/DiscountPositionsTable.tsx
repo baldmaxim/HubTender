@@ -4,11 +4,19 @@ import type { ColumnsType } from 'antd/es/table';
 import { collectSectionDescendants } from '../../../../utils/positions/collectSectionDescendants';
 import type { PositionWithCostsRow } from '../../../../lib/api/positions';
 import type { DiscountPositionRow } from '../utils/positionRows';
+import { PositionSelectCard } from './PositionSelectCard';
 
 const { Text } = Typography;
 
 const formatMoney = (value: number): string =>
   value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const reducedMinus = (value: number) =>
+  value > 0 ? (
+    <span style={{ color: '#cf1322', fontWeight: 500 }}>{`−${formatMoney(value)}`}</span>
+  ) : (
+    <Text type="secondary">—</Text>
+  );
 
 interface DiscountPositionsTableProps {
   rows: DiscountPositionRow[];
@@ -17,6 +25,10 @@ interface DiscountPositionsTableProps {
   selectedIds: Set<string>;
   disabled: boolean;
   onSelectionChange: (next: Set<string>) => void;
+  /** Портрет телефона — карточный список вместо колонок. */
+  isPhone?: boolean;
+  /** Ландшафт телефона — колонки как на десктопе, но ниже высота скролла. */
+  isLandscapePhone?: boolean;
 }
 
 function DiscountPositionsTableImpl({
@@ -25,6 +37,8 @@ function DiscountPositionsTableImpl({
   selectedIds,
   disabled,
   onSelectionChange,
+  isPhone = false,
+  isLandscapePhone = false,
 }: DiscountPositionsTableProps) {
   // Что можно выбрать. Set, а не массив: getCheckboxProps зовётся на каждую строку.
   //
@@ -68,71 +82,90 @@ function DiscountPositionsTableImpl({
   // Колонки чисто презентационные: новая ссылка массива заставила бы Ant Table
   // считать схему изменившейся и ремоунтить header/ячейки на каждый ввод суммы.
   const columns = useMemo<ColumnsType<DiscountPositionRow>>(
-    () => [
-      { title: '№', dataIndex: 'positionNumber', key: 'positionNumber', width: 56, align: 'center' },
-      {
-        title: 'Наименование',
-        key: 'name',
-        render: (_, record) => {
-          const itemNoColor = record.isLeaf ? '#52c41a' : '#ff7875';
-          const inner = (
-            <div
-              style={{
-                paddingLeft: record.isAdditional ? 16 : 0,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {record.isAdditional && (
-                <Tag color="orange" style={{ marginRight: 6 }}>
-                  ДОП
-                </Tag>
-              )}
-              {record.itemNo && (
-                <span style={{ marginRight: 6, color: itemNoColor, fontWeight: 600 }}>
-                  {record.itemNo}
-                </span>
-              )}
-              <span
-                style={{
-                  fontWeight: record.isLeaf ? undefined : 700,
-                  fontFamily: record.isLeaf ? undefined : 'Georgia, "Times New Roman", serif',
-                }}
-              >
-                {record.workName}
-              </span>
-            </div>
-          );
-          return <Tooltip title={record.workName}>{inner}</Tooltip>;
-        },
-      },
-      {
-        title: 'Доступно к снижению',
-        key: 'remaining',
-        width: 170,
-        align: 'right',
-        render: (_, record) => formatMoney(Math.max(0, record.reducible - record.alreadyReduced)),
-      },
-      {
-        title: 'Уже снижено',
-        dataIndex: 'alreadyReduced',
-        key: 'alreadyReduced',
-        width: 150,
-        align: 'right',
-        render: (value: number) =>
-          value > 0 ? (
-            <span style={{ color: '#cf1322', fontWeight: 500 }}>{`−${formatMoney(value)}`}</span>
-          ) : (
-            <Text type="secondary">—</Text>
-          ),
-      },
-    ],
-    [],
+    () =>
+      isPhone
+        ? [
+            {
+              title: 'Строки Заказчика',
+              key: 'card',
+              render: (_, record) => (
+                <PositionSelectCard
+                  positionNumber={record.positionNumber}
+                  itemNo={record.itemNo}
+                  workName={record.workName}
+                  isAdditional={record.isAdditional}
+                  isLeaf={record.isLeaf}
+                  lines={[
+                    {
+                      label: 'Доступно к снижению',
+                      value: formatMoney(Math.max(0, record.reducible - record.alreadyReduced)),
+                    },
+                    { label: 'Уже снижено', value: reducedMinus(record.alreadyReduced) },
+                  ]}
+                />
+              ),
+            },
+          ]
+        : [
+            { title: '№', dataIndex: 'positionNumber', key: 'positionNumber', width: 56, align: 'center' },
+            {
+              title: 'Наименование',
+              key: 'name',
+              render: (_, record) => {
+                const itemNoColor = record.isLeaf ? '#52c41a' : '#ff7875';
+                const inner = (
+                  <div
+                    style={{
+                      paddingLeft: record.isAdditional ? 16 : 0,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {record.isAdditional && (
+                      <Tag color="orange" style={{ marginRight: 6 }}>
+                        ДОП
+                      </Tag>
+                    )}
+                    {record.itemNo && (
+                      <span style={{ marginRight: 6, color: itemNoColor, fontWeight: 600 }}>
+                        {record.itemNo}
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        fontWeight: record.isLeaf ? undefined : 700,
+                        fontFamily: record.isLeaf ? undefined : 'Georgia, "Times New Roman", serif',
+                      }}
+                    >
+                      {record.workName}
+                    </span>
+                  </div>
+                );
+                return <Tooltip title={record.workName}>{inner}</Tooltip>;
+              },
+            },
+            {
+              title: 'Доступно к снижению',
+              key: 'remaining',
+              width: 170,
+              align: 'right',
+              render: (_, record) => formatMoney(Math.max(0, record.reducible - record.alreadyReduced)),
+            },
+            {
+              title: 'Уже снижено',
+              dataIndex: 'alreadyReduced',
+              key: 'alreadyReduced',
+              width: 150,
+              align: 'right',
+              render: (value: number) => reducedMinus(value),
+            },
+          ],
+    [isPhone],
   );
 
   const rowSelection = {
-    columnWidth: 40,
+    columnWidth: isPhone ? 44 : 40,
     selectedRowKeys: Array.from(selectedIds),
     // Клик по разделу забирает все его дочерние строки — общая утилита с
     // Перераспределением, чтобы «раздел» означал одно и то же на обеих страницах.
@@ -154,17 +187,21 @@ function DiscountPositionsTableImpl({
     }),
   };
 
+  // Ландшафт-телефон низкий по высоте → таблица не должна выталкивать страницу.
+  const scrollY = isPhone ? 440 : isLandscapePhone ? 260 : 460;
+  const rowHeight = isPhone ? 88 : 34;
+
   return (
     <>
       {/* Фиксированная высота строк тела — обязательное условие для virtual:
           переменная высота запускает петлю переизмерения rc-virtual-list
           (collectHeight → syncScrollTop), см. ResultsTable/PositionsBlock. */}
       <style>{`
-        .fi-discount-positions .ant-table-tbody .ant-table-cell { height: 34px; overflow: hidden; }
+        .fi-discount-positions .ant-table-tbody .ant-table-cell { height: ${rowHeight}px; overflow: hidden; }
       `}</style>
       <Card
         size="small"
-        className="fi-discount-positions"
+        className={`fi-discount-positions${isPhone ? ' fi-positions--phone' : ''}`}
         title={
           <Space wrap>
             <Text strong>Строки Заказчика</Text>
@@ -193,20 +230,31 @@ function DiscountPositionsTableImpl({
           dataSource={rows}
           rowSelection={rowSelection}
           pagination={false}
-          scroll={{ y: 460 }}
+          scroll={{ y: scrollY }}
           virtual
           summary={() => (
             <Table.Summary fixed="bottom">
               <Table.Summary.Row>
-                <Table.Summary.Cell index={0} colSpan={2} align="right">
-                  <Text strong>{`Выбрано строк: ${totals.count}`}</Text>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={1} align="right">
-                  <Text strong>{formatMoney(totals.selectedRemaining)}</Text>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={2} align="right">
-                  <Text type="secondary">—</Text>
-                </Table.Summary.Cell>
+                {isPhone ? (
+                  <Table.Summary.Cell index={0}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <Text strong>{`Выбрано: ${totals.count}`}</Text>
+                      <Text strong>{formatMoney(totals.selectedRemaining)}</Text>
+                    </div>
+                  </Table.Summary.Cell>
+                ) : (
+                  <>
+                    <Table.Summary.Cell index={0} colSpan={2} align="right">
+                      <Text strong>{`Выбрано строк: ${totals.count}`}</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">
+                      <Text strong>{formatMoney(totals.selectedRemaining)}</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} align="right">
+                      <Text type="secondary">—</Text>
+                    </Table.Summary.Cell>
+                  </>
+                )}
               </Table.Summary.Row>
             </Table.Summary>
           )}
