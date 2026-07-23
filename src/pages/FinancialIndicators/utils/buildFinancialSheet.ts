@@ -136,10 +136,15 @@ export function buildFinancialSheet(input: SheetInput): XLSX.WorkSheet {
     // xf из стиля, поэтому формат обязан лежать в .s, иначе колонка = «Общий».
     const fmtStyle = (col: number, fmt: string) => ({ ...rowStyle(row, col), numFmt: fmt });
 
+    // Формат коэффициента: целый процент → «0%» (иначе «0.##%» рисует лишний
+    // десятичный разделитель — в ru Excel «5,%»); дробный → «0.##%» («13,99%»).
+    const cpct = num(row.coeff_pct);
+    const coeffFmt = Math.abs(cpct - Math.round(cpct)) < 1e-9 ? '0%' : PCT_FMT;
+
     set(rIdx, 0, { t: 'n', v: row.row_number, s: rowStyle(row, 0) });
     set(rIdx, 1, { t: 's', v: row.indicator_name, s: rowStyle(row, 1) });
     set(rIdx, 2, isMarkup
-      ? { t: 'n', v: num(row.coeff_pct) / 100, z: PCT_FMT, s: fmtStyle(2, PCT_FMT) }
+      ? { t: 'n', v: cpct / 100, z: coeffFmt, s: fmtStyle(2, coeffFmt) }
       : { t: 's', v: row.coefficient || '', s: rowStyle(row, 2) });
     set(rIdx, 3, spTotal > 0 ? { t: 'n', f: `F${rExcel}/${spTotal}`, z: MONEY_FMT, s: fmtStyle(3, MONEY_FMT) } : { t: 'n', v: 0, z: MONEY_FMT, s: fmtStyle(3, MONEY_FMT) });
     set(rIdx, 4, customerTotal > 0 ? { t: 'n', f: `F${rExcel}/${customerTotal}`, z: MONEY_FMT, s: fmtStyle(4, MONEY_FMT) } : { t: 'n', v: 0, z: MONEY_FMT, s: fmtStyle(4, MONEY_FMT) });
