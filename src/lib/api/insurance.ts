@@ -15,6 +15,10 @@ export interface InsuranceData {
   parking_area: number;
   storage_price_m2: number;
   storage_area: number;
+  // Гейтит ТОЛЬКО разнесение страхования по строкам заказчика на «Перераспределении»/
+  // «Форме КП» (display-only). НЕ влияет на слагаемое страхования в итоге ФП /
+  // cached_grand_total. По умолчанию true (прежнее поведение — разносить всегда).
+  distribute_to_rows: boolean;
 }
 
 const ZERO_INSURANCE: InsuranceData = {
@@ -26,6 +30,7 @@ const ZERO_INSURANCE: InsuranceData = {
   parking_area: 0,
   storage_price_m2: 0,
   storage_area: 0,
+  distribute_to_rows: true,
 };
 
 function toNumber(v: unknown): number {
@@ -42,6 +47,7 @@ function normalize(data: Partial<InsuranceData>): InsuranceData {
     parking_area: toNumber(data.parking_area),
     storage_price_m2: toNumber(data.storage_price_m2),
     storage_area: toNumber(data.storage_area),
+    distribute_to_rows: data.distribute_to_rows ?? true,
   };
 }
 

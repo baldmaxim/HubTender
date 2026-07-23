@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {
   Card, Select, InputNumber, Typography, Space,
-  Row, Col, message, Tag,
+  Row, Col, message, Tag, Button, Tooltip,
 } from 'antd';
-import { SafetyCertificateOutlined } from '@ant-design/icons';
+import { SafetyCertificateOutlined, DeploymentUnitOutlined } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import {
   fetchInsuranceTenders,
@@ -29,6 +29,7 @@ interface InsuranceFormData {
   parking_area: number;
   storage_price_m2: number;
   storage_area: number;
+  distribute_to_rows: boolean;
 }
 
 const DEFAULT_DATA: InsuranceFormData = {
@@ -40,6 +41,7 @@ const DEFAULT_DATA: InsuranceFormData = {
   parking_area: 0,
   storage_price_m2: 0,
   storage_area: 0,
+  distribute_to_rows: true,
 };
 
 function calcInsurance(d: InsuranceFormData) {
@@ -122,6 +124,17 @@ export default function Insurance() {
     if (!selectedTenderId) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => persistSave(selectedTenderId, next), 700);
+  };
+
+  // Тумблер «Распределить во все строки»: сохраняем сразу (без debounce), т.к.
+  // это дискретное действие. Гейтит только per-row разнесение на «Перераспределении»/
+  // «Форме КП»; в итог ФП страхование входит в любом случае.
+  const handleToggleDistribute = () => {
+    if (!selectedTenderId || isAreaOnly) return;
+    const next = { ...formData, distribute_to_rows: !formData.distribute_to_rows };
+    setFormData(next);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    void persistSave(selectedTenderId, next);
   };
 
   const getTenderTitles = () => {
@@ -370,6 +383,32 @@ export default function Insurance() {
               {fmt(sumTotal)} × {formData.judicial_pct}% × {formData.total_pct}%
             </Text>
           </Card>
+        </Col>
+        <Col xs={24} sm={24} lg={9} style={{ display: 'flex', alignItems: 'center' }}>
+          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+            <Tooltip
+              title={
+                formData.distribute_to_rows
+                  ? 'Сумма страхования равномерно раскидывается во все строки заказчика на «Перераспределении» и «Форме КП». Нажмите, чтобы отключить.'
+                  : 'Сумма страхования НЕ раскидывается в строки заказчика, но входит в итог на странице «Финансовые показатели». Нажмите, чтобы включить разнесение.'
+              }
+            >
+              <Button
+                type={formData.distribute_to_rows ? 'primary' : 'default'}
+                icon={<DeploymentUnitOutlined />}
+                onClick={handleToggleDistribute}
+                disabled={!selectedTenderId || isAreaOnly}
+                block
+              >
+                Распределить во все строки
+              </Button>
+            </Tooltip>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {formData.distribute_to_rows
+                ? 'Разносится по строкам заказчика'
+                : 'Не разносится · учтено в итоге «Финансовых показателей»'}
+            </Text>
+          </Space>
         </Col>
       </Row>
 

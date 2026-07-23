@@ -15,6 +15,8 @@ const { Text } = Typography;
 interface CommerceCardsProps {
   positions: PositionWithCommercialCost[];
   insuranceTotal?: number;
+  /** Флаг «Распределить во все строки». false → доля страхования по строкам = 0. */
+  distributeToRows?: boolean;
   onNavigateToPosition: (positionId: string) => void;
   selectedTenderId: string | undefined;
 }
@@ -102,6 +104,7 @@ const CommerceCard = memo(({ record, ins, hasTender, onNavigateToPosition }: Com
 function CommerceCardsInner({
   positions,
   insuranceTotal = 0,
+  distributeToRows = true,
   onNavigateToPosition,
   selectedTenderId,
 }: CommerceCardsProps) {
@@ -127,6 +130,9 @@ function CommerceCardsInner({
     totalCommercial += p.commercial_total || 0;
   }
   const insShare = (pos: PositionWithCommercialCost) => {
+    // Разнесение выключено → доля страхования по строкам = 0 (страхование остаётся
+    // только в скалярном итоге totalWorksWithIns / «Финансовые показатели»).
+    if (!distributeToRows) return 0;
     if (pos.insurance_share != null) return pos.insurance_share;
     return totalWorks > 0 ? insuranceTotal * ((pos.work_cost_total || 0) / totalWorks) : 0;
   };

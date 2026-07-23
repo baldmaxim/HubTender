@@ -197,25 +197,28 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 			judicial_pct, total_pct,
 			apt_price_m2, apt_area,
 			parking_price_m2, parking_area,
-			storage_price_m2, storage_area
+			storage_price_m2, storage_area,
+			distribute_to_rows
 		)
 		SELECT
 			$1::uuid,
 			judicial_pct, total_pct,
 			apt_price_m2, apt_area,
 			parking_price_m2, parking_area,
-			storage_price_m2, storage_area
+			storage_price_m2, storage_area,
+			distribute_to_rows
 		FROM public.tender_insurance
 		WHERE tender_id = $2::uuid
 		ON CONFLICT (tender_id) DO UPDATE SET
-			judicial_pct     = EXCLUDED.judicial_pct,
-			total_pct        = EXCLUDED.total_pct,
-			apt_price_m2     = EXCLUDED.apt_price_m2,
-			apt_area         = EXCLUDED.apt_area,
-			parking_price_m2 = EXCLUDED.parking_price_m2,
-			parking_area     = EXCLUDED.parking_area,
-			storage_price_m2 = EXCLUDED.storage_price_m2,
-			storage_area     = EXCLUDED.storage_area
+			judicial_pct       = EXCLUDED.judicial_pct,
+			total_pct          = EXCLUDED.total_pct,
+			apt_price_m2       = EXCLUDED.apt_price_m2,
+			apt_area           = EXCLUDED.apt_area,
+			parking_price_m2   = EXCLUDED.parking_price_m2,
+			parking_area       = EXCLUDED.parking_area,
+			storage_price_m2   = EXCLUDED.storage_price_m2,
+			storage_area       = EXCLUDED.storage_area,
+			distribute_to_rows = EXCLUDED.distribute_to_rows
 	`, newTenderID, in.SourceTenderID)
 	if err != nil {
 		return nil, fmt.Errorf("transferRepo: copy tender insurance: %w", err)

@@ -246,9 +246,14 @@ async function loadCommerceCalculationContext(tenderId: string): Promise<Commerc
   };
 }
 
-async function loadInsuranceTotal(tenderId: string): Promise<number> {
+async function loadInsuranceTotal(
+  tenderId: string,
+): Promise<{ total: number; distributeToRows: boolean }> {
   const data = await loadTenderInsurance(tenderId);
-  return computeInsuranceTotal(data);
+  return {
+    total: computeInsuranceTotal(data),
+    distributeToRows: data?.distribute_to_rows ?? true,
+  };
 }
 
 /**
@@ -273,6 +278,10 @@ export function useCommerceData(isActive = true) {
   const [tacticChanged, setTacticChanged] = useState(false);
   const [referenceTotal, setReferenceTotal] = useState<number>(0);
   const [insuranceTotal, setInsuranceTotal] = useState<number>(0);
+  // Флаг «Распределить во все строки» (страница «Страхование»). insuranceTotal
+  // всегда полный (для скалярных итогов computeCommerceTotals); флаг гейтит только
+  // per-row разнесение (insurance_share / applyRedistributionPipeline).
+  const [distributeToRows, setDistributeToRows] = useState<boolean>(true);
 
   // Загрузка списка тендеров и тактик
   useEffect(() => {
@@ -289,6 +298,7 @@ export function useCommerceData(isActive = true) {
       setBoqItems(null);
       setReferenceTotal(0);
       setInsuranceTotal(0);
+      setDistributeToRows(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTenderId]);
@@ -361,7 +371,7 @@ export function useCommerceData(isActive = true) {
     setBoqItems(null);
 
     try {
-      const [positionsResult, nextInsuranceTotal] = await Promise.all([
+      const [positionsResult, nextInsurance] = await Promise.all([
         (async (): Promise<AggregatedPositionLoadResult> => {
           const [clientPositions, allBoqItems, calculationContext] = await Promise.all([
             loadClientPositions(tenderId),
@@ -376,7 +386,8 @@ export function useCommerceData(isActive = true) {
 
       setPositions(positionsResult.positions);
       setReferenceTotal(positionsResult.referenceTotal);
-      setInsuranceTotal(nextInsuranceTotal);
+      setInsuranceTotal(nextInsurance.total);
+      setDistributeToRows(nextInsurance.distributeToRows);
       setBoqItems(positionsResult.boqItems);
     } catch (error) {
       console.error('Ошибка загрузки позиций:', error);
@@ -475,7 +486,7 @@ export function useCommerceData(isActive = true) {
       const prepared = applyRedistributionPipeline({
         categoryLevelRows,
         positionAdjustmentDeltas: deltas,
-        insuranceTotal,
+        insuranceTotal: distributeToRows ? insuranceTotal : 0,
       });
 
       const byId = new Map<string, PreparedRow>();
@@ -510,7 +521,7 @@ export function useCommerceData(isActive = true) {
     // positions.length достаточно для триггера «позиции готовы»; полный объект positions
     // умышленно опущен, чтобы не зациклить эффект (мы сами вызываем setPositions внутри).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTenderId, selectedTacticId, boqItems, insuranceTotal, positions.length]);
+  }, [selectedTenderId, selectedTacticId, boqItems, insuranceTotal, distributeToRows, positions.length]);
 
   const handleTacticChange = (tacticId: string) => {
     setSelectedTacticId(tacticId);
@@ -576,5 +587,6 @@ export function useCommerceData(isActive = true) {
     totals,
     referenceTotal,
     insuranceTotal,
+    distributeToRows,
   };
 }

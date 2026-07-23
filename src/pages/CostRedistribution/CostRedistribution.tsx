@@ -36,6 +36,9 @@ const CostRedistribution: React.FC = () => {
   const { isPhone, isPhoneDevice } = useIsMobile();
   const { theme: currentTheme } = useTheme();
   const [insuranceTotal, setInsuranceTotal] = useState(0);
+  // Флаг «Распределить во все строки» (страница «Страхование»). Гейтит per-row
+  // разнесение страхования; в сумму работ строк оно попадает только при true.
+  const [distributeToRows, setDistributeToRows] = useState(true);
   const [savedRecently, setSavedRecently] = useState(false);
   const [autosaveNonce, setAutosaveNonce] = useState(0);
   const isSavingRef = useRef(false);
@@ -148,20 +151,22 @@ const CostRedistribution: React.FC = () => {
     return applyRedistributionPipeline({
       categoryLevelRows,
       positionAdjustmentDeltas: adjustment.appliedDeltas,
-      insuranceTotal,
+      insuranceTotal: distributeToRows ? insuranceTotal : 0,
     });
   }, [
     hasAnyRedistribution,
     categoryLevelRows,
     insuranceTotal,
+    distributeToRows,
     adjustment.appliedDeltas,
   ]);
 
   // Загрузка страхования от судимостей при смене тендера
   useEffect(() => {
-    if (!selectedTenderId) { setInsuranceTotal(0); return; }
+    if (!selectedTenderId) { setInsuranceTotal(0); setDistributeToRows(true); return; }
     loadTenderInsurance(selectedTenderId).then((data) => {
       setInsuranceTotal(computeInsuranceTotal(data));
+      setDistributeToRows(data?.distribute_to_rows ?? true);
     });
   }, [selectedTenderId]);
 

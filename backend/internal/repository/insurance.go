@@ -20,6 +20,10 @@ type InsuranceRow struct {
 	ParkingArea      float64 `json:"parking_area"`
 	StoragePriceM2   float64 `json:"storage_price_m2"`
 	StorageArea      float64 `json:"storage_area"`
+	// DistributeToRows gates ONLY the per-row insurance spread on the
+	// CostRedistribution / Commerce pages (display-only). It does NOT affect the
+	// insurance addend in cached_grand_total. Defaults to true (legacy behavior).
+	DistributeToRows bool `json:"distribute_to_rows"`
 }
 
 // InsuranceRepo handles tender_insurance reads + upserts.
@@ -45,7 +49,8 @@ func (r *InsuranceRepo) Get(ctx context.Context, tenderID string) (*InsuranceRow
 			COALESCE(parking_price_m2, 0),
 			COALESCE(parking_area, 0),
 			COALESCE(storage_price_m2, 0),
-			COALESCE(storage_area, 0)
+			COALESCE(storage_area, 0),
+			COALESCE(distribute_to_rows, true)
 		FROM public.tender_insurance
 		WHERE tender_id = $1
 	`, tenderID).Scan(
@@ -57,6 +62,7 @@ func (r *InsuranceRepo) Get(ctx context.Context, tenderID string) (*InsuranceRow
 		&row.ParkingArea,
 		&row.StoragePriceM2,
 		&row.StorageArea,
+		&row.DistributeToRows,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -77,8 +83,9 @@ func (r *InsuranceRepo) Upsert(ctx context.Context, tenderID string, in Insuranc
 			judicial_pct, total_pct,
 			apt_price_m2, apt_area,
 			parking_price_m2, parking_area,
-			storage_price_m2, storage_area
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			storage_price_m2, storage_area,
+			distribute_to_rows
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (tender_id) DO UPDATE SET
 			judicial_pct = EXCLUDED.judicial_pct,
 			total_pct = EXCLUDED.total_pct,
@@ -87,7 +94,8 @@ func (r *InsuranceRepo) Upsert(ctx context.Context, tenderID string, in Insuranc
 			parking_price_m2 = EXCLUDED.parking_price_m2,
 			parking_area = EXCLUDED.parking_area,
 			storage_price_m2 = EXCLUDED.storage_price_m2,
-			storage_area = EXCLUDED.storage_area
+			storage_area = EXCLUDED.storage_area,
+			distribute_to_rows = EXCLUDED.distribute_to_rows
 		RETURNING
 			COALESCE(judicial_pct, 0),
 			COALESCE(total_pct, 0),
@@ -96,13 +104,15 @@ func (r *InsuranceRepo) Upsert(ctx context.Context, tenderID string, in Insuranc
 			COALESCE(parking_price_m2, 0),
 			COALESCE(parking_area, 0),
 			COALESCE(storage_price_m2, 0),
-			COALESCE(storage_area, 0)
+			COALESCE(storage_area, 0),
+			COALESCE(distribute_to_rows, true)
 	`,
 		tenderID,
 		in.JudicialPct, in.TotalPct,
 		in.AptPriceM2, in.AptArea,
 		in.ParkingPriceM2, in.ParkingArea,
 		in.StoragePriceM2, in.StorageArea,
+		in.DistributeToRows,
 	).Scan(
 		&out.JudicialPct,
 		&out.TotalPct,
@@ -112,6 +122,7 @@ func (r *InsuranceRepo) Upsert(ctx context.Context, tenderID string, in Insuranc
 		&out.ParkingArea,
 		&out.StoragePriceM2,
 		&out.StorageArea,
+		&out.DistributeToRows,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insuranceRepo.Upsert: %w", err)

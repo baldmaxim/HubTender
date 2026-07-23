@@ -314,6 +314,7 @@ CREATE TABLE IF NOT EXISTS public.tender_insurance (
     parking_area numeric NOT NULL DEFAULT 0,
     storage_price_m2 numeric NOT NULL DEFAULT 0,
     storage_area numeric NOT NULL DEFAULT 0,
+    distribute_to_rows boolean NOT NULL DEFAULT true,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
 );

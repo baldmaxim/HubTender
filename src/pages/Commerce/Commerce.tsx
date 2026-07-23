@@ -59,6 +59,7 @@ export default function Commerce() {
     syncTenderMarkupTactic,
     referenceTotal,
     insuranceTotal,
+    distributeToRows,
   } = useCommerceData(isTabActive);
 
   const {
@@ -160,7 +161,7 @@ export default function Commerce() {
       message.error(fxMsg);
       return;
     }
-    exportCommerceToExcel(positions, selectedTender, insuranceTotal);
+    exportCommerceToExcel(positions, selectedTender, insuranceTotal, distributeToRows);
   };
 
   // Единый Alert об отсутствующем курсе валюты (P0): считаем по загруженным
@@ -247,6 +248,7 @@ export default function Commerce() {
               selectedTenderId={selectedTenderId}
               onNavigateToPosition={handleNavigateToPosition}
               insuranceTotal={insuranceTotal}
+              distributeToRows={distributeToRows}
             />
           ) : isLandscapePhone ? (
             <LandscapeTableOverlay
@@ -266,6 +268,7 @@ export default function Commerce() {
                 onNavigateToPosition={handleNavigateToPosition}
                 referenceTotal={referenceTotal}
                 insuranceTotal={insuranceTotal}
+                distributeToRows={distributeToRows}
                 fitToScreen
               />
             </LandscapeTableOverlay>
@@ -276,6 +279,7 @@ export default function Commerce() {
               onNavigateToPosition={handleNavigateToPosition}
               referenceTotal={referenceTotal}
               insuranceTotal={insuranceTotal}
+              distributeToRows={distributeToRows}
             />
           )}
         </Spin>

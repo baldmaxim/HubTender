@@ -1148,7 +1148,8 @@ begin
     parking_price_m2,
     parking_area,
     storage_price_m2,
-    storage_area
+    storage_area,
+    distribute_to_rows
   )
   select
     v_new_tender.id,
@@ -1159,7 +1160,8 @@ begin
     parking_price_m2,
     parking_area,
     storage_price_m2,
-    storage_area
+    storage_area,
+    distribute_to_rows
   from public.tender_insurance
   where tender_id = p_source_tender_id
   on conflict (tender_id) do update
@@ -1171,7 +1173,8 @@ begin
     parking_price_m2 = excluded.parking_price_m2,
     parking_area = excluded.parking_area,
     storage_price_m2 = excluded.storage_price_m2,
-    storage_area = excluded.storage_area;
+    storage_area = excluded.storage_area,
+    distribute_to_rows = excluded.distribute_to_rows;
 
   get diagnostics v_insurance_rows_copied = row_count;
 
@@ -2039,11 +2042,13 @@ begin
 
   insert into public.tender_insurance (
     tender_id, judicial_pct, total_pct, apt_price_m2, apt_area,
-    parking_price_m2, parking_area, storage_price_m2, storage_area
+    parking_price_m2, parking_area, storage_price_m2, storage_area,
+    distribute_to_rows
   )
   select
     v_new.id, judicial_pct, total_pct, apt_price_m2, apt_area,
-    parking_price_m2, parking_area, storage_price_m2, storage_area
+    parking_price_m2, parking_area, storage_price_m2, storage_area,
+    distribute_to_rows
   from public.tender_insurance
   where tender_id = p_source_tender_id
   on conflict (tender_id) do nothing;

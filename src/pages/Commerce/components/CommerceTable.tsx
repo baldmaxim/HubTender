@@ -28,6 +28,8 @@ interface CommerceTableProps {
   onNavigateToPosition: (positionId: string) => void;
   referenceTotal: number;
   insuranceTotal?: number;
+  /** Флаг «Распределить во все строки». false → доля страхования по строкам = 0. */
+  distributeToRows?: boolean;
   /** Для ландшафтного оверлея: без внутреннего скролла и виртуализации (вписывается масштабом). */
   fitToScreen?: boolean;
 }
@@ -38,6 +40,7 @@ export default function CommerceTable({
   onNavigateToPosition,
   referenceTotal,
   insuranceTotal = 0,
+  distributeToRows = true,
   fitToScreen = false,
 }: CommerceTableProps) {
   const [tableScrollY, setTableScrollY] = useState(getTableScrollY);
@@ -66,6 +69,9 @@ export default function CommerceTable({
   // числа совпадают с CR. Иначе fallback на пропорциональное разнесение по
   // raw work_cost_total (live-calc tender без снимка).
   const insShare = (pos: PositionWithCommercialCost) => {
+    // Разнесение выключено → доля страхования по строкам = 0 (страхование остаётся
+    // только в скалярном итоге, см. computeCommerceTotals / «Финансовые показатели»).
+    if (!distributeToRows) return 0;
     if (pos.insurance_share != null) return pos.insurance_share;
     return summary.totalWorks > 0
       ? insuranceTotal * ((pos.work_cost_total || 0) / summary.totalWorks)
