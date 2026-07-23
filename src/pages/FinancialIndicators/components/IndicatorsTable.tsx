@@ -106,7 +106,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
       width: 400,
       onHeaderCell: () => ({ style: { textAlign: 'center' } }),
       render: (text, record) => {
-        const isIndented = record.row_number >= 2 && record.row_number <= 7;
+        const isIndented = record.is_indented === true;
         const content = (
           <Text
             strong={record.is_header || record.is_total}

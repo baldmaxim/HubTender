@@ -18,6 +18,7 @@ import { aggregateDirectCosts } from '../utils/aggregateDirectCosts';
 import { extractSequenceParams, resolveMarkupCoefficients } from '../utils/markupCoefficients';
 import { computeIndicators } from '../utils/computeIndicators';
 import { buildIndicatorRows } from '../utils/buildIndicatorRows';
+import { buildTableRows } from '../utils/buildTableRows';
 import { getFiDiscounts, type FiDiscountSettings } from '../../../lib/api/fiDiscounts';
 import {
   buildDiscountWorkspace,
@@ -60,6 +61,9 @@ const loadDiscountSettings = async (tenderId: string): Promise<FiDiscountSetting
 export const useFinancialCalculations = () => {
   const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [data, setData] = useState<IndicatorRow[]>([]);
+  // Отдельная модель строк для вкладки «Таблица» (расщепления, без НДС, +Работы/
+  // Материалы). Графики продолжают потреблять `data`.
+  const [tableData, setTableData] = useState<IndicatorRow[]>([]);
   const [spTotal, setSpTotal] = useState<number>(0);
   const [customerTotal, setCustomerTotal] = useState<number>(0);
   const [isVatInConstructor, setIsVatInConstructor] = useState<boolean>(false);
@@ -164,6 +168,7 @@ export const useFinancialCalculations = () => {
       if (totalsResult.value === null) {
         setFxMissing(totalsResult.missingCurrencies);
         setData([]);
+        setTableData([]);
         setSpTotal(0);
         setCustomerTotal(0);
         // Сводку снижения тоже гасим: без курсов «Было/Стало» показывать нечего.
@@ -231,10 +236,11 @@ export const useFinancialCalculations = () => {
       }
       setDiscountContext(discount);
 
-      // Сборка строк таблицы (включая НДС-умножение строк 1-16)
-      const tableData = buildIndicatorRows(calc, calcTotals, coeffs, insuranceData, areaSp, areaClient);
-
-      setData(tableData);
+      // Базовые 18 строк (для графиков, включая НДС-умножение строк 1-16)
+      const baseRows = buildIndicatorRows(calc, calcTotals, coeffs, insuranceData, areaSp, areaClient);
+      setData(baseRows);
+      // Модель строк вкладки «Таблица» (расщепления + Работы/Материалы, без НДС)
+      setTableData(buildTableRows(baseRows, calc, calcTotals, coeffs, areaSp, areaClient));
       setSpTotal(areaSp);
       setCustomerTotal(areaClient);
     } catch (error) {
@@ -251,6 +257,7 @@ export const useFinancialCalculations = () => {
 
   return {
     data,
+    tableData,
     spTotal,
     customerTotal,
     loading,

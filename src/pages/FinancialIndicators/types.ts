@@ -14,6 +14,15 @@ export interface IndicatorRow {
   is_total?: boolean;
   is_yellow?: boolean;
   tooltip?: string;
+  // Отступ (подстрока прямых затрат). Раньше определялся по диапазону
+  // row_number 2..7; вынесен во флаг, чтобы разбиение строк не ломало вёрстку.
+  is_indented?: boolean;
+  // Роль строки для генерации Excel-формул (=база × коэффициент). Только у
+  // таблицы; см. utils/buildTableRows.ts и utils/exportToExcel.ts.
+  calc_key?: string;
+  // Числовой процент наценки (для Excel-ячейки коэффициента и формулы). Только
+  // у строк-наценок.
+  coeff_pct?: number;
   // Промежуточные расчеты для роста стоимости
   works_su10_growth?: number;
   materials_su10_growth?: number;
@@ -33,6 +42,18 @@ export interface DirectCostTotals {
   materials: number;
   materialsComp: number;
   worksComp: number;
+  // Разбивка материалов по material_type (осн./вспом.) — для тултипов таблицы
+  // и строки «Материалы». Партиция: materials = materialsBasic + materialsAux,
+  // subcontractMaterials = subcontractMaterialsBasic + subcontractMaterialsAux.
+  // null material_type трактуется как осн.
+  materialsBasic: number;
+  materialsAux: number;
+  subcontractMaterialsBasic: number;
+  subcontractMaterialsAux: number;
+  // Разбивка growth-базы субподряд-материалов (с учётом исключений категорий)
+  // по осн./вспом. — для тултипа строки «Материалы субподряд рост».
+  subcontractMaterialsForGrowthBasic: number;
+  subcontractMaterialsForGrowthAux: number;
   // Суммы коммерческих стоимостей из boq_items (кросс-чек с Commerce)
   totalCommercialMaterial: number;
   totalCommercialWork: number;

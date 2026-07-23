@@ -17,6 +17,16 @@ export const CASCADE_FIELDS = [
   'materials',
   'materialsComp',
   'worksComp',
+  // Разбивки осн/вспом — множитель каскада у них 0 (computeIndicators их не
+  // читает), поэтому в S/commercialOf они не вносят вклад, но масштабируются
+  // снижением параллельно родительским корзинам → партиция остаётся согласованной
+  // (materials = materialsBasic + materialsAux и т.д.) в reducedTotals.
+  'materialsBasic',
+  'materialsAux',
+  'subcontractMaterialsBasic',
+  'subcontractMaterialsAux',
+  'subcontractMaterialsForGrowthBasic',
+  'subcontractMaterialsForGrowthAux',
 ] as const;
 
 export type CascadeField = (typeof CASCADE_FIELDS)[number];

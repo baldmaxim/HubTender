@@ -20,9 +20,19 @@ export const emptyDirectCostTotals = (): DirectCostTotals => ({
   materials: 0,
   materialsComp: 0,
   worksComp: 0,
+  materialsBasic: 0,
+  materialsAux: 0,
+  subcontractMaterialsBasic: 0,
+  subcontractMaterialsAux: 0,
+  subcontractMaterialsForGrowthBasic: 0,
+  subcontractMaterialsForGrowthAux: 0,
   totalCommercialMaterial: 0,
   totalCommercialWork: 0,
 });
+
+// Признак вспомогательного материала. null/пусто → трактуем как основной.
+const isAux = (materialType: string | null | undefined): boolean =>
+  materialType?.trim() === 'вспомогат.';
 
 /** Множества категорий, исключённых из базы роста субподряда. */
 export interface GrowthExclusionSets {
@@ -76,17 +86,25 @@ export const accumulateDirectCost = (
         acc.subcontractWorksForGrowth += baseCost;
       }
       break;
-    case 'суб-мат':
+    case 'суб-мат': {
+      const aux = isAux(item.material_type);
       acc.subcontractMaterials += baseCost;
+      if (aux) acc.subcontractMaterialsAux += baseCost;
+      else acc.subcontractMaterialsBasic += baseCost;
       if (!(categoryId && excluded.materials.has(categoryId))) {
         acc.subcontractMaterialsForGrowth += baseCost;
+        if (aux) acc.subcontractMaterialsForGrowthAux += baseCost;
+        else acc.subcontractMaterialsForGrowthBasic += baseCost;
       }
       break;
+    }
     case 'раб':
       acc.works += baseCost;
       break;
     case 'мат':
       acc.materials += baseCost;
+      if (isAux(item.material_type)) acc.materialsAux += baseCost;
+      else acc.materialsBasic += baseCost;
       break;
     case 'мат-комп.':
     case 'мат-комп':

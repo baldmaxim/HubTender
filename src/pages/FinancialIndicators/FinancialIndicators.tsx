@@ -57,6 +57,7 @@ const FinancialIndicators: React.FC = () => {
     tenders,
     loading,
     data,
+    tableData,
     spTotal,
     customerTotal,
     isVatInConstructor,
@@ -275,7 +276,7 @@ const FinancialIndicators: React.FC = () => {
 
   const indicatorsTableNode = (
     <IndicatorsTable
-      data={data}
+      data={tableData}
       spTotal={spTotal}
       customerTotal={customerTotal}
       formatNumber={formatNumber}
@@ -296,7 +297,7 @@ const FinancialIndicators: React.FC = () => {
   // в ландшафте (масштаб подбирает LandscapeTableOverlay, чтобы всё влезло без прокрутки).
   const indicatorsTableFitNode = (
     <IndicatorsTable
-      data={data}
+      data={tableData}
       spTotal={spTotal}
       customerTotal={customerTotal}
       formatNumber={formatNumber}

@@ -12,6 +12,7 @@ export const useFinancialData = () => {
 
   const {
     data,
+    tableData,
     spTotal,
     customerTotal,
     loading: calculationsLoading,
@@ -28,6 +29,7 @@ export const useFinancialData = () => {
     tenders,
     loading: tendersLoading || calculationsLoading,
     data,
+    tableData,
     spTotal,
     customerTotal,
     isVatInConstructor,
