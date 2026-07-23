@@ -36,6 +36,8 @@ interface IndicatorsTableProps {
   fxMissing?: CurrencyType[];
   /** Примечание о снижении для Excel; строки таблицы уже сниженные */
   discountNote?: string | null;
+  /** Подзаголовок (объём строительства) в верхней строке Excel */
+  volumeTitle?: string;
 }
 
 export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
@@ -54,6 +56,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
   fitToScreen,
   fxMissing,
   discountNote,
+  volumeTitle,
 }) => {
   const [editingSp, setEditingSp] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
@@ -66,7 +69,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
       message.error(formatFXUnavailable(fxMissing));
       return;
     }
-    exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion, discountNote);
+    exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion, discountNote, volumeTitle);
   };
 
   const handleUpdateArea = async (field: 'area_sp' | 'area_client', value: number) => {

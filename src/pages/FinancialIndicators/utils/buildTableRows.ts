@@ -124,7 +124,7 @@ export const buildTableRows = (
     keep(5, { is_indented: true, calc_key: 'mechanization', coeff_pct: coeffs.mechanizationCoeff }),
     keep(6, { is_indented: true, calc_key: 'mvp', coeff_pct: coeffs.mvpGsmCoeff }),
     keep(7, { is_indented: true, calc_key: 'warranty', coeff_pct: coeffs.warrantyCoeff }),
-    keep(8, { calc_key: 'coef16', coeff_pct: coeffs.coefficient06 }),
+    keep(8, { indicator_name: '0,6 к (Раб СУ-10+СМ)', calc_key: 'coef16', coeff_pct: coeffs.coefficient06 }),
 
     mk({
       name: 'Работы СУ-10 рост', total: gWork, calc_key: 'growth_work',
@@ -158,11 +158,11 @@ export const buildTableRows = (
     keep(10, { calc_key: 'unforeseeable', coeff_pct: coeffs.unforeseeableCoeff }),
     keep(11, { calc_key: 'ooz', coeff_pct: coeffs.overheadOwnForcesCoeff }),
     keep(12, { calc_key: 'ooz_sub', coeff_pct: coeffs.overheadSubcontractCoeff }),
-    keep(13, { calc_key: 'ofz', coeff_pct: coeffs.generalCostsCoeff }),
+    keep(13, { indicator_name: 'ОФЗ (без субподряда)', calc_key: 'ofz', coeff_pct: coeffs.generalCostsCoeff }),
     keep(14, { calc_key: 'profit', coeff_pct: coeffs.profitOwnForcesCoeff }),
     keep(15, { calc_key: 'profit_sub', coeff_pct: coeffs.profitSubcontractCoeff }),
-    keep(16, { calc_key: 'insurance' }),
-    keep(17, { calc_key: 'total' }),
+    keep(16, { indicator_name: 'Страхование от судимостей, 3% от продаваемых помещений', calc_key: 'insurance' }),
+    keep(17, { indicator_name: 'ИТОГО стоимость по КП, в т.ч.', calc_key: 'total' }),
 
     mk({ name: 'Работы', total: worksRow, calc_key: 'row_works' }),
     mk({

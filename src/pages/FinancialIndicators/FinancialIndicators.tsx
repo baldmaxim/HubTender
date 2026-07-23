@@ -290,6 +290,7 @@ const FinancialIndicators: React.FC = () => {
       readOnly={readOnly}
       fxMissing={fxMissing}
       discountNote={discountNote}
+      volumeTitle={volumeTitle}
     />
   );
 
@@ -311,6 +312,7 @@ const FinancialIndicators: React.FC = () => {
       readOnly={readOnly}
       fxMissing={fxMissing}
       discountNote={discountNote}
+      volumeTitle={volumeTitle}
       fitToScreen
     />
   );
