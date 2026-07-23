@@ -256,18 +256,26 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
           />
         </>
       ) : (
-        <>
-          <ZeroingPositionsTable
-            rows={zeroingRows}
-            positions={positions}
-            selectedIds={zeroedIds}
-            disabled={saving}
-            onSelectionChange={setZeroedIds}
-          />
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <div style={{ display: 'flex', gap: 8, width: isPhone ? '100%' : 260 }}>{saveButton}</div>
-          </div>
-        </>
+        <ZeroingPositionsTable
+          rows={zeroingRows}
+          positions={positions}
+          selectedIds={zeroedIds}
+          disabled={saving}
+          onSelectionChange={setZeroedIds}
+          extra={
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              size="small"
+              loading={saving}
+              disabled={!dirty}
+              onClick={save}
+              style={{ width: isPhone ? 120 : 130 }}
+            >
+              {dirty ? 'Сохранить' : 'Сохранено'}
+            </Button>
+          }
+        />
       )}
     </Space>
   );

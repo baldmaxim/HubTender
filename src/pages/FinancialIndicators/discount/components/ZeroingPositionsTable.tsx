@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, type ReactNode } from 'react';
 import { Button, Card, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { collectSectionDescendants } from '../../../../utils/positions/collectSectionDescendants';
@@ -17,6 +17,8 @@ interface ZeroingPositionsTableProps {
   selectedIds: Set<string>;
   disabled: boolean;
   onSelectionChange: (next: Set<string>) => void;
+  /** Правый угол шапки (кнопка «Сохранить»). */
+  extra?: ReactNode;
 }
 
 function ZeroingPositionsTableImpl({
@@ -25,6 +27,7 @@ function ZeroingPositionsTableImpl({
   selectedIds,
   disabled,
   onSelectionChange,
+  extra,
 }: ZeroingPositionsTableProps) {
   const allIds = useMemo(() => rows.map((r) => r.positionId), [rows]);
   const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
@@ -104,6 +107,7 @@ function ZeroingPositionsTableImpl({
             </Button>
           </Space>
         }
+        extra={extra}
         styles={{ body: { padding: 0 } }}
       >
         <Table<ZeroingPositionRow>
@@ -113,7 +117,7 @@ function ZeroingPositionsTableImpl({
           dataSource={rows}
           rowSelection={rowSelection}
           pagination={false}
-          scroll={{ y: 460 }}
+          scroll={{ y: 600 }}
           virtual
           summary={() => (
             <Table.Summary fixed="bottom">
