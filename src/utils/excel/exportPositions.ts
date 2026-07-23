@@ -31,9 +31,14 @@ import {
   columnWidths,
   numericColIndices,
   fourDecimalColIndices,
+  groupedColIndices,
   nameColIndex,
+  NUM_FMT_2,
+  NUM_FMT_4,
+  NUM_FMT_2_PLAIN,
+  NUM_FMT_4_PLAIN,
 } from './styles';
-import { injectStrikeRuns, type StrikeCell } from './strikeInject';
+import { injectStrikeRuns, injectFreezePane, type StrikeCell } from './strikeInject';
 
 function triggerDownload(data: Uint8Array, fileName: string): void {
   const blob = new Blob([data as unknown as BlobPart], {
@@ -326,6 +331,14 @@ function createWorksheet(rows: ExportRow[]): { ws: XLSX.WorkSheet; richCells: St
 
       const isNumeric = numericColIndices.includes(col);
 
+      // Числовой формат кладём в .s (xlsx-js-style игнорирует .z при наличии .s).
+      // Разделитель разрядов — только у колонок из groupedColIndices (11/15/16).
+      const numFmt = isNumeric
+        ? groupedColIndices.includes(col)
+          ? fourDecimalColIndices.includes(col) ? NUM_FMT_4 : NUM_FMT_2
+          : fourDecimalColIndices.includes(col) ? NUM_FMT_4_PLAIN : NUM_FMT_2_PLAIN
+        : undefined;
+
       // Колонка 5 (Наименование) - выравнивание по левому краю с переносом
       // Остальные колонки - выравнивание по центру
       if (col === nameColIndex) {
@@ -333,6 +346,7 @@ function createWorksheet(rows: ExportRow[]): { ws: XLSX.WorkSheet; richCells: St
         ws[cellRef].s = {
           ...style,
           border: cellBorderStyle,
+          ...(numFmt && { numFmt }),
           alignment: {
             wrapText: true,
             vertical: 'center',
@@ -344,6 +358,7 @@ function createWorksheet(rows: ExportRow[]): { ws: XLSX.WorkSheet; richCells: St
         ws[cellRef].s = {
           ...style,
           border: cellBorderStyle,
+          ...(numFmt && { numFmt }),
           alignment: {
             wrapText: true,
             vertical: 'center',
@@ -377,13 +392,9 @@ function createWorksheet(rows: ExportRow[]): { ws: XLSX.WorkSheet; richCells: St
         }
       }
 
-      // Установить числовой формат для ВСЕХ числовых колонок (даже пустых)
+      // Числовой формат уже задан через .s.numFmt выше. Здесь только гарантируем,
+      // что непустая числовая ячейка имеет тип 'n'.
       if (isNumeric) {
-        // Колонки 7,8,9,10 (количества и коэффициенты) - 4 знака после запятой БЕЗ разделителя тысяч
-        // Колонки 13,14,15 (стоимости и суммы) - 2 знака после запятой С разделителем тысяч
-        ws[cellRef].z = fourDecimalColIndices.includes(col) ? '0.0000' : '# ##0.00';
-
-        // Если ячейка не пустая, убедиться что это число
         if (ws[cellRef].v !== '' && ws[cellRef].v !== null && ws[cellRef].v !== undefined) {
           // Если это уже число - просто установить тип
           if (typeof ws[cellRef].v === 'number') {
@@ -408,8 +419,8 @@ function createWorksheet(rows: ExportRow[]): { ws: XLSX.WorkSheet; richCells: St
   // Установить высоту строки заголовка (увеличена для переноса текста)
   ws['!rows'] = [{ hpt: 40 }];
 
-  // Заморозить первую строку (заголовки)
-  ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+  // Заморозка первой строки делается пост-обработкой (injectFreezePane) —
+  // xlsx-js-style 1.2.0 не поддерживает panes на запись.
 
   return { ws, richCells };
 }
@@ -468,15 +479,16 @@ export async function exportPositionsToExcel(
     // Сформировать имя файла
     const fileName = `Расчет ПЗ_${tenderTitle}_Версия ${tenderVersion}.xlsx`;
 
-    // Экспортировать файл. Если есть частичное зачёркивание — пост-обработка OOXML
-    // (inline rich string) через fflate, иначе обычная запись.
+    // Всегда пишем в память и пост-обрабатываем OOXML через fflate:
+    //  1) injectFreezePane — заморозка строки заголовков (lib не умеет panes);
+    //  2) injectStrikeRuns — inline rich string для частичного зачёркивания.
+    const written = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+    let u8 = written instanceof Uint8Array ? written : new Uint8Array(written as ArrayBuffer);
+    u8 = injectFreezePane(u8, sheetName);
     if (richCells.length > 0) {
-      const written = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
-      const u8 = written instanceof Uint8Array ? written : new Uint8Array(written as ArrayBuffer);
-      triggerDownload(injectStrikeRuns(u8, sheetName, richCells), fileName);
-    } else {
-      XLSX.writeFile(workbook, fileName);
+      u8 = injectStrikeRuns(u8, sheetName, richCells);
     }
+    triggerDownload(u8, fileName);
   } catch (error) {
     console.error('Ошибка экспорта в Excel:', error);
     throw error;
