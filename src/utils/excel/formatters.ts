@@ -1,5 +1,18 @@
 import type { BoqItemFull, ExportRow, BoqItemType, ClientPosition } from './types';
 import { safeTotalAmount, safeDeliveryUnitCost } from '../boq/currencyGuard';
+import { getCurrencyRateFromTender } from '../boq/calculateBoqAmount';
+
+/** Курс валюты строки для литерала в Excel-формуле (1 для ₽; курсы уже проверены до экспорта). */
+const safeFxRate = (
+  currency: BoqItemFull['currency_type'],
+  rates: { usd_rate?: number | null; eur_rate?: number | null; cny_rate?: number | null }
+): number => {
+  try {
+    return getCurrencyRateFromTender(currency, rates);
+  } catch {
+    return 1;
+  }
+};
 
 /**
  * Проверяет является ли тип элемента работой
@@ -74,6 +87,8 @@ export function createPositionRow(
     isLeaf,
     boqItemType: null,
     richRuns: position.rich_runs ?? null,
+    hierarchyLevel: position.hierarchy_level ?? 0,
+    isAdditional: position.is_additional ?? false,
   };
 }
 
@@ -123,5 +138,9 @@ export function createBoqItemRow(
     isPosition: false,
     isLeaf: false,
     boqItemType: item.boq_item_type,
+    boqItemId: item.id,
+    parentWorkItemId: item.parent_work_item_id ?? null,
+    fxRate: safeFxRate(item.currency_type, currencyRates),
+    deliveryPriceType: item.delivery_price_type ?? null,
   };
 }

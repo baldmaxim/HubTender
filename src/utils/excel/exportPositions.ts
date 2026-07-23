@@ -39,6 +39,7 @@ import {
   NUM_FMT_4_PLAIN,
 } from './styles';
 import { injectStrikeRuns, injectFreezePane, type StrikeCell } from './strikeInject';
+import { buildItemFormulas, computeSubtotalRanges } from './positionFormulas';
 
 function triggerDownload(data: Uint8Array, fileName: string): void {
   const blob = new Blob([data as unknown as BlobPart], {
@@ -412,6 +413,38 @@ function createWorksheet(rows: ExportRow[]): { ws: XLSX.WorkSheet; richCells: St
       }
     }
   });
+
+  // ── Excel-формулы в расчётных ячейках (аудит расчёта в файле) ──
+  // Карта id BOQ-строки → номер строки Excel (1-based; +2 из-за строки заголовка).
+  const idToExcelRow = new Map<string, number>();
+  rows.forEach((row, i) => {
+    if (row.boqItemId) idToExcelRow.set(row.boqItemId, i + 2);
+  });
+
+  // Проставить формулу+кэш в ячейку (r,c 0-based), сохранив стиль/формат.
+  const setFormula = (r: number, c: number, f: string, v: number | null): void => {
+    const cell = ws[XLSX.utils.encode_cell({ r, c })];
+    if (!cell) return;
+    cell.t = 'n';
+    cell.f = f;
+    if (v !== null && v !== undefined) cell.v = v;
+    else delete cell.v;
+  };
+
+  // Формулы по строкам-items: L (Кол-во ГП линк-мат), O (доставка «не в цене»), Q (Итого).
+  rows.forEach((row, i) => {
+    if (row.isPosition) return;
+    const parentWorkRow = row.parentWorkItemId ? idToExcelRow.get(row.parentWorkItemId) : undefined;
+    const f = buildItemFormulas(row, i + 2, parentWorkRow);
+    if (f.gp) setFormula(i + 1, 11, f.gp, row.gpVolume);
+    if (f.delivery) setFormula(i + 1, 14, f.delivery, row.deliveryCost);
+    if (f.total) setFormula(i + 1, 16, f.total, row.totalAmount);
+  });
+
+  // Формулы-подытоги по строкам-позициям: Q = SUBTOTAL(9, диапазон потомков).
+  for (const range of computeSubtotalRanges(rows)) {
+    setFormula(range.rowIndex + 1, 16, range.formula, range.cachedSum);
+  }
 
   // Установить ширину колонок
   ws['!cols'] = columnWidths;
