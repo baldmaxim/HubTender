@@ -109,9 +109,9 @@ status: active | draft
 | [H](../../backend/internal/quality/rules/H-position-zero-gp.md) | Позиция со строками при Кол-ве ГП = 0 | warning | 929 |
 | [Q](../../backend/internal/quality/rules/Q-zero-unit-rate.md) | Нулевая цена за единицу | warning | 5 468 |
 | [R](../../backend/internal/quality/rules/R-work-qty-one.md) | Работа кол-во = 1 при объёме позиции > 10 | warning | 1 874 |
-| [M](../../backend/internal/quality/rules/M-conversion-extreme.md) | Коэфф. перевода вне [0.0001, 1000] | warning | 149 |
+| [M](../../backend/internal/quality/rules/M-conversion-extreme.md) | Коэфф. перевода не согласуется с единицей работы | warning | 158 |
 | [G](../../backend/internal/quality/rules/G-duplicate-materials.md) | Дубли материала в позиции | warning | 9 192 |
-| [S](../../backend/internal/quality/rules/S-quantity-outlier.md) | ГП материала > 100× объёма позиции | warning | 5 953 |
+| [S](../../backend/internal/quality/rules/S-quantity-outlier.md) | ГП материала > 100× объёма позиции при той же единице | warning | 104 |
 | [P](../../backend/internal/quality/rules/P-price-divergence.md) | Один материал по ценам, различающимся > 2× | warning | 757 |
 
 ### Стражи регресса

@@ -7,47 +7,79 @@ status: active
 ---
 ## Суть
 
-Количество материала более чем в 100 раз больше объёма позиции, в которой он лежит.
-Обычно это либо ошибка порядка при вводе, либо коэффициент, применённый не к той
-величине.
+Количество материала более чем в 100 раз больше объёма позиции — **при одной и той же
+единице измерения**. Одинаковая единица здесь принципиальна: без неё сравнение
+бессмысленно.
 
-Иногда законно: материал измеряется в мелких единицах при позиции в крупных
-(штуки метизов на кубометр кладки, граммы на тонну). Поэтому severity `warning` —
-правило показывает кандидатов, а не выносит приговор.
+Позиция часто измеряется в комплектах или комплексах, а материалы внутри неё — в
+штуках, килограммах, метрах. «500 шт при объёме позиции 1 комплекс» — это норма, а не
+аномалия: сопоставляются разные величины. Поэтому правило сравнивает количества,
+только когда единица материала совпадает с единицей позиции, и молчит, если хотя бы
+одна из них не заполнена.
 
-Порог 100× выбран как заведомо консервативный: обычные пересчёты единиц дают
-кратность в десятки, а не в сотни.
+Что остаётся после такого ограничения — уже настоящие выбросы: позиция «1 компл», а
+материала 18 415 компл; позиция «1 м», а кабеля 25 680 м. Обычно это либо ошибка
+порядка при вводе, либо незаполненный объём позиции (см. правила **H** и **R**).
+
+Единицы сравниваются нормализованными: регистр, пробелы и переводы строк по краям
+снимаются — в справочнике встречаются значения вида `м2\r\n(по полу)`.
 
 ## SQL
 
 ```sql
+WITH norm AS (
+  SELECT
+    b.id, b.tender_id, b.client_position_id,
+    COALESCE(b.quantity, 0)  AS quantity,
+    b.unit_rate,
+    cp.manual_volume,
+    lower(btrim(cp.unit_code, E' \t\r\n')) AS pos_unit,
+    lower(btrim(b.unit_code,  E' \t\r\n')) AS mat_unit
+  FROM public.boq_items b
+  JOIN public.client_positions cp ON cp.id = b.client_position_id
+  WHERE b.tender_id = $1
+    AND b.boq_item_type::text LIKE '%мат%'
+    AND COALESCE(cp.manual_volume, 0) > 0
+    AND cp.unit_code IS NOT NULL
+    AND b.unit_code IS NOT NULL
+)
 SELECT
-  b.tender_id,
+  n.tender_id,
   cp.position_number,
   cp.item_no,
-  b.id AS entity_id,
-  md5(concat_ws('|', b.quantity, cp.manual_volume, b.unit_rate)) AS fingerprint,
+  n.id AS entity_id,
+  md5(concat_ws('|', n.quantity, n.manual_volume, n.mat_unit, n.pos_unit)) AS fingerprint,
   concat_ws(' ',
-    'Количество ГП', round(COALESCE(b.quantity, 0), 4)::text,
-    'при объёме позиции', round(COALESCE(cp.manual_volume, 0), 4)::text,
+    'Количество ГП', round(n.quantity, 4)::text, n.mat_unit,
+    'при объёме позиции', round(n.manual_volume, 4)::text, n.pos_unit,
     '— кратность',
-    round(COALESCE(b.quantity, 0) / NULLIF(cp.manual_volume, 0), 1)::text || '×') AS detail,
+    round(n.quantity / NULLIF(n.manual_volume, 0), 1)::text || '×') AS detail,
   NULL::numeric AS money_delta
-FROM public.boq_items b
-JOIN public.client_positions cp ON cp.id = b.client_position_id
-WHERE b.tender_id = $1
-  AND b.boq_item_type::text LIKE '%мат%'
-  AND COALESCE(cp.manual_volume, 0) > 0
-  AND COALESCE(b.quantity, 0) > 100 * cp.manual_volume
-ORDER BY COALESCE(b.quantity, 0) / NULLIF(cp.manual_volume, 0) DESC
+FROM norm n
+JOIN public.client_positions cp ON cp.id = n.client_position_id
+WHERE n.pos_unit <> ''
+  AND n.pos_unit = n.mat_unit
+  AND n.quantity > 100 * n.manual_volume
+ORDER BY n.quantity / NULLIF(n.manual_volume, 0) DESC
 ```
 
 ## Подтверждено
 
-- TP: 5 953 строки в 77 тендерах.
-- FP: ожидается значительная доля — мелкоштучные материалы на крупный объём позиции
-  дают законную кратность в сотни раз.
+- TP: позиции 2059 и 2035 — «Расходники на системы вентиляции» 18 415 и 17 928 компл
+  при объёме позиции 1 компл. Единицы совпадают, кратность около 18 000×.
+- TP: позиция 2552 — кабель ППГнг(А)-FRHF и гофротруба по 25 680 м при объёме позиции
+  1 м. Скорее всего не заполнен объём позиции.
+- FP: отсеиваются самим условием. До ограничения по единице правило давало 5 953
+  находки, из которых 2 792 приходились на позиции в «к-с», 736 — в «компл» и 1 938 —
+  на позиции без единицы вовсе. Все они сравнивали разнородные величины.
 
 ## Замер (2026-07-24)
 
-5 953 строки в 77 тендерах.
+**104 строки в 37 тендерах** (единицы совпадают, порог 100×).
+
+Пороги при совпадающих единицах: 10× → 1 919, 50× → 240, **100× → 104**, 500× → 37,
+1000× → 25. Порог 100× оставлен как дающий управляемый объём разбора.
+
+Для сравнения: без требования одинаковой единицы правило давало 5 953 находки в 77
+тендерах, и лишь 104 из них (1.7%) сопоставляли сравнимые величины — остальные 98%
+были шумом.
