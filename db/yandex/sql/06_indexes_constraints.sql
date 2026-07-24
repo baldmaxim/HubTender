@@ -445,3 +445,21 @@ CREATE INDEX IF NOT EXISTS idx_tender_registry_construction_scope_id ON public.t
 CREATE INDEX IF NOT EXISTS idx_tender_registry_status_id ON public.tender_registry(status_id);
 CREATE INDEX IF NOT EXISTS idx_user_position_filters_position_id ON public.user_position_filters(position_id);
 CREATE INDEX IF NOT EXISTS idx_works_library_folder_id ON public.works_library(folder_id);
+
+-- ----- quality_acknowledgements ---------------------------------------------
+-- Вердикты инженера по находкам правил проверки данных.
+-- Уникальность по (tender_id, rule_code, entity_id): один действующий вердикт
+-- на сущность в рамках правила, перезаписывается при смене решения.
+ALTER TABLE public.quality_acknowledgements
+    ADD CONSTRAINT quality_acknowledgements_pkey PRIMARY KEY (id);
+ALTER TABLE public.quality_acknowledgements
+    ADD CONSTRAINT quality_acknowledgements_verdict_check
+    CHECK (verdict IN ('accepted', 'error'));
+ALTER TABLE public.quality_acknowledgements
+    ADD CONSTRAINT quality_acknowledgements_tender_fkey
+    FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS quality_acknowledgements_unique_idx
+    ON public.quality_acknowledgements (tender_id, rule_code, entity_id);
+CREATE INDEX IF NOT EXISTS quality_acknowledgements_tender_idx
+    ON public.quality_acknowledgements (tender_id);

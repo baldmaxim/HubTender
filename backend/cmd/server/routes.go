@@ -91,6 +91,12 @@ func newRouter(
 		r.Get("/api/v1/positions/{id}/boq-items-full", d.positionH.ListBoqItemsFullByPosition)
 		r.Get("/api/v1/tenders/{id}/boq-items-full", d.positionH.ListBoqItemsFullByTender)
 		r.Get("/api/v1/tenders/{id}/construction-cost-volumes", d.ccvH.ListByTender)
+
+		// Проверка данных: находки правил, вердикт инженера, выгрузка для замера.
+		r.Get("/api/v1/tenders/{id}/quality", d.qualityH.GetReport)
+		r.Post("/api/v1/tenders/{id}/quality/verdict", d.qualityH.PostVerdict)
+		r.Get("/api/v1/quality/rules", d.qualityH.GetRules)
+		r.Get("/api/v1/quality/export", d.qualityH.GetExport)
 		r.Post("/api/v1/construction-cost-volumes", d.ccvH.Upsert)
 		r.Get("/api/v1/tenders/{id}/positions/{posId}/items", d.boqH.GetBoqItems)
 

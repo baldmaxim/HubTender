@@ -578,3 +578,16 @@ CREATE TABLE IF NOT EXISTS public.tender_iterations (
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS public.quality_acknowledgements (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tender_id uuid NOT NULL,
+    rule_code text NOT NULL,
+    entity_id uuid NOT NULL,
+    fingerprint text NOT NULL,
+    verdict text NOT NULL,
+    note text,
+    created_by uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);

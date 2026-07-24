@@ -92,6 +92,7 @@ export const ALL_PAGES = [
   '/users',
   '/admin/import-log',
   '/admin/insurance',
+  '/data-quality',
 ] as const;
 
 // Страницы по умолчанию для каждой роли
@@ -157,6 +158,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/settings': 'Настройки',
   '/positions/:positionId/items': 'Работы и материалы',
   '/commerce': 'Форма КП', // Старый путь, оставлен для совместимости
+  '/data-quality': 'Проверка данных',
 };
 
 // Структура страниц с группировкой (для UI модального окна)

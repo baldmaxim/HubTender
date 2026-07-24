@@ -106,6 +106,11 @@ export const menuItems: NonNullable<MenuProps['items']> = [
     label: 'Финансовые показатели',
   },
   {
+    key: '/data-quality',
+    icon: <SafetyCertificateOutlined />,
+    label: 'Проверка данных',
+  },
+  {
     key: 'analytics',
     icon: <FundOutlined />,
     label: 'Аналитика',

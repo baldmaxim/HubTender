@@ -25,6 +25,7 @@ import './App.css';
 // страницу из монолитного бандла (INP), чанк догружается в startTransition-навигации
 // react-router v7 (старый экран висит до готовности, Suspense-фолбэк — в MainLayout).
 const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
+const DataQuality = lazy(() => import('./pages/DataQuality/DataQuality'));
 const Tasks = lazy(() => import('./pages/Tasks'));
 const Nomenclatures = lazy(() => import('./pages/Admin/Nomenclatures/Nomenclatures'));
 const AdminTenders = lazy(() => import('./pages/Admin/Tenders/Tenders'));
@@ -106,6 +107,7 @@ function AppContent() {
             </Route>
             <Route path="costs" element={<ConstructionCostNew />} />
             <Route path="financial-indicators" element={<FinancialIndicators />} />
+            <Route path="data-quality" element={<DataQuality />} />
             <Route path="projects" element={<Projects />} />
             <Route path="projects/:projectId" element={<ProjectDetail />} />
             <Route path="users" element={<Users />} />

@@ -61,6 +61,7 @@ type deps struct {
 	fiH               *handlers.FIHandler
 	ccvH              *handlers.ConstructionCostVolumesHandler
 	wsH               *handlers.WsHandler
+	qualityH          *handlers.QualityHandler
 }
 
 // buildDeps wires repositories → cache → services → handlers. Extracted from
@@ -81,6 +82,7 @@ func buildDeps(
 	tenderRepo := repository.NewTenderRepo(pool)
 	positionRepo := repository.NewPositionRepo(pool)
 	positionCostsRepo := repository.NewPositionCostsRepo(pool)
+	qualityRepo := repository.NewQualityRepo(pool)
 	boqRepo := repository.NewBoqRepo(pool)
 	bulkBoqRepo := repository.NewBulkBoqRepo(pool)
 	importBoqRepo := repository.NewImportRepo(pool)
@@ -122,6 +124,7 @@ func buildDeps(
 	tenderSvc := services.NewTenderService(tenderRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	positionSvc := services.NewPositionService(positionRepo, inMemCache)
 	positionCostsSvc := services.NewPositionCostsService(positionCostsRepo, inMemCache)
+	qualitySvc := services.NewQualityService(qualityRepo, inMemCache)
 	boqSvc := services.NewBoqService(boqRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	bulkBoqSvc := services.NewBulkBoqService(bulkBoqRepo, inMemCache)
 	importBoqSvc := services.NewImportBoqService(importBoqRepo, inMemCache).WithRecalcQueue(recalcQueue)
@@ -162,6 +165,7 @@ func buildDeps(
 		positionH:         handlers.NewPositionHandler(positionSvc),
 		positionWH:        handlers.NewPositionWriteHandler(positionSvc),
 		positionCostsH:    handlers.NewPositionCostsHandler(positionCostsSvc),
+		qualityH:          handlers.NewQualityHandler(qualitySvc),
 		boqH:              handlers.NewBoqHandler(boqSvc),
 		boqWH:             handlers.NewBoqWriteHandler(boqSvc),
 		bulkBoqH:          handlers.NewBulkBoqHandler(bulkBoqSvc),

@@ -240,3 +240,9 @@ DROP TRIGGER IF EXISTS update_works_library_updated_at ON public.works_library;
 CREATE TRIGGER update_works_library_updated_at
   BEFORE UPDATE ON public.works_library
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- ----- quality_acknowledgements ---------------------------------------------
+DROP TRIGGER IF EXISTS quality_acknowledgements_updated_at ON public.quality_acknowledgements;
+CREATE TRIGGER quality_acknowledgements_updated_at
+  BEFORE UPDATE ON public.quality_acknowledgements
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
