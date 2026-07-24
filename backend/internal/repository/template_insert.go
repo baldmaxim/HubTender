@@ -206,6 +206,32 @@ func (r *BoqRepo) InsertTemplateItems(
 		}
 	}
 
+	// 4c. Quantities. Инвариант: у ПРИВЯЗАННОГО материала количество выводится из
+	// родительской РАБОТЫ (work.quantity × перевод × расход) — тот же инвариант,
+	// что в position_recompute.go и в форме материала. Объём позиции
+	// (manual_volume) применяется ТОЛЬКО к непривязанным материалам.
+	// Два прохода: сначала работы (родитель всегда работа), поэтому порядок
+	// элементов в шаблоне не важен.
+	quantities := make([]float64, len(items))
+	for i, t := range items {
+		if t.Kind == "work" {
+			quantities[i] = 1.0
+		}
+	}
+	for i, t := range items {
+		if t.Kind == "work" {
+			continue
+		}
+		switch {
+		case hasEffectiveParent[i]:
+			quantities[i] = quantities[idxByTID[*t.ParentTID]] * orOne(t.ConvCoeff) * orOne(t.MConsCoef)
+		case t.ConvCoeff != nil && *t.ConvCoeff != 0:
+			quantities[i] = *t.ConvCoeff * orOne(manualVolume)
+		default:
+			quantities[i] = 1.0
+		}
+	}
+
 	// 5. Current max sort_number for the position.
 	var maxSort int
 	if err := tx.QueryRow(ctx,
@@ -270,17 +296,21 @@ func (r *BoqRepo) InsertTemplateItems(
 			materialNameID = t.MNameID
 			matType = t.MMatType
 			dpt = t.MDPT
-			one := 1.0
-			baseQty = &one
+			// base_quantity держим только у НЕпривязанного материала; у привязанного
+			// он NULL (инвариант, как в useMaterialEditForm/boqFieldPatch).
+			if !hasEffectiveParent[i] {
+				one := 1.0
+				baseQty = &one
+			}
 			cc := orOne(t.MConsCoef)
 			consCoef = &cc
 			deliveryAmount = orZero(t.MDelivAmt)
 		}
 
-		quantity := 1.0
+		// Количество предрассчитано в шаге 4c (привязанный материал — от работы).
+		quantity := quantities[i]
 		if !isWork && t.ConvCoeff != nil && *t.ConvCoeff != 0 {
-			quantity = *t.ConvCoeff * orOne(manualVolume)
-			convCoef = t.ConvCoeff
+			convCoef = t.ConvCoeff // перевод сохраняем независимо от ветки количества
 		}
 
 		// Money is derived ONLY by the authoritative kernel, from exactly the
