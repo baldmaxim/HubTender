@@ -152,7 +152,9 @@ function ZeroingPositionsTableImpl({
             <Table.Summary fixed="bottom">
               <Table.Summary.Row>
                 {isPhone ? (
-                  <Table.Summary.Cell index={0}>
+                  // colSpan=2: колонка выбора (чекбокс) не авто-обрабатывается
+                  // Table.Summary — без неё текст сминается в 44px.
+                  <Table.Summary.Cell index={0} colSpan={2}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <Text strong>{`Выбрано: ${totals.count}`}</Text>
                       <Text strong>{formatMoney(totals.selectedSum)}</Text>

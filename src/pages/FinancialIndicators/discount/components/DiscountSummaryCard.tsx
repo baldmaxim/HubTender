@@ -26,18 +26,70 @@ function DiscountSummaryCardImpl({ discount, isPhone }: DiscountSummaryCardProps
   const changeTitle = isZeroing ? 'Обнулено' : 'Снижение';
   const afterTitle = isZeroing ? 'Стоимость после обнуления' : 'Стоимость после снижения';
 
+  const beforeTitle = isZeroing ? 'Стоимость до обнуления' : 'Стоимость до снижения';
+
+  // Портрет телефона: «до» и «после» — в одну строку рядом, «Снижение» —
+  // второй строкой по центру. Шрифт мельче, чтобы суммы влезали без переноса.
+  if (isPhone) {
+    const phoneTitle = (text: string) => <span style={{ fontSize: 12 }}>{text}</span>;
+    const phoneValue = (color?: string) => ({
+      fontSize: 15,
+      whiteSpace: 'nowrap' as const,
+      ...(color ? { color } : {}),
+    });
+
+    return (
+      <Card
+        size="small"
+        style={{ marginBottom: 12, borderColor: '#faad14' }}
+        styles={{ body: { padding: 10 } }}
+      >
+        <div style={{ display: 'flex', gap: 5 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Statistic
+              title={phoneTitle(beforeTitle)}
+              value={formatMoney(baseGrandTotal)}
+              valueStyle={phoneValue()}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Statistic
+              title={phoneTitle(afterTitle)}
+              value={formatMoney(reducedGrandTotal)}
+              valueStyle={phoneValue('#10b981')}
+            />
+          </div>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 8 }}>
+          <Statistic
+            title={phoneTitle(changeTitle)}
+            value={formatMoney(appliedAmount)}
+            prefix={<ArrowDownOutlined />}
+            suffix={<Text type="secondary" style={{ fontSize: 12 }}>{`${percent.toFixed(2)} %`}</Text>}
+            valueStyle={phoneValue('#cf1322')}
+          />
+        </div>
+        {failedRules > 0 && (
+          <Text type="warning" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
+            {`Не применено итераций: ${failedRules} — откройте вкладку «Снижение», чтобы исправить.`}
+          </Text>
+        )}
+      </Card>
+    );
+  }
+
   return (
     <Card
       size="small"
       style={{ marginBottom: 12, borderColor: '#faad14' }}
-      styles={{ body: { padding: isPhone ? 12 : 16 } }}
+      styles={{ body: { padding: 16 } }}
     >
       <Row gutter={[16, 12]} align="middle">
         <Col xs={24} sm={8}>
           <Statistic
-            title={isZeroing ? 'Стоимость до обнуления' : 'Стоимость до снижения'}
+            title={beforeTitle}
             value={formatMoney(baseGrandTotal)}
-            valueStyle={{ fontSize: isPhone ? 18 : 22 }}
+            valueStyle={{ fontSize: 22 }}
           />
         </Col>
         <Col xs={24} sm={8}>
@@ -46,14 +98,14 @@ function DiscountSummaryCardImpl({ discount, isPhone }: DiscountSummaryCardProps
             value={formatMoney(appliedAmount)}
             prefix={<ArrowDownOutlined />}
             suffix={<Text type="secondary" style={{ fontSize: 13 }}>{`${percent.toFixed(2)} %`}</Text>}
-            valueStyle={{ fontSize: isPhone ? 18 : 22, color: '#cf1322' }}
+            valueStyle={{ fontSize: 22, color: '#cf1322' }}
           />
         </Col>
         <Col xs={24} sm={8}>
           <Statistic
             title={afterTitle}
             value={formatMoney(reducedGrandTotal)}
-            valueStyle={{ fontSize: isPhone ? 18 : 22, color: '#10b981' }}
+            valueStyle={{ fontSize: 22, color: '#10b981' }}
           />
         </Col>
       </Row>

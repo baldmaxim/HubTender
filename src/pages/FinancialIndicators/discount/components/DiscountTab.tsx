@@ -64,7 +64,6 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
     appliedAlpha,
     previewCapacity,
     previewErrors,
-    totalDiscount,
     setAmount,
     setSelectedIds,
     setZeroedIds,
@@ -187,7 +186,6 @@ export const DiscountTab: React.FC<DiscountTabProps> = ({
                 <Space>
                   <Text strong>Применённые итерации</Text>
                   <Tag color="purple">{rules.length}</Tag>
-                  <Text type="secondary">{`на ${formatMoney(totalDiscount)} ₽`}</Text>
                 </Space>
               }
               extra={

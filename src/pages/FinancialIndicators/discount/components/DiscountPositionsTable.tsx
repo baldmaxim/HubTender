@@ -88,22 +88,25 @@ function DiscountPositionsTableImpl({
             {
               title: 'Строки Заказчика',
               key: 'card',
-              render: (_, record) => (
-                <PositionSelectCard
-                  positionNumber={record.positionNumber}
-                  itemNo={record.itemNo}
-                  workName={record.workName}
-                  isAdditional={record.isAdditional}
-                  isLeaf={record.isLeaf}
-                  lines={[
-                    {
-                      label: 'Доступно к снижению',
-                      value: formatMoney(Math.max(0, record.reducible - record.alreadyReduced)),
-                    },
-                    { label: 'Уже снижено', value: reducedMinus(record.alreadyReduced) },
-                  ]}
-                />
-              ),
+              render: (_, record) => {
+                // Показываем сумму только там, где реально есть что снижать
+                // (ненулевая работа в строке). Иначе — только наименование.
+                const remaining = Math.max(0, record.reducible - record.alreadyReduced);
+                return (
+                  <PositionSelectCard
+                    positionNumber={record.positionNumber}
+                    itemNo={record.itemNo}
+                    workName={record.workName}
+                    isAdditional={record.isAdditional}
+                    isLeaf={record.isLeaf}
+                    lines={
+                      remaining > 0.01
+                        ? [{ label: 'Доступно к снижению', value: formatMoney(remaining) }]
+                        : []
+                    }
+                  />
+                );
+              },
             },
           ]
         : [
@@ -189,7 +192,7 @@ function DiscountPositionsTableImpl({
 
   // Ландшафт-телефон низкий по высоте → таблица не должна выталкивать страницу.
   const scrollY = isPhone ? 440 : isLandscapePhone ? 260 : 460;
-  const rowHeight = isPhone ? 88 : 34;
+  const rowHeight = isPhone ? 60 : 34;
 
   return (
     <>
@@ -236,7 +239,9 @@ function DiscountPositionsTableImpl({
             <Table.Summary fixed="bottom">
               <Table.Summary.Row>
                 {isPhone ? (
-                  <Table.Summary.Cell index={0}>
+                  // colSpan=2: колонка выбора (чекбокс) не авто-обрабатывается
+                  // Table.Summary — без неё текст сминается в 44px.
+                  <Table.Summary.Cell index={0} colSpan={2}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <Text strong>{`Выбрано: ${totals.count}`}</Text>
                       <Text strong>{formatMoney(totals.selectedRemaining)}</Text>
