@@ -104,7 +104,6 @@ status: active | draft
 | [A](../../backend/internal/quality/rules/A-linked-material-quantity.md) | Привязанный материал ≠ работа×перевод×расход | error | 526 |
 | [L](../../backend/internal/quality/rules/L-delivery-sum-zero.md) | Доставка «суммой» при сумме 0 | error | 34 |
 | [N](../../backend/internal/quality/rules/N-no-cost-category.md) | Строка без категории затрат | info | 43 |
-| [T](../../backend/internal/quality/rules/T-linked-sum-vs-work.md) | Σ привязанных материалов ≠ кол-ву работы | error | 1 466 |
 | [B](../../backend/internal/quality/rules/B-mixed-binding.md) | В позиции и привязанные, и непривязанные материалы | warning | 1 543 |
 | [H](../../backend/internal/quality/rules/H-position-zero-gp.md) | Позиция со строками при Кол-ве ГП = 0 | warning | 929 |
 | [Q](../../backend/internal/quality/rules/Q-zero-unit-rate.md) | Нулевая цена за единицу | warning | 5 468 |
@@ -113,6 +112,15 @@ status: active | draft
 | [G](../../backend/internal/quality/rules/G-duplicate-materials.md) | Дубли материала в позиции | warning | 9 192 |
 | [S](../../backend/internal/quality/rules/S-quantity-outlier.md) | ГП материала > 100× объёма позиции при той же единице | warning | 104 |
 | [P](../../backend/internal/quality/rules/P-price-divergence.md) | Один материал по ценам, различающимся > 2× | warning | 757 |
+
+### Выключенные правила (`status: draft`)
+
+Не выполняются. Файл сохранён вместе с замером и разбором — почему выключено и что
+должно появиться, чтобы правило вернулось.
+
+| Код | Правило | Почему выключено |
+|---|---|---|
+| [T](../../backend/internal/quality/rules/T-linked-sum-vs-work.md) | Σ привязанных материалов ≠ кол-ву работы | Посылка неверна: под одной работой законно стоит комплект разных материалов, каждый равен количеству работы. 97.6% находок — комплекты, точность после сужения 6%. Нужна семантика наименований |
 
 ### Стражи регресса
 
