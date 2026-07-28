@@ -216,7 +216,7 @@ emergency off, затем ротация.
 ## 25. Deployment procedure
 
 Стандартный порядок [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md):
-миграции (`2026_07_ai_controlled_rollout.sql` idempotent) → backend →
+миграции (`2026_07_ai_rollout_controlled.sql` idempotent) → backend →
 frontend. Rollout после деплоя остаётся `off` — деплой 2.6 не меняет
 поведение для пользователей.
 

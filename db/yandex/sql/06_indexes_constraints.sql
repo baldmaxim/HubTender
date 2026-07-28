@@ -446,11 +446,11 @@ ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_impor
 ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_user_id_fkey
     FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 -- hard delete каталога не блокируем: alias уходит каскадом (без dangling ID).
-ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_material_fkey
+ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_material_name_id_fkey
     FOREIGN KEY (material_name_id) REFERENCES public.material_names(id) ON DELETE CASCADE;
-ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_work_fkey
+ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_work_name_id_fkey
     FOREIGN KEY (work_name_id) REFERENCES public.work_names(id) ON DELETE CASCADE;
-ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_dcc_fkey
+ALTER TABLE public.nomenclature_import_aliases ADD CONSTRAINT nomenclature_import_aliases_detail_cost_category_id_fkey
     FOREIGN KEY (detail_cost_category_id) REFERENCES public.detail_cost_categories(id) ON DELETE CASCADE;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_nomenclature_import_aliases_active_key
     ON public.nomenclature_import_aliases (
@@ -483,9 +483,9 @@ ALTER TABLE public.ai_feature_settings ADD CONSTRAINT ai_feature_settings_update
 
 -- Этап 2.6: Controlled AI Rollout
 ALTER TABLE public.ai_pilot_users ADD CONSTRAINT ai_pilot_users_pkey PRIMARY KEY (feature_code, user_id);
-ALTER TABLE public.ai_pilot_users ADD CONSTRAINT ai_pilot_users_feature_fkey
+ALTER TABLE public.ai_pilot_users ADD CONSTRAINT ai_pilot_users_feature_code_fkey
     FOREIGN KEY (feature_code) REFERENCES public.ai_feature_settings(feature_code) ON DELETE CASCADE;
-ALTER TABLE public.ai_pilot_users ADD CONSTRAINT ai_pilot_users_user_fkey
+ALTER TABLE public.ai_pilot_users ADD CONSTRAINT ai_pilot_users_user_id_fkey
     FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 ALTER TABLE public.ai_pilot_users ADD CONSTRAINT ai_pilot_users_added_by_fkey
     FOREIGN KEY (added_by) REFERENCES public.users(id) ON DELETE SET NULL;
@@ -493,9 +493,9 @@ CREATE INDEX IF NOT EXISTS idx_ai_pilot_users_active
     ON public.ai_pilot_users (feature_code, is_active) WHERE is_active;
 
 ALTER TABLE public.ai_usage_requests ADD CONSTRAINT ai_usage_requests_pkey PRIMARY KEY (id);
-ALTER TABLE public.ai_usage_requests ADD CONSTRAINT ai_usage_requests_feature_fkey
+ALTER TABLE public.ai_usage_requests ADD CONSTRAINT ai_usage_requests_feature_code_fkey
     FOREIGN KEY (feature_code) REFERENCES public.ai_feature_settings(feature_code) ON DELETE CASCADE;
-ALTER TABLE public.ai_usage_requests ADD CONSTRAINT ai_usage_requests_user_fkey
+ALTER TABLE public.ai_usage_requests ADD CONSTRAINT ai_usage_requests_user_id_fkey
     FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_ai_usage_requests_user_day
     ON public.ai_usage_requests (feature_code, user_id, created_at DESC);
@@ -505,20 +505,20 @@ CREATE INDEX IF NOT EXISTS idx_ai_usage_requests_reserved
     ON public.ai_usage_requests (reservation_expires_at) WHERE request_status = 'reserved';
 
 ALTER TABLE public.ai_row_feedback ADD CONSTRAINT ai_row_feedback_pkey PRIMARY KEY (id);
-ALTER TABLE public.ai_row_feedback ADD CONSTRAINT ai_row_feedback_request_fkey
+ALTER TABLE public.ai_row_feedback ADD CONSTRAINT ai_row_feedback_request_id_fkey
     FOREIGN KEY (request_id) REFERENCES public.ai_usage_requests(id) ON DELETE CASCADE;
-ALTER TABLE public.ai_row_feedback ADD CONSTRAINT ai_row_feedback_user_fkey
+ALTER TABLE public.ai_row_feedback ADD CONSTRAINT ai_row_feedback_user_id_fkey
     FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 ALTER TABLE public.ai_row_feedback ADD CONSTRAINT ai_row_feedback_request_row_uniq UNIQUE (request_id, row_context_hash);
 CREATE INDEX IF NOT EXISTS idx_ai_row_feedback_request ON public.ai_row_feedback (request_id);
 CREATE INDEX IF NOT EXISTS idx_ai_row_feedback_user ON public.ai_row_feedback (user_id, created_at DESC);
 
 ALTER TABLE public.ai_circuit_state ADD CONSTRAINT ai_circuit_state_pkey PRIMARY KEY (feature_code);
-ALTER TABLE public.ai_circuit_state ADD CONSTRAINT ai_circuit_state_feature_fkey
+ALTER TABLE public.ai_circuit_state ADD CONSTRAINT ai_circuit_state_feature_code_fkey
     FOREIGN KEY (feature_code) REFERENCES public.ai_feature_settings(feature_code) ON DELETE CASCADE;
 
 ALTER TABLE public.ai_evaluation_summaries ADD CONSTRAINT ai_evaluation_summaries_pkey PRIMARY KEY (id);
-ALTER TABLE public.ai_evaluation_summaries ADD CONSTRAINT ai_evaluation_summaries_feature_fkey
+ALTER TABLE public.ai_evaluation_summaries ADD CONSTRAINT ai_evaluation_summaries_feature_code_fkey
     FOREIGN KEY (feature_code) REFERENCES public.ai_feature_settings(feature_code) ON DELETE CASCADE;
 ALTER TABLE public.ai_evaluation_summaries ADD CONSTRAINT ai_evaluation_summaries_executed_by_fkey
     FOREIGN KEY (executed_by) REFERENCES public.users(id) ON DELETE SET NULL;

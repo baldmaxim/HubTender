@@ -16,7 +16,7 @@ function stripComments(text) {
 }
 
 const F = {
-  migration: 'db/yandex/incremental/2026_07_ai_controlled_rollout.sql',
+  migration: 'db/yandex/incremental/2026_07_ai_rollout_controlled.sql',
   settingsRepo: 'backend/internal/repository/ai_settings.go',
   rolloutRepo: 'backend/internal/repository/ai_rollout.go',
   usageRepo: 'backend/internal/repository/ai_usage.go',

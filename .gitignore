@@ -193,3 +193,6 @@ backend/hubtender-bff.exe
 # .claude/agents/*.md и .claude/commands/*.md трекаются намеренно, их НЕ игнорируем.
 .agents/
 .claude/scheduled_tasks.lock
+
+# Release artifacts (manifests/logs этапа 3.1 — не коммитятся)
+artifacts/

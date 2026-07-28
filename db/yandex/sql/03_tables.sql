@@ -679,15 +679,14 @@ CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
     enabled boolean NOT NULL DEFAULT false,
     needs_review_reason text,
     -- Этап 2.6: controlled rollout (off по умолчанию; general availability НЕТ).
-    rollout_mode text NOT NULL DEFAULT 'off'
-        CHECK (rollout_mode IN ('off', 'evaluation', 'pilot_individual', 'pilot_bulk')),
-    rollout_config_version integer NOT NULL DEFAULT 1 CHECK (rollout_config_version >= 1),
-    daily_request_limit integer NOT NULL DEFAULT 20 CHECK (daily_request_limit BETWEEN 1 AND 10000),
-    daily_row_limit integer NOT NULL DEFAULT 400 CHECK (daily_row_limit BETWEEN 1 AND 1000000),
-    request_max_reserved_cost numeric(14, 8) NOT NULL DEFAULT 0.05 CHECK (request_max_reserved_cost > 0),
-    circuit_failure_threshold integer NOT NULL DEFAULT 3 CHECK (circuit_failure_threshold BETWEEN 1 AND 100),
-    circuit_cooldown_seconds integer NOT NULL DEFAULT 300 CHECK (circuit_cooldown_seconds BETWEEN 10 AND 86400),
-    reservation_timeout_seconds integer NOT NULL DEFAULT 120 CHECK (reservation_timeout_seconds BETWEEN 10 AND 3600),
+    rollout_mode text NOT NULL DEFAULT 'off',
+    rollout_config_version integer NOT NULL DEFAULT 1,
+    daily_request_limit integer NOT NULL DEFAULT 20,
+    daily_row_limit integer NOT NULL DEFAULT 400,
+    request_max_reserved_cost numeric(14, 8) NOT NULL DEFAULT 0.05,
+    circuit_failure_threshold integer NOT NULL DEFAULT 3,
+    circuit_cooldown_seconds integer NOT NULL DEFAULT 300,
+    reservation_timeout_seconds integer NOT NULL DEFAULT 120,
     pilot_started_at timestamp with time zone,
     pilot_ended_at timestamp with time zone,
     last_live_evaluation_id uuid,
@@ -700,6 +699,20 @@ CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
             AND model_test_status = 'passed'
             AND model_test_config_hash IS NOT NULL
         )
+    ),
+    -- Имена/состав совпадают с 2026_07_ai_rollout_controlled.sql (schema
+    -- equivalence: baseline == migration chain; DO-блок миграции увидит
+    -- существующий conname и пропустит ADD CONSTRAINT).
+    CONSTRAINT ai_feature_settings_rollout_mode_chk
+        CHECK (rollout_mode IN ('off', 'evaluation', 'pilot_individual', 'pilot_bulk')),
+    CONSTRAINT ai_feature_settings_rollout_limits_chk CHECK (
+        rollout_config_version >= 1
+        AND daily_request_limit BETWEEN 1 AND 10000
+        AND daily_row_limit BETWEEN 1 AND 1000000
+        AND request_max_reserved_cost > 0
+        AND circuit_failure_threshold BETWEEN 1 AND 100
+        AND circuit_cooldown_seconds BETWEEN 10 AND 86400
+        AND reservation_timeout_seconds BETWEEN 10 AND 3600
     )
 );
 

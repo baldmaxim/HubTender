@@ -284,7 +284,7 @@ for (const rel of [
   const dir = join(ROOT, 'db/yandex/incremental');
   const allowedAIMigrations = new Set([
     '2026_07_ai_feature_settings.sql',      // этап 2.5: settings-only
-    '2026_07_ai_controlled_rollout.sql',    // этап 2.6: rollout/ledger/feedback (safe metadata)
+    '2026_07_ai_rollout_controlled.sql',    // этап 2.6: rollout/ledger/feedback (safe metadata)
   ]);
   if (existsSync(dir)) {
     for (const f of readdirSync(dir)) {
