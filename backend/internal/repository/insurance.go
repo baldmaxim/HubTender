@@ -7,19 +7,21 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/su10/hubtender/backend/internal/calc"
 )
 
 // InsuranceRow mirrors public.tender_insurance columns consumed by the
 // FinancialIndicators / Admin/Insurance pages.
 type InsuranceRow struct {
-	JudicialPct      float64 `json:"judicial_pct"`
-	TotalPct         float64 `json:"total_pct"`
-	AptPriceM2       float64 `json:"apt_price_m2"`
-	AptArea          float64 `json:"apt_area"`
-	ParkingPriceM2   float64 `json:"parking_price_m2"`
-	ParkingArea      float64 `json:"parking_area"`
-	StoragePriceM2   float64 `json:"storage_price_m2"`
-	StorageArea      float64 `json:"storage_area"`
+	JudicialPct    float64 `json:"judicial_pct"`
+	TotalPct       float64 `json:"total_pct"`
+	AptPriceM2     float64 `json:"apt_price_m2"`
+	AptArea        float64 `json:"apt_area"`
+	ParkingPriceM2 float64 `json:"parking_price_m2"`
+	ParkingArea    float64 `json:"parking_area"`
+	StoragePriceM2 float64 `json:"storage_price_m2"`
+	StorageArea    float64 `json:"storage_area"`
 	// DistributeToRows gates ONLY the per-row insurance spread on the
 	// CostRedistribution / Commerce pages (display-only). It does NOT affect the
 	// insurance addend in cached_grand_total. Defaults to true (legacy behavior).
@@ -75,9 +77,40 @@ func (r *InsuranceRepo) Get(ctx context.Context, tenderID string) (*InsuranceRow
 
 // Upsert inserts a new row or updates the existing one for the tender.
 // Conflict target is tender_id (unique). Returns the persisted row.
+//
+// Stage 0.1.2.4a — категория A: страхование напрямую входит в
+// cached_grand_total, поэтому операция выполняется в ОДНОЙ транзакции:
+// валидация конфигурации через calc.CalculateInsuranceTotal (невалидная
+// конфигурация → rollback, total не меняется) → upsert →
+// RecalculateTenderGrandTotalTx → commit. SQL-триггер больше не обеспечивает
+// корректность (grand-total триггеры удалены).
 func (r *InsuranceRepo) Upsert(ctx context.Context, tenderID string, in InsuranceRow) (*InsuranceRow, error) {
+	// Пользовательская конфигурация валидируется ДО любой записи тем же calc,
+	// который считает total (typed error → RFC7807 в handler).
+	if _, err := calc.CalculateInsuranceTotal(&calc.InsuranceInput{
+		AptPriceM2: in.AptPriceM2, AptArea: in.AptArea,
+		ParkingPriceM2: in.ParkingPriceM2, ParkingArea: in.ParkingArea,
+		StoragePriceM2: in.StoragePriceM2, StorageArea: in.StorageArea,
+		JudicialPct: in.JudicialPct, TotalPct: in.TotalPct,
+	}); err != nil {
+		return nil, fmt.Errorf("insuranceRepo.Upsert: %w", err)
+	}
+
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("insuranceRepo.Upsert: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// 0-F2 (category B): insurance affects ONLY the cached grand total, which
+	// is recomputed synchronously below — one revision bump + success CAS.
+	revision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, tenderID, "insurance_upsert")
+	if err != nil {
+		return nil, fmt.Errorf("insuranceRepo.Upsert: %w", err)
+	}
+
 	var out InsuranceRow
-	err := r.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO public.tender_insurance (
 			tender_id,
 			judicial_pct, total_pct,
@@ -126,6 +159,20 @@ func (r *InsuranceRepo) Upsert(ctx context.Context, tenderID string, in Insuranc
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insuranceRepo.Upsert: %w", err)
+	}
+
+	// Синхронный пересчёт итога тендера ДО commit — никакого
+	// «insurance commit → async total recalc позже».
+	if _, err := RecalculateTenderGrandTotalTx(ctx, tx, tenderID); err != nil {
+		return nil, fmt.Errorf("insuranceRepo.Upsert: grand total: %w", err)
+	}
+	// Полный sync-расчёт для этой ревизии завершён → success CAS в той же tx.
+	if err := MarkTenderCalculationSucceededTx(ctx, tx, tenderID, revision); err != nil {
+		return nil, fmt.Errorf("insuranceRepo.Upsert: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("insuranceRepo.Upsert: commit: %w", err)
 	}
 	return &out, nil
 }

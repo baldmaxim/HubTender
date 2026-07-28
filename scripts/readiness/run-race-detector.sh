@@ -22,7 +22,7 @@ STAMP="$(date +%s)$RANDOM"
 NET="hubtender-race-test-net-$STAMP"
 PG="hubtender-race-test-pg-$STAMP"
 DB="hubtender_race_test"
-GO_IMAGE="golang:1.23"
+GO_IMAGE="golang:1.25"
 
 cleanup() {
   local rc=$?

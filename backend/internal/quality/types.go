@@ -18,7 +18,7 @@ package quality
 // строка требует проверки; information = диагностика без блокировки.
 const (
 	SeverityBlocker     = "blocker"
-	SeverityWarn     = "warning"
+	SeverityWarn        = "warning"
 	SeverityInformation = "information"
 )
 

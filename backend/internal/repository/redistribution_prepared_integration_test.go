@@ -200,3 +200,40 @@ func TestPreparedRedistribution_NotConfigured(t *testing.T) {
 		t.Fatalf("want not_configured/empty, got %q (%d rows)", load.Status, len(load.Results))
 	}
 }
+
+// ─── Regression (merge c11af3a/c50fb65): distribute_to_rows=false гейтит
+// ТОЛЬКО per-row разнос страхования в server prepared-пайплайне. ─────────────
+
+func TestPreparedRedistribution_DistributeToRowsOffSkipsInsurance(t *testing.T) {
+	pool := newTestPool(t)
+	f := seedRedistributionFixture(t, pool, "insoff", nil)
+	f.seedTwoItems(t, pool)
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE public.tender_insurance SET distribute_to_rows = false WHERE tender_id = $1::uuid`,
+		f.tenderID); err != nil {
+		t.Fatalf("set distribute_to_rows=false: %v", err)
+	}
+
+	repo := NewRedistributionRepo(pool)
+	out, err := repo.SaveAuthoritative(context.Background(), f.tenderID, f.tacticID, f.d1toD2Rules(), rbActor)
+	if err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+	if out.Prepared == nil {
+		t.Fatal("save must return the prepared projection")
+	}
+	p := out.Prepared
+	// Флаг выключен ⇒ страхование НЕ разносится: сумма 0, строки без надбавки.
+	if p.Summary.InsuranceTotal != 0 {
+		t.Fatalf("insurance_total = %v, want 0 (distribute_to_rows=false)", p.Summary.InsuranceTotal)
+	}
+	for _, row := range p.Rows {
+		if row.InsuranceAmount != 0 {
+			t.Fatalf("row %s insurance_amount = %v, want 0", row.PositionID, row.InsuranceAmount)
+		}
+		if row.FinalWorkCost != row.WorkCostRounded {
+			t.Fatalf("row %s final=%v != rounded=%v (страховая надбавка при выключенном флаге)",
+				row.PositionID, row.FinalWorkCost, row.WorkCostRounded)
+		}
+	}
+}

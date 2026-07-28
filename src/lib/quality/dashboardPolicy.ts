@@ -1,7 +1,7 @@
 // Этап 1.1: чистые helpers панели «Качество расчёта» — фильтрация, порядок,
 // готовность, deep-link цели. Без React/DOM: покрываются focused-скриптом
 // scripts/checks/qualityFrontendPolicy.check.mjs.
-import type { QualityIssue, QualityReport } from '../api/quality';
+import type { QualityIssue, QualityReport } from '../api/qualityAnalytics';
 
 export const SEVERITY_ORDER: Record<string, number> = {
   blocker: 0,

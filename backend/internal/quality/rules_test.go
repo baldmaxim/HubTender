@@ -63,7 +63,7 @@ func TestSeverityIsKnown(t *testing.T) {
 func TestParseRuleRejectsBrokenInput(t *testing.T) {
 	cases := map[string]string{
 		"без фронтматтера": "## Суть\nтекст\n",
-		"нет SQL": "---\ncode: X\ntitle: T\nseverity: error\nstatus: active\n---\n## Суть\nтекст\n",
+		"нет SQL":          "---\ncode: X\ntitle: T\nseverity: error\nstatus: active\n---\n## Суть\nтекст\n",
 		"SQL без $1": "---\ncode: X\ntitle: T\nseverity: error\nstatus: active\n---\n" +
 			"## SQL\n```sql\nSELECT tender_id, position_number, item_no, entity_id," +
 			" fingerprint, detail, money_delta FROM t\n```\n",

@@ -243,7 +243,7 @@ func derefF(p *float64) float64 {
 
 var severityRank = map[string]int{
 	SeverityBlocker:     0,
-	SeverityWarn:     1,
+	SeverityWarn:        1,
 	SeverityInformation: 2,
 }
 

@@ -50,7 +50,7 @@ if (existsSync(dist)) {
   walk(dist);
   files.sort();
   buildManifest = {
-    release: 'hubtender-rc1',
+    release: process.env.HUBTENDER_RELEASE_NAME || 'hubtender-rc1',
     commit_sha: commit,
     node: process.version,
     files: files.map((p) => ({
@@ -75,7 +75,7 @@ const canonical = JSON.stringify({
 const fingerprint = sha256(canonical);
 
 const manifest = {
-  release_name: 'hubtender-rc1',
+  release_name: process.env.HUBTENDER_RELEASE_NAME || 'hubtender-rc1',
   commit_sha: commit,
   short_sha: commit.slice(0, 7),
   branch,

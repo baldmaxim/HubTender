@@ -388,9 +388,12 @@ func TestTemplateInsertIntegration_ParentLinkAndChildPricing(t *testing.T) {
 		t.Fatalf("parent_work_item_id = %s, want the inserted work %s", *matParent, workID)
 	}
 
-	// Child ⇒ calc forces consumption to 1: 1 × 1 × 100 = 100 (NOT 120).
-	if matTotal != 100 {
-		t.Fatalf("child material total_amount = %v, want 100 (consumption forced to 1 for a child)", matTotal)
+	// Child (merge 6e8ea39, шаг 4c): количество выводится ИЗ РАБОТЫ —
+	// work.quantity(1) × перевод(1) × расход(1.2) = 1.2; kernel для child
+	// consumption повторно НЕ применяет ⇒ 1.2 × 100 = 120. Тот же инвариант,
+	// что в position_recompute.go и форме материала.
+	if matTotal != 120 {
+		t.Fatalf("child material total_amount = %v, want 120 (qty от работы × расход)", matTotal)
 	}
 }
 
