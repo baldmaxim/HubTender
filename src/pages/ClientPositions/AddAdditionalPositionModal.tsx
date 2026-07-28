@@ -177,4 +177,6 @@ const AddAdditionalPositionModal: React.FC<AddAdditionalPositionModalProps> = ({
   );
 };
 
-export default AddAdditionalPositionModal;
+// memo: модалка всегда смонтирована на странице позиций и без границы перерендеривалась
+// бы на каждый символ поиска; пропсы стабилизированы в ClientPositions (useCallback).
+export default React.memo(AddAdditionalPositionModal);

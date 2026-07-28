@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { message } from 'antd';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import type { UnitType, BoqItemType } from '../../../lib/types';
@@ -69,7 +69,10 @@ export function useBsmData() {
     });
   };
 
-  const getTenderTitles = (): TenderOption[] => {
+  // Опции мемоизированы по tenders: раньше массивы пересобирались инлайн на каждый
+  // рендер страницы (в т.ч. на каждый кейстрок поиска), и новая identity options
+  // заставляла оба Select'а шапки полностью перерендериваться.
+  const tenderTitleOptions = useMemo<TenderOption[]>(() => {
     const uniqueTitles = new Map<string, TenderOption>();
     const filteredTenders = shouldFilterArchived ? tenders.filter(t => !t.is_archived) : tenders;
     filteredTenders.forEach(tender => {
@@ -82,16 +85,26 @@ export function useBsmData() {
       }
     });
     return Array.from(uniqueTitles.values());
-  };
+  }, [tenders]);
 
-  const getVersionsForTitle = (title: string): { value: number; label: string }[] => {
-    const filtered = shouldFilterArchived
-      ? tenders.filter(tender => tender.title === title && !tender.is_archived)
-      : tenders.filter(tender => tender.title === title);
-    return filtered
-      .map(tender => ({ value: tender.version || 1, label: `Версия ${tender.version || 1}` }))
-      .sort((a, b) => b.value - a.value);
-  };
+  const getTenderTitles = useCallback((): TenderOption[] => tenderTitleOptions, [tenderTitleOptions]);
+
+  const versionsByTitle = useMemo(() => {
+    const map = new Map<string, { value: number; label: string }[]>();
+    const source = shouldFilterArchived ? tenders.filter(t => !t.is_archived) : tenders;
+    source.forEach(tender => {
+      const list = map.get(tender.title) ?? [];
+      list.push({ value: tender.version || 1, label: `Версия ${tender.version || 1}` });
+      map.set(tender.title, list);
+    });
+    map.forEach(list => list.sort((a, b) => b.value - a.value));
+    return map;
+  }, [tenders]);
+
+  const getVersionsForTitle = useCallback(
+    (title: string): { value: number; label: string }[] => versionsByTitle.get(title) ?? [],
+    [versionsByTitle],
+  );
 
   // Fetch BOQ items for selected tender (группировка по материал/работа + затрата).
   const fetchBoqItems = async (tenderId: string) => {
@@ -199,7 +212,9 @@ export function useBsmData() {
   };
 
   // Inline-обновление ссылки на КП: апдейтит все boq_items с тем же материалом/работой.
-  const handleUpdateQuoteLink = async (record: BoqItemData, newQuoteLink: string) => {
+  // useCallback: колбэк — зависимость columns useMemo в Bsm; без стабильной identity
+  // колонки таблицы пересобирались на каждый рендер.
+  const handleUpdateQuoteLink = useCallback(async (record: BoqItemData, newQuoteLink: string) => {
     try {
       const updateField = record.material_name_id ? 'material_name_id' : 'work_name_id';
       const updateValue = record.material_name_id || record.work_name_id;
@@ -222,7 +237,7 @@ export function useBsmData() {
       console.error('Error updating quote link:', error);
       message.error('Ошибка обновления ссылки на КП');
     }
-  };
+  }, [selectedTenderId]);
 
   // Автоматическая простановка ссылок: ищет совпадающие строки и батчем апдейтит.
   const handleApplyQuoteLinks = async () => {

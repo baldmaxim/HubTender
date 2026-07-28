@@ -15,7 +15,7 @@ import (
 //	HUBTENDER_TEST_DATABASE_URL='postgres://…/hubtender_test?sslmode=disable' \
 //	  go test ./internal/repository/ -run QualityIntegration -v
 
-func loadReport(t *testing.T, repo *QualityRepo, tenderID string) *quality.Report {
+func loadReport(t *testing.T, repo *QualityAnalyticsRepo, tenderID string) *quality.Report {
 	t.Helper()
 	snap, err := repo.LoadSnapshot(context.Background(), tenderID)
 	if err != nil {
@@ -36,7 +36,7 @@ func issueByCode(r *quality.Report, code string) *quality.Issue {
 // §12.3 — несуществующий тендер → typed not-found (handler отдаёт 404).
 func TestQualityIntegration_TenderNotFound(t *testing.T) {
 	pool := newTestPool(t)
-	repo := NewQualityRepo(pool)
+	repo := NewQualityAnalyticsRepo(pool)
 	_, err := repo.LoadSnapshot(context.Background(), "ffffffff-ffff-ffff-ffff-ffffffffffff")
 	if !errors.Is(err, ErrQualityTenderNotFound) {
 		t.Fatalf("want ErrQualityTenderNotFound, got %v", err)
@@ -49,7 +49,7 @@ func TestQualityIntegration_MissingFxAggregation(t *testing.T) {
 	f := seedRollbackFixture(t, pool, "QFX", nil) // usd_rate NULL
 	usd1 := f.addItem(t, pool, "раб", "USD", 1, 10, nil)
 	usd2 := f.addItem(t, pool, "раб", "USD", 2, 10, nil)
-	repo := NewQualityRepo(pool)
+	repo := NewQualityAnalyticsRepo(pool)
 
 	r := loadReport(t, repo, f.tenderID)
 	is := issueByCode(r, "FX_RATE_MISSING")
@@ -76,7 +76,7 @@ func TestQualityIntegration_ExactDuplicates(t *testing.T) {
 	b := f.addItem(t, pool, "раб", "RUB", 5, 100, nil) // тот же key
 	_ = a
 	_ = b
-	repo := NewQualityRepo(pool)
+	repo := NewQualityAnalyticsRepo(pool)
 	r := loadReport(t, repo, f.tenderID)
 	is := issueByCode(r, "EXACT_DUPLICATE_GROUP")
 	if is == nil || is.AffectedCount != 2 || is.Severity != quality.SeverityWarning {
@@ -109,7 +109,7 @@ func TestQualityIntegration_DerivedMismatch(t *testing.T) {
 	}
 	_ = tx.Commit(ctx)
 
-	repo := NewQualityRepo(pool)
+	repo := NewQualityAnalyticsRepo(pool)
 	if is := issueByCode(loadReport(t, repo, f.tenderID), "BOQ_TOTAL_AMOUNT_MISMATCH"); is != nil {
 		t.Fatalf("healthy tender flagged: %+v", is)
 	}
@@ -136,7 +136,7 @@ func TestQualityIntegration_ConsistentSnapshotSmoke(t *testing.T) {
 	pool := newTestPool(t)
 	f := seedRollbackFixture(t, pool, "QSNAP", fptr(90))
 	f.addItem(t, pool, "раб", "RUB", 1, 10, nil)
-	repo := NewQualityRepo(pool)
+	repo := NewQualityAnalyticsRepo(pool)
 	r := loadReport(t, repo, f.tenderID)
 	// Согласованность полей одного snapshot: status+revisions читаются одним
 	// запросом → отчёт не может смешать состояния разных ревизий.

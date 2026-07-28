@@ -34,7 +34,7 @@ interface PositionToolbarProps {
   onVersionChange: (version: number) => void;
 }
 
-export const PositionToolbar: React.FC<PositionToolbarProps> = ({
+const PositionToolbarInner: React.FC<PositionToolbarProps> = ({
   selectedTender,
   selectedTenderTitle,
   selectedVersion,
@@ -215,6 +215,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                           icon={<LinkOutlined />}
                           href={selectedTender.upload_folder}
                           target="_blank"
+                          rel="noopener noreferrer"
                           size="small"
                         >
                           Папка КП
@@ -225,6 +226,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                           icon={<FileTextOutlined />}
                           href={selectedTender.bsm_link}
                           target="_blank"
+                          rel="noopener noreferrer"
                           size="small"
                         >
                           БСМ
@@ -235,6 +237,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                           icon={<FileTextOutlined />}
                           href={selectedTender.tz_link}
                           target="_blank"
+                          rel="noopener noreferrer"
                           size="small"
                         >
                           Уточнение ТЗ
@@ -245,6 +248,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                           icon={<QuestionCircleOutlined />}
                           href={selectedTender.qa_form_link}
                           target="_blank"
+                          rel="noopener noreferrer"
                           size="small"
                         >
                           Вопросы
@@ -255,6 +259,7 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
                           icon={<FolderOutlined />}
                           href={selectedTender.project_folder_link}
                           target="_blank"
+                          rel="noopener noreferrer"
                           size="small"
                         >
                           Папка с проектом
@@ -322,3 +327,8 @@ export const PositionToolbar: React.FC<PositionToolbarProps> = ({
     </>
   );
 };
+
+/** memo: страница перерендеривается на каждый символ поиска (urgent + deferred),
+ *  а пропсы шапки от ввода не зависят — все стабилизированы в ClientPositions
+ *  (useCallback/useMemo), поэтому граница держится. */
+export const PositionToolbar = React.memo(PositionToolbarInner);

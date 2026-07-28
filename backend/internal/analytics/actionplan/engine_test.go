@@ -94,10 +94,10 @@ func TestQualityBlockerBecomesBlocking(t *testing.T) { // §16.1
 func TestQualityWarningMapping(t *testing.T) { // §16.2
 	in := baseInputs()
 	in.Quality.Issues = []quality.Issue{
-		qIssue("QUANTITY_ZERO", quality.SeverityWarning, quality.CategoryBoqInput, "boq_item", "i1", "p1", "quantity", nil),
-		qIssue("UNIT_RATE_ZERO", quality.SeverityWarning, quality.CategoryBoqInput, "boq_item", "i2", "p1", "unit_rate", nil),
-		qIssue("EXACT_DUPLICATE_GROUP", quality.SeverityWarning, quality.CategoryDuplicates, "client_position", "p1", "p1", "", []string{"i1", "i2"}),
-		qIssue("UNIT_CODE_MISSING", quality.SeverityWarning, quality.CategoryBoqInput, "boq_item", "i3", "p2", "unit_code", nil),
+		qIssue("QUANTITY_ZERO", quality.SeverityWarn, quality.CategoryBoqInput, "boq_item", "i1", "p1", "quantity", nil),
+		qIssue("UNIT_RATE_ZERO", quality.SeverityWarn, quality.CategoryBoqInput, "boq_item", "i2", "p1", "unit_rate", nil),
+		qIssue("EXACT_DUPLICATE_GROUP", quality.SeverityWarn, quality.CategoryDuplicates, "client_position", "p1", "p1", "", []string{"i1", "i2"}),
+		qIssue("UNIT_CODE_MISSING", quality.SeverityWarn, quality.CategoryBoqInput, "boq_item", "i3", "p2", "unit_code", nil),
 	}
 	r := Compose(in)
 	for code, want := range map[string]string{
@@ -242,7 +242,7 @@ func TestBenchmarkUnavailableNotDuplicatedAsAction(t *testing.T) { // §16.17, r
 func TestNomenclatureMergeCombinesSources(t *testing.T) { // §16.18, rule B
 	in := baseInputs()
 	in.Quality.Issues = []quality.Issue{
-		qIssue("UNIT_CODE_MISSING", quality.SeverityWarning, quality.CategoryBoqInput, "boq_item", "i1", "p1", "unit_code", nil),
+		qIssue("UNIT_CODE_MISSING", quality.SeverityWarn, quality.CategoryBoqInput, "boq_item", "i1", "p1", "unit_code", nil),
 	}
 	in.Benchmark.Items = []pb.ItemBenchmark{
 		pbNotEligible("i1", "p1", "INSUFFICIENT_IDENTITY: не указана единица измерения"),
@@ -263,7 +263,7 @@ func TestNomenclatureMergeCombinesSources(t *testing.T) { // §16.18, rule B
 func TestDuplicateGroupStaysOneAction(t *testing.T) { // §16.19, rule C
 	in := baseInputs()
 	in.Quality.Issues = []quality.Issue{
-		qIssue("EXACT_DUPLICATE_GROUP", quality.SeverityWarning, quality.CategoryDuplicates, "client_position", "p1", "p1", "", []string{"i1", "i2"}),
+		qIssue("EXACT_DUPLICATE_GROUP", quality.SeverityWarn, quality.CategoryDuplicates, "client_position", "p1", "p1", "", []string{"i1", "i2"}),
 	}
 	r := Compose(in)
 	if len(r.Actions) != 1 || len(r.Actions[0].BoqItemIDs) != 2 {
@@ -281,7 +281,7 @@ func mixedInputs() Inputs {
 	in.Quality.Issues = []quality.Issue{
 		qIssue("FX_RATE_MISSING", quality.SeverityBlocker, quality.CategoryCurrency, "tender", "T1", "", "usd_rate", []string{"i1"}),
 		qIssue("CALCULATION_STALE", quality.SeverityBlocker, quality.CategoryCalculationState, "tender", "T1", "", "", nil),
-		qIssue("QUANTITY_ZERO", quality.SeverityWarning, quality.CategoryBoqInput, "boq_item", "i2", "p1", "quantity", nil),
+		qIssue("QUANTITY_ZERO", quality.SeverityWarn, quality.CategoryBoqInput, "boq_item", "i2", "p1", "quantity", nil),
 		qIssue("DESCRIPTION_EMPTY", quality.SeverityInformation, quality.CategoryBoqInput, "boq_item", "i3", "p2", "description", nil),
 	}
 	in.Benchmark.Items = []pb.ItemBenchmark{pbOutlier("i1", "p1", pb.StatusHighOutlier)}
@@ -375,7 +375,7 @@ func TestImpactUnavailableWhenStale(t *testing.T) { // §16.27
 func TestGroupImpactDoesNotDoubleCountItem(t *testing.T) { // §16.28
 	in := baseInputs()
 	in.Quality.Issues = []quality.Issue{
-		qIssue("EXACT_DUPLICATE_GROUP", quality.SeverityWarning, quality.CategoryDuplicates,
+		qIssue("EXACT_DUPLICATE_GROUP", quality.SeverityWarn, quality.CategoryDuplicates,
 			"client_position", "p1", "p1", "", []string{"i1", "i2", "i1"}), // i1 дважды
 	}
 	r := Compose(in)
@@ -389,7 +389,7 @@ func TestSummaryAmountCountsItemOnce(t *testing.T) { // §16.29
 	in := baseInputs()
 	// одна строка i1 в трёх действиях из трёх источников.
 	in.Quality.Issues = []quality.Issue{
-		qIssue("QUANTITY_ZERO", quality.SeverityWarning, quality.CategoryBoqInput, "boq_item", "i1", "p1", "quantity", nil),
+		qIssue("QUANTITY_ZERO", quality.SeverityWarn, quality.CategoryBoqInput, "boq_item", "i1", "p1", "quantity", nil),
 	}
 	in.Benchmark.Items = []pb.ItemBenchmark{pbOutlier("i1", "p1", pb.StatusHighOutlier)}
 	in.Source.Items = []ps.Row{psRow("i1", "p1", ps.StatusStale)}
@@ -518,7 +518,7 @@ func TestLargePlanNoQuadraticBehavior(t *testing.T) { // §16.40
 			switch i % 3 {
 			case 0:
 				in.Quality.Issues = append(in.Quality.Issues,
-					qIssue("QUANTITY_ZERO", quality.SeverityWarning, quality.CategoryBoqInput, "boq_item", id, pos, "quantity", nil))
+					qIssue("QUANTITY_ZERO", quality.SeverityWarn, quality.CategoryBoqInput, "boq_item", id, pos, "quantity", nil))
 			case 1:
 				in.Benchmark.Items = append(in.Benchmark.Items, pbOutlier(id, pos, pb.StatusHighOutlier))
 			default:

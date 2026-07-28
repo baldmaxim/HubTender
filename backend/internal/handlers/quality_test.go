@@ -39,7 +39,7 @@ func qualityReq(t *testing.T, authed bool) *http.Request {
 	return r.WithContext(ctx)
 }
 
-func TestQualityHandler_AuthorizedGetsDashboard(t *testing.T) {
+func TestQualityAnalyticsHandler_AuthorizedGetsDashboard(t *testing.T) {
 	svc := &stubQualitySvc{report: &quality.Report{
 		TenderID:                     "22222222-2222-2222-2222-222222222222",
 		FinancialInputRevision:       7,
@@ -49,7 +49,7 @@ func TestQualityHandler_AuthorizedGetsDashboard(t *testing.T) {
 		Issues:                       []quality.Issue{},
 		Categories:                   []quality.CategorySummary{},
 	}}
-	h := NewQualityHandler(svc)
+	h := NewQualityAnalyticsHandler(svc)
 	w := httptest.NewRecorder()
 	h.TenderQuality(w, qualityReq(t, true))
 	if w.Code != http.StatusOK {
@@ -70,8 +70,8 @@ func TestQualityHandler_AuthorizedGetsDashboard(t *testing.T) {
 	}
 }
 
-func TestQualityHandler_Unauthorized(t *testing.T) {
-	h := NewQualityHandler(&stubQualitySvc{})
+func TestQualityAnalyticsHandler_Unauthorized(t *testing.T) {
+	h := NewQualityAnalyticsHandler(&stubQualitySvc{})
 	w := httptest.NewRecorder()
 	h.TenderQuality(w, qualityReq(t, false))
 	if w.Code != http.StatusUnauthorized {
@@ -79,9 +79,9 @@ func TestQualityHandler_Unauthorized(t *testing.T) {
 	}
 }
 
-func TestQualityHandler_NotFound(t *testing.T) {
+func TestQualityAnalyticsHandler_NotFound(t *testing.T) {
 	svc := &stubQualitySvc{err: fmt.Errorf("qualityService.TenderQuality: %w", repository.ErrQualityTenderNotFound)}
-	h := NewQualityHandler(svc)
+	h := NewQualityAnalyticsHandler(svc)
 	w := httptest.NewRecorder()
 	h.TenderQuality(w, qualityReq(t, true))
 	if w.Code != http.StatusNotFound {

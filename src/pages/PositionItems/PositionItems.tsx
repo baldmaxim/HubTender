@@ -1,7 +1,6 @@
 import { useState, useMemo, memo, useEffect } from 'react';
-import { Card, Tabs, Alert } from 'antd';
+import { Card, Tabs, Alert, Skeleton } from 'antd';
 import { missingFXMessage } from '../../utils/boq/currencyGuard';
-import { useParams, useSearchParams } from 'react-router-dom';
 import WorkEditForm from './WorkEditForm';
 import MaterialEditForm from './MaterialEditForm';
 import { useBoqItems } from './hooks/useBoqItems';
@@ -17,24 +16,27 @@ import AddItemForm from './components/AddItemForm';
 import TemplateSelectModal from './components/TemplateSelectModal';
 import AuditHistoryTab from './components/AuditHistoryTab';
 import { BoqItemsImportModal } from './components/BoqItemsImportModal';
+import BoqItemSheet from './components/mobile/BoqItemSheet';
+import { useGpAutosave } from './hooks/useGpAutosave';
 import { useDeadlineCheck } from '../../hooks/useDeadlineCheck';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 
+/** Стабильная пустышка вместо рефетча позиции (телефонный автосейв ГП). */
+const NOOP = () => {};
+
 interface PositionItemsProps {
   /** Передаётся из WorkspaceKeepAlive (несколько экземпляров смонтированы сразу —
-   *  нельзя полагаться на useParams). Fallback на useParams для прямого роутинга. */
-  positionId?: string;
+   *  нельзя полагаться на useParams). Для прямого роутинга есть PositionItemsRoute. */
+  positionId: string;
+  /** ?itemId=… из URL. Приходит пропом, а НЕ из useSearchParams: см. memo ниже.
+   *  WorkspaceKeepAlive отдаёт его только активной вкладке. */
+  deepLinkItemId?: string | null;
 }
 
-const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionId }) => {
-  const params = useParams<{ positionId: string }>();
-  const positionId = propPositionId ?? params.positionId;
-  // Этап 1.1 (deep links): ?itemId=… — прокрутить к строке BOQ и подсветить.
-  const [deepLinkParams] = useSearchParams();
-  const deepLinkItemId = deepLinkParams.get('itemId');
+const PositionItems: React.FC<PositionItemsProps> = ({ positionId, deepLinkItemId = null }) => {
   const { user } = useAuth();
   const { isPhone, isLandscapePhone, isMobile, isPhoneDevice } = useIsMobile();
   const { theme } = useTheme();
@@ -89,7 +91,18 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
     getCurrencyRate,
     fetchPositionData,
     fetchItems,
+    loadEditData,
+    editDataState,
   } = useBoqItems(positionId, isPhoneDevice);
+
+  // Телефонный лист редактирования (обе ориентации). Держим id, а не запись:
+  // лист сам находит её в items — так он переживает рефетч и поворот.
+  const [sheetItemId, setSheetItemId] = useState<string | null>(null);
+  const openSheet = (id: string) => {
+    setSheetItemId(id);
+    // Справочники на телефоне пропущены skipEditData — догружаем по первому тапу.
+    void loadEditData();
+  };
 
   // Обновление заголовка вкладки приложения для этой позиции
   usePositionTabTitle(positionId, position);
@@ -120,6 +133,7 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
     handleAddMaterial,
     handleAddTemplate,
     handleFormSave,
+    handleItemFieldSave,
     handleSaveGPData,
     handleSaveAdditionalWorkData,
     handleMoveItem,
@@ -167,14 +181,28 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
   };
   const onFormCancel = () => setExpandedRowKeys([]);
 
-  const onSaveGPData = async () => {
-    if (positionId) await handleSaveGPData(positionId, gpVolume, gpNote, fetchPositionData);
+  // Значения приходят аргументами, а не из замыкания: телефонный автосейв шлёт свой
+  // драфт, иначе WS-рефетч (fetchPositionData → setGpVolume) успел бы затереть его
+  // серверным значением до срабатывания debounce.
+  const onSaveGPData = async (volume: number, note: string, opts?: { refetch?: boolean }) => {
+    if (!positionId) return;
+    await handleSaveGPData(
+      positionId,
+      volume,
+      note,
+      opts?.refetch === false ? NOOP : fetchPositionData,
+    );
   };
   const onSaveAdditionalWorkData = async () => {
     if (positionId && position?.is_additional) {
       await handleSaveAdditionalWorkData(positionId, workName, unitCode, fetchPositionData);
     }
   };
+
+  // РОВНО один экземпляр на страницу: в ландшафте PositionHeader остаётся
+  // смонтированным под оверлеем, и хук внутри GpInlineFields дал бы два таймера.
+  const gp = useGpAutosave({ gpVolume, setGpVolume, gpNote, setGpNote, onSaveGPData });
+  const gpEditable = isPhoneDevice && !isReadOnlyByDeadline;
 
   const handleStartDelete = (id: string) => {
     setExpandedRowKeys([]);
@@ -193,26 +221,61 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
     setSelectedDeleteIds(new Set());
   };
 
+  // Обычно сюда не попадаем: call-site'ы («Позиции», «Форма КП») сеют строку в
+  // positionRowCache перед навигацией, и useBoqItems гидратирует position синхронно.
+  // Остаётся на промах кэша (deep-link, F5, переход из места без сида) — скелетон, а не
+  // белый экран, чтобы промах деградировал мягко.
   if (!position) {
-    return <div>Загрузка...</div>;
+    return (
+      <div style={{ padding: '0 8px' }}>
+        <Card style={{ marginBottom: 16 }}>
+          <Skeleton active paragraph={{ rows: 2 }} />
+        </Card>
+        <Card>
+          <Skeleton active paragraph={{ rows: 6 }} title={false} />
+        </Card>
+      </div>
+    );
   }
 
   // Тело карточки «Элементы позиции» в зависимости от устройства/ориентации
   const itemsBody = (() => {
     if (isPhone && !isLandscapePhone) {
-      return <ItemsMobileCards items={items} totalSum={totalSum} />;
+      return (
+        <ItemsMobileCards
+          items={items}
+          totalSum={totalSum}
+          loading={loading}
+          positionId={positionId}
+          onItemClick={(it) => openSheet(it.id)}
+        />
+      );
     }
     if (isLandscapePhone) {
       return (
-        <LandscapeTableOverlay theme={theme} fit="zoom" width={ITEMS_PLAIN_FIT_WIDTH}>
+        // fit="width" (transform:scale), а НЕ "zoom": CSS zoom смещает hit-тестинг в
+        // мобильных WebView — тап по строке попадал бы в пустоту. Прецедент: «Форма КП»
+        // и «Затраты» переехали на width ровно тогда, когда их строки стали кликабельными.
+        // Цена — sticky-шапка (она реализована только для .lto-fit-zoom).
+        <LandscapeTableOverlay theme={theme} fit="width" width={ITEMS_PLAIN_FIT_WIDTH}>
           <PositionLandscapeInfo
             position={position}
             gpVolume={gpVolume}
             gpNote={gpNote}
             workName={workName}
             unitCode={unitCode}
+            gpEditable={gpEditable}
+            gp={gp}
+            disabled={isReadOnlyByDeadline}
           />
-          <ItemsTable plain readOnly items={items} loading={loading} getCurrencyRate={getCurrencyRate} />
+          <ItemsTable
+            plain
+            readOnly
+            items={items}
+            loading={loading}
+            getCurrencyRate={getCurrencyRate}
+            onRowClick={(r) => openSheet(r.id)}
+          />
         </LandscapeTableOverlay>
       );
     }
@@ -291,6 +354,9 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
         onSaveGPData={onSaveGPData}
         onSaveAdditionalWorkData={onSaveAdditionalWorkData}
         isPhone={isPhoneDevice}
+        // В ландшафте шапка закрыта оверлеем — ГП там правится в PositionLandscapeInfo.
+        gpEditable={gpEditable && isPhone && !isLandscapePhone}
+        gp={gp}
       />
 
       <Tabs
@@ -390,6 +456,25 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId: propPositionI
           }}
         />
       )}
+
+      {/* Телефонный лист редактирования — вне веток портрета/ландшафта, поэтому
+          переживает поворот (запись ищется по id в живом items). */}
+      {isPhoneDevice && (
+        <BoqItemSheet
+          itemId={sheetItemId}
+          items={items}
+          workNames={workNames}
+          materialNames={materialNames}
+          costCategories={costCategories}
+          units={units}
+          currencyRates={currencyRates}
+          gpVolume={gpVolume}
+          editDataState={editDataState}
+          canEdit={!isReadOnlyByDeadline}
+          onFieldSave={handleItemFieldSave}
+          onClose={() => setSheetItemId(null)}
+        />
+      )}
     </div>
   );
 };
@@ -458,6 +543,17 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleElement);
 }
 
-// memo: в keep-alive смонтировано несколько экземпляров (по вкладке на позицию);
-// positionId стабилен, поэтому скрытые вкладки не перерендериваются при open/close.
+/**
+ * memo: в keep-alive смонтировано несколько экземпляров (по вкладке на позицию), и без него
+ * КАЖДАЯ скрытая вкладка перестраивала бы весь свой список на каждую навигацию.
+ *
+ * Держится только пока компонент не подписан на роутер. Раньше memo не работал вовсе:
+ * useParams()/useSearchParams() подписывают на RouteContext/LocationContext, а те меняются
+ * на каждую навигацию — то есть мемоизация была фиктивной, несмотря на стабильный
+ * positionId. Поэтому positionId и deepLinkItemId приходят ПРОПАМИ, а роутер читает тонкая
+ * обёртка PositionItemsRoute (для прямого роутинга) и WorkspaceKeepAlive (для вкладок).
+ *
+ * НЕ добавлять сюда useParams/useSearchParams/useLocation/useNavigate — это молча вернёт
+ * шторм перерисовок, который ничем себя не выдаёт, кроме подтормаживания на телефоне.
+ */
 export default memo(PositionItems);

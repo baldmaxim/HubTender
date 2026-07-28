@@ -60,7 +60,7 @@ func TestResolveTemplateParent_NoParent_Standalone(t *testing.T) {
 	p, err := planTemplateRow(
 		tmplItemRow{Kind: "material", HasML: true, MItemType: sp(calc.BoqMat),
 			MUnitRate: fp(100), MConsCoef: fp(1.2), MDPT: sp(calc.DeliveryInPrice)},
-		pIdx, nil, calc.CurrencyRates{},
+		pIdx, 1, calc.CurrencyRates{},
 	)
 	if err != nil {
 		t.Fatalf("plan error: %v", err)
@@ -90,7 +90,7 @@ func TestResolveTemplateParent_ValidWorkParent_Child(t *testing.T) {
 	p, err := planTemplateRow(
 		tmplItemRow{Kind: "material", HasML: true, MItemType: sp(calc.BoqMat),
 			MUnitRate: fp(100), MConsCoef: fp(1.2), MDPT: sp(calc.DeliveryInPrice)},
-		pIdx, nil, calc.CurrencyRates{},
+		pIdx, 1, calc.CurrencyRates{},
 	)
 	if err != nil {
 		t.Fatalf("plan error: %v", err)
@@ -214,7 +214,7 @@ func TestPlanTemplateRow_MatchesCalcForFinalParentState(t *testing.T) {
 	}
 
 	// standalone (parentIdx = -1)
-	standalone, err := planTemplateRow(row, -1, nil, rates)
+	standalone, err := planTemplateRow(row, -1, 1, rates)
 	if err != nil {
 		t.Fatalf("plan error: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestPlanTemplateRow_MatchesCalcForFinalParentState(t *testing.T) {
 	}
 
 	// child (parentIdx = 0)
-	child, err := planTemplateRow(row, 0, nil, rates)
+	child, err := planTemplateRow(row, 0, 1, rates)
 	if err != nil {
 		t.Fatalf("plan error: %v", err)
 	}

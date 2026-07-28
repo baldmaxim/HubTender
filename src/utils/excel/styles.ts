@@ -6,10 +6,10 @@ import type { ExportRow } from './types';
 export function getCellStyle(row: ExportRow) {
   const baseStyle = {
     border: {
-      top: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      bottom: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      left: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      right: { style: 'thin', color: { rgb: 'D3D3D3' } },
+      top: { style: 'thin', color: { rgb: '000000' } },
+      bottom: { style: 'thin', color: { rgb: '000000' } },
+      left: { style: 'thin', color: { rgb: '000000' } },
+      right: { style: 'thin', color: { rgb: '000000' } },
     },
     alignment: {
       wrapText: true,    // Перенос строк в ячейках
@@ -57,10 +57,10 @@ export const headerStyle = {
     wrapText: true  // Перенос текста в заголовках
   },
   border: {
-    top: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    bottom: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    left: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    right: { style: 'thin', color: { rgb: 'D3D3D3' } },
+    top: { style: 'thin', color: { rgb: '000000' } },
+    bottom: { style: 'thin', color: { rgb: '000000' } },
+    left: { style: 'thin', color: { rgb: '000000' } },
+    right: { style: 'thin', color: { rgb: '000000' } },
   },
 };
 
@@ -68,10 +68,10 @@ export const headerStyle = {
  * Стиль границ ячейки
  */
 export const cellBorderStyle = {
-  top: { style: 'thin', color: { rgb: 'D3D3D3' } },
-  bottom: { style: 'thin', color: { rgb: 'D3D3D3' } },
-  left: { style: 'thin', color: { rgb: 'D3D3D3' } },
-  right: { style: 'thin', color: { rgb: 'D3D3D3' } },
+  top: { style: 'thin', color: { rgb: '000000' } },
+  bottom: { style: 'thin', color: { rgb: '000000' } },
+  left: { style: 'thin', color: { rgb: '000000' } },
+  right: { style: 'thin', color: { rgb: '000000' } },
 };
 
 /**
@@ -114,3 +114,19 @@ export const fourDecimalColIndices = [8, 9, 10, 11];
  * Индекс колонки "Наименование" для левого выравнивания
  */
 export const nameColIndex = 6;
+
+/**
+ * Форматы чисел. Токен `,` в русской локали Excel рисуется как пробел-разделитель
+ * разрядов. numFmt кладём в объект стиля `.s` — xlsx-js-style игнорирует `.z`,
+ * когда у ячейки есть `.s`.
+ */
+export const NUM_FMT_2 = '#,##0.00';        // 2 знака + разделитель разрядов
+export const NUM_FMT_4 = '#,##0.0000';      // 4 знака + разделитель разрядов
+export const NUM_FMT_2_PLAIN = '0.00';      // 2 знака без разрядов
+export const NUM_FMT_4_PLAIN = '0.0000';    // 4 знака без разрядов
+
+/**
+ * Колонки с разделителем разрядов: Количество ГП (11), Цена за единицу (15),
+ * Итоговая сумма (16).
+ */
+export const groupedColIndices = [11, 15, 16];

@@ -87,7 +87,9 @@ func newRouter(
 		r.Get("/api/v1/tenders", d.tenderH.GetTenders)
 		r.Get("/api/v1/exchange-rates", d.cbrH.GetExchangeRates)
 		r.Get("/api/v1/tenders/{id}/overview", d.tenderH.GetTenderOverview)
-		r.Get("/api/v1/tenders/{id}/quality", d.qualityH.TenderQuality)
+		// Этап 2.1 (аналитика качества расчёта). Путь /quality занят страницей
+		// «Проверка данных» (main, прод-контракт) — аналитика живёт отдельно.
+		r.Get("/api/v1/tenders/{id}/quality-analytics", d.qualityAnalyticsH.TenderQuality)
 		r.Get("/api/v1/tenders/{id}/price-benchmarks", d.priceBenchmarkH.TenderPriceBenchmarks)
 		r.Get("/api/v1/tenders/{id}/price-benchmarks/{itemId}/history", d.priceBenchmarkH.ItemHistory)
 		r.Get("/api/v1/tenders/{id}/price-source-quality", d.priceSourceH.TenderPriceSourceQuality)
@@ -102,6 +104,12 @@ func newRouter(
 		r.Get("/api/v1/positions/{id}/boq-items-full", d.positionH.ListBoqItemsFullByPosition)
 		r.Get("/api/v1/tenders/{id}/boq-items-full", d.positionH.ListBoqItemsFullByTender)
 		r.Get("/api/v1/tenders/{id}/construction-cost-volumes", d.ccvH.ListByTender)
+
+		// Проверка данных: находки правил, вердикт инженера, выгрузка для замера.
+		r.Get("/api/v1/tenders/{id}/quality", d.qualityH.GetReport)
+		r.Post("/api/v1/tenders/{id}/quality/verdict", d.qualityH.PostVerdict)
+		r.Get("/api/v1/quality/rules", d.qualityH.GetRules)
+		r.Get("/api/v1/quality/export", d.qualityH.GetExport)
 		r.Post("/api/v1/construction-cost-volumes", d.ccvH.Upsert)
 		r.Get("/api/v1/tenders/{id}/positions/{posId}/items", d.boqH.GetBoqItems)
 
@@ -223,6 +231,10 @@ func newRouter(
 		// Insurance (per-tender).
 		r.Get("/api/v1/tenders/{id}/insurance", d.insuranceH.Get)
 		r.Put("/api/v1/tenders/{id}/insurance", d.insuranceH.Put)
+
+		// Снижение коммерческой стоимости на «Финансовых показателях».
+		r.Get("/api/v1/tenders/{id}/fi-discounts", d.fiDiscountsH.Get)
+		r.Put("/api/v1/tenders/{id}/fi-discounts", d.fiDiscountsH.Put)
 
 		// User position filters (per-user, per-tender).
 		r.Get("/api/v1/tenders/{id}/position-filters", d.positionFiltersH.List)

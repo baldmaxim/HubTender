@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { message } from 'antd';
 import type {
   ClientPosition,
@@ -44,6 +44,12 @@ interface Template {
   detail_cost_category_full?: string | null;
 }
 
+interface TenderRates {
+  usd: number;
+  eur: number;
+  cny: number;
+}
+
 /**
  * @param skipEditData когда true (телефон в любой ориентации — UI редактирования не
  *   рендерится), не грузим edit-only справочники (works/materials/templates/
@@ -63,6 +69,13 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
   const [workNames, setWorkNames] = useState<WorkName[]>([]);
   const [materialNames, setMaterialNames] = useState<MaterialName[]>([]);
   const [units, setUnits] = useState<Array<{ code: string; name: string }>>([]);
+
+  // Ленивая догрузка edit-справочников на телефоне (см. loadEditData).
+  // ref — источник истины для гонки параллельных тапов; state — для рендера.
+  const editDataRef = useRef<'idle' | 'loading' | 'ready'>('idle');
+  const [editDataState, setEditDataState] = useState<'idle' | 'loading' | 'ready' | 'error'>(
+    skipEditData ? 'idle' : 'ready',
+  );
 
   // Состояния для данных ГП
   const [gpVolume, setGpVolume] = useState<number>(0);
@@ -86,8 +99,9 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
     }
   };
 
-  const fetchPositionData = async () => {
-    if (!positionId) return;
+  /** Возвращает курсы тендера, чтобы fetchItems не перезапрашивал ту же строку. */
+  const fetchPositionData = async (): Promise<TenderRates | null> => {
+    if (!positionId) return null;
     try {
       const data = (await getPositionWithTender(positionId)) as unknown as
         (ClientPosition & {
@@ -104,14 +118,18 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
       }
 
       if (data.tenders) {
-        setCurrencyRates({
+        const next = {
           usd: data.tenders.usd_rate || 0,
           eur: data.tenders.eur_rate || 0,
           cny: data.tenders.cny_rate || 0,
-        });
+        };
+        setCurrencyRates(next);
+        return next;
       }
+      return null;
     } catch (error) {
       message.error('Ошибка загрузки позиции: ' + getErrorMessage(error));
+      return null;
     }
   };
 
@@ -152,26 +170,24 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
     return result;
   };
 
-  const fetchItems = async () => {
+  /**
+   * @param ratesSource курсы (или промис курсов) от уже летящего fetchPositionData. Раньше
+   *   fetchItems сам звал getPositionWithTender и ЖДАЛ его перед listBoqItemsFullByPosition:
+   *   это был дубль запроса, который fetchPositionData делает в том же тике, да ещё и
+   *   сериализованный впереди единственного запроса, наполняющего таблицу (≈2× до появления
+   *   строк на мобильной сети). Без аргумента (standalone-вызовы из мутаций) курсы
+   *   догружаются самостоятельно, но уже параллельно строкам.
+   */
+  const fetchItemsWithRates = async (ratesSource?: Promise<TenderRates | null>) => {
     if (!positionId) return;
     setLoading(true);
     try {
-      let rates = currencyRates;
-
-      // Go: одна запросом одновременно с rates (positions/{id}/with-tender)
-      const positionFull = (await getPositionWithTender(positionId)) as unknown as {
-        tenders?: { usd_rate?: number; eur_rate?: number; cny_rate?: number } | null;
-      };
-      const tenderRates = positionFull.tenders ?? null;
-
-      if (tenderRates) {
-        rates = {
-          usd: tenderRates.usd_rate || 0,
-          eur: tenderRates.eur_rate || 0,
-          cny: tenderRates.cny_rate || 0,
-        };
-        setCurrencyRates(rates);
-      }
+      const ratesPromise: Promise<TenderRates | null> =
+        ratesSource ??
+        getPositionWithTender(positionId).then((p) => {
+          const t = (p as { tenders?: { usd_rate?: number; eur_rate?: number; cny_rate?: number } | null }).tenders;
+          return t ? { usd: t.usd_rate || 0, eur: t.eur_rate || 0, cny: t.cny_rate || 0 } : null;
+        });
 
       // Loose shape mirroring the Go nested-embed JSON; field-by-field
       // access below preserves the original supabase-PostgREST mapping.
@@ -190,7 +206,18 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
         } | null;
         [k: string]: unknown;
       };
-      const data = (await listBoqItemsFullByPosition(positionId)) as unknown as RawBoqItemJoin[];
+      // Курсы и строки — параллельно: курсы нужны только на маппинге safeTotalAmount ниже.
+      const [rawData, resolvedRates] = await Promise.all([
+        listBoqItemsFullByPosition(positionId),
+        ratesPromise,
+      ]);
+      const data = rawData as unknown as RawBoqItemJoin[];
+
+      let rates = currencyRates;
+      if (resolvedRates) {
+        rates = resolvedRates;
+        setCurrencyRates(rates);
+      }
 
       // Fallback-ставка нужна ТОЛЬКО для строк без сохранённого unit_rate. Раньше
       // полные библиотеки тянулись всегда, когда были material/work-строки, —
@@ -278,6 +305,11 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
     }
   };
 
+  // Публичная сигнатура без аргументов: fetchItems уходит в useItemActions /
+  // useItemBulkActions как `() => Promise<void>` и зовётся из колбэков — лишний
+  // позиционный аргумент там стал бы event-объектом.
+  const fetchItems = () => fetchItemsWithRates();
+
   const fetchWorks = async () => {
     try {
       const data = await listWorksLibrary();
@@ -336,7 +368,9 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
     }
   };
 
-  const fetchCostCategories = async () => {
+  // Три fetch'а ниже возвращают признак успеха: телефонный loadEditData обязан
+  // отличить «загрузилось пусто» от «упало», иначе ✎ навсегда останется мёртвым.
+  const fetchCostCategories = async (): Promise<boolean> => {
     try {
       const data = await listDetailCostCategoriesWithCategory();
       const options = (data || []).map((item) => {
@@ -349,30 +383,60 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
         };
       });
       setCostCategories(options);
+      return true;
     } catch (error) {
       message.error('Ошибка загрузки категорий затрат: ' + getErrorMessage(error));
+      return false;
     }
   };
 
-  const fetchWorkNames = async () => {
+  const fetchWorkNames = async (): Promise<boolean> => {
     try {
       // Go отдаёт все work_names одним запросом; пагинация убрана.
       const data = await listWorkNames();
       const sorted = [...data].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setWorkNames(sorted as unknown as WorkName[]);
+      return true;
     } catch (error) {
       message.error('Ошибка загрузки наименований работ: ' + getErrorMessage(error));
+      return false;
     }
   };
 
-  const fetchMaterialNames = async () => {
+  const fetchMaterialNames = async (): Promise<boolean> => {
     try {
       const data = await listMaterialNames();
       const sorted = [...data].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setMaterialNames(sorted as unknown as MaterialName[]);
+      return true;
     } catch (error) {
       message.error('Ошибка загрузки наименований материалов: ' + getErrorMessage(error));
+      return false;
     }
+  };
+
+  /**
+   * Ленивая догрузка edit-справочников на телефоне (skipEditData их пропустил).
+   * Зовётся по первому тапу по карточке/строке — не на маунте: WorkspaceKeepAlive
+   * держит несколько PositionItems смонтированными разом, и «всегда на телефоне»
+   * умножило бы запросы на число вкладок.
+   *
+   * Нужны ровно три: units грузятся безусловно, курсы приходят из fetchPositionData,
+   * а работы для «Привязки» берутся из уже загруженных items.
+   */
+  const loadEditData = async (): Promise<void> => {
+    if (editDataRef.current !== 'idle') return;
+    editDataRef.current = 'loading';
+    setEditDataState('loading');
+    const results = await Promise.all([
+      fetchCostCategories(),
+      fetchWorkNames(),
+      fetchMaterialNames(),
+    ]);
+    const ok = results.every(Boolean);
+    // Провал → откатываем ref в idle, чтобы следующее открытие повторило попытку.
+    editDataRef.current = ok ? 'ready' : 'idle';
+    setEditDataState(ok ? 'ready' : 'error');
   };
 
   const fetchUnits = async () => {
@@ -388,9 +452,9 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
   useEffect(() => {
     if (!positionId) return;
 
-    // Hydrate header instantly from the row cache populated on the parent
-    // ClientPositions tab. fetchPositionData below still runs to refresh and
-    // load currency rates from the joined tenders row.
+    // Мгновенная гидратация шапки из row-кэша: call-site'ы («Позиции», «Форма КП») сеют
+    // кликнутую строку прямо перед навигацией, поэтому попадание здесь — норма, а не удача.
+    // fetchPositionData ниже всё равно освежает строку и приносит курсы из join'а tenders.
     const cached = getCachedPositionRow(positionId);
     if (cached) {
       setPosition(cached);
@@ -402,8 +466,10 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
       }
     }
 
-    fetchPositionData();
-    fetchItems();
+    // Один /with-tender на оба потребителя: fetchPositionData ставит шапку и отдаёт курсы,
+    // fetchItems их ждёт вместо повторного запроса — и стартует listBoqItemsFullByPosition
+    // немедленно, а не за вторым RTT.
+    void fetchItemsWithRates(fetchPositionData());
     fetchUnits();
 
     // Edit-only справочники: на телефоне UI редактирования не рендерится —
@@ -426,8 +492,8 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
   useRealtimeRefetch(
     position?.tender_id ? `tender:${position.tender_id}` : null,
     () => {
-      void fetchItems();
-      void fetchPositionData();
+      // Тот же дедуп, что и на маунте: один /with-tender вместо двух на каждое WS-событие.
+      void fetchItemsWithRates(fetchPositionData());
     },
   );
 
@@ -454,5 +520,7 @@ export const useBoqItems = (positionId: string | undefined, skipEditData = false
     getCurrencyRate,
     fetchPositionData,
     fetchItems,
+    loadEditData,
+    editDataState,
   };
 };

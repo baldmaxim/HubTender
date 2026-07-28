@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Card, Space, Tag, Typography, Empty } from 'antd';
+import { Card, Space, Tag, Typography, Empty, Skeleton } from 'antd';
 import { LinkOutlined } from '@ant-design/icons';
 import type { BoqItemFull } from '../../../lib/types';
 import { currencySymbols, getBoqTypeTagStyle, isMaterialType } from './boqColors';
@@ -11,6 +11,15 @@ const { Text } = Typography;
 interface ItemsMobileCardsProps {
   items: BoqItemFull[];
   totalSum: number | null;
+  /** Пока строки летят, показываем скелетон, а не «Нет элементов»: шапка гидратируется из
+   *  positionRowCache мгновенно, поэтому без этого гейта пользователь видел бы уверенное
+   *  «позиция пуста» + «Итого: —» на всё время загрузки. */
+  loading?: boolean;
+  /** Тап по карточке → лист редактирования. Не задан ⇒ карточки некликабельны. */
+  onItemClick?: (item: BoqItemFull) => void;
+  /** Ключ сброса инкрементального рендера: рефетч после каждого сохранения отдаёт
+   *  новый массив, и на идентичности пользователя выкидывало бы к первым 40 карточкам. */
+  positionId?: string;
 }
 
 const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
@@ -20,8 +29,14 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
   </div>
 );
 
-/** Портретный телефонный read-only список элементов позиции (вместо широкой таблицы). */
-const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({ items, totalSum }) => {
+/** Портретный телефонный список элементов позиции (вместо широкой таблицы). */
+const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({
+  items,
+  totalSum,
+  loading = false,
+  onItemClick,
+  positionId,
+}) => {
   // Индекс id → элемент: убирает O(n²) (items.find на каждую карточку).
   const itemById = useMemo(() => {
     const map = new Map<string, BoqItemFull>();
@@ -30,7 +45,11 @@ const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({ items, totalSum }) 
   }, [items]);
 
   // Инкрементальный рендер: на крупной позиции не строим все карточки разом.
-  const { visible, sentinelRef, hasMore } = useIncrementalRender(items);
+  const { visible, sentinelRef, hasMore } = useIncrementalRender(items, 40, positionId);
+
+  if (loading && items.length === 0) {
+    return <Skeleton active paragraph={{ rows: 6 }} title={false} />;
+  }
 
   if (items.length === 0) {
     return <Empty description="Нет элементов" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
@@ -48,7 +67,27 @@ const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({ items, totalSum }) 
         const total = item.total_amount || 0;
 
         return (
-          <Card key={item.id} size="small" styles={{ body: { padding: 12 } }}>
+          <Card
+            key={item.id}
+            size="small"
+            styles={{ body: { padding: 12 } }}
+            role={onItemClick ? 'button' : undefined}
+            tabIndex={onItemClick ? 0 : undefined}
+            onClick={onItemClick ? () => onItemClick(item) : undefined}
+            onKeyDown={
+              onItemClick
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onItemClick(item);
+                    }
+                  }
+                : undefined
+            }
+            style={
+              onItemClick ? { cursor: 'pointer', touchAction: 'manipulation' } : undefined
+            }
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
               <Tag style={{ backgroundColor: bgColor, color: textColor, border: 'none', margin: 0 }}>
                 {item.boq_item_type}
@@ -68,14 +107,16 @@ const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({ items, totalSum }) 
               )}
             </div>
 
-            <div style={{ marginBottom: 8 }}>
-              <Text strong style={{ wordBreak: 'break-word' }}>{item.work_name || item.material_name}</Text>
-              {isMat && parentWork && (
-                <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
-                  <LinkOutlined style={{ marginRight: 4 }} />
-                  {parentWork.work_name}
-                </div>
-              )}
+            <div style={{ marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text strong style={{ wordBreak: 'break-word' }}>{item.work_name || item.material_name}</Text>
+                {isMat && parentWork && (
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                    <LinkOutlined style={{ marginRight: 4 }} />
+                    {parentWork.work_name}
+                  </div>
+                )}
+              </div>
             </div>
 
             <Field label="Кол-во">

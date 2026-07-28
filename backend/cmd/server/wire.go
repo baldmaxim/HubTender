@@ -54,6 +54,7 @@ type deps struct {
 	libraryH          *handlers.LibraryHandler
 	redistributionH   *handlers.RedistributionHandler
 	insuranceH        *handlers.InsuranceHandler
+	fiDiscountsH      *handlers.FIDiscountsHandler
 	positionFiltersH  *handlers.PositionFiltersHandler
 	notificationsH    *handlers.NotificationsHandler
 	tenderRegistryH   *handlers.TenderRegistryHandler
@@ -64,7 +65,7 @@ type deps struct {
 	userAdminH        *handlers.UserAdminHandler
 	markupH           *handlers.MarkupHandler
 	fiH               *handlers.FIHandler
-	qualityH          *handlers.QualityHandler
+	qualityAnalyticsH *handlers.QualityAnalyticsHandler
 	priceBenchmarkH   *handlers.PriceBenchmarkHandler
 	priceSourceH      *handlers.PriceSourceHandler
 	actionPlanH       *handlers.ActionPlanHandler
@@ -76,6 +77,7 @@ type deps struct {
 	aiAdminH          *handlers.AIAdminHandler
 	aiHealthH         *handlers.AIHealthHandler
 	wsH               *handlers.WsHandler
+	qualityH          *handlers.QualityHandler
 }
 
 // buildDeps wires repositories → cache → services → handlers. Extracted from
@@ -96,6 +98,7 @@ func buildDeps(
 	tenderRepo := repository.NewTenderRepo(pool)
 	positionRepo := repository.NewPositionRepo(pool)
 	positionCostsRepo := repository.NewPositionCostsRepo(pool)
+	qualityRepo := repository.NewQualityRepo(pool)
 	boqRepo := repository.NewBoqRepo(pool)
 	bulkBoqRepo := repository.NewBulkBoqRepo(pool)
 	importBoqRepo := repository.NewImportRepo(pool)
@@ -111,6 +114,7 @@ func buildDeps(
 	libraryRepo := repository.NewLibraryRepo(pool)
 	redistributionRepo := repository.NewRedistributionRepo(pool)
 	insuranceRepo := repository.NewInsuranceRepo(pool)
+	fiDiscountsRepo := repository.NewFIDiscountsRepo(pool)
 	positionFiltersRepo := repository.NewPositionFiltersRepo(pool)
 	notificationsRepo := repository.NewNotificationsRepo(pool)
 	tenderRegistryRepo := repository.NewTenderRegistryRepo(pool)
@@ -122,7 +126,7 @@ func buildDeps(
 	markupRepo := repository.NewMarkupRepo(pool)
 	fiRepo := repository.NewFIRepo(pool)
 	ccvRepo := repository.NewConstructionCostVolumesRepo(pool)
-	qualityRepo := repository.NewQualityRepo(pool)
+	qualityAnalyticsRepo := repository.NewQualityAnalyticsRepo(pool)
 	priceBenchmarkRepo := repository.NewPriceBenchmarkRepo(pool)
 	priceSourceRepo := repository.NewPriceSourceRepo(pool)
 	actionPlanRepo := repository.NewActionPlanRepo(pool)
@@ -164,6 +168,7 @@ func buildDeps(
 	tenderSvc := services.NewTenderService(tenderRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	positionSvc := services.NewPositionService(positionRepo, inMemCache)
 	positionCostsSvc := services.NewPositionCostsService(positionCostsRepo, inMemCache)
+	qualitySvc := services.NewQualityService(qualityRepo, inMemCache)
 	boqSvc := services.NewBoqService(boqRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	bulkBoqSvc := services.NewBulkBoqService(bulkBoqRepo, inMemCache)
 	importBoqSvc := services.NewImportBoqService(importBoqRepo, inMemCache).WithRecalcQueue(recalcQueue)
@@ -179,6 +184,7 @@ func buildDeps(
 	librarySvc := services.NewLibraryService(libraryRepo, inMemCache)
 	redistributionSvc := services.NewRedistributionService(redistributionRepo, inMemCache)
 	insuranceSvc := services.NewInsuranceService(insuranceRepo, inMemCache)
+	fiDiscountsSvc := services.NewFIDiscountsService(fiDiscountsRepo, inMemCache)
 	positionFiltersSvc := services.NewPositionFiltersService(positionFiltersRepo)
 	notificationsSvc := services.NewNotificationsService(notificationsRepo)
 	tenderRegistrySvc := services.NewTenderRegistryService(tenderRegistryRepo)
@@ -189,7 +195,7 @@ func buildDeps(
 	userAdminSvc := services.NewUserAdminService(userAdminRepo, inMemCache)
 	markupSvc := services.NewMarkupService(markupRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	fiSvc := services.NewFIService(fiRepo)
-	qualitySvc := services.NewQualityService(qualityRepo)
+	qualityAnalyticsSvc := services.NewQualityAnalyticsService(qualityAnalyticsRepo)
 	priceBenchmarkSvc := services.NewPriceBenchmarkService(priceBenchmarkRepo)
 	priceSourceSvc := services.NewPriceSourceService(priceSourceRepo)
 	actionPlanSvc := services.NewActionPlanService(actionPlanRepo)
@@ -297,6 +303,7 @@ func buildDeps(
 		positionH:         handlers.NewPositionHandler(positionSvc),
 		positionWH:        handlers.NewPositionWriteHandler(positionSvc),
 		positionCostsH:    handlers.NewPositionCostsHandler(positionCostsSvc),
+		qualityH:          handlers.NewQualityHandler(qualitySvc),
 		boqH:              handlers.NewBoqHandler(boqSvc),
 		boqWH:             handlers.NewBoqWriteHandler(boqSvc),
 		bulkBoqH:          handlers.NewBulkBoqHandler(bulkBoqSvc),
@@ -314,6 +321,7 @@ func buildDeps(
 		libraryH:          handlers.NewLibraryHandler(librarySvc),
 		redistributionH:   handlers.NewRedistributionHandler(redistributionSvc),
 		insuranceH:        handlers.NewInsuranceHandler(insuranceSvc),
+		fiDiscountsH:      handlers.NewFIDiscountsHandler(fiDiscountsSvc),
 		positionFiltersH:  handlers.NewPositionFiltersHandler(positionFiltersSvc),
 		notificationsH:    handlers.NewNotificationsHandler(notificationsSvc),
 		tenderRegistryH:   handlers.NewTenderRegistryHandler(tenderRegistrySvc),
@@ -324,7 +332,7 @@ func buildDeps(
 		userAdminH:        handlers.NewUserAdminHandler(userAdminSvc),
 		markupH:           handlers.NewMarkupHandler(markupSvc),
 		fiH:               handlers.NewFIHandler(fiSvc),
-		qualityH:          handlers.NewQualityHandler(qualitySvc),
+		qualityAnalyticsH: handlers.NewQualityAnalyticsHandler(qualityAnalyticsSvc),
 		priceBenchmarkH:   handlers.NewPriceBenchmarkHandler(priceBenchmarkSvc),
 		priceSourceH:      handlers.NewPriceSourceHandler(priceSourceSvc),
 		actionPlanH:       handlers.NewActionPlanHandler(actionPlanSvc),

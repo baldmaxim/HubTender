@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Select, DatePicker, message, Space, Tag, Tooltip } from 'antd';
+import { Table, Button, Modal, Select, DatePicker, ConfigProvider, message, Space, Tag, Tooltip } from 'antd';
 import { CalendarOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -9,6 +9,40 @@ import { getErrorMessage } from '../../../utils/errors';
 import { fetchTenders } from '../../../lib/api/tenders';
 import { listAccessUsers, setTenderExtensionForUsers } from '../../../lib/api/userAdmin';
 import { TenderAccessCards, DeadlineTag } from './TenderAccessCards';
+
+/**
+ * Панель DatePicker (календарь + часы/минуты) — 401px, не влезает в 390px.
+ * Ужимаем токенами: 32*7+36 + 1 + 2*44 = 349px. НЕ transform: он ломает useAlign
+ * (_scaleX = rect.width/computedWidth → офсеты делятся на scale,
+ * @rc-component/trigger/lib/hooks/useAlign.js:231,500), из-за чего панель уезжала вправо.
+ * Ссылка обязана быть стабильной: antd сравнивает тему шалловo.
+ */
+const PHONE_PICKER_THEME = {
+  components: { DatePicker: { cellWidth: 32, timeColumnWidth: 44 } },
+} as const;
+
+/**
+ * Центрирование панели по экрану без transform. styles.popup.root разливается ПОСЛЕ
+ * offsetStyle (@rc-component/trigger/lib/Popup/index.js:169-176) → перебивает
+ * инлайновые left/top от rc-trigger. Портал — голый div в body, трансформов у
+ * предков нет → fixed резолвится во вьюпорт.
+ * Четыре лонгханда, а НЕ inset: они должны перезаписать одноимённые ключи offsetStyle;
+ * шорткат оставил бы left/top от rc-trigger в атрибуте style.
+ * minWidth: 'auto' гасит stretch="minWidth" (ширину инпута, ~552px в ландшафте).
+ */
+const PHONE_PICKER_POPUP_STYLE: React.CSSProperties = {
+  position: 'fixed',
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  margin: 'auto',
+  width: 'fit-content',
+  height: 'fit-content',
+  minWidth: 'auto',
+  maxWidth: 'calc(100vw - 16px)',
+  maxHeight: 'calc(100vh - 16px)',
+};
 
 export interface TenderRecord {
   id: string;
@@ -353,14 +387,20 @@ const TenderAccessTab: React.FC<TenderAccessTabProps> = ({ searchText = '' }) =>
 
           <div>
             <label>Новая дата дедлайна:</label>
-            <DatePicker
-              style={{ width: '100%' }}
-              popupClassName="datetime-popup-mobile"
-              showTime
-              format="DD.MM.YYYY HH:mm"
-              value={extendedDeadline}
-              onChange={setExtendedDeadline}
-            />
+            <ConfigProvider theme={isPhoneDevice ? PHONE_PICKER_THEME : undefined}>
+              <DatePicker
+                style={{ width: '100%' }}
+                styles={isPhoneDevice ? { popup: { root: PHONE_PICKER_POPUP_STYLE } } : undefined}
+                // Панель центрирована по вьюпорту: на iOS position:fixed считается от
+                // layout-вьюпорта, который не сжимается под клавиатуру, — она перекрыла бы
+                // футер панели. На телефоне календарь и так единственный способ ввода.
+                inputReadOnly={isPhoneDevice}
+                showTime
+                format="DD.MM.YYYY HH:mm"
+                value={extendedDeadline}
+                onChange={setExtendedDeadline}
+              />
+            </ConfigProvider>
           </div>
 
           {selectedTender && (

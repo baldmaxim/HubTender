@@ -50,6 +50,12 @@ CREATE TRIGGER trigger_update_cost_redistribution_results_updated_at
   BEFORE UPDATE ON public.cost_redistribution_results
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
+-- ----- tender_fi_discounts --------------------------------------------------
+DROP TRIGGER IF EXISTS trigger_update_tender_fi_discounts_updated_at ON public.tender_fi_discounts;
+CREATE TRIGGER trigger_update_tender_fi_discounts_updated_at
+  BEFORE UPDATE ON public.tender_fi_discounts
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
 -- ----- detail_cost_categories ----------------------------------------------
 DROP TRIGGER IF EXISTS update_detail_cost_categories_updated_at ON public.detail_cost_categories;
 CREATE TRIGGER update_detail_cost_categories_updated_at
@@ -251,4 +257,8 @@ CREATE TRIGGER trg_ai_pilot_users_updated_at
 DROP TRIGGER IF EXISTS trg_ai_circuit_state_updated_at ON public.ai_circuit_state;
 CREATE TRIGGER trg_ai_circuit_state_updated_at
   BEFORE UPDATE ON public.ai_circuit_state
+-- ----- quality_acknowledgements ---------------------------------------------
+DROP TRIGGER IF EXISTS quality_acknowledgements_updated_at ON public.quality_acknowledgements;
+CREATE TRIGGER quality_acknowledgements_updated_at
+  BEFORE UPDATE ON public.quality_acknowledgements
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

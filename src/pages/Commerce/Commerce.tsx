@@ -3,11 +3,12 @@
  */
 
 import { Card, Spin, Empty, Alert, message } from 'antd';
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { missingFXMessage } from '../../utils/boq/currencyGuard';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { buildPositionTabPath } from '../../lib/cache/workspaceTabsStorage';
+import { setRow as seedPositionRow } from '../../lib/cache/positionRowCache';
 import { useCommerceData, useCommerceActions } from './hooks';
 import { TenderSelector, CommerceTable, CommerceCards, CommerceHeader, COMMERCE_TABLE_FIT_WIDTH } from './components';
 import CommerceTotalsBar from './components/CommerceTotalsBar';
@@ -20,6 +21,15 @@ import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTabl
 
 export default function Commerce() {
   const navigate = useNavigate();
+  // См. handleNavigateToPosition: navigate пересоздаётся на каждую навигацию — держим в ref,
+  // чтобы обработчик оставался стабильным пропом для мемоизированного CommerceCards.
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  const location = useLocation();
+  // Под keep-alive страница остаётся смонтированной, когда открыта вкладка позиции
+  // (WorkspaceKeepAlive скрывает через display:none, а не размонтирует). URL — источник
+  // истины активной вкладки; Commerce рендерится только на этом якоре.
+  const isTabActive = location.pathname === '/commerce/proposal';
   const { openPositionTab } = useWorkspaceTabActions();
   const { isPhone, isLandscapePhone } = useIsMobile();
   const { theme: currentTheme } = useTheme();
@@ -51,7 +61,13 @@ export default function Commerce() {
     referenceTotal,
     insuranceTotal,
     redistributionState,
-  } = useCommerceData();
+    distributeToRows,
+  } = useCommerceData(isTabActive);
+
+  // Когда распределение по строкам выключено — страхование не показываем на
+  // «Форме КП» вообще (ни в строках, ни в итогах/сводке): оно учитывается только
+  // в итоге «Финансовых показателей». При включённом флаге — полная сумма.
+  const effInsurance = distributeToRows ? insuranceTotal : 0;
 
   const {
     handleApplyTactic
@@ -70,7 +86,9 @@ export default function Commerce() {
 
   useEffect(() => {
     const refreshIfNeeded = () => {
-      if (!selectedTenderId || loading || calculating) {
+      // Скрытая вкладка не рефетчит: под keep-alive эти слушатели живут и пока пользователь
+      // работает во вкладке позиции, и тянули бы весь loadPositions ей в конкуренты.
+      if (!isTabActive || !selectedTenderId || loading || calculating) {
         return;
       }
 
@@ -100,7 +118,7 @@ export default function Commerce() {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [selectedTenderId, loading, calculating, loadPositions]);
+  }, [isTabActive, selectedTenderId, loading, calculating, loadPositions]);
 
   // Обработка выбора наименования тендера
   const handleTenderTitleChange = (title: string) => {
@@ -168,7 +186,7 @@ export default function Commerce() {
       );
       return;
     }
-    exportCommerceToExcel(positions, selectedTender, insuranceTotal);
+    exportCommerceToExcel(positions, selectedTender, effInsurance, distributeToRows);
   };
 
   // Единый Alert об отсутствующем курсе валюты (P0): считаем по загруженным
@@ -192,11 +210,22 @@ export default function Commerce() {
 
   // Навигация к позиции — открываем внутренней вкладкой приложения (keep-alive), «Форма КП»
   // остаётся смонтированной вкладкой и сохраняет состояние.
-  const handleNavigateToPosition = (positionId: string) => {
+  //
+  // useCallback + navigateRef: обработчик уходит пропом в мемоизированный CommerceCards, а
+  // react-router пересоздаёт navigate на каждую навигацию — без ref идентичность обработчика
+  // менялась бы и пробивала memo, обнуляя смысл мемоизации списка.
+  const handleNavigateToPosition = useCallback((positionId: string) => {
     if (!selectedTenderId) return;
+    // Сеем строку в positionRowCache ПЕРЕД навигацией: useBoqItems гидратирует из него шапку
+    // синхронно, иначе PositionItems вернёт скелетон на весь round-trip /with-tender.
+    // Именно setRow, а НЕ setRows([row]): setRows всегда зовёт pruneExpired — полный скан
+    // localStorage с JSON.parse каждой записи, и в обработчике клика это залипание перед
+    // переходом (регрессия, из-за которой залипли ОБЕ страницы, включая быстрые «Позиции»).
+    const row = positions.find((p) => p.id === positionId);
+    if (row) seedPositionRow(row);
     openPositionTab({ positionId, tenderId: selectedTenderId, title: 'Позиция' });
-    navigate(buildPositionTabPath(positionId, selectedTenderId));
-  };
+    navigateRef.current(buildPositionTabPath(positionId, selectedTenderId));
+  }, [selectedTenderId, positions, openPositionTab]);
 
   // Если тендер не выбран, показываем только выбор тендера
   if (!selectedTenderId) {
@@ -267,7 +296,8 @@ export default function Commerce() {
               positions={positions}
               selectedTenderId={selectedTenderId}
               onNavigateToPosition={handleNavigateToPosition}
-              insuranceTotal={insuranceTotal}
+              insuranceTotal={effInsurance}
+              distributeToRows={distributeToRows}
             />
           ) : isLandscapePhone ? (
             <LandscapeTableOverlay
@@ -276,8 +306,8 @@ export default function Commerce() {
               width={COMMERCE_TABLE_FIT_WIDTH}
               footer={
                 <CommerceTotalsBar
-                  totals={computeCommerceTotals(positions, insuranceTotal, referenceTotal)}
-                  insuranceTotal={insuranceTotal}
+                  totals={computeCommerceTotals(positions, effInsurance, referenceTotal)}
+                  insuranceTotal={effInsurance}
                 />
               }
             >
@@ -286,7 +316,8 @@ export default function Commerce() {
                 selectedTenderId={selectedTenderId}
                 onNavigateToPosition={handleNavigateToPosition}
                 referenceTotal={referenceTotal}
-                insuranceTotal={insuranceTotal}
+                insuranceTotal={effInsurance}
+                distributeToRows={distributeToRows}
                 fitToScreen
               />
             </LandscapeTableOverlay>
@@ -296,7 +327,8 @@ export default function Commerce() {
               selectedTenderId={selectedTenderId}
               onNavigateToPosition={handleNavigateToPosition}
               referenceTotal={referenceTotal}
-              insuranceTotal={insuranceTotal}
+              insuranceTotal={effInsurance}
+              distributeToRows={distributeToRows}
             />
           )}
         </Spin>

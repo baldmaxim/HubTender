@@ -28,7 +28,7 @@ import type { RoleRecord, UserRecord } from './types';
 const Users: React.FC = () => {
   const { user: currentUser } = useAuth();
   const { theme: currentTheme } = useTheme();
-  const { isPhone, isPhoneDevice } = useIsMobile();
+  const { isPhone, isPhoneDevice, isMobile } = useIsMobile();
 
   const hasAccess = !!(currentUser && canManageUsers(currentUser.role));
 
@@ -270,42 +270,62 @@ const Users: React.FC = () => {
     {
       key: 'tender-access',
       label: 'Доступ к тендерам',
-      children: <TenderAccessTab searchText={tenderSearchText} />,
+      children: (
+        <>
+          <div style={{ margin: isPhoneDevice ? '0 0 12px' : '0 24px 16px' }}>
+            <AutoComplete
+              style={{ width: isPhoneDevice ? 240 : 450, maxWidth: '100%' }}
+              options={tendersList.map(t => ({ value: t.title, label: `№${t.tender_number} v${t.version} - ${t.title}` }))}
+              value={tenderSearchText}
+              onChange={setTenderSearchText}
+              placeholder="Поиск по тендеру"
+              filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              allowClear
+            />
+          </div>
+          <TenderAccessTab searchText={tenderSearchText} />
+        </>
+      ),
     },
   ];
 
+  const tabsBlock = (
+    <>
+      <style>{`.users-tabs-flush > .ant-tabs-nav { padding: 0 ${isPhoneDevice ? '0px' : '24px'}; }`}</style>
+      <Tabs className="users-tabs-flush" activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+    </>
+  );
+
   return (
-    <div style={{ padding: isPhoneDevice ? 12 : 24 }}>
-      <Card
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <UserOutlined style={{ fontSize: 24, color: '#10b981' }} />
-            <span>Управление пользователями</span>
-          </div>
-        }
-        styles={{ body: { padding: 0 } }}
-      >
-        <style>{`.users-tabs-flush > .ant-tabs-nav { padding: 0 24px; }`}</style>
-        <Tabs
-          className="users-tabs-flush"
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={tabItems}
-          tabBarExtraContent={
-            activeTab === 'tender-access' ? (
-              <AutoComplete
-                style={{ width: isPhoneDevice ? 160 : 300 }}
-                options={tendersList.map(t => ({ value: t.title, label: `№${t.tender_number} v${t.version} - ${t.title}` }))}
-                value={tenderSearchText}
-                onChange={setTenderSearchText}
-                placeholder="Поиск по тендеру"
-                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-                allowClear
-              />
-            ) : null
+    <div
+      style={{
+        // Заголовок страницы уже рисует шапка (MainLayout) — на телефоне карточку с
+        // дублирующим названием не показываем, вкладки поджимаем к шапке.
+        padding: isPhoneDevice ? '0 12px 12px' : 24,
+        // <Content> (MainLayout.tsx:475) даёт сверху 8px при isMobile и 16px иначе
+        // (ландшафтный телефон ≥768px по ширине — уже не isMobile). Гасим до ~4px.
+        // Ключ — isMobile (он и задаёт padding), НЕ isLandscapePhone: у 667×375
+        // (SE, ландшафт) isMobile=true и padding всё ещё 8px.
+        // |marginTop| не должен превышать padding-top у <Content>: там overflow:auto,
+        // иначе контент обрежет скроллер.
+        marginTop: isPhoneDevice ? (isMobile ? -4 : -12) : 0,
+      }}
+    >
+      {isPhoneDevice ? (
+        tabsBlock
+      ) : (
+        <Card
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <UserOutlined style={{ fontSize: 24, color: '#10b981' }} />
+              <span>Управление пользователями</span>
+            </div>
           }
-        />
-      </Card>
+          styles={{ body: { padding: 0 } }}
+        >
+          {tabsBlock}
+        </Card>
+      )}
 
       <EditUserModal
         open={isEditModalVisible}

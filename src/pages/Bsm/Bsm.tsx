@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { Card, Table, Select, Tabs, Input, message, Button, Typography, Space } from 'antd';
 import { SearchOutlined, FileExcelOutlined, LinkOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -19,6 +19,10 @@ const Bsm: React.FC = () => {
   const readOnly = isMobile || isLandscapePhone;
 
   const [searchText, setSearchText] = useState('');
+  // Отложенное значение поиска: срочный рендер кейстрока идёт со старым списком
+  // (identity filteredItems не меняется → memo-список не перестраивается),
+  // а перефильтрация и перерисовка карточек уезжают в прерываемый deferred-рендер.
+  const deferredSearchText = useDeferredValue(searchText);
   const [activeTab, setActiveTab] = useState<'all' | 'materials' | 'works'>('all');
   const [selectedExpense, setSelectedExpense] = useState<string | null>(null);
 
@@ -66,12 +70,12 @@ const Bsm: React.FC = () => {
     if (selectedExpense) {
       filtered = filtered.filter(item => item.expense_label === selectedExpense);
     }
-    if (searchText) {
-      const q = searchText.toLowerCase();
+    if (deferredSearchText) {
+      const q = deferredSearchText.toLowerCase();
       filtered = filtered.filter(item => item.name.toLowerCase().includes(q));
     }
     return filtered;
-  }, [allItems, activeTab, selectedExpense, searchText]);
+  }, [allItems, activeTab, selectedExpense, deferredSearchText]);
 
   const columns = useMemo(
     () => buildBsmColumns(handleUpdateQuoteLink, readOnly),

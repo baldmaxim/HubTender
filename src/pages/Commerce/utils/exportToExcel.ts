@@ -10,7 +10,8 @@ import type { PositionWithCommercialCost } from '../types';
 export function exportCommerceToExcel(
   positions: PositionWithCommercialCost[],
   selectedTender: Tender | undefined,
-  insuranceTotal: number = 0
+  insuranceTotal: number = 0,
+  distributeToRows: boolean = true
 ) {
   if (positions.length === 0) {
     message.warning('Нет данных для экспорта');
@@ -34,6 +35,9 @@ export function exportCommerceToExcel(
   // (страница «Перераспределение» = единый источник правды), используем его —
   // числа совпадут с CR. Иначе fallback на пропорциональное разнесение.
   const getInsuranceShare = (pos: PositionWithCommercialCost) => {
+    // Разнесение выключено → доля страхования по строкам = 0 (в скалярный итог
+    // экспорта страхование по-прежнему входит отдельной строкой).
+    if (!distributeToRows) return 0;
     if (pos.insurance_share != null) return pos.insurance_share;
     return totalWorksBase > 0
       ? insuranceTotal * ((pos.work_cost_total ?? 0) / totalWorksBase)

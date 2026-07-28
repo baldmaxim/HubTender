@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /**
  * Ближайший предок с собственной прокруткой. Нужен как явный `root` наблюдателя:
@@ -39,18 +39,36 @@ export function useIncrementalRender<T>(items: T[], step = 40, resetKey?: unknow
   const [sentinel, setSentinel] = useState<HTMLDivElement | null>(null);
   const sentinelRef = useCallback((node: HTMLDivElement | null) => setSentinel(node), []);
 
-  const total = items.length;
-  const hasMore = count < total;
-
   // Сброс к первой порции при смене набора (другой тендер/фильтр/поиск).
   // По умолчанию ключ — идентичность массива. Страницы с realtime-рефетчем
   // передают стабильный `resetKey`: рефетч отдаёт новый массив с тем же
   // содержимым, и на идентичности пользователя выкидывало бы к первым `step`
   // строкам посреди прокрутки.
+  //
+  // Сбрасываем синхронно в рендере (adjust state during render), а не в useEffect:
+  // сброс в эффекте давал кадр со stale count — после глубокого скролла (count
+  // вырос до сотен) первый же кейстрок поиска строил сотни карточек, и только
+  // потом эффект возвращал первую порцию вторым рендером. React при setState
+  // в рендере перезапускает компонент до рендера детей, так что тяжёлый slice
+  // со старым count вообще не доходит до DOM; effectiveCount страхует и сам
+  // (выбрасываемый) проход.
   const key = resetKey === undefined ? items : resetKey;
-  useEffect(() => {
+  const [prevKey, setPrevKey] = useState<unknown>(key);
+  let effectiveCount = count;
+  if (prevKey !== key) {
+    setPrevKey(key);
     setCount(step);
-  }, [key, step]);
+    effectiveCount = step;
+  }
+
+  const total = items.length;
+  const hasMore = effectiveCount < total;
+
+  // Родитель прокрутки конкретной ноды сентинела не меняется, а ищется проходом по
+  // предкам с getComputedStyle на каждом — дорого в раздутом keep-alive DOM. Эффект
+  // наблюдателя ниже пересоздаётся на каждое изменение count/total (в т.ч. на каждый
+  // deferred-ввод поиска), поэтому root кэшируем по ноде, а не ищем заново.
+  const scrollRoot = useMemo(() => (sentinel ? findScrollParent(sentinel) : null), [sentinel]);
 
   useEffect(() => {
     if (!sentinel || !hasMore || typeof IntersectionObserver === 'undefined') return undefined;
@@ -58,15 +76,15 @@ export function useIncrementalRender<T>(items: T[], step = 40, resetKey?: unknow
       if (entries.some((e) => e.isIntersecting)) {
         setCount((c) => Math.min(c + step, total));
       }
-    }, { root: findScrollParent(sentinel), rootMargin: '400px' });
+    }, { root: scrollRoot, rootMargin: '400px' });
     io.observe(sentinel);
     return () => io.disconnect();
     // `count` в deps не лишний: после каждой подгрузки наблюдатель пересоздаётся и
     // заново оценивает пересечение. Иначе, если сентинел остался в зоне видимости,
     // IO повторно не сработает (он репортит только пересечение границы) и список
     // залипнет на текущей порции.
-  }, [sentinel, hasMore, count, total, step]);
+  }, [sentinel, scrollRoot, hasMore, count, total, step]);
 
-  const visible = hasMore ? items.slice(0, count) : items;
+  const visible = hasMore ? items.slice(0, effectiveCount) : items;
   return { visible, sentinelRef, hasMore };
 }

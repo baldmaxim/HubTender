@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchTenders } from '../../lib/api/tenders';
-import { fetchTenderQuality, QualityIssue, QualityReport } from '../../lib/api/quality';
+import { fetchTenderQuality, QualityIssue, QualityReport } from '../../lib/api/qualityAnalytics';
 import {
   buildNavigationTarget, categoryLabel, filterIssues, formatCompleteness,
   resolveReadyState, severityDisplay,

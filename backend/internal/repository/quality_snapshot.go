@@ -15,21 +15,21 @@ import (
 // ErrQualityTenderNotFound — тендер не существует (404 в handler).
 var ErrQualityTenderNotFound = errors.New("тендер не найден")
 
-// QualityRepo грузит read-only snapshot для движка качества.
-type QualityRepo struct {
+// QualityAnalyticsRepo грузит read-only snapshot для движка качества.
+type QualityAnalyticsRepo struct {
 	pool *pgxpool.Pool
 }
 
-// NewQualityRepo creates a QualityRepo.
-func NewQualityRepo(pool *pgxpool.Pool) *QualityRepo {
-	return &QualityRepo{pool: pool}
+// NewQualityAnalyticsRepo creates a QualityAnalyticsRepo.
+func NewQualityAnalyticsRepo(pool *pgxpool.Pool) *QualityAnalyticsRepo {
+	return &QualityAnalyticsRepo{pool: pool}
 }
 
 // LoadSnapshot собирает согласованный срез тендера ФИКСИРОВАННЫМ числом
 // запросов (5) в одной REPEATABLE READ READ ONLY транзакции: tender+insurance
 // агрегаты, позиции, BOQ, redistribution metadata. Никаких мутаций, никакого
 // N+1 (parent-валидация выполняется движком по загруженной карте).
-func (r *QualityRepo) LoadSnapshot(ctx context.Context, tenderID string) (*quality.Snapshot, error) {
+func (r *QualityAnalyticsRepo) LoadSnapshot(ctx context.Context, tenderID string) (*quality.Snapshot, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{
 		IsoLevel:   pgx.RepeatableRead,
 		AccessMode: pgx.ReadOnly,

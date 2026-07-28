@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {
   Card, Select, InputNumber, Typography, Space,
-  Row, Col, message, Tag,
+  Row, Col, message, Tag, Button, Tooltip,
 } from 'antd';
-import { SafetyCertificateOutlined } from '@ant-design/icons';
+import { SafetyCertificateOutlined, DeploymentUnitOutlined } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import {
   fetchInsuranceTenders,
@@ -13,7 +13,8 @@ import {
   type InsuranceData,
 } from '../../../lib/api/insurance';
 import { getErrorMessage } from '../../../utils/errors';
-import { getVersionColorByTitle } from '../../../utils/versionColor';
+import { TenderTileCard } from '../../../components/TenderTileCard';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useRealtimeRefetch } from '../../../lib/realtime/useRealtimeRefetch';
 
@@ -28,6 +29,7 @@ interface InsuranceFormData {
   parking_area: number;
   storage_price_m2: number;
   storage_area: number;
+  distribute_to_rows: boolean;
 }
 
 const DEFAULT_DATA: InsuranceFormData = {
@@ -39,6 +41,7 @@ const DEFAULT_DATA: InsuranceFormData = {
   parking_area: 0,
   storage_price_m2: 0,
   storage_area: 0,
+  distribute_to_rows: true,
 };
 
 function calcInsurance(d: InsuranceFormData) {
@@ -65,6 +68,7 @@ const AREA_ONLY_ROLES = ['engineer', 'senior_group'];
 
 export default function Insurance() {
   const { user } = useAuth();
+  const { isPhone, isPhoneDevice } = useIsMobile();
   const isAreaOnly = AREA_ONLY_ROLES.includes(user?.role_code || '');
 
   const [tenders, setTenders] = useState<Tender[]>([]);
@@ -120,6 +124,17 @@ export default function Insurance() {
     if (!selectedTenderId) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => persistSave(selectedTenderId, next), 700);
+  };
+
+  // Тумблер «Распределить во все строки»: сохраняем сразу (без debounce), т.к.
+  // это дискретное действие. Гейтит только per-row разнесение на «Перераспределении»/
+  // «Форме КП»; в итог ФП страхование входит в любом случае.
+  const handleToggleDistribute = () => {
+    if (!selectedTenderId || isAreaOnly) return;
+    const next = { ...formData, distribute_to_rows: !formData.distribute_to_rows };
+    setFormData(next);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    void persistSave(selectedTenderId, next);
   };
 
   const getTenderTitles = () => {
@@ -230,84 +245,51 @@ export default function Insurance() {
     return (
       <Card bordered={false} style={{ height: '100%' }}>
         <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <SafetyCertificateOutlined style={{ fontSize: 56, color: '#10b981', marginBottom: 16 }} />
-          <Title level={3} style={{ marginBottom: 8 }}>Страхование от судимостей</Title>
+          {/* На телефоне заголовок уже есть в шапке (pageTitle) — здесь не дублируем. */}
+          {!isPhoneDevice && (
+            <>
+              <SafetyCertificateOutlined style={{ fontSize: 56, color: '#10b981', marginBottom: 16 }} />
+              <Title level={3} style={{ marginBottom: 8 }}>Страхование от судимостей</Title>
+            </>
+          )}
           <Text type="secondary" style={{ display: 'block', marginBottom: 24, fontSize: 15 }}>
             Выберите тендер для редактирования параметров страхования
           </Text>
-          <Space size="middle" wrap style={{ justifyContent: 'center', display: 'flex', marginBottom: 32 }}>
+          <Select
+            placeholder="Наименование тендера"
+            style={{ width: isPhone ? '100%' : 400, maxWidth: '100%', marginBottom: 32 }}
+            showSearch
+            value={selectedTenderTitle}
+            onChange={handleTitleChange}
+            options={getTenderTitles()}
+            filterOption={(input, opt) =>
+              (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())
+            }
+            size="large"
+          />
+          {selectedTenderTitle && (
             <Select
-              placeholder="Наименование тендера"
-              style={{ width: 400 }}
-              showSearch
-              value={selectedTenderTitle}
-              onChange={handleTitleChange}
-              options={getTenderTitles()}
-              filterOption={(input, opt) =>
-                (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())
-              }
+              placeholder="Версия"
+              style={{ width: isPhone ? '100%' : 160, maxWidth: '100%', marginBottom: 32, marginLeft: isPhone ? 0 : 16 }}
+              value={selectedVersion}
+              onChange={handleVersionChange}
+              options={getVersionsForTitle(selectedTenderTitle)}
               size="large"
             />
-            {selectedTenderTitle && (
-              <Select
-                placeholder="Версия"
-                style={{ width: 160 }}
-                value={selectedVersion}
-                onChange={handleVersionChange}
-                options={getVersionsForTitle(selectedTenderTitle)}
-                size="large"
-              />
-            )}
-          </Space>
+          )}
           {quickCards.length > 0 && (
             <div style={{ marginTop: 8 }}>
               <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
                 Или выберите из списка:
               </Text>
-              <Row gutter={[16, 16]} justify="center">
+              <Row gutter={isPhoneDevice ? [8, 8] : [16, 16]} justify="center">
                 {quickCards.map(tender => (
                   <Col key={tender.id}>
-                    <Card
-                      hoverable
-                      style={{
-                        width: 200,
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        borderColor: '#10b981',
-                        borderWidth: 1,
-                      }}
+                    <TenderTileCard
+                      tender={tender}
+                      allTenders={tenders}
                       onClick={() => selectTender(tender.id, tender.title, tender.version || 1)}
-                    >
-                      <div style={{ marginBottom: 8 }}>
-                        <Tag color="#10b981">{tender.tender_number}</Tag>
-                      </div>
-                      <div style={{
-                        marginBottom: 8,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexWrap: 'nowrap',
-                        gap: 4,
-                      }}>
-                        <Text strong style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          maxWidth: 140,
-                        }}>
-                          {tender.title}
-                        </Text>
-                        <Tag
-                          color={getVersionColorByTitle(tender.version, tender.title, tenders)}
-                          style={{ flexShrink: 0, margin: 0 }}
-                        >
-                          v{tender.version || 1}
-                        </Tag>
-                      </div>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {tender.client_name}
-                      </Text>
-                    </Card>
+                    />
                   </Col>
                 ))}
               </Row>
@@ -401,6 +383,25 @@ export default function Insurance() {
               {fmt(sumTotal)} × {formData.judicial_pct}% × {formData.total_pct}%
             </Text>
           </Card>
+        </Col>
+        <Col xs={24} sm={24} lg={9} style={{ display: 'flex', alignItems: 'center' }}>
+          <Tooltip
+            title={
+              formData.distribute_to_rows
+                ? 'Сумма страхования равномерно раскидывается во все строки заказчика на «Перераспределении» и «Форме КП». Нажмите, чтобы отключить.'
+                : 'Сумма страхования НЕ раскидывается в строки заказчика, но входит в итог на странице «Финансовые показатели». Нажмите, чтобы включить распределение.'
+            }
+          >
+            <Button
+              type={formData.distribute_to_rows ? 'primary' : 'default'}
+              icon={<DeploymentUnitOutlined style={{ fontSize: 14 }} />}
+              onClick={handleToggleDistribute}
+              disabled={!selectedTenderId || isAreaOnly}
+              style={{ fontSize: 14, height: 40, padding: '0 16px', lineHeight: 1 }}
+            >
+              Распределить во все строки
+            </Button>
+          </Tooltip>
         </Col>
       </Row>
 

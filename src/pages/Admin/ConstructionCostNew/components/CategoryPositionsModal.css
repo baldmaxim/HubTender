@@ -1,0 +1,46 @@
+/**
+ * Модалка drill-down по категории затрат.
+ * Таблица рендерится одной общей <table> (без scroll.y), поэтому шапка, тело и строка
+ * итогов используют единый colgroup — границы колонок не могут разъехаться.
+ * Вертикальный скролл и «липкость» вынесены сюда, на .ant-table-content.
+ */
+
+/* rc-table вешает на .ant-table-content инлайновый overflow-y: hidden — нужен !important.
+   Лимит 240px = прежний бюджет высоты: раньше scroll.y ограничивал только тело
+   (100vh - 320px), а шапка и строка итогов (~80px) висели снаружи. */
+.ccn-positions-table .ant-table-content {
+  max-height: calc(100dvh - 240px);
+  overflow-y: auto !important;
+}
+
+/* Липкая шапка внутри одного <table>: ширины колонок общие с телом. */
+.ccn-positions-table .ant-table-thead > tr > th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+/* Угловые ячейки (закреплённые по горизонтали) должны быть выше соседей по шапке:
+   у antd .ant-table-cell-fix-left/right z-index = 2 (zIndexTableFixed). */
+.ccn-positions-table .ant-table-thead > tr > th.ant-table-cell-fix-left,
+.ccn-positions-table .ant-table-thead > tr > th.ant-table-cell-fix-right {
+  z-index: 4;
+}
+
+/* Липкая строка итогов. background: inherit тянет цвет от tfoot
+   (antd задаёт ему token.tableBg) — без хардкода цветов темы. */
+.ccn-positions-table .ant-table-summary > tr,
+.ccn-positions-table .ant-table-summary > tr > td {
+  background: inherit;
+}
+
+.ccn-positions-table .ant-table-summary > tr > td {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+}
+
+.ccn-positions-table .ant-table-summary > tr > td.ant-table-cell-fix-left,
+.ccn-positions-table .ant-table-summary > tr > td.ant-table-cell-fix-right {
+  z-index: 4;
+}

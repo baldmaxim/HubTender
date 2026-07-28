@@ -17,6 +17,7 @@ import {
   updateBoqItemWithAudit,
   deleteBoqItemWithAudit,
 } from '../../../lib/api/boq';
+import type { BoqItemFieldPatch } from '../utils/boqFieldPatch';
 import { insertTemplateItems } from '../../../utils/insertTemplateItems';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getErrorMessage } from '../../../utils/errors';
@@ -255,6 +256,43 @@ export const useItemActions = ({
     }
   };
 
+  /**
+   * Точечное сохранение ОДНОГО поля из телефонного листа (BoqItemSheet).
+   *
+   * Отличия от handleFormSave: patch собран buildFieldPatch'ем (только тронутое
+   * поле + companion'ы), а ошибка НЕ глотается — её ловит useBoqFieldSave и
+   * оставляет поле в режиме редактирования с введённым значением.
+   */
+  const handleItemFieldSave = async (
+    itemId: string,
+    patch: BoqItemFieldPatch,
+    opts: { recomputeWorkId?: string } = {},
+  ): Promise<void> => {
+    if (readOnly) throw new Error('Срок редактирования истёк');
+    // Пустой patch не меняет строку (touchesAnything() = false), но НЕ попадает
+    // под isQuoteMetadataOnlyPatch → двигал бы ревизию тендера впустую.
+    if (Object.keys(patch).length === 0) throw new Error('Нет изменений');
+
+    markTenderMutated();
+    await updateBoqItemWithAudit(user?.id, itemId, patch as Partial<BoqItemInsert>);
+
+    if (opts.recomputeWorkId) {
+      markTenderMutated();
+      try {
+        await recomputeLinkedMaterials(opts.recomputeWorkId);
+      } catch (error) {
+        // PATCH уже закоммичен — не роняем сохранение целиком. Пересчёт жёстко
+        // падает, если у ребёнка нет курса валюты.
+        message.error(
+          'Сохранено, но пересчёт количества материалов не выполнен: ' + getErrorMessage(error),
+        );
+      }
+    }
+
+    await fetchItems();
+    if (position) await updateClientPositionTotals(position.id);
+  };
+
   const handleSaveGPData = async (
     positionId: string,
     gpVolume: number,
@@ -406,6 +444,7 @@ export const useItemActions = ({
     handleAddTemplate,
     handleDelete,
     handleFormSave,
+    handleItemFieldSave,
     handleSaveGPData,
     handleSaveAdditionalWorkData,
     handleMoveItem,

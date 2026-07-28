@@ -107,3 +107,42 @@ export function injectStrikeRuns(
   files[sheetPath] = strToU8(newXml);
   return zipSync(files as unknown as Zippable);
 }
+
+/**
+ * Заморозить первые `rows` строк листа: xlsx-js-style 1.2.0 не поддерживает
+ * panes на запись (`ws['!freeze']` игнорируется), поэтому впрыскиваем
+ * <pane>/<selection> в <sheetView> листа пост-обработкой OOXML (fflate).
+ * Возвращает новые байты .xlsx.
+ */
+export function injectFreezePane(
+  xlsxBytes: Uint8Array,
+  sheetName: string,
+  rows = 1,
+): Uint8Array {
+  const files = unzipSync(xlsxBytes) as ZipMap;
+  const sheetPath = resolveSheetPath(files, sheetName);
+  let sheetXml = strFromU8(files[sheetPath]);
+
+  const topLeft = `A${rows + 1}`;
+  const paneXml =
+    `<pane ySplit="${rows}" topLeftCell="${topLeft}" activePane="bottomLeft" state="frozen"/>` +
+    `<selection pane="bottomLeft" activeCell="${topLeft}" sqref="${topLeft}"/>`;
+
+  const selfClosing = /<sheetView\b[^>]*\/>/;
+  const openTag = /<sheetView\b[^>]*?>/;
+
+  if (selfClosing.test(sheetXml)) {
+    // <sheetView …/> → <sheetView …>pane…</sheetView>
+    sheetXml = sheetXml.replace(selfClosing, (tag) => `${tag.slice(0, -2)}>${paneXml}</sheetView>`);
+  } else if (openTag.test(sheetXml)) {
+    // <sheetView …>…</sheetView> → pane первым дочерним элементом
+    sheetXml = sheetXml.replace(openTag, (tag) => `${tag}${paneXml}`);
+  } else {
+    // <sheetViews> нет — вставить целиком перед <sheetData
+    const views = `<sheetViews><sheetView workbookViewId="0">${paneXml}</sheetView></sheetViews>`;
+    sheetXml = sheetXml.replace(/<sheetData\b/, `${views}<sheetData`);
+  }
+
+  files[sheetPath] = strToU8(sheetXml);
+  return zipSync(files as unknown as Zippable);
+}

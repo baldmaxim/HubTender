@@ -12,13 +12,16 @@ import { useLayoutEffect, useRef, useState } from 'react';
  * (внешний узел держит overflow:hidden и фиксированный inset).
  *
  * Возвращает также натуральные размеры (natW/natH) — нужны вызывающему, чтобы
- * задать размер scaled-обёртки и получить корректную протяжённость скролла.
+ * задать размер scaled-обёртки и получить корректную протяжённость скролла, —
+ * и размеры доступной области (availW/availH) — нужны, чтобы задать высоту
+ * внутреннего скролл-контейнера в немасштабированных единицах (availH/scale).
  */
 export function useFitScale(axis: 'both' | 'width' = 'both') {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [nat, setNat] = useState({ natW: 0, natH: 0 });
+  const [avail, setAvail] = useState({ availW: 0, availH: 0 });
 
   useLayoutEffect(() => {
     const outer = outerRef.current;
@@ -36,6 +39,9 @@ export function useFitScale(axis: 'both' | 'width' = 'both') {
           : Math.min(availW / natW, availH / natH, 1);
       setScale(next > 0 ? next : 1);
       setNat((prev) => (prev.natW === natW && prev.natH === natH ? prev : { natW, natH }));
+      setAvail((prev) =>
+        prev.availW === availW && prev.availH === availH ? prev : { availW, availH },
+      );
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -62,5 +68,13 @@ export function useFitScale(axis: 'both' | 'width' = 'both') {
     };
   }, [axis]);
 
-  return { outerRef, innerRef, scale, natW: nat.natW, natH: nat.natH };
+  return {
+    outerRef,
+    innerRef,
+    scale,
+    natW: nat.natW,
+    natH: nat.natH,
+    availW: avail.availW,
+    availH: avail.availH,
+  };
 }

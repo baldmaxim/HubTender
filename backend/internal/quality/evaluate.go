@@ -53,7 +53,7 @@ func Evaluate(s *Snapshot) *Report {
 		case SeverityBlocker:
 			sum.Blockers++
 			c.Blockers++
-		case SeverityWarning:
+		case SeverityWarn:
 			sum.Warnings++
 			c.Warnings++
 		default:

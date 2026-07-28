@@ -1,58 +1,108 @@
-// Этап 1.1: клиент GET /api/v1/tenders/{id}/quality (read-only аналитика).
+// Проверка данных: находки правил по тендеру и вердикты инженера.
+// Каталог правил живёт в backend/internal/quality/rules/*.md и встроен в бинарь,
+// поэтому фронт получает и сами находки, и человеческое описание правила.
+// Формат правил и дисциплина порогов — docs/data-quality/README.md.
 import { apiFetch } from './client';
 
-export type QualitySeverity = 'blocker' | 'warning' | 'information';
+export type QualitySeverity = 'error' | 'warning' | 'info';
+export type QualityVerdict = 'accepted' | 'error';
 
-export interface QualityIssue {
-  id: string;
-  code: string;
-  severity: QualitySeverity | string;
-  category: string;
-  entity_type: 'tender' | 'client_position' | 'boq_item' | string;
+/** Одна находка правила по конкретному тендеру. */
+export interface QualityFinding {
+  rule_code: string;
+  rule_title: string;
+  severity: QualitySeverity;
+  /** Текст «Суть» из правила — показывается инженеру вместо LLM-объяснения. */
+  summary: string;
+  tender_id: string;
+  position_number: number | null;
+  item_no: string | null;
   entity_id: string;
-  client_position_id?: string;
-  field?: string;
-  title: string;
+  /** md5 значимых значений; изменились данные — вердикт перестаёт действовать. */
+  fingerprint: string;
+  detail: string;
+  money_delta: number | null;
+  /** Вердикт инженера, если он есть И отпечаток совпадает. */
+  verdict: QualityVerdict | null;
+  note: string | null;
+}
+
+/** Правило, которое не отработало. Остальные находки при этом остаются валидными. */
+export interface QualityRuleError {
+  rule_code: string;
   message: string;
-  fix_hint: string;
-  current_value: string | null;
-  affected_item_ids?: string[];
-  affected_count?: number;
-  group_total_amount?: number;
-}
-
-export interface QualityCategorySummary {
-  code: string;
-  blockers: number;
-  warnings: number;
-  information: number;
-}
-
-export interface QualitySummary {
-  blockers: number;
-  warnings: number;
-  information: number;
-  calculation_completeness_percent: number;
-  review_completeness_percent: number;
-  positions_total: number;
-  boq_items_total: number;
-  boq_items_with_issues: number;
 }
 
 export interface QualityReport {
   tender_id: string;
-  financial_input_revision: number;
-  financial_calculation_revision: number;
-  financial_calculation_status: string;
   generated_at: string;
-  summary: QualitySummary;
-  categories: QualityCategorySummary[];
-  issues: QualityIssue[];
+  findings: QualityFinding[];
+  errors: QualityRuleError[];
 }
 
-export async function fetchTenderQuality(tenderId: string): Promise<QualityReport> {
-  const resp = await apiFetch<{ data: QualityReport }>(
-    `/api/v1/tenders/${tenderId}/quality`,
+/** Правило каталога — метаданные для страницы. */
+export interface QualityRule {
+  Code: string;
+  Title: string;
+  Severity: QualitySeverity;
+  Money: boolean;
+  Status: 'active' | 'draft';
+  Summary: string;
+  SQL: string;
+}
+
+/** Строка выгрузки вердиктов — вход для замера точности правил. */
+export interface QualityExportRow {
+  tender_title: string;
+  tender_version: number;
+  rule_code: string;
+  entity_id: string;
+  verdict: QualityVerdict;
+  note: string | null;
+  created_at: string;
+}
+
+/**
+ * Находки по тендеру. refresh=true обходит кэш — кнопка «Перепроверить».
+ * Прогон читает все строки тендера, поэтому без refresh результат берётся из кэша.
+ */
+export async function fetchTenderQuality(
+  tenderId: string,
+  refresh = false,
+): Promise<QualityReport> {
+  const qs = refresh ? '?refresh=1' : '';
+  const res = await apiFetch<{ data: QualityReport }>(
+    `/api/v1/tenders/${tenderId}/quality${qs}`,
+    { timeoutMs: 60_000 },
   );
-  return resp.data;
+  return res.data;
+}
+
+/** Вердикт инженера по находке. Отпечаток берётся из самой находки. */
+export async function setQualityVerdict(
+  tenderId: string,
+  input: {
+    rule_code: string;
+    entity_id: string;
+    fingerprint: string;
+    verdict: QualityVerdict;
+    note?: string | null;
+  },
+): Promise<void> {
+  await apiFetch<void>(`/api/v1/tenders/${tenderId}/quality/verdict`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/** Каталог правил целиком, включая черновики. */
+export async function fetchQualityRules(): Promise<QualityRule[]> {
+  const res = await apiFetch<{ data: QualityRule[] }>('/api/v1/quality/rules');
+  return res.data;
+}
+
+/** Выгрузка вердиктов по всей базе — для наращивания каталога. */
+export async function fetchQualityExport(): Promise<QualityExportRow[]> {
+  const res = await apiFetch<{ data: QualityExportRow[] }>('/api/v1/quality/export');
+  return res.data;
 }

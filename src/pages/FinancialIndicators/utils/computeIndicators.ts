@@ -6,13 +6,27 @@ import type { DirectCostTotals, MarkupCoefficients, FinancialCalcResult } from '
 /**
  * Формульный расчёт финансовых показателей (строки 1-18) из прямых затрат
  * и коэффициентов наценок. Перенесено из useFinancialCalculations без
- * изменений логики; console.log — намеренные кросс-чеки.
+ * изменений логики; console.log — намеренные кросс-чеки (глушатся `quiet`).
+ *
+ * ВАЖНО — на это свойство опирается механизм снижения (discount/):
+ * расчёт ЛИНЕЕН и ОДНОРОДЕН по полям `totals` и по `insuranceCost`. Каждый шаг —
+ * умножение на процент и сложение, свободного члена нет, поэтому
+ *   grandTotal(a·totals) = a · grandTotal(totals)   при insuranceCost = 0
+ * и вклад любой подвыборки прямых затрат считается тем же вызовом. Если сюда
+ * когда-нибудь добавят нелинейный шаг (округление, min/max, ступенчатую шкалу) —
+ * снижение начнёт «недоливать» до введённой суммы, см.
+ * discount/utils/markupMultipliers.ts.
  */
 export const computeIndicators = (
   totals: DirectCostTotals,
   coeffs: MarkupCoefficients,
   insuranceCost: number,
+  // Расчёт вызывается не только один раз на тендер: механизм снижения гоняет
+  // его на «пробных» векторах прямых затрат. Логи там — мусор на десятки тысяч
+  // строк и заметная просадка с открытым DevTools, поэтому глушим.
+  options?: { quiet?: boolean },
 ): FinancialCalcResult => {
+  const quiet = options?.quiet === true;
   const {
     subcontractWorks,
     subcontractMaterials,
@@ -44,11 +58,13 @@ export const computeIndicators = (
     isVatInConstructor,
   } = coeffs;
 
-  console.log('Works (раб):', works);
-  console.log('WorksComp (раб-комп.):', worksComp);
-  console.log('WorksSu10Only base:', works + worksComp);
-  console.log('Calculated 0,6к cost:', (works + worksComp) * (coefficient06 / 100));
-  console.log('=========================');
+  if (!quiet) {
+    console.log('Works (раб):', works);
+    console.log('WorksComp (раб-комп.):', worksComp);
+    console.log('WorksSu10Only base:', works + worksComp);
+    console.log('Calculated 0,6к cost:', (works + worksComp) * (coefficient06 / 100));
+    console.log('=========================');
+  }
 
   // Итоговые значения прямых затрат (без коррекции — total_amount в BOQ это базовая стоимость)
   const subcontractTotal = subcontractWorks + subcontractMaterials;
@@ -56,7 +72,9 @@ export const computeIndicators = (
   const reserveForDeliveryTotal = materialsComp + worksComp; // Запас на сдачу объекта
   const directCostsTotal = subcontractTotal + su10Total + reserveForDeliveryTotal;
 
-  console.log('Итоговые ПЗ после коррекции:', { subcontractTotal, su10Total, reserveForDeliveryTotal, directCostsTotal });
+  if (!quiet) {
+    console.log('Итоговые ПЗ после коррекции:', { subcontractTotal, su10Total, reserveForDeliveryTotal, directCostsTotal });
+  }
 
   const worksSu10Only = works;
   const mechanizationCost = worksSu10Only * (mechanizationCoeff / 100);
@@ -129,44 +147,46 @@ export const computeIndicators = (
     vatCost = grandTotal / (1 + vatCoeff / 100) * (vatCoeff / 100);
   }
 
-  console.log('=== Financial Indicators Calculation (ФОРМУЛЫ) ===');
-  console.log('--- ПРЯМЫЕ ЗАТРАТЫ ---');
-  console.log('  Direct costs (base):', directCostsTotal.toLocaleString('ru-RU'));
-  console.log('    - Subcontract:', subcontractTotal.toLocaleString('ru-RU'));
-  console.log('    - SU-10:', su10Total.toLocaleString('ru-RU'));
-  console.log('    - Reserve (comp):', reserveForDeliveryTotal.toLocaleString('ru-RU'));
-  console.log('--- НАЦЕНКИ (формульный расчёт) ---');
-  console.log('  Mechanization:', mechanizationCost.toLocaleString('ru-RU'), `(${mechanizationCoeff}%)`);
-  console.log('  MVP+GSM:', mvpGsmCost.toLocaleString('ru-RU'), `(${mvpGsmCoeff}%)`);
-  console.log('  Warranty:', warrantyCost.toLocaleString('ru-RU'), `(${warrantyCoeff}%)`);
-  console.log('  0.6k coefficient:', coefficient06Cost.toLocaleString('ru-RU'), `(${coefficient06}%)`);
-  console.log('  Cost growth total:', totalCostGrowth.toLocaleString('ru-RU'));
-  console.log('    - works growth:', worksCostGrowthAmount.toLocaleString('ru-RU'), `(${worksCostGrowth}%)`);
-  console.log('    - materials growth:', materialCostGrowthAmount.toLocaleString('ru-RU'), `(${materialCostGrowth}%)`);
-  console.log('    - subcontract works growth:', subcontractWorksCostGrowthAmount.toLocaleString('ru-RU'), `(${subcontractWorksCostGrowth}%)`);
-  console.log('    - subcontract materials growth:', subcontractMaterialsCostGrowthAmount.toLocaleString('ru-RU'), `(${subcontractMaterialsCostGrowth}%)`);
-  console.log('  Unforeseeable:', unforeseeableCost.toLocaleString('ru-RU'), `(${unforeseeableCoeff}%)`);
-  console.log('  Overhead own forces (ООЗ):', overheadOwnForcesCost.toLocaleString('ru-RU'), `(${overheadOwnForcesCoeff}%)`);
-  console.log('  Overhead subcontract (ООЗ суб):', overheadSubcontractCost.toLocaleString('ru-RU'), `(${overheadSubcontractCoeff}%)`);
-  console.log('  General costs (ОФЗ):', generalCostsCost.toLocaleString('ru-RU'), `(${generalCostsCoeff}%)`);
-  console.log('  Profit own forces:', profitOwnForcesCost.toLocaleString('ru-RU'), `(${profitOwnForcesCoeff}%)`);
-  console.log('  Profit subcontract:', profitSubcontractCost.toLocaleString('ru-RU'), `(${profitSubcontractCoeff}%)`);
-  console.log('--- НДС ---');
-  console.log('  VAT in constructor:', isVatInConstructor);
-  console.log('  VAT coefficient:', vatCoeff);
-  console.log('  Sum before VAT (rows 1-14):', grandTotalBeforeVAT.toLocaleString('ru-RU'));
-  console.log('  VAT cost:', vatCost.toLocaleString('ru-RU'));
-  console.log('--- ИТОГО ---');
-  console.log('  GRAND TOTAL (по формулам FI):', grandTotal.toLocaleString('ru-RU'));
+  if (!quiet) {
+    console.log('=== Financial Indicators Calculation (ФОРМУЛЫ) ===');
+    console.log('--- ПРЯМЫЕ ЗАТРАТЫ ---');
+    console.log('  Direct costs (base):', directCostsTotal.toLocaleString('ru-RU'));
+    console.log('    - Subcontract:', subcontractTotal.toLocaleString('ru-RU'));
+    console.log('    - SU-10:', su10Total.toLocaleString('ru-RU'));
+    console.log('    - Reserve (comp):', reserveForDeliveryTotal.toLocaleString('ru-RU'));
+    console.log('--- НАЦЕНКИ (формульный расчёт) ---');
+    console.log('  Mechanization:', mechanizationCost.toLocaleString('ru-RU'), `(${mechanizationCoeff}%)`);
+    console.log('  MVP+GSM:', mvpGsmCost.toLocaleString('ru-RU'), `(${mvpGsmCoeff}%)`);
+    console.log('  Warranty:', warrantyCost.toLocaleString('ru-RU'), `(${warrantyCoeff}%)`);
+    console.log('  0.6k coefficient:', coefficient06Cost.toLocaleString('ru-RU'), `(${coefficient06}%)`);
+    console.log('  Cost growth total:', totalCostGrowth.toLocaleString('ru-RU'));
+    console.log('    - works growth:', worksCostGrowthAmount.toLocaleString('ru-RU'), `(${worksCostGrowth}%)`);
+    console.log('    - materials growth:', materialCostGrowthAmount.toLocaleString('ru-RU'), `(${materialCostGrowth}%)`);
+    console.log('    - subcontract works growth:', subcontractWorksCostGrowthAmount.toLocaleString('ru-RU'), `(${subcontractWorksCostGrowth}%)`);
+    console.log('    - subcontract materials growth:', subcontractMaterialsCostGrowthAmount.toLocaleString('ru-RU'), `(${subcontractMaterialsCostGrowth}%)`);
+    console.log('  Unforeseeable:', unforeseeableCost.toLocaleString('ru-RU'), `(${unforeseeableCoeff}%)`);
+    console.log('  Overhead own forces (ООЗ):', overheadOwnForcesCost.toLocaleString('ru-RU'), `(${overheadOwnForcesCoeff}%)`);
+    console.log('  Overhead subcontract (ООЗ суб):', overheadSubcontractCost.toLocaleString('ru-RU'), `(${overheadSubcontractCoeff}%)`);
+    console.log('  General costs (ОФЗ):', generalCostsCost.toLocaleString('ru-RU'), `(${generalCostsCoeff}%)`);
+    console.log('  Profit own forces:', profitOwnForcesCost.toLocaleString('ru-RU'), `(${profitOwnForcesCoeff}%)`);
+    console.log('  Profit subcontract:', profitSubcontractCost.toLocaleString('ru-RU'), `(${profitSubcontractCoeff}%)`);
+    console.log('--- НДС ---');
+    console.log('  VAT in constructor:', isVatInConstructor);
+    console.log('  VAT coefficient:', vatCoeff);
+    console.log('  Sum before VAT (rows 1-14):', grandTotalBeforeVAT.toLocaleString('ru-RU'));
+    console.log('  VAT cost:', vatCost.toLocaleString('ru-RU'));
+    console.log('--- ИТОГО ---');
+    console.log('  GRAND TOTAL (по формулам FI):', grandTotal.toLocaleString('ru-RU'));
 
-  console.log('');
-  console.log('======= СРАВНЕНИЕ COMMERCE vs FINANCIAL INDICATORS =======');
-  const commercialGrandTotal = totalCommercialMaterial + totalCommercialWork;
-  console.log('  COMMERCE (boq_items total_commercial_*):', commercialGrandTotal.toLocaleString('ru-RU'));
-  console.log('  FINANCIAL INDICATORS (формулы):', grandTotal.toLocaleString('ru-RU'));
-  console.log('  РАЗНИЦА:', (commercialGrandTotal - grandTotal).toLocaleString('ru-RU'));
-  console.log('  РАЗНИЦА %:', ((commercialGrandTotal - grandTotal) / grandTotal * 100).toFixed(4) + '%');
-  console.log('=============================================================');
+    console.log('');
+    console.log('======= СРАВНЕНИЕ COMMERCE vs FINANCIAL INDICATORS =======');
+    const commercialGrandTotal = totalCommercialMaterial + totalCommercialWork;
+    console.log('  COMMERCE (boq_items total_commercial_*):', commercialGrandTotal.toLocaleString('ru-RU'));
+    console.log('  FINANCIAL INDICATORS (формулы):', grandTotal.toLocaleString('ru-RU'));
+    console.log('  РАЗНИЦА:', (commercialGrandTotal - grandTotal).toLocaleString('ru-RU'));
+    console.log('  РАЗНИЦА %:', ((commercialGrandTotal - grandTotal) / grandTotal * 100).toFixed(4) + '%');
+    console.log('=============================================================');
+  }
 
   return {
     subcontractTotal,

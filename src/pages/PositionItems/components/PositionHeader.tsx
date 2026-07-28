@@ -1,6 +1,8 @@
 import { Card, Typography, Tag, Input, InputNumber, Select } from 'antd';
 import type { ClientPosition } from '../../../lib/types';
 import { renderStrikeRuns, renderStruck } from '../../../components/RichText/StrikeText';
+import GpInlineFields from './GpInlineFields';
+import type { GpAutosave } from '../hooks/useGpAutosave';
 
 const { Text } = Typography;
 
@@ -16,10 +18,16 @@ interface PositionHeaderProps {
   setUnitCode: (v: string) => void;
   units: { code: string }[];
   disabled: boolean;
-  onSaveGPData: () => void;
+  /** Значения передаются явно: замыкание на gpVolume/gpNote ломало бы telephone-драфт
+   *  (WS-рефетч перезаписывает их безусловно). */
+  onSaveGPData: (volume: number, note: string, opts?: { refetch?: boolean }) => void;
   onSaveAdditionalWorkData: () => void;
-  /** Телефон: показываем значения текстом (без полей ввода), стек вертикально. */
+  /** Телефон (обе ориентации): вертикальный стек вместо широкой раскладки. */
   isPhone: boolean;
+  /** Портретный телефон: ГП редактируется прямо в шапке. В ландшафте шапка закрыта
+   *  оверлеем, и ГП живёт в PositionLandscapeInfo — поэтому отдельный флаг. */
+  gpEditable?: boolean;
+  gp?: GpAutosave;
 }
 
 const PositionHeader: React.FC<PositionHeaderProps> = ({
@@ -37,7 +45,10 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
   onSaveGPData,
   onSaveAdditionalWorkData,
   isPhone,
+  gpEditable = false,
+  gp,
 }) => {
+  const saveGp = () => onSaveGPData(gpVolume, gpNote);
   const titleBlock = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {position.is_additional && <Tag color="orange">ДОП</Tag>}
@@ -69,14 +80,24 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
               Примечание заказчика: <Text strong>{renderStrikeRuns(position.rich_runs?.client_note, position.client_note)}</Text>
             </Text>
           )}
-          <Text type="secondary">
-            Кол-во ГП: <Text strong>{gpVolume?.toLocaleString('ru-RU') || '-'}</Text>
-            {' '}<Text strong>{position.is_additional ? unitCode : position.unit_code}</Text>
-          </Text>
-          {gpNote && (
-            <Text type="secondary">
-              Примечание ГП: <Text strong>{gpNote}</Text>
-            </Text>
+          {gpEditable && gp ? (
+            <GpInlineFields
+              gp={gp}
+              unitCode={position.is_additional ? unitCode : position.unit_code}
+              disabled={disabled}
+            />
+          ) : (
+            <>
+              <Text type="secondary">
+                Кол-во ГП: <Text strong>{gpVolume?.toLocaleString('ru-RU') || '-'}</Text>
+                {' '}<Text strong>{position.is_additional ? unitCode : position.unit_code}</Text>
+              </Text>
+              {gpNote && (
+                <Text type="secondary">
+                  Примечание ГП: <Text strong>{gpNote}</Text>
+                </Text>
+              )}
+            </>
           )}
         </div>
       </Card>
@@ -121,7 +142,7 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
                 <Input.TextArea
                   value={gpNote}
                   onChange={(e) => setGpNote(e.target.value)}
-                  onBlur={onSaveGPData}
+                  onBlur={saveGp}
                   disabled={disabled}
                   style={{ width: 300 }}
                   size="small"
@@ -134,7 +155,7 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
                 <InputNumber
                   value={gpVolume}
                   onChange={(value) => setGpVolume(value || 0)}
-                  onBlur={onSaveGPData}
+                  onBlur={saveGp}
                   disabled={disabled}
                   precision={5}
                   style={{ width: 120 }}
@@ -174,7 +195,7 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
                   <InputNumber
                     value={gpVolume}
                     onChange={(value) => setGpVolume(value || 0)}
-                    onBlur={onSaveGPData}
+                    onBlur={saveGp}
                     disabled={disabled}
                     precision={5}
                     style={{ width: 120 }}
@@ -190,7 +211,7 @@ const PositionHeader: React.FC<PositionHeaderProps> = ({
                 <Input.TextArea
                   value={gpNote}
                   onChange={(e) => setGpNote(e.target.value)}
-                  onBlur={onSaveGPData}
+                  onBlur={saveGp}
                   disabled={disabled}
                   style={{ width: 400 }}
                   size="small"

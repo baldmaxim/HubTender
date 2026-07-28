@@ -99,6 +99,7 @@ export const ALL_PAGES = [
   '/admin/import-log',
   '/admin/insurance',
   '/admin/ai-settings',
+  '/data-quality',
 ] as const;
 
 // Страницы по умолчанию для каждой роли
@@ -150,12 +151,6 @@ export const PAGE_LABELS: Record<string, string> = {
   '/bsm': 'Базовая стоимость',
   '/costs': 'Затраты на строительство',
   '/financial-indicators': 'Финансовые показатели',
-  '/analytics/quality': 'Качество расчёта',
-  '/analytics/price-benchmark': 'Ценовые отклонения',
-  '/analytics/price-sources': 'Источники цен',
-  '/analytics/action-plan': 'План действий',
-  '/analytics/change-impact': 'Изменения расчёта',
-  '/analytics/review-pack': 'Отчёт для проверки',
   '/analytics/comparison': 'Сравнение объектов',
   '/projects': 'Текущие объекты',
   '/projects/:projectId': 'Детали объекта',
@@ -166,11 +161,18 @@ export const PAGE_LABELS: Record<string, string> = {
   '/admin/markup_constructor': 'Конструктор наценок',
   '/admin/import-log': 'Журнал импортов строк',
   '/admin/insurance': 'Страхование от судимостей',
-  '/admin/ai-settings': 'AI и нейросети',
   '/users': 'Пользователи',
   '/settings': 'Настройки',
   '/positions/:positionId/items': 'Работы и материалы',
   '/commerce': 'Форма КП', // Старый путь, оставлен для совместимости
+  '/data-quality': 'Проверка данных',
+  '/analytics/quality': 'Качество расчёта',
+  '/analytics/price-benchmark': 'Ценовые отклонения',
+  '/analytics/price-sources': 'Источники цен',
+  '/analytics/action-plan': 'План действий',
+  '/analytics/change-impact': 'Изменения расчёта',
+  '/analytics/review-pack': 'Отчёт для проверки',
+  '/admin/ai-settings': 'AI и нейросети',
 };
 
 // Структура страниц с группировкой (для UI модального окна)

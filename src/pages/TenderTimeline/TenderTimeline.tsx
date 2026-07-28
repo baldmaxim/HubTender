@@ -9,16 +9,11 @@ import { useTenderAssignableUsers } from './hooks/useTenderAssignableUsers';
 import { useTenders, type TimelineTenderListItem } from './hooks/useTenders';
 import { useTenderGroups } from './hooks/useTenderGroups';
 import {
-  DEFAULT_TENDER_TEAMS,
   TIMELINE_EXCLUDED_FULL_NAMES,
   TIMELINE_PRIVILEGED_ROLE_CODES,
   normalizeFullName,
 } from './utils/timeline.utils';
-import {
-  getExpectedAutoGroups,
-  getExpectedSignature,
-  getGroupsSignature,
-} from './utils/timelineSignatures';
+import { getExpectedAutoGroups, isReconciled } from './utils/timelineSignatures';
 import { TenderTeamsView } from './components/TenderTeamsView';
 import { TimelinePanel } from './components/TimelinePanel';
 import { TimelineTenderTable } from './components/TimelineTenderTable';
@@ -57,7 +52,9 @@ const TenderTimeline: React.FC = () => {
   const [qualityTenderId, setQualityTenderId] = useState<string | null>(null);
   const [realtimeSignal, setRealtimeSignal] = useState(0);
   const syncInFlightRef = useRef(false);
-  const lastSyncSignatureRef = useRef<string>('');
+  // Отметка времени последней локальной записи по выбранному тендеру — чтобы
+  // не гонять повторный refreshAll на собственное realtime-эхо (см. подписку).
+  const localWriteAtRef = useRef(0);
 
   const {
     groups,
@@ -240,7 +237,6 @@ const TenderTimeline: React.FC = () => {
 
   useEffect(() => {
     if (!selectedTenderId) {
-      lastSyncSignatureRef.current = '';
       return;
     }
 
@@ -248,12 +244,11 @@ const TenderTimeline: React.FC = () => {
       return;
     }
 
-    const expectedSignature = `${selectedTenderId}::${getExpectedSignature(autoExpectedGroups)}`;
-    const actualSignature = `${selectedTenderId}::${getGroupsSignature(
-      groups.filter((group) => DEFAULT_TENDER_TEAMS.some((team) => team.name === group.name))
-    )}`;
-
-    if (expectedSignature === actualSignature || lastSyncSignatureRef.current === expectedSignature) {
+    // Предикат — чистая функция реального состояния групп: сошедшийся тендер
+    // стабильно возвращает true (в т.ч. когда есть защищённые итерациями
+    // участники вне ростера), поэтому reconcile не запускается на каждый
+    // разворот карточки. Гоняем POST только когда сервер реально что-то изменит.
+    if (isReconciled(autoExpectedGroups, groups, excludedTimelineUserIds)) {
       return;
     }
 
@@ -271,8 +266,11 @@ const TenderTimeline: React.FC = () => {
           })),
         });
 
-        lastSyncSignatureRef.current = expectedSignature;
-        await Promise.all([refetchGroups(), refetchTenders()]);
+        // Своя запись — гасим повторный refreshAll на собственное realtime-эхо.
+        localWriteAtRef.current = Date.now();
+        // Группы обновляем в фоне (без мигания скелетона); список тендеров нужен
+        // для агрегатов (очистка excluded-итераций меняет счётчики/статус).
+        await Promise.all([refetchGroups({ background: true }), refetchTenders()]);
       } catch (err) {
         message.error(err instanceof Error ? err.message : 'Не удалось автоматически синхронизировать команды');
       } finally {
@@ -299,10 +297,28 @@ const TenderTimeline: React.FC = () => {
     await Promise.all([refetchTenders(), refetchGroups()]);
   };
 
+  // Локальная запись, у которой уже есть собственный refetch, помечает время —
+  // realtime-эхо этой же записи (приходит через pgnotify в топик tender:<id>)
+  // тогда игнорируется, чтобы не гонять второй refreshAll.
+  const ECHO_SUPPRESS_MS = 1500;
+  const markLocalWrite = () => {
+    localWriteAtRef.current = Date.now();
+  };
+
+  // Панель итераций уже делает свою запись (respond) — помечаем её как локальную
+  // и обновляем данные сами, чтобы realtime-эхо не вызвало второй refreshAll.
+  const handlePanelDataChanged = () => {
+    markLocalWrite();
+    return refreshAll();
+  };
+
   // Realtime: при изменении timeline-строк выбранного тендера (создание/ответ по
   // записи, оценка качества — фан-аут через pgnotify в топик tender:<id>)
   // перезапрашиваем список/группы и сигналим открытой панели обновить итерации.
   useRealtimeTopic(selectedTenderId ? `tender:${selectedTenderId}` : null, () => {
+    if (Date.now() - localWriteAtRef.current < ECHO_SUPPRESS_MS) {
+      return; // наша собственная запись уже вызвала refetch — эхо пропускаем
+    }
     void refreshAll();
     setRealtimeSignal((signal) => signal + 1);
   });
@@ -311,7 +327,6 @@ const TenderTimeline: React.FC = () => {
     if (tenderId !== selectedTenderId) {
       setSelectedGroupId(null);
       setSelectedUserId(null);
-      lastSyncSignatureRef.current = '';
     }
 
     setSelectedTenderId(tenderId);
@@ -352,7 +367,6 @@ const TenderTimeline: React.FC = () => {
     setSelectedTenderId(tenderId);
     setSelectedGroupId(null);
     setSelectedUserId(null);
-    lastSyncSignatureRef.current = '';
   };
 
   const handleCloseQualityModal = () => {
@@ -382,6 +396,7 @@ const TenderTimeline: React.FC = () => {
 
       message.success('Уровень расчета обновлен');
       handleCloseQualityModal();
+      markLocalWrite();
       await refreshAll();
     } catch (err) {
       message.error(err instanceof Error ? err.message : 'Не удалось обновить уровень расчета');
@@ -391,7 +406,14 @@ const TenderTimeline: React.FC = () => {
   };
 
   const renderExpandedGroups = (tender: TimelineTenderListItem) => {
-    if (selectedTenderId !== tender.id || groupsLoading || assignableUsersLoading) {
+    // Скелетон — только когда данных ещё нет (первая загрузка). Фоновые
+    // ревалидации (reconcile, realtime, повторный разворот) подменяют данные
+    // тихо, без повторного мигания скелетона.
+    if (
+      selectedTenderId !== tender.id ||
+      (groupsLoading && groups.length === 0) ||
+      assignableUsersLoading
+    ) {
       return (
         <div style={{ padding: 12 }}>
           <Skeleton active paragraph={{ rows: 3 }} />
@@ -527,7 +549,7 @@ const TenderTimeline: React.FC = () => {
               currentUserId={user?.id || null}
               currentUserRoleCode={user?.role_code || null}
               canRespond={canRespondToIterations}
-              onDataChanged={refreshAll}
+              onDataChanged={handlePanelDataChanged}
               refreshSignal={realtimeSignal}
               onClose={handleCloseTimeline}
               colorText={colorText}
@@ -554,7 +576,7 @@ const TenderTimeline: React.FC = () => {
               currentUserId={user?.id || null}
               currentUserRoleCode={user?.role_code || null}
               canRespond={canRespondToIterations}
-              onDataChanged={refreshAll}
+              onDataChanged={handlePanelDataChanged}
               refreshSignal={realtimeSignal}
               onClose={handleCloseTimeline}
               colorText={colorText}

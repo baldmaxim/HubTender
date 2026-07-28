@@ -12,6 +12,7 @@ export const useFinancialData = () => {
 
   const {
     data,
+    tableData,
     spTotal,
     customerTotal,
     loading: calculationsLoading,
@@ -19,12 +20,16 @@ export const useFinancialData = () => {
     vatCoefficient,
     fxMissing,
     fetchFinancialIndicators,
+    discountContext,
+    discountSettings,
+    getDiscountWorkspace,
   } = useFinancialCalculations();
 
   return {
     tenders,
     loading: tendersLoading || calculationsLoading,
     data,
+    tableData,
     spTotal,
     customerTotal,
     isVatInConstructor,
@@ -32,5 +37,8 @@ export const useFinancialData = () => {
     fxMissing,
     loadTenders,
     fetchFinancialIndicators,
+    discountContext,
+    discountSettings,
+    getDiscountWorkspace,
   };
 };

@@ -20,6 +20,10 @@ export interface InsuranceData {
   // Потребители отображают это значение и не пересчитывают формулу локально.
   // Optional: при PUT клиент его не отправляет (сервер игнорирует и считает сам).
   insurance_total?: number;
+  // Гейтит ТОЛЬКО разнесение страхования по строкам заказчика на «Перераспределении»/
+  // «Форме КП» (display-only). НЕ влияет на слагаемое страхования в итоге ФП /
+  // cached_grand_total. По умолчанию true (прежнее поведение — разносить всегда).
+  distribute_to_rows: boolean;
 }
 
 const ZERO_INSURANCE: InsuranceData = {
@@ -32,6 +36,7 @@ const ZERO_INSURANCE: InsuranceData = {
   storage_price_m2: 0,
   storage_area: 0,
   insurance_total: 0,
+  distribute_to_rows: true,
 };
 
 function toNumber(v: unknown): number {
@@ -49,6 +54,7 @@ function normalize(data: Partial<InsuranceData>): InsuranceData {
     storage_price_m2: toNumber(data.storage_price_m2),
     storage_area: toNumber(data.storage_area),
     insurance_total: toNumber(data.insurance_total),
+    distribute_to_rows: data.distribute_to_rows ?? true,
   };
 }
 

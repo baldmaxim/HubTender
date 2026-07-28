@@ -51,23 +51,55 @@ export function getExpectedAutoGroups(
   });
 }
 
-export function getGroupsSignature(groups: TimelineGroupItem[]): string {
-  return groups
-    .map((group) => ({
-      name: group.name,
-      color: group.color,
-      sortOrder: group.sort_order,
-      userIds: group.members.map((member) => member.user_id).sort(),
-    }))
-    .sort((left, right) => left.name.localeCompare(right.name, 'ru-RU'))
-    .map((group) => `${group.name}|${group.color}|${group.sortOrder}|${group.userIds.join(',')}`)
-    .join(';');
-}
+/**
+ * Возвращает true, когда ReconcileTenderGroups на сервере затронул бы НОЛЬ строк
+ * для текущего состояния групп — то есть авто-синхронизация не нужна. Зеркалит
+ * решение бэкенда (backend/internal/repository/timeline_reconcile.go): вставка
+ * группы, UPDATE цвета/порядка, add/remove участника (с защитой владельцев
+ * итераций), очистка excluded-пользователей. В отличие от сравнения сигнатур
+ * «ожидаемое == фактическое», предикат корректно учитывает защищённых
+ * итерациями участников, поэтому сошедшийся тендер стабильно даёт true и не
+ * запускает бесконечную петлю reconcile при каждом развороте карточки.
+ */
+export function isReconciled(
+  expected: ExpectedAutoGroup[],
+  groups: TimelineGroupItem[],
+  excludedUserIds: string[],
+): boolean {
+  const excluded = new Set(excludedUserIds);
 
-export function getExpectedSignature(expectedGroups: ExpectedAutoGroup[]): string {
-  return expectedGroups
-    .slice()
-    .sort((left, right) => left.name.localeCompare(right.name, 'ru-RU'))
-    .map((group) => `${group.name}|${group.color}|${group.sortOrder}|${group.userIds.slice().sort().join(',')}`)
-    .join(';');
+  for (const exp of expected) {
+    const group = groups.find((candidate) => candidate.name === exp.name);
+    if (!group) {
+      return false; // группы нет → сервер сделает INSERT
+    }
+    if (group.color !== exp.color || (group.sort_order ?? 0) !== exp.sortOrder) {
+      return false; // сервер сделает UPDATE цвета/порядка
+    }
+
+    const memberIds = new Set(group.members.map((member) => member.user_id));
+    const protectedIds = new Set(group.iterationUserIds); // владельцы итераций — защищены от удаления
+    const expectedIds = new Set(exp.userIds);
+
+    for (const uid of exp.userIds) {
+      if (!memberIds.has(uid)) {
+        return false; // сервер добавит участника
+      }
+    }
+    for (const uid of memberIds) {
+      if (!expectedIds.has(uid) && !protectedIds.has(uid)) {
+        return false; // сервер удалит лишнего участника
+      }
+      if (excluded.has(uid)) {
+        return false; // сервер вычистит excluded-участника
+      }
+    }
+    for (const uid of protectedIds) {
+      if (excluded.has(uid)) {
+        return false; // сервер вычистит excluded-итерации
+      }
+    }
+  }
+
+  return true;
 }

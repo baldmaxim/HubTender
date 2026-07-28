@@ -34,6 +34,10 @@ interface IndicatorsTableProps {
   fitToScreen?: boolean;
   /** Валюты без курса: экспорт заблокирован, чтобы не выгрузить частичные значения */
   fxMissing?: CurrencyType[];
+  /** Примечание о снижении для Excel; строки таблицы уже сниженные */
+  discountNote?: string | null;
+  /** Подзаголовок (объём строительства) в верхней строке Excel */
+  volumeTitle?: string;
 }
 
 export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
@@ -51,6 +55,8 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
   readOnly,
   fitToScreen,
   fxMissing,
+  discountNote,
+  volumeTitle,
 }) => {
   const [editingSp, setEditingSp] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
@@ -63,7 +69,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
       message.error(formatFXUnavailable(fxMissing));
       return;
     }
-    exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion);
+    exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion, discountNote, volumeTitle);
   };
 
   const handleUpdateArea = async (field: 'area_sp' | 'area_client', value: number) => {
@@ -103,7 +109,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
       width: 400,
       onHeaderCell: () => ({ style: { textAlign: 'center' } }),
       render: (text, record) => {
-        const isIndented = record.row_number >= 2 && record.row_number <= 7;
+        const isIndented = record.is_indented === true;
         const content = (
           <Text
             strong={record.is_header || record.is_total}

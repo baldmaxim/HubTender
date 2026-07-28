@@ -300,7 +300,7 @@ func TestQuality_ZeroInputs(t *testing.T) {
 	r := Evaluate(s)
 	q := findIssue(r, "QUANTITY_ZERO")
 	u := findIssue(r, "UNIT_RATE_ZERO")
-	if q == nil || u == nil || q.Severity != SeverityWarning || u.Severity != SeverityWarning {
+	if q == nil || u == nil || q.Severity != SeverityWarn || u.Severity != SeverityWarn {
 		t.Fatalf("want zero-input warnings, got %+v", r.Issues)
 	}
 }
@@ -342,7 +342,7 @@ func TestQuality_ExactDuplicates(t *testing.T) {
 	s.Positions[0].TotalMaterial = 200
 	r := Evaluate(s)
 	is := findIssue(r, "EXACT_DUPLICATE_GROUP")
-	if is == nil || is.Severity != SeverityWarning {
+	if is == nil || is.Severity != SeverityWarn {
 		t.Fatalf("want one duplicate warning, got %+v", r.Issues)
 	}
 	if is.AffectedCount != 2 || is.EntityID != "item-m" {
@@ -393,7 +393,7 @@ func TestQuality_DeterministicOrdering(t *testing.T) {
 		t.Fatalf("issue list depends on input order:\n%v\nvs\n%v", ids(r1), ids(r2))
 	}
 	// порядок severity невозрастающий
-	rank := map[string]int{SeverityBlocker: 0, SeverityWarning: 1, SeverityInformation: 2}
+	rank := map[string]int{SeverityBlocker: 0, SeverityWarn: 1, SeverityInformation: 2}
 	for i := 1; i < len(r1.Issues); i++ {
 		if rank[r1.Issues[i-1].Severity] > rank[r1.Issues[i].Severity] {
 			t.Fatalf("severity ordering broken at %d", i)

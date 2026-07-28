@@ -91,10 +91,16 @@ type templateRowPlan struct {
 // planTemplateRow normalizes one template row into the EXACT values that will be
 // persisted and prices it through the authoritative calc kernel. Pure — no DB
 // access — so the whole batch can be validated and priced before any mutation.
+//
+// quantity приходит предрассчитанным из шага 4c (merge 6e8ea39): у привязанного
+// материала — от родительской РАБОТЫ (work.quantity × перевод × расход), объём
+// позиции применяется только к непривязанным. base_quantity держим только у
+// НЕпривязанного материала; у привязанного он NULL (инвариант, как в
+// useMaterialEditForm/boqFieldPatch).
 func planTemplateRow(
 	t tmplItemRow,
 	parentIdx int,
-	manualVolume *float64,
+	quantity float64,
 	rates calc.CurrencyRates,
 ) (templateRowPlan, error) {
 	isWork := t.Kind == "work"
@@ -115,17 +121,18 @@ func planTemplateRow(
 		p.MaterialNameID = t.MNameID
 		p.MatType = t.MMatType
 		p.DPT = t.MDPT
-		one := 1.0
-		p.BaseQty = &one
+		if parentIdx < 0 {
+			one := 1.0
+			p.BaseQty = &one
+		}
 		cc := orOne(t.MConsCoef)
 		p.ConsCoef = &cc
 		p.DeliveryAmount = orZero(t.MDelivAmt)
 	}
 
-	p.Quantity = 1.0
+	p.Quantity = quantity
 	if !isWork && t.ConvCoeff != nil && *t.ConvCoeff != 0 {
-		p.Quantity = *t.ConvCoeff * orOne(manualVolume)
-		p.ConvCoef = t.ConvCoeff
+		p.ConvCoef = t.ConvCoeff // перевод сохраняем независимо от ветки количества
 	}
 
 	// Money is derived ONLY by the authoritative kernel, from exactly the values

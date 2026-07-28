@@ -179,6 +179,13 @@ CREATE TRIGGER trg_notify_row_change_subcontract_growth_exclusions
     AFTER INSERT OR UPDATE OR DELETE ON public.subcontract_growth_exclusions
     FOR EACH ROW EXECUTE FUNCTION public.notify_row_change();
 
+-- Снижение на «Финансовых показателях» (db/yandex/incremental/2026_07_fi_discounts.sql).
+-- Несёт tender_id → generic-ветка notify_row_change() → топик tender:<tender_id>.
+DROP TRIGGER IF EXISTS trg_notify_row_change_tender_fi_discounts ON public.tender_fi_discounts;
+CREATE TRIGGER trg_notify_row_change_tender_fi_discounts
+    AFTER INSERT OR UPDATE OR DELETE ON public.tender_fi_discounts
+    FOR EACH ROW EXECUTE FUNCTION public.notify_row_change();
+
 -- =============================================================================
 -- Global / reference extension (db/yandex/incremental/2026_06_global_pgnotify.sql)
 -- Row-level for low-frequency tables; statement-level for bulk-imported ones.

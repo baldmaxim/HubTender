@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import {
   getTenderById,
@@ -30,6 +30,16 @@ import { aggregateDirectCosts } from '../utils/aggregateDirectCosts';
 import { extractSequenceParams, resolveMarkupCoefficients } from '../utils/markupCoefficients';
 import { computeIndicators } from '../utils/computeIndicators';
 import { buildIndicatorRows } from '../utils/buildIndicatorRows';
+import { buildTableRows } from '../utils/buildTableRows';
+import { getFiDiscounts, type FiDiscountSettings } from '../../../lib/api/fiDiscounts';
+import {
+  buildDiscountWorkspace,
+  type DiscountWorkspace,
+  type BuildWorkspaceInput,
+} from '../discount/utils/buildWorkspace';
+import { applyDiscountRules } from '../discount/utils/applyDiscount';
+import { applyZeroing } from '../discount/utils/applyZeroing';
+import type { DiscountContext } from '../discount/types';
 
 // Обратная совместимость: IndicatorRow переехал в ../types.ts,
 // useFinancialData и компоненты продолжают импортировать его отсюда.
@@ -47,15 +57,62 @@ const addNotification = async (
   }
 };
 
+/**
+ * Настройки снижения. Единственный доп. запрос на обычном пути — по нему и
+ * определяется, включено ли снижение вообще. Сбой не должен ронять страницу:
+ * падаем в «выключено», то есть в исходное поведение.
+ */
+const loadDiscountSettings = async (tenderId: string): Promise<FiDiscountSettings> => {
+  try {
+    return await getFiDiscounts(tenderId);
+  } catch (error) {
+    console.error('Ошибка загрузки настроек снижения:', error);
+    return { enabled: false, mode: 'discount', rules: [], zeroedPositionIds: [] };
+  }
+};
+
 export const useFinancialCalculations = () => {
   const [loading, setLoading] = useRealtimeAwareLoading(false);
   const [data, setData] = useState<IndicatorRow[]>([]);
+  // Отдельная модель строк для вкладки «Таблица» (расщепления, без НДС, +Работы/
+  // Материалы). Графики продолжают потреблять `data`.
+  const [tableData, setTableData] = useState<IndicatorRow[]>([]);
   const [spTotal, setSpTotal] = useState<number>(0);
   const [customerTotal, setCustomerTotal] = useState<number>(0);
   const [isVatInConstructor, setIsVatInConstructor] = useState<boolean>(false);
   const [vatCoefficient, setVatCoefficient] = useState<number>(0);
   // Fail-closed: валюты без курса → показатели не рассчитываются, Alert/«—».
   const [fxMissing, setFxMissing] = useState<CurrencyType[]>([]);
+  // Снижение: null — выключено или не настроено, страница считает как обычно.
+  const [discountContext, setDiscountContext] = useState<DiscountContext | null>(null);
+  const [discountSettings, setDiscountSettings] = useState<FiDiscountSettings | null>(null);
+
+  // Сырые входы последней загрузки. Нужны, чтобы вкладка «Снижение» могла
+  // построить рабочее пространство, не перезагружая boq_items (десятки тысяч
+  // строк), и чтобы обычный путь расчёта не платил за это ничего.
+  const rawInputsRef = useRef<BuildWorkspaceInput | null>(null);
+  const workspaceRef = useRef<{ tenderId: string; workspace: DiscountWorkspace } | null>(null);
+
+  /**
+   * Рабочее пространство снижения для текущего тендера (ленивое, с кэшем).
+   * Зовётся из пайплайна при enabled=true и из вкладки «Снижение» при открытии.
+   *
+   * `expectedTenderId` защищает от гонки при переключении тендера: вкладка может
+   * дёрнуть хелпер раньше, чем пайплайн обновит rawInputsRef, и без проверки
+   * получила бы рабочее пространство предыдущего тендера.
+   */
+  const getDiscountWorkspace = useCallback(async (
+    expectedTenderId?: string,
+  ): Promise<DiscountWorkspace | null> => {
+    const raw = rawInputsRef.current;
+    if (!raw) return null;
+    if (expectedTenderId && raw.tenderId !== expectedTenderId) return null;
+    const cached = workspaceRef.current;
+    if (cached && cached.tenderId === raw.tenderId) return cached.workspace;
+    const workspace = await buildDiscountWorkspace(raw);
+    workspaceRef.current = { tenderId: raw.tenderId, workspace };
+    return workspace;
+  }, []);
 
   const fetchFinancialIndicators = useCallback(async (selectedTenderId: string | null) => {
     if (!selectedTenderId) return;
@@ -127,8 +184,13 @@ export const useFinancialCalculations = () => {
       if (totalsResult.value === null) {
         setFxMissing(totalsResult.missingCurrencies);
         setData([]);
+        setTableData([]);
         setSpTotal(0);
         setCustomerTotal(0);
+        // Сводку снижения тоже гасим: без курсов «Было/Стало» показывать нечего.
+        setDiscountContext(null);
+        rawInputsRef.current = null;
+        workspaceRef.current = null;
         return;
       }
       setFxMissing([]);
@@ -142,13 +204,88 @@ export const useFinancialCalculations = () => {
       setVatCoefficient(coeffs.vatCoeff);
       setIsVatInConstructor(coeffs.isVatInConstructor);
 
+      // Сырые входы кладём до ветки со снижением: вкладка «Снижение» должна
+      // уметь построить рабочее пространство и когда тумблер выключен.
+      rawInputsRef.current = { tenderId: selectedTenderId, tender, boqItems, exclusions, coeffs };
+      if (workspaceRef.current && workspaceRef.current.tenderId !== selectedTenderId) {
+        workspaceRef.current = null;
+      }
+
+      // Снижение — опционально. Выключено или правил нет → ниже идёт ровно тот
+      // же путь, что и до появления механизма: никаких доп. загрузок и правок
+      // в числах.
+      const settings = await loadDiscountSettings(selectedTenderId);
+      setDiscountSettings(settings);
+
+      let calcTotals = totals;
+      let discount: DiscountContext | null = null;
+      // Режим обнуления: снятую сумму знаем только после основного каскада.
+      let zeroingActive = false;
+
+      if (settings.enabled) {
+        const baseGrandTotal = () => computeIndicators(totals, coeffs, insuranceCost, { quiet: true }).grandTotal;
+
+        if (settings.mode === 'discount' && settings.rules.length > 0) {
+          const workspace = await getDiscountWorkspace();
+          if (workspace) {
+            const applied = applyDiscountRules(totals, settings.rules, workspace.reducibles, workspace.multipliers);
+            calcTotals = applied.reducedTotals;
+            const { alphaByPosition } = applied;
+            discount = {
+              mode: 'discount',
+              baseGrandTotal: baseGrandTotal(),
+              reducedGrandTotal: 0, // проставляется ниже, когда посчитан основной каскад
+              appliedAmount: applied.appliedAmount,
+              alphaByPosition,
+              errorsByRule: applied.errorsByRule,
+              itemScale: (positionId, boqItemType, materialType) => {
+                if (!positionId) return 1;
+                const alpha = alphaByPosition.get(positionId);
+                if (!alpha) return 1;
+                // Нереснижаемые элементы (база основных материалов) не масштабируем —
+                // ровно как в самом расчёте снижения.
+                return workspace.isReducible(boqItemType, materialType) ? 1 - alpha : 1;
+              },
+            };
+          }
+        } else if (settings.mode === 'zeroing' && settings.zeroedPositionIds.length > 0) {
+          const workspace = await getDiscountWorkspace();
+          if (workspace) {
+            const applied = applyZeroing(totals, settings.zeroedPositionIds, workspace.fullByPosition);
+            calcTotals = applied.reducedTotals;
+            const zeroedSet = new Set(settings.zeroedPositionIds);
+            zeroingActive = true;
+            discount = {
+              mode: 'zeroing',
+              baseGrandTotal: baseGrandTotal(),
+              reducedGrandTotal: 0,
+              appliedAmount: 0, // = base − reduced, проставляется ниже
+              // Обнулённые позиции убраны целиком → доля «снижения» = 1.
+              alphaByPosition: new Map(settings.zeroedPositionIds.map((id) => [id, 1])),
+              errorsByRule: new Map(),
+              // Элементы обнулённых позиций не участвуют в drill-down (масштаб 0).
+              itemScale: (positionId) => (positionId && zeroedSet.has(positionId) ? 0 : 1),
+            };
+          }
+        }
+      }
+
       // Формульный расчёт всех промежуточных значений и итогов
-      const calc = computeIndicators(totals, coeffs, insuranceCost);
+      const calc = computeIndicators(calcTotals, coeffs, insuranceCost);
 
-      // Сборка строк таблицы (включая НДС-умножение строк 1-16)
-      const tableData = buildIndicatorRows(calc, totals, coeffs, insuranceData, areaSp, areaClient);
+      if (discount) {
+        discount.reducedGrandTotal = calc.grandTotal;
+        if (zeroingActive) {
+          discount.appliedAmount = discount.baseGrandTotal - calc.grandTotal;
+        }
+      }
+      setDiscountContext(discount);
 
-      setData(tableData);
+      // Базовые 18 строк (для графиков, включая НДС-умножение строк 1-16)
+      const baseRows = buildIndicatorRows(calc, calcTotals, coeffs, insuranceData, areaSp, areaClient);
+      setData(baseRows);
+      // Модель строк вкладки «Таблица» (расщепления + Работы/Материалы, без НДС)
+      setTableData(buildTableRows(baseRows, calc, calcTotals, coeffs, areaSp, areaClient));
       setSpTotal(areaSp);
       setCustomerTotal(areaClient);
     } catch (error) {
@@ -161,10 +298,11 @@ export const useFinancialCalculations = () => {
     } finally {
       setLoading(false);
     }
-  }, [setLoading]);
+  }, [setLoading, getDiscountWorkspace]);
 
   return {
     data,
+    tableData,
     spTotal,
     customerTotal,
     loading,
@@ -172,5 +310,9 @@ export const useFinancialCalculations = () => {
     vatCoefficient,
     fxMissing,
     fetchFinancialIndicators,
+    // Снижение
+    discountContext,
+    discountSettings,
+    getDiscountWorkspace,
   };
 };

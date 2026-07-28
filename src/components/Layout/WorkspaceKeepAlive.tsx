@@ -1,8 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { useLocation, useMatch, useSearchParams } from 'react-router-dom';
 import PositionItems from '../../pages/PositionItems/PositionItems';
 import { useWorkspaceTabs } from '../../contexts/WorkspaceTabsContext';
 import { WORKSPACE_PAGES } from './workspacePages';
+
+/** Memo-граница страниц-якорей. Keep-alive перерендеривается на каждую навигацию
+ *  (useLocation/useSearchParams) и пересоздаёт элементы вкладок — без границы все
+ *  смонтированные якоря рендерились бы заново на каждое переключение/открытие вкладки.
+ *  `component` — стабильная ссылка из WORKSPACE_PAGES, поэтому memo держится всегда;
+ *  страницу, подписанную на router-контекст самостоятельно (ClientPositions с
+ *  useSearchParams), граница от location-перерендеров не защищает. */
+const PageHost = memo(({ component: Page }: { component: React.ComponentType }) => <Page />);
 
 /**
  * Keep-alive «рабочего стола» вкладок: страницы-якоря («Позиции», «Форма КП», «Затраты») и
@@ -52,16 +60,23 @@ const WorkspaceKeepAlive: React.FC = () => {
         if (tab.kind === 'page') {
           const page = WORKSPACE_PAGES.find((p) => p.path === tab.key);
           if (!page) return null; // защита от «протухшей» sessionStorage-записи после deploy
-          const Page = page.component;
           return (
             <div key={tab.key} style={{ display: isActive ? 'block' : 'none', height: '100%' }}>
-              <Page />
+              <PageHost component={page.component} />
             </div>
           );
         }
         return (
           <div key={tab.key} style={{ display: isActive ? 'block' : 'none' }}>
-            <PositionItems positionId={tab.positionId} />
+            {/* deepLinkItemId — только активной вкладке. Во-первых, memo(PositionItems)
+                держится лишь на стабильных пропах: отдай мы ?itemId= всем, он менялся бы у
+                каждой вкладки на любой переход. Во-вторых, подсветка ищет строку через
+                document.querySelector — глобально, так что скрытые вкладки перехватывали бы
+                deep-link на себя. */}
+            <PositionItems
+              positionId={tab.positionId}
+              deepLinkItemId={isActive ? searchParams.get('itemId') : null}
+            />
           </div>
         );
       })}

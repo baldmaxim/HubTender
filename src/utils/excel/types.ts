@@ -54,6 +54,14 @@ export interface ExportRow {
 
   // Зачёркивание из Excel (только для строк-позиций; для round-trip в экспорт)
   richRuns?: RichRuns | null;
+
+  // Метаданные для Excel-формул (см. positionFormulas.ts)
+  boqItemId?: string;                 // id BOQ-строки (для map id→строка Excel)
+  parentWorkItemId?: string | null;   // родительская работа (линк-материал)
+  fxRate?: number;                    // курс валюты строки (1 для ₽) — литерал в формуле
+  deliveryPriceType?: string | null;  // тип доставки ('не в цене' | 'суммой' | 'в цене')
+  hierarchyLevel?: number;            // уровень позиции (для диапазона SUBTOTAL раздела)
+  isAdditional?: boolean;             // ДОП-позиция
 }
 
 /**

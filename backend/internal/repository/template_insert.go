@@ -225,6 +225,32 @@ func (r *BoqRepo) InsertTemplateItems(
 		parentIdx[i] = pIdx
 	}
 
+	// 4c. Quantities. Инвариант: у ПРИВЯЗАННОГО материала количество выводится из
+	// родительской РАБОТЫ (work.quantity × перевод × расход) — тот же инвариант,
+	// что в position_recompute.go и в форме материала. Объём позиции
+	// (manual_volume) применяется ТОЛЬКО к непривязанным материалам.
+	// Два прохода: сначала работы (родитель всегда работа), поэтому порядок
+	// элементов в шаблоне не важен.
+	quantities := make([]float64, len(items))
+	for i, t := range items {
+		if t.Kind == "work" {
+			quantities[i] = 1.0
+		}
+	}
+	for i, t := range items {
+		if t.Kind == "work" {
+			continue
+		}
+		switch {
+		case parentIdx[i] >= 0:
+			quantities[i] = quantities[parentIdx[i]] * orOne(t.ConvCoeff) * orOne(t.MConsCoef)
+		case t.ConvCoeff != nil && *t.ConvCoeff != 0:
+			quantities[i] = *t.ConvCoeff * orOne(manualVolume)
+		default:
+			quantities[i] = 1.0
+		}
+	}
+
 	// 5. Current max sort_number for the position.
 	var maxSort int
 	if err := tx.QueryRow(ctx,
@@ -264,7 +290,9 @@ func (r *BoqRepo) InsertTemplateItems(
 			}
 		}
 
-		p, planErr := planTemplateRow(t, parentIdx[i], manualVolume, rates)
+		// Количество предрассчитано в шаге 4c (привязанный материал — от работы,
+		// merge 6e8ea39): plan использует его вместо своей старой формулы.
+		p, planErr := planTemplateRow(t, parentIdx[i], quantities[i], rates)
 		if planErr != nil {
 			// Fail-closed: nothing has been written yet. %w keeps MissingFXRateError
 			// findable by errors.As all the way up to the handler.

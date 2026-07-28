@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, Drawer, Space, Popconfirm, message, Alert } from 'antd';
 import { formatFXUnavailable } from '../../utils/boq/currencyGuard';
-import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons';
+import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined, FallOutlined } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { getVersionColorByTitle } from '../../utils/versionColor';
 import { getTenderById, approveFinancial } from '../../lib/api/fi';
 import { adminPatchTender } from '../../lib/api/tenders';
 import { getErrorMessage } from '../../utils/errors';
@@ -26,11 +25,13 @@ import {
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { AutoFitText } from '../../components/AutoFitText';
+import { TenderTileCard } from '../../components/TenderTileCard';
 import { useFinancialData } from './hooks/useFinancialData';
 import { IndicatorsCharts } from './components/IndicatorsCharts';
 import { IndicatorsTable, INDICATORS_TABLE_FIT_WIDTH } from './components/IndicatorsTable';
 import { IndicatorsFilters } from './components/IndicatorsFilters';
+import { DiscountTab } from './discount/components/DiscountTab';
+import { DiscountSummaryCard } from './discount/components/DiscountSummaryCard';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 import './FinancialIndicators.css';
 
@@ -54,6 +55,9 @@ const FinancialIndicators: React.FC = () => {
   const { isPhone, isLandscapePhone, isPhoneDevice, isMobile, screens } = useIsMobile();
   // Генеральный директор и телефоны (в любой ориентации) — только просмотр (без обновления и редактирования)
   const readOnly = user?.role_code === 'general_director' || isMobile || isLandscapePhone;
+  // Вкладка «Снижение/Обнуление» редактируется и на телефоне (адаптивно);
+  // недоступна только генеральному директору.
+  const canEditDiscount = user?.role_code !== 'general_director';
   // Кнопка/зум на весь экран нужны там, где широкая таблица может не помещаться,
   // но это не телефон (на телефоне — карточный вид или зум inline): настоящие планшеты, узкие ноуты.
   const showFullscreenTable = !isPhoneDevice && !screens.lg;
@@ -61,6 +65,7 @@ const FinancialIndicators: React.FC = () => {
     tenders,
     loading,
     data,
+    tableData,
     spTotal,
     customerTotal,
     isVatInConstructor,
@@ -68,12 +73,15 @@ const FinancialIndicators: React.FC = () => {
     fxMissing,
     loadTenders,
     fetchFinancialIndicators,
+    discountContext,
+    discountSettings,
+    getDiscountWorkspace,
   } = useFinancialData();
 
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
   const [selectedTenderTitle, setSelectedTenderTitle] = useState<string>('');
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'table' | 'charts'>('charts');
+  const [activeTab, setActiveTab] = useState<'table' | 'charts' | 'discount'>('charts');
   const [editingVolumeTitle, setEditingVolumeTitle] = useState(false);
   const [volumeTitle, setVolumeTitle] = useState('Полный объём строительства');
   const [tempVolumeTitle, setTempVolumeTitle] = useState('Полный объём строительства');
@@ -256,72 +264,17 @@ const FinancialIndicators: React.FC = () => {
                 <Row gutter={isPhoneDevice ? [8, 8] : [16, 16]} justify="center">
                   {tenders.filter(t => !t.is_archived).slice(0, 6).map(tender => (
                     <Col key={tender.id}>
-                      <Card
-                        hoverable
-                        size={isPhoneDevice ? 'small' : 'default'}
-                        styles={{ body: { padding: isPhoneDevice ? '8px 10px' : '12px 16px' } }}
-                        style={{
-                          width: isPhoneDevice ? 160 : 200,
-                          textAlign: 'center',
-                          cursor: 'pointer',
-                          borderColor: '#10b981',
-                          borderWidth: 1,
-                        }}
+                      <TenderTileCard
+                        tender={tender}
+                        allTenders={tenders}
+                        desktopBodyPadding="12px 16px"
                         onClick={() => {
                           setSelectedTenderTitle(tender.title);
                           setSelectedVersion(tender.version || 1);
                           setSelectedTenderId(tender.id);
                         }}
-                        onAuxClick={(e) => {
-                          if (e.button === 1) {
-                            e.preventDefault();
-                            window.open(`/financial-indicators?tenderId=${tender.id}`, '_blank');
-                          }
-                        }}
-                      >
-                        {isPhoneDevice ? (
-                          <>
-                            {/* Телефон: номер тендера убран; версия стоит вплотную справа от наименования (по центру). */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', gap: 6, marginBottom: 4 }}>
-                              <Text strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100, fontSize: 12 }}>
-                                {tender.title}
-                              </Text>
-                              <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
-                            </div>
-                            <AutoFitText maxFontSize={11} minFontSize={7} align="center">
-                              {tender.client_name}
-                            </AutoFitText>
-                          </>
-                        ) : (
-                          <>
-                            {/* Десктоп/планшет: фиксированная ширина 200, как на «Позициях заказчика». */}
-                            <div style={{ marginBottom: 8 }}>
-                              <Tag color="#10b981" style={{ margin: 0 }}>{tender.tender_number}</Tag>
-                            </div>
-                            <div style={{
-                              marginBottom: 8,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexWrap: 'nowrap',
-                              gap: 4,
-                            }}>
-                              <Text strong style={{
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                maxWidth: 140,
-                              }}>
-                                {tender.title}
-                              </Text>
-                              <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
-                            </div>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              {tender.client_name}
-                            </Text>
-                          </>
-                        )}
-                      </Card>
+                        deepLinkUrl={`/financial-indicators?tenderId=${tender.id}`}
+                      />
                     </Col>
                   ))}
                 </Row>
@@ -333,9 +286,17 @@ const FinancialIndicators: React.FC = () => {
     );
   }
 
+  // Экспорт выгружает уже сниженные строки — без этой пометки в файле нельзя
+  // отличить снижённый расчёт от обычного.
+  const discountNote = discountContext
+    ? `${discountContext.mode === 'zeroing' ? 'Применено обнуление' : 'Применено снижение'}: ` +
+      `${formatNumber(discountContext.appliedAmount)} руб. ` +
+      `(до ${discountContext.mode === 'zeroing' ? 'обнуления' : 'снижения'}: ${formatNumber(discountContext.baseGrandTotal)} руб.)`
+    : null;
+
   const indicatorsTableNode = (
     <IndicatorsTable
-      data={data}
+      data={tableData}
       spTotal={spTotal}
       customerTotal={customerTotal}
       formatNumber={formatNumber}
@@ -348,6 +309,8 @@ const FinancialIndicators: React.FC = () => {
       onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
       readOnly={readOnly}
       fxMissing={fxMissing}
+      discountNote={discountNote}
+      volumeTitle={volumeTitle}
     />
   );
 
@@ -355,7 +318,7 @@ const FinancialIndicators: React.FC = () => {
   // в ландшафте (масштаб подбирает LandscapeTableOverlay, чтобы всё влезло без прокрутки).
   const indicatorsTableFitNode = (
     <IndicatorsTable
-      data={data}
+      data={tableData}
       spTotal={spTotal}
       customerTotal={customerTotal}
       formatNumber={formatNumber}
@@ -368,6 +331,8 @@ const FinancialIndicators: React.FC = () => {
       onAreaUpdated={() => fetchFinancialIndicators(selectedTenderId)}
       readOnly={readOnly}
       fxMissing={fxMissing}
+      discountNote={discountNote}
+      volumeTitle={volumeTitle}
       fitToScreen
     />
   );
@@ -477,11 +442,17 @@ const FinancialIndicators: React.FC = () => {
           )}
         </div>
 
+        {/* Сводка снижения — только когда оно включено и применено. При
+            выключенном тумблере страница выглядит ровно как раньше. */}
+        {discountContext && (
+          <DiscountSummaryCard discount={discountContext} isPhone={isPhone} />
+        )}
+
         <Spin spinning={loading}>
           <Tabs
             activeKey={activeTab}
             onChange={(key) => {
-              setActiveTab(key as 'table' | 'charts');
+              setActiveTab(key as 'table' | 'charts' | 'discount');
             }}
             items={[
               {
@@ -500,6 +471,7 @@ const FinancialIndicators: React.FC = () => {
                     selectedTenderId={selectedTenderId}
                     isVatInConstructor={isVatInConstructor}
                     vatCoefficient={vatCoefficient}
+                    itemScale={discountContext?.itemScale ?? null}
                   />
                 ),
               },
@@ -539,6 +511,30 @@ const FinancialIndicators: React.FC = () => {
                   </>
                 ),
               },
+              // Настройка снижения — для всех, кроме генерального директора
+              // (телефоны редактируют адаптивно). Данные вкладки грузятся
+              // лениво, при первом её открытии.
+              ...(canEditDiscount && selectedTenderId
+                ? [{
+                    key: 'discount',
+                    label: (
+                      <span>
+                        <FallOutlined style={{ marginRight: 8 }} />
+                        Снижение
+                      </span>
+                    ),
+                    children: (
+                      <DiscountTab
+                        tenderId={selectedTenderId}
+                        settings={discountSettings}
+                        getDiscountWorkspace={getDiscountWorkspace}
+                        onSaved={() => fetchFinancialIndicators(selectedTenderId)}
+                        isPhone={isPhone}
+                        isLandscapePhone={isLandscapePhone}
+                      />
+                    ),
+                  }]
+                : []),
             ]}
           />
         </Spin>

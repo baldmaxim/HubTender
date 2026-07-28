@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } from 'react';
+import { Input } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { buildPositionTabPath } from '../../lib/cache/workspaceTabsStorage';
+import { setRow as seedPositionRow } from '../../lib/cache/positionRowCache';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClientPositions } from './hooks/useClientPositions';
 import { usePositionActions } from './hooks/usePositionActions';
@@ -37,6 +40,10 @@ interface TenderOption {
 const ClientPositions: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  // См. handleRowClick: react-router пересоздаёт navigate на каждую навигацию, поэтому
+  // держим его в ref — иначе обработчик клика меняет идентичность и пробивает memo списка.
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const { openPositionTab } = useWorkspaceTabActions();
   const { theme: currentTheme } = useTheme();
   const { isPhoneDevice } = useIsMobile();
@@ -235,8 +242,9 @@ const ClientPositions: React.FC = () => {
     setPositionSearchQuery('');
   }, [selectedTenderId]);
 
-  // Обработка выбора наименования тендера
-  const handleTenderTitleChange = (title: string) => {
+  // Обработка выбора наименования тендера. useCallback — пропсы PositionToolbar
+  // должны быть стабильны на вводе в поиск, иначе его memo пробивается на каждый символ.
+  const handleTenderTitleChange = useCallback((title: string) => {
     setSelectedTenderTitle(title);
     // Автоматически выбираем последнюю версию нового тендера
     const versionsOfTitle = tenders
@@ -256,10 +264,10 @@ const ClientPositions: React.FC = () => {
       setClientPositions([]);
       setSearchParams({});
     }
-  };
+  }, [tenders, shouldFilterArchived, setSelectedTender, setClientPositions, fetchClientPositions, setSearchParams]);
 
   // Обработка выбора версии тендера
-  const handleVersionChange = (version: number) => {
+  const handleVersionChange = useCallback((version: number) => {
     setSelectedVersion(version);
     const tender = tenders.find(t => t.title === selectedTenderTitle && t.version === version);
     if (tender) {
@@ -268,7 +276,7 @@ const ClientPositions: React.FC = () => {
       fetchClientPositions(tender.id);
       setSearchParams({ tenderId: tender.id });
     }
-  };
+  }, [tenders, selectedTenderTitle, setSelectedTender, fetchClientPositions, setSearchParams]);
 
   // Автоматический выбор тендера из URL параметров
   useEffect(() => {
@@ -294,7 +302,7 @@ const ClientPositions: React.FC = () => {
     setAdditionalModalOpen(true);
   }, []);
 
-  const handleAdditionalSuccess = (newPositionId: string) => {
+  const handleAdditionalSuccess = useCallback((newPositionId: string) => {
     setAdditionalModalOpen(false);
     setSelectedParentId(null);
     if (selectedTenderId) {
@@ -303,20 +311,53 @@ const ClientPositions: React.FC = () => {
     if (isFilterActive) {
       addPositionToFilter(newPositionId);
     }
-  };
+  }, [selectedTenderId, isFilterActive, fetchClientPositions, addPositionToFilter]);
 
-  // Обработчик клика по строке — открываем позицию внутренней вкладкой приложения
+  const handleAdditionalCancel = useCallback(() => {
+    setAdditionalModalOpen(false);
+    setSelectedParentId(null);
+  }, []);
+
+  const handleMassImportClose = useCallback(() => {
+    setMassImportModalOpen(false);
+    // Обновляем всегда: при частичной/ошибочной загрузке уже
+    // закоммиченные строки иначе не появятся до ручной перезагрузки.
+    if (selectedTenderId) {
+      fetchClientPositions(selectedTenderId);
+    }
+  }, [selectedTenderId, fetchClientPositions]);
+
+  // Обработчик клика по строке — открываем позицию внутренней вкладкой приложения.
+  //
+  // navigate держим в ref и НЕ включаем в deps: react-router мемоизирует его с
+  // locationPathname в зависимостях, поэтому на КАЖДУЮ навигацию он новый → новый
+  // handleRowClick → пробивает React.memo у PositionCardList → полная перерисовка списка
+  // на текущем count (а count растёт со скроллом и не сбрасывается). Это и есть тормоз
+  // при переключении/открытии вкладок. Ref безопасен: зовём только из обработчика
+  // события, где .current всегда актуален, а не во время рендера.
+  //
+  // clientPositions/leafPositionIndices оставляем в deps: они навигационно-стабильны, а
+  // ref сделал бы поиск строки для seedPositionRow протухшим.
   const handleRowClick = useCallback((record: { id: string; position_number?: number }) => {
     const isLeaf = leafPositionIndices.has(record.id);
     if (isLeaf && selectedTender) {
+      // Ре-стемп кликнутой строки перед навигацией. Массовый setRows на загрузке списка
+      // (useClientPositions) ставит метку один раз и не обновляет её на чтении, а TTL 60 c —
+      // значит клик позже минуты попадал в промах и давал скелетон, как и из «Формы КП».
+      // Здесь разрыв запись→чтение ~1 кадр, поэтому быстрый путь перестаёт зависеть от
+      // времени на списке. Именно setRow, а НЕ setRows([row]): setRows всегда зовёт
+      // pruneExpired (полный скан localStorage с JSON.parse каждой записи) — в обработчике
+      // клика это залипание перед переходом.
+      const row = clientPositions.find((p) => p.id === record.id);
+      if (row) seedPositionRow(row);
       openPositionTab({
         positionId: record.id,
         tenderId: selectedTender.id,
         title: record.position_number != null ? `№ ${record.position_number}` : 'Позиция',
       });
-      navigate(buildPositionTabPath(record.id, selectedTender.id));
+      navigateRef.current(buildPositionTabPath(record.id, selectedTender.id));
     }
-  }, [leafPositionIndices, selectedTender, openPositionTab, navigate]);
+  }, [leafPositionIndices, selectedTender, clientPositions, openPositionTab]);
 
 
   // Обработчик клика по карточке тендера
@@ -434,16 +475,30 @@ const ClientPositions: React.FC = () => {
 
       {/* Таблица позиций заказчика (на телефоне — карточный read-only список) */}
       {selectedTender && isPhoneDevice && (
-        <PositionCardList
-          clientPositions={searchedPositions}
-          selectedTender={selectedTender}
-          loading={loading || filterLoading}
-          positionCounts={positionCounts}
-          leafPositionIndices={leafPositionIndices}
-          searchQuery={positionSearchQuery}
-          onSearchQueryChange={setPositionSearchQuery}
-          onRowClick={handleRowClick}
-        />
+        <div style={{ marginTop: 16 }}>
+          {/* Поле поиска живёт ЗДЕСЬ, а не внутри PositionCardList: контролируемому Input
+              нужно недеферренное значение, и, находясь внутри мемоизированного списка, оно
+              пробивало memo на каждый символ — список перерисовывался целиком на текущем
+              (выросшем со скроллом) count, полностью обнуляя useDeferredValue ниже.
+              Держим его вне ветки loading/empty, иначе поле исчезает на пустой выдаче. */}
+          <Input
+            allowClear
+            value={positionSearchQuery}
+            onChange={(event) => setPositionSearchQuery(event.target.value)}
+            placeholder="Поиск по номеру и наименованию"
+            prefix={<SearchOutlined />}
+            style={{ width: '100%', marginBottom: 12 }}
+          />
+          <PositionCardList
+            clientPositions={searchedPositions}
+            selectedTender={selectedTender}
+            loading={loading || filterLoading}
+            positionCounts={positionCounts}
+            leafPositionIndices={leafPositionIndices}
+            searchKey={deferredPositionSearchQuery}
+            onRowClick={handleRowClick}
+          />
+        </div>
       )}
 
       {selectedTender && !isPhoneDevice && (
@@ -521,10 +576,7 @@ const ClientPositions: React.FC = () => {
         parentPositionId={selectedParentId}
         tenderId={selectedTenderId || ''}
         disabled={isReadOnlyByDeadline}
-        onCancel={() => {
-          setAdditionalModalOpen(false);
-          setSelectedParentId(null);
-        }}
+        onCancel={handleAdditionalCancel}
         onSuccess={handleAdditionalSuccess}
       />
 
@@ -545,14 +597,7 @@ const ClientPositions: React.FC = () => {
         open={massImportModalOpen}
         tenderId={selectedTenderId || ''}
         tenderTitle={selectedTender?.title || ''}
-        onClose={() => {
-          setMassImportModalOpen(false);
-          // Обновляем всегда: при частичной/ошибочной загрузке уже
-          // закоммиченные строки иначе не появятся до ручной перезагрузки.
-          if (selectedTenderId) {
-            fetchClientPositions(selectedTenderId);
-          }
-        }}
+        onClose={handleMassImportClose}
       />
     </div>
   );

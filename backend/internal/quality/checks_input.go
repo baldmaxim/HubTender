@@ -34,7 +34,7 @@ func (e *evaluator) checkBoqInputs() {
 		if it.Quantity == nil || *it.Quantity == 0 {
 			is := base
 			is.Code = "QUANTITY_ZERO"
-			is.Severity = SeverityWarning
+			is.Severity = SeverityWarn
 			is.Field = "quantity"
 			is.Title = "Не заполнено количество"
 			is.Message = "Количество не задано или равно нулю — сумма строки равна нулю."
@@ -47,7 +47,7 @@ func (e *evaluator) checkBoqInputs() {
 		if it.UnitRate == nil || *it.UnitRate == 0 {
 			is := base
 			is.Code = "UNIT_RATE_ZERO"
-			is.Severity = SeverityWarning
+			is.Severity = SeverityWarn
 			is.Field = "unit_rate"
 			is.Title = "Не заполнена цена за единицу"
 			is.Message = "Цена за единицу не задана или равна нулю — сумма строки равна нулю."
@@ -60,7 +60,7 @@ func (e *evaluator) checkBoqInputs() {
 		if it.UnitCode == nil || strings.TrimSpace(*it.UnitCode) == "" {
 			is := base
 			is.Code = "UNIT_CODE_MISSING"
-			is.Severity = SeverityWarning
+			is.Severity = SeverityWarn
 			is.Field = "unit_code"
 			is.Title = "Не указана единица измерения"
 			is.Message = "Без единицы измерения строку невозможно проверить по смете."
@@ -70,7 +70,7 @@ func (e *evaluator) checkBoqInputs() {
 		if it.DetailCostCategoryID == nil || *it.DetailCostCategoryID == "" {
 			is := base
 			is.Code = "DETAIL_COST_CATEGORY_MISSING"
-			is.Severity = SeverityWarning
+			is.Severity = SeverityWarn
 			is.Field = "detail_cost_category_id"
 			is.Title = "Не указана затрата на строительство"
 			is.Message = "Строка не привязана к детальной категории затрат — перераспределение и структура затрат её не учтут."
@@ -209,7 +209,7 @@ func (e *evaluator) checkDuplicates() {
 		total := g.total
 		e.add(Issue{
 			Code:             "EXACT_DUPLICATE_GROUP",
-			Severity:         SeverityWarning,
+			Severity:         SeverityWarn,
 			Category:         CategoryDuplicates,
 			EntityType:       "boq_item",
 			EntityID:         g.ids[0], // первая строка — navigation target
@@ -243,7 +243,7 @@ func derefF(p *float64) float64 {
 
 var severityRank = map[string]int{
 	SeverityBlocker:     0,
-	SeverityWarning:     1,
+	SeverityWarn:     1,
 	SeverityInformation: 2,
 }
 

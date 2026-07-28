@@ -331,6 +331,7 @@ CREATE TABLE IF NOT EXISTS public.tender_insurance (
     parking_area numeric NOT NULL DEFAULT 0,
     storage_price_m2 numeric NOT NULL DEFAULT 0,
     storage_area numeric NOT NULL DEFAULT 0,
+    distribute_to_rows boolean NOT NULL DEFAULT true,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
 );
@@ -506,6 +507,20 @@ CREATE TABLE IF NOT EXISTS public.cost_redistribution_results (
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now(),
     created_by uuid
+);
+
+-- Снижение коммерческой стоимости на «Финансовых показателях».
+-- Хранятся только параметры (enabled + rules); суммы пересчитываются на загрузке.
+CREATE TABLE IF NOT EXISTS public.tender_fi_discounts (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tender_id uuid NOT NULL,
+    enabled boolean NOT NULL DEFAULT false,
+    rules jsonb NOT NULL DEFAULT '[]'::jsonb,
+    mode text NOT NULL DEFAULT 'discount',
+    zeroed_position_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+    created_by uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- ----- LEVEL 5 --------------------------------------------------------------
@@ -802,4 +817,16 @@ CREATE TABLE IF NOT EXISTS public.ai_evaluation_summaries (
     gate_details jsonb NOT NULL DEFAULT '{}'::jsonb,
     executed_by uuid,
     executed_at timestamp with time zone NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS public.quality_acknowledgements (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tender_id uuid NOT NULL,
+    rule_code text NOT NULL,
+    entity_id uuid NOT NULL,
+    fingerprint text NOT NULL,
+    verdict text NOT NULL,
+    note text,
+    created_by uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
 );

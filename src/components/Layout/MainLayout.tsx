@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Layout, Menu, Avatar, Switch, theme, Dropdown, Typography, Tag, Button } from 'antd';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { Layout, Menu, Avatar, Switch, theme, Dropdown, Typography, Tag, Button, Spin } from 'antd';
 import type { MenuProps } from 'antd';
 const { Text } = Typography;
 import {
@@ -25,6 +25,7 @@ import { type Notification } from '../../lib/types';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { listNotifications, deleteAllNotifications } from '../../lib/api/notifications';
 import { hasPageAccess, PAGE_LABELS } from '../../lib/types/types';
+import type { AuthUser } from '../../lib/types/types';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -36,6 +37,121 @@ dayjs.extend(relativeTime);
 dayjs.locale('ru');
 
 const { Header, Sider, Content } = Layout;
+
+// ── Обработка пунктов меню: чистые функции на уровне модуля ──────────────────
+// Раньше жили внутри компонента и прогонялись на каждый его рендер (навигация,
+// уведомления, resize) — заметный вклад в INP кликов по меню на телефоне.
+type MenuItem = NonNullable<MenuProps['items']>[number];
+type MenuItemWithKey = Extract<MenuItem, { key?: React.Key }>;
+
+// Преобразование пункта меню в ссылку (Link — поддержка открытия в новой вкладке)
+const renderMenuItem = (item: MenuItem) => {
+  if (!item || item.type === 'divider') return null;
+  const mi = item as MenuItemWithKey;
+  // Если это группа (есть children), не рендерим как ссылку
+  if ('children' in mi && mi.children) {
+    return (mi as { label?: React.ReactNode }).label;
+  }
+  // Если есть key, рендерим как Link для поддержки открытия в новой вкладке
+  const key = mi.key != null ? String(mi.key) : undefined;
+  const label = (mi as { label?: React.ReactNode }).label;
+  if (key && key.startsWith('/')) {
+    return <Link to={key}>{label}</Link>;
+  }
+  return label;
+};
+
+// menuItems статичен — оборачиваем label в Link один раз на загрузку модуля
+// (каст как в исходнике: map теряет дискриминант type у групп)
+const processedMenuItems = menuItems.map((item: MenuItem) => {
+  if (item && 'children' in item && item.children) {
+    return {
+      ...item,
+      children: (item.children as MenuItem[]).map((child: MenuItem) => ({
+        ...child,
+        label: child && child.type === 'divider' ? undefined : renderMenuItem(child),
+      })),
+    };
+  }
+  return {
+    ...item,
+    label: renderMenuItem(item),
+  };
+}) as MenuProps['items'];
+
+// Фильтруем меню на основе прав доступа пользователя
+const filterMenuByAccess = (items: MenuProps['items'], user: AuthUser | null): MenuProps['items'] => {
+  if (!user) return items;
+  if (!items) return items;
+
+  return items
+    .map((item) => {
+      if (!item) return null;
+      // Если у пункта есть дочерние элементы
+      if ('children' in item && item.children) {
+        const filteredChildren = (item.children as MenuItem[]).filter((child) => {
+          if (!child) return false;
+          // Пропускаем разделители
+          if ('type' in child && child.type === 'divider') return true;
+          // Проверяем доступ к дочернему пункту
+          const key = 'key' in child ? String(child.key) : undefined;
+          return key ? hasPageAccess(user, key) : true;
+        });
+
+        // Реальные доступные страницы (без разделителей)
+        const accessiblePages = filteredChildren.filter(
+          (child) => !(child && 'type' in child && child.type === 'divider')
+        );
+
+        // Нет доступных страниц — убираем группу целиком
+        if (accessiblePages.length === 0) {
+          return null;
+        }
+
+        // Доступна ровно одна страница — показываем прямую ссылку на неё,
+        // без промежуточного раскрытия группы (убираем двойной переход)
+        if (accessiblePages.length === 1) {
+          return accessiblePages[0];
+        }
+
+        // Иначе оставляем родительский пункт с отфильтрованными детьми
+        return {
+          ...item,
+          children: filteredChildren,
+        };
+      }
+
+      // Для обычных пунктов проверяем доступ
+      const itemKey = 'key' in item && item.key != null ? String(item.key) : undefined;
+      return itemKey ? (hasPageAccess(user, itemKey) ? item : null) : item;
+    })
+    .filter((item): item is NonNullable<typeof item> => item != null);
+};
+
+// На телефонах (Android/iPhone) скрываем часть разделов из меню
+const filterMenuByDevice = (items: MenuProps['items'], isPhoneDevice: boolean): MenuProps['items'] => {
+  if (!isPhoneDevice || !items) return items;
+  return items
+    .map((item) => {
+      if (!item) return null;
+      // Обычный пункт — скрываем по ключу
+      if (!('children' in item) || !item.children) {
+        const key = 'key' in item && item.key != null ? String(item.key) : undefined;
+        return key && MOBILE_HIDDEN_KEYS.has(key) ? null : item;
+      }
+      // Группа — отфильтровываем скрытые дочерние страницы
+      const children = (item.children as MenuItem[]).filter((child) => {
+        const key = child && 'key' in child ? String(child.key) : undefined;
+        return !(key && MOBILE_HIDDEN_KEYS.has(key));
+      });
+      const realPages = children.filter(
+        (c) => !(c && 'type' in c && c.type === 'divider')
+      );
+      if (realPages.length === 0) return null; // группа опустела — убираем целиком
+      return { ...item, children };
+    })
+    .filter((item): item is NonNullable<typeof item> => item != null);
+};
 
 interface MainLayoutProps {
   children?: React.ReactNode;
@@ -132,118 +248,11 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     }
   };
 
-  // Функция для преобразования пунктов меню в ссылки
-  type MenuItem = NonNullable<MenuProps['items']>[number];
-  type MenuItemWithKey = Extract<MenuItem, { key?: React.Key }>;
-  const renderMenuItem = (item: MenuItem) => {
-    if (!item || item.type === 'divider') return null;
-    const mi = item as MenuItemWithKey;
-    // Если это группа (есть children), не рендерим как ссылку
-    if ('children' in mi && mi.children) {
-      return (mi as { label?: React.ReactNode }).label;
-    }
-    // Если есть key, рендерим как Link для поддержки открытия в новой вкладке
-    const key = mi.key != null ? String(mi.key) : undefined;
-    const label = (mi as { label?: React.ReactNode }).label;
-    if (key && key.startsWith('/')) {
-      return <Link to={key}>{label}</Link>;
-    }
-    return label;
-  };
-
-  // Преобразуем menuItems, добавляя label как функцию рендеринга
-  const processedMenuItems = menuItems.map((item: MenuItem) => {
-    if (item && 'children' in item && item.children) {
-      return {
-        ...item,
-        children: (item.children as MenuItem[]).map((child: MenuItem) => ({
-          ...child,
-          label: child && child.type === 'divider' ? undefined : renderMenuItem(child),
-        })),
-      };
-    }
-    return {
-      ...item,
-      label: renderMenuItem(item),
-    };
-  });
-
-  // Фильтруем меню на основе прав доступа пользователя
-  const filterMenuByAccess = (items: MenuProps['items']): MenuProps['items'] => {
-    if (!user) return items;
-    if (!items) return items;
-
-    return items
-      .map((item) => {
-        if (!item) return null;
-        // Если у пункта есть дочерние элементы
-        if ('children' in item && item.children) {
-          const filteredChildren = (item.children as MenuItem[]).filter((child) => {
-            if (!child) return false;
-            // Пропускаем разделители
-            if ('type' in child && child.type === 'divider') return true;
-            // Проверяем доступ к дочернему пункту
-            const key = 'key' in child ? String(child.key) : undefined;
-            return key ? hasPageAccess(user, key) : true;
-          });
-
-          // Реальные доступные страницы (без разделителей)
-          const accessiblePages = filteredChildren.filter(
-            (child) => !(child && 'type' in child && child.type === 'divider')
-          );
-
-          // Нет доступных страниц — убираем группу целиком
-          if (accessiblePages.length === 0) {
-            return null;
-          }
-
-          // Доступна ровно одна страница — показываем прямую ссылку на неё,
-          // без промежуточного раскрытия группы (убираем двойной переход)
-          if (accessiblePages.length === 1) {
-            return accessiblePages[0];
-          }
-
-          // Иначе оставляем родительский пункт с отфильтрованными детьми
-          return {
-            ...item,
-            children: filteredChildren,
-          };
-        }
-
-        // Для обычных пунктов проверяем доступ
-        const itemKey = 'key' in item && item.key != null ? String(item.key) : undefined;
-        return itemKey ? (hasPageAccess(user, itemKey) ? item : null) : item;
-      })
-      .filter((item): item is NonNullable<typeof item> => item != null);
-  };
-
-  // На телефонах (Android/iPhone) скрываем часть разделов из меню
-  const filterMenuByDevice = (items: MenuProps['items']): MenuProps['items'] => {
-    if (!isPhoneDevice || !items) return items;
-    return items
-      .map((item) => {
-        if (!item) return null;
-        // Обычный пункт — скрываем по ключу
-        if (!('children' in item) || !item.children) {
-          const key = 'key' in item && item.key != null ? String(item.key) : undefined;
-          return key && MOBILE_HIDDEN_KEYS.has(key) ? null : item;
-        }
-        // Группа — отфильтровываем скрытые дочерние страницы
-        const children = (item.children as MenuItem[]).filter((child) => {
-          const key = child && 'key' in child ? String(child.key) : undefined;
-          return !(key && MOBILE_HIDDEN_KEYS.has(key));
-        });
-        const realPages = children.filter(
-          (c) => !(c && 'type' in c && c.type === 'divider')
-        );
-        if (realPages.length === 0) return null; // группа опустела — убираем целиком
-        return { ...item, children };
-      })
-      .filter((item): item is NonNullable<typeof item> => item != null);
-  };
-
-  const filteredMenuItems = filterMenuByAccess(
-    filterMenuByDevice(processedMenuItems as MenuProps['items'])
+  // Меню пересчитывается только при смене пользователя/типа устройства,
+  // а не на каждый рендер лейаута.
+  const filteredMenuItems = useMemo(
+    () => filterMenuByAccess(filterMenuByDevice(processedMenuItems, isPhoneDevice), user),
+    [user, isPhoneDevice]
   );
 
   return (
@@ -480,8 +489,18 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         >
           {/* «Рабочий стол» (Позиции / Форма КП / Затраты / Элементы позиции) рендерится через
               keep-alive контейнер (открытые страницы смонтированы одновременно), остальные роуты —
-              обычный Outlet. */}
-          {isWorkspacePath(location.pathname) ? <WorkspaceKeepAlive /> : <Outlet />}
+              обычный Outlet. Suspense — граница для lazy-страниц из App.tsx: при навигации
+              react-router v7 держит старый экран (startTransition), фолбэк виден только
+              на прямой загрузке URL. */}
+          <Suspense
+            fallback={
+              <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 80 }}>
+                <Spin size="large" />
+              </div>
+            }
+          >
+            {isWorkspacePath(location.pathname) ? <WorkspaceKeepAlive /> : <Outlet />}
+          </Suspense>
         </Content>
       </Layout>
     </Layout>

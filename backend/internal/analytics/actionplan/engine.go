@@ -98,7 +98,7 @@ func Compose(in Inputs) *Report {
 			switch is.Severity {
 			case quality.SeverityBlocker:
 				prio = PriorityBlocking
-			case quality.SeverityWarning:
+			case quality.SeverityWarn:
 				prio = PriorityNormal
 				if qualityHighWarnings[is.Code] {
 					prio = PriorityHigh

@@ -44,6 +44,9 @@ const CostRedistribution: React.FC = () => {
   // строк/сумм после save/load. null = показывается локальный preview с
   // явным статусом «не сохранён».
   const [serverPrepared, setServerPrepared] = useState<PreparedServerRedistribution | null>(null);
+  // Флаг «Распределить во все строки» (страница «Страхование»). Гейтит per-row
+  // разнесение страхования (server prepared учитывает его сам; preview — здесь).
+  const [distributeToRows, setDistributeToRows] = useState(true);
   const [savedRecently, setSavedRecently] = useState(false);
   const [autosaveNonce, setAutosaveNonce] = useState(0);
   const isSavingRef = useRef(false);
@@ -147,7 +150,7 @@ const CostRedistribution: React.FC = () => {
       ...applyRedistributionPipeline({
         categoryLevelRows,
         positionAdjustmentDeltas: adjustment.appliedDeltas,
-        insuranceTotal,
+        insuranceTotal: distributeToRows ? insuranceTotal : 0,
       }),
       isPreview: true,
     };
@@ -156,14 +159,16 @@ const CostRedistribution: React.FC = () => {
     hasAnyRedistribution,
     categoryLevelRows,
     insuranceTotal,
+    distributeToRows,
     adjustment.appliedDeltas,
   ]);
 
   // Загрузка страхования от судимостей при смене тендера (server-computed total)
   useEffect(() => {
-    if (!selectedTenderId) { setInsuranceTotal(0); return; }
+    if (!selectedTenderId) { setInsuranceTotal(0); setDistributeToRows(true); return; }
     loadTenderInsurance(selectedTenderId).then((data) => {
       setInsuranceTotal(data?.insurance_total ?? 0);
+      setDistributeToRows(data?.distribute_to_rows ?? true);
     });
   }, [selectedTenderId]);
 
@@ -509,7 +514,7 @@ const CostRedistribution: React.FC = () => {
         onTacticChange={handleTacticChange}
         loading={loading}
         totals={preparedResults?.totals}
-        insuranceTotal={insuranceTotal}
+        insuranceTotal={distributeToRows ? insuranceTotal : 0}
         hasResults={hasAnyRedistribution}
         onExport={handleExport}
         saving={saving}

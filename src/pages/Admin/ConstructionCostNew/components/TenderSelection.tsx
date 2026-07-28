@@ -3,10 +3,10 @@
  */
 
 import React from 'react';
-import { Card, Select, Typography, Row, Col, Tag } from 'antd';
+import { Card, Select, Typography, Row, Col } from 'antd';
 import type { Tender } from '../../../../lib/types';
 import type { TenderOption } from '../hooks/useCostData';
-import { getVersionColorByTitle } from '../../../../utils/versionColor';
+import { TenderTileCard } from '../../../../components/TenderTileCard';
 import { useIsMobile } from '../../../../hooks/useIsMobile';
 
 const { Title, Text } = Typography;
@@ -38,9 +38,12 @@ const TenderSelection: React.FC<TenderSelectionProps> = ({
     <div style={{ margin: '-16px', padding: '24px' }}>
       <Card bordered={false} style={{ height: '100%' }}>
         <div style={{ textAlign: 'center', padding: isPhone ? '24px 8px' : '40px 20px' }}>
-          <Title level={4} style={{ marginBottom: 24 }}>
-            Затраты на строительство
-          </Title>
+          {/* На телефоне заголовок уже есть в шапке (pageTitle) — здесь не дублируем. */}
+          {!isPhoneDevice && (
+            <Title level={4} style={{ marginBottom: 24 }}>
+              Затраты на строительство
+            </Title>
+          )}
           <Text type="secondary" style={{ fontSize: 16, marginBottom: 24, display: 'block' }}>
             Выберите тендер для просмотра затрат
           </Text>
@@ -78,50 +81,12 @@ const TenderSelection: React.FC<TenderSelectionProps> = ({
               <Row gutter={isPhoneDevice ? [8, 8] : [16, 16]} justify="center">
                 {tenders.filter(t => !t.is_archived).slice(0, 6).map((tender) => (
                   <Col key={tender.id}>
-                    <Card
-                      hoverable
-                      style={{
-                        width: isPhoneDevice ? 160 : 200,
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        borderColor: '#10b981',
-                        borderWidth: 1,
-                      }}
-                      onClick={() => {
-                        onTenderSelect(tender.id, tender.title, tender.version || 1);
-                      }}
-                      onAuxClick={(e) => {
-                        if (e.button === 1) {
-                          e.preventDefault();
-                          window.open(`/costs?tenderId=${tender.id}`, '_blank');
-                        }
-                      }}
-                    >
-                      <div style={{ marginBottom: 8 }}>
-                        <Tag color="#10b981">{tender.tender_number}</Tag>
-                      </div>
-                      <div style={{
-                        marginBottom: 8,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexWrap: 'nowrap',
-                        gap: 4
-                      }}>
-                        <Text strong style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          maxWidth: 140
-                        }}>
-                          {tender.title}
-                        </Text>
-                        <Tag color={getVersionColorByTitle(tender.version, tender.title, tenders)} style={{ flexShrink: 0, margin: 0 }}>v{tender.version || 1}</Tag>
-                      </div>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {tender.client_name}
-                      </Text>
-                    </Card>
+                    <TenderTileCard
+                      tender={tender}
+                      allTenders={tenders}
+                      onClick={() => onTenderSelect(tender.id, tender.title, tender.version || 1)}
+                      deepLinkUrl={`/costs?tenderId=${tender.id}`}
+                    />
                   </Col>
                 ))}
               </Row>

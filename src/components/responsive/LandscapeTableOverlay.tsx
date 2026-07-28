@@ -16,6 +16,13 @@ interface LandscapeTableOverlayProps {
    *   Вертикальный скролл — нативный. Замеров нет → нет петли ResizeObserver.
    */
   fit?: 'contain' | 'width' | 'zoom';
+  /**
+   * Только для fit='width': закрепить шапку таблицы при вертикальном скролле.
+   * Скролл переносится ВНУТРЬ масштабируемой области (между thead и скроллером
+   * нет transform → нативный position:sticky работает), масштаб остаётся
+   * transform:scale → тапы hit-тестятся корректно (в отличие от fit='zoom').
+   */
+  stickyHeader?: boolean;
   /** Закреплённая полоса под скроллом (вне scale), видна всегда. Для fit='width' и fit='zoom'. */
   footer?: React.ReactNode;
   children: React.ReactNode;
@@ -37,10 +44,13 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
   theme,
   width = 1080,
   fit = 'contain',
+  stickyHeader = false,
   footer,
   children,
 }) => {
-  const { outerRef, innerRef, scale, natW, natH } = useFitScale(fit === 'width' ? 'width' : 'both');
+  const { outerRef, innerRef, scale, natW, natH, availH } = useFitScale(
+    fit === 'width' ? 'width' : 'both',
+  );
   const background = theme === 'dark' ? '#1f1f1f' : '#ffffff';
 
   // Реактивная ширина окна для режима 'zoom' (известная ширина контента → фактор без замеров).
@@ -125,6 +135,8 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
   }
 
   if (fit === 'width') {
+    // Фон закреплённой шапки (непрозрачный, отдельно от фона тела).
+    const headBg = theme === 'dark' ? '#1d1d1d' : '#fafafa';
     return (
       <div
         style={{
@@ -140,37 +152,81 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
       >
         <style>{`
           .lto-fit-width .ant-table.ant-table-small .ant-table-cell { padding: 2px 4px; }
+          ${stickyHeader ? `
+          /* Скролл-контейнер — внутренний див ниже: снимаем overflow у обёрток AntD,
+             иначе sticky-шапка прилипнет к нескроллящейся обёртке. */
+          .lto-fit-width .ant-table,
+          .lto-fit-width .ant-table-container,
+          .lto-fit-width .ant-table-content { overflow: visible; }
+          /* Закрепляем шапку при скролле. */
+          .lto-fit-width .ant-table-thead { position: sticky; top: 0; z-index: 11; }
+          .lto-fit-width .ant-table-thead > tr > th { background: ${headBg}; }
+          ` : ''}
         `}</style>
-        <div
-          ref={outerRef}
-          className="lto-fit-width"
-          style={{
-            flex: 1,
-            minHeight: 0,
-            width: '100%',
-            // Полосу всегда резервируем (scroll, не auto) + stable-gutter — иначе
-            // её появление/исчезновение меняет clientWidth и зацикливает ResizeObserver.
-            overflowY: 'scroll',
-            overflowX: 'hidden',
-            scrollbarGutter: 'stable',
-          }}
-        >
-          <div style={{ position: 'relative', width: natW * scale, height: natH * scale }}>
+        {stickyHeader ? (
+          // Скролл внутри масштабируемой области: между thead и скроллером нет
+          // transform, поэтому position:sticky работает нативно (без дрожания).
+          <div
+            ref={outerRef}
+            style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}
+          >
             <div
-              ref={innerRef}
               style={{
                 position: 'absolute',
                 top: 0,
                 left: 0,
-                width: 'max-content',
                 transform: `scale(${scale})`,
                 transformOrigin: 'top left',
               }}
             >
-              {children}
+              <div
+                ref={innerRef}
+                className="lto-fit-width"
+                style={{
+                  width: 'max-content',
+                  // Высота задаётся в немасштабированных единицах, чтобы после
+                  // scale ровно заполнить доступную область (floor — не вылезаем на 1px).
+                  height: availH > 0 && scale > 0 ? Math.floor(availH / scale) : undefined,
+                  overflowY: 'auto',
+                  WebkitOverflowScrolling: 'touch',
+                }}
+              >
+                {children}
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div
+            ref={outerRef}
+            className="lto-fit-width"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              width: '100%',
+              // Полосу всегда резервируем (scroll, не auto) + stable-gutter — иначе
+              // её появление/исчезновение меняет clientWidth и зацикливает ResizeObserver.
+              overflowY: 'scroll',
+              overflowX: 'hidden',
+              scrollbarGutter: 'stable',
+            }}
+          >
+            <div style={{ position: 'relative', width: natW * scale, height: natH * scale }}>
+              <div
+                ref={innerRef}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: 'max-content',
+                  transform: `scale(${scale})`,
+                  transformOrigin: 'top left',
+                }}
+              >
+                {children}
+              </div>
+            </div>
+          </div>
+        )}
         {footer && (
           <div
             style={{

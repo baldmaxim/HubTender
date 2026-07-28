@@ -47,25 +47,37 @@ func loadPreparedPositions(ctx context.Context, tx pgx.Tx, tenderID string) ([]c
 }
 
 // loadInsuranceInput loads the tender's insurance row (nil when absent).
+//
+// distribute_to_rows=false (флаг «Распределить во все строки», merge c11af3a/
+// c50fb65) гейтит ТОЛЬКО per-row разнос страхования в prepared-пайплайне —
+// возвращаем nil, как будто страховки нет. Слагаемое страхования в итоге ФП /
+// cached_grand_total идёт отдельным путём (tender_recalc.go) и от флага не
+// зависит.
 func loadInsuranceInput(ctx context.Context, tx pgx.Tx, tenderID string) (*calc.InsuranceInput, error) {
 	var in calc.InsuranceInput
+	var distributeToRows bool
 	err := tx.QueryRow(ctx, `
 		SELECT COALESCE(judicial_pct, 0), COALESCE(total_pct, 0),
 		       COALESCE(apt_price_m2, 0), COALESCE(apt_area, 0),
 		       COALESCE(parking_price_m2, 0), COALESCE(parking_area, 0),
-		       COALESCE(storage_price_m2, 0), COALESCE(storage_area, 0)
+		       COALESCE(storage_price_m2, 0), COALESCE(storage_area, 0),
+		       COALESCE(distribute_to_rows, true)
 		FROM public.tender_insurance
 		WHERE tender_id = $1::uuid
 		LIMIT 1
 	`, tenderID).Scan(&in.JudicialPct, &in.TotalPct,
 		&in.AptPriceM2, &in.AptArea,
 		&in.ParkingPriceM2, &in.ParkingArea,
-		&in.StoragePriceM2, &in.StorageArea)
+		&in.StoragePriceM2, &in.StorageArea,
+		&distributeToRows)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("loadInsuranceInput: %w", err)
+	}
+	if !distributeToRows {
+		return nil, nil
 	}
 	return &in, nil
 }

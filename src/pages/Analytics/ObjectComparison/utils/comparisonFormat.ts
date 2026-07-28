@@ -1,4 +1,22 @@
+import type { ColumnsType } from 'antd/es/table';
 import type { ComparisonRow, TenderCosts } from '../types';
+
+/**
+ * Сумма ширин листовых колонок — значение для `scroll.x`.
+ * Группы (колонки тендеров, «Разница») разворачиваем в children.
+ * Ширина таблицы обязана совпадать с суммой объявленных ширин: иначе браузер растягивает
+ * колонки на дробные величины, а закреплённая шапка (rc-table FixedHolder) берёт их уже
+ * измеренными/округлёнными — границы шапки и тела расходятся.
+ */
+export const sumLeafWidths = (cols: ColumnsType<ComparisonRow>): number =>
+  cols.reduce(
+    (acc, col) =>
+      acc +
+      ('children' in col && col.children
+        ? sumLeafWidths(col.children as ColumnsType<ComparisonRow>)
+        : Number(col.width) || 0),
+    0,
+  );
 
 export const formatNum = (value: number) =>
   value.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
