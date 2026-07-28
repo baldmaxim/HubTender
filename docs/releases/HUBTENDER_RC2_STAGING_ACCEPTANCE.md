@@ -69,12 +69,22 @@ RC2-манифесты в `artifacts/release/` (`rc2-*`), fingerprint перес
 - **npm audit --omit=dev**: 3 high, все классифицированы unreachable в production runtime (fast-uri — build-tooling цепочка внутри @ant-design/charts; react-router CSRF — только RSC-режим, приложение чистый SPA). Изменений npm-зависимостей не делалось; backlog: bump react-router-dom ≥8.3.0 отдельным изменением. Детали: `artifacts/release/rc2-supply-chain-summary.json`.
 - Legacy Supabase anon-key в `scripts/archive/` — pre-existing; активность старого проекта установить локально нельзя → **manual gate: ротация/зачистка на стороне владельца** (старый Supabase prod ещё живой — не игнорировать).
 
-## 8–23. Staging
+## 8. Staging bootstrap (итерация 2: owner прислал директиву с approvals)
 
-**НЕ ВЫПОЛНЯЛОСЬ**: `STAGING_PUSH_APPROVED`/`STAGING_DEPLOY_APPROVED` отсутствуют; staging deployment configuration в проекте НЕ существует (в DEPLOY.md и deploy-скриптах только production su10; staging remote/host/DB/URL/пользователи/registry — не определены). По протоколу этапа: локальные pre-deploy гейты выполнены, deployment не имитировался локальным Docker.
+**Release freeze подтверждён**: worktree чист на `0bffa67`, ancestry (41b7e7f, a957091, 662f50b) — PASS, origin/main не сдвинулся (drift 0, RC3 не требуется).
 
-Недостающие staging inputs (владельцу): staging host/домен + TLS; staging PostgreSQL (имя с «staging», не prod); staging env-файл (DSN, JWT-ключ, CORS, APP_BASE_URL); staging-пользователи (admin/regular/pilot-test); решение об OpenRouter key для staging (или fake-only); механизм деплоя (расширение deploy-server.sh или отдельный скрипт); approvals `STAGING_PUSH_APPROVED`/`STAGING_DEPLOY_APPROVED`.
+**Generic staging package создан и закоммичен** (без секретов):
+- `deploy/staging/docker-compose.staging.yml` — изолированный проект `hubtender-staging` (своя сеть/volumes, db без внешнего порта, api только за proxy, immutable `${STAGING_IMAGE}`, memory-limits для isolated_same_host), migration one-shot профиль (baseline+incrementals ×2, guard на «staging» в имени БД);
+- `deploy/staging/Caddyfile.staging` — TLS, HSTS, `/api|/ws|/health` → api, source maps 404, no-cache index.html / immutable assets;
+- `deploy/staging/.env.staging.example` — только placeholder'ы; `deploy/staging/README.md` — runbook (обе топологии);
+- `scripts/staging/`: `lib-guards.sh` (отказ при БД без «staging», prod-DSN, APP_ENV≠staging), `deploy-staging.sh` (freeze-проверка SHA, migrate → api → build dist из того же SHA → web → health), `health-check-staging.sh`, `backup-staging.sh` (SHA-256, retention 7), `restore-test-staging.sh` (restore в disposable `*_restore_test`, counts, rollout=off), `seed-staging-users.sh` (bcrypt через `caddy hash-password`, идемпотентно, APP_ENV=staging guard, синтетический STAGING-SYNTH-001), `rollback-staging.sh` (frontend/backend/ai-off по политике RC1_ROLLBACK), `cleanup-staging.sh`.
+
+**First-install dry-runs на замороженном HEAD** (§6): fresh — **PASSED** (миграции ×2, полный suite, readiness, rollout off, FK, tombstones); synthetic upgrade — **PASSED** (legacy-данные, audit выявил рисковые строки, remediation только в test DB, повторное применение). Артефакты: `artifacts/staging/{fresh,upgrade}-dry-run.{json,log}`.
+
+## 9–23. Actual provision/push/deploy/acceptance
+
+**НЕ ВЫПОЛНЯЛИСЬ — STAGING INPUTS INCOMPLETE.** В окружении сессии не установлена НИ ОДНА `STAGING_*`-переменная, а в присланной директиве все подключение-критичные значения — литеральные `...`-плейсхолдеры: `STAGING_SSH_TARGET`, `STAGING_PUBLIC_URL`, `STAGING_API_URL`, `STAGING_REGISTRY`, `STAGING_IMAGE_REPOSITORY`, `STAGING_DB_HOST/PORT/USER/PASSWORD`, `STAGING_JWT_SECRET`, все 6 test-user переменных. Также отсутствуют owner-gates данных: `STAGING_MARKUP_BACKFILL_REVIEWED`, `STAGING_RELATION_PREFLIGHT_APPROVED` (для first-install пустой БД оба вакуумны, но требуются явно). Без реальных значений provision/push/deploy запрещены §0; деплой локальным Docker не имитировался.
 
 ## 24. Вердикт
 
-**READY FOR STAGING, NOT DEPLOYED** — этап 3.2 НЕ завершён: push и staging deployment не выполнялись (нет approvals и staging-окружения). Все локальные RC2-гейты — см. финальный отчёт; production manual gates — раздел 7 + RC1 DEPLOYMENT/ROLLBACK манифесты (актуальны для RC2 с добавлением 4 миграций main, уже применённых к prod).
+**STAGING INPUTS INCOMPLETE** — этап 3.2 НЕ завершён. Всё, что выполнимо без staging-значений, сделано: RC2 заморожен и перепроверен, staging package готов к развёртыванию (runbook — `deploy/staging/README.md`), dry-runs зелёные. Следующий шаг владельца: заполнить `STAGING_*`-значения (env или `.env.staging` на staging host по шаблону) + два data-gate подтверждения → повторный проход выполнит push, publish, actual migration, deploy и полную приёмку (§9–23) по этому же runbook.

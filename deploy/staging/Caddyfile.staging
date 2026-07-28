@@ -1,0 +1,36 @@
+# HUBTender staging reverse proxy.
+# Только staging-домен; TLS — автоматический Let's Encrypt (или internal при
+# закрытом контуре — заменить строку tls). HTTP→HTTPS редиректит Caddy сам.
+{$STAGING_DOMAIN} {
+	encode gzip
+
+	# API и websocket — на backend; финансовые ответы не кэшируются.
+	handle /api/* {
+		reverse_proxy api:3005
+	}
+	handle /ws* {
+		reverse_proxy api:3005
+	}
+	handle /health* {
+		reverse_proxy api:3005
+	}
+
+	# Статический бандл. Source maps (hidden) наружу не отдаём.
+	handle {
+		root * /srv/dist
+		@maps path *.js.map *.css.map
+		respond @maps 404
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		# index.html не кэшировать дольше минуты; hashed-ассеты — иммутабельны.
+	}
+	@html path /index.html /
+	header @html Cache-Control "no-cache"
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+}

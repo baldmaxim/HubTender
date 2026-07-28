@@ -1,0 +1,107 @@
+# HUBTender staging — изолированный compose-проект (этап 3.2).
+#
+#   docker compose -p hubtender-staging --env-file .env.staging \
+#     -f deploy/staging/docker-compose.staging.yml up -d
+#
+# Инварианты изоляции:
+#   * project name hubtender-staging → свои network/volumes/имена;
+#   * образ backend — ТОЛЬКО immutable ${STAGING_IMAGE} (staging-<sha>/digest),
+#     никаких latest и production-тегов;
+#   * db не публикуется наружу (нет ports:), только внутренняя сеть;
+#   * production volumes/networks не монтируются;
+#   * секреты — только из .env.staging (вне git).
+name: hubtender-staging
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${STAGING_DB_NAME:?STAGING_DB_NAME обязателен (должен содержать staging)}
+      POSTGRES_USER: ${STAGING_DB_USER:?}
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:?}
+    volumes:
+      - staging-pgdata:/var/lib/postgresql/data
+    networks: [staging]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${STAGING_DB_USER} -d ${STAGING_DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          memory: ${STAGING_DB_MEM_LIMIT:-1g}
+
+  # One-shot: baseline + incrementals строго по lexicographic-порядку, затем
+  # повторное применение (идемпотентность). НЕ запускается при каждом старте
+  # api (deployment policy: отдельный migration job).
+  migrate:
+    image: postgres:17
+    profiles: [migrate]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${STAGING_DB_PASSWORD:?}
+    volumes:
+      - ../../db/yandex:/migrations:ro
+    networks: [staging]
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        case "${STAGING_DB_NAME}" in *staging*) ;; *) echo "FATAL: DB name без 'staging'"; exit 1;; esac
+        for round in 1 2; do
+          echo "== round $$round =="
+          for f in /migrations/sql/*.sql; do
+            psql -h db -U "${STAGING_DB_USER}" -d "${STAGING_DB_NAME}" -q -f "$$f" >/dev/null 2>&1 || true
+          done
+          for f in /migrations/incremental/*.sql; do
+            psql -h db -U "${STAGING_DB_USER}" -d "${STAGING_DB_NAME}" -v ON_ERROR_STOP=1 -q -f "$$f" >/dev/null \
+              || { echo "MIGRATION FAILED: $$f"; exit 1; }
+          done
+        done
+        echo "MIGRATIONS OK (x2 idempotent)"
+
+  api:
+    image: ${STAGING_IMAGE:?STAGING_IMAGE обязателен (hubtender:staging-<sha> или digest)}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Путь резолвится относительно этого compose-файла → корень репо.
+    env_file:
+      - ${STAGING_ENV_FILE:-../../.env.staging}
+    networks: [staging]
+    expose: ["3005"]
+    # Наружу api не публикуем: только reverse proxy (web) в той же сети.
+    deploy:
+      resources:
+        limits:
+          memory: ${STAGING_API_MEM_LIMIT:-512m}
+
+  # Статический фронтенд + same-origin proxy /api и /ws на api.
+  # dist/ собирается deploy-скриптом из ТОГО ЖЕ RC2 SHA c VITE_API_URL=STAGING_PUBLIC_URL.
+  web:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [api]
+    volumes:
+      - ./Caddyfile.staging:/etc/caddy/Caddyfile:ro
+      - staging-dist:/srv/dist:ro
+      - staging-caddy-data:/data
+    networks: [staging]
+    ports:
+      - "${STAGING_WEB_BIND:-127.0.0.1}:${STAGING_WEB_PORT:-8443}:443"
+      - "${STAGING_WEB_BIND:-127.0.0.1}:${STAGING_WEB_HTTP_PORT:-8080}:80"
+    environment:
+      STAGING_DOMAIN: ${STAGING_DOMAIN:?домен staging (не production!)}
+
+volumes:
+  staging-pgdata:
+  staging-dist:
+  staging-caddy-data:
+
+networks:
+  staging:
+    name: hubtender-staging-net
