@@ -1,7 +1,9 @@
 # HUBTender staging reverse proxy.
-# Только staging-домен; TLS — автоматический Let's Encrypt (или internal при
-# закрытом контуре — заменить строку tls). HTTP→HTTPS редиректит Caddy сам.
-{$STAGING_DOMAIN} {
+# Адрес сайта — из env STAGING_SITE_ADDRESS:
+#   dedicated_host:     https://staging.example.com  (Caddy сам берёт TLS/ACME)
+#   isolated_same_host: http://:80                   (TLS терминирует host-nginx,
+#                       который проксирует staging-домен на 127.0.0.1:$STAGING_WEB_HTTP_PORT)
+{$STAGING_SITE_ADDRESS} {
 	encode gzip
 
 	# API и websocket — на backend; финансовые ответы не кэшируются.

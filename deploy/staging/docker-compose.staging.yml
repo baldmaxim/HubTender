@@ -96,6 +96,8 @@ services:
       - "${STAGING_WEB_BIND:-127.0.0.1}:${STAGING_WEB_HTTP_PORT:-8080}:80"
     environment:
       STAGING_DOMAIN: ${STAGING_DOMAIN:?домен staging (не production!)}
+      # dedicated_host: https://$STAGING_DOMAIN; isolated_same_host: http://:80
+      STAGING_SITE_ADDRESS: ${STAGING_SITE_ADDRESS:-https://${STAGING_DOMAIN}}
 
 volumes:
   staging-pgdata:
