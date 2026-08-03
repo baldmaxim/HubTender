@@ -9,7 +9,7 @@ TenderHUB — портал управления тендерами в строи
 - **Языковые конвенции**: русский UI, английский код, русские сообщения коммитов
 - **Стек**: React 18 + Ant Design + Vite + TypeScript на фронте. Go BFF (chi + pgx/v5 + coder/websocket) перед **Yandex Managed PostgreSQL 17**. Supabase runtime удалён целиком (Auth + Data + SDK). Realtime — native WebSocket-хаб Go BFF. Auth — RS256 JWT, выдаётся Go BFF через `/api/v1/auth/*`.
 - **Брендинг**: дизайн-система описана в BRANDING.md
-- **Runtime БД**: Yandex Managed PostgreSQL (`rc1d-…mdb.yandexcloud.net:6432/HubTender`, sslmode=verify-full). Cutover выполнен 2026-05-18, Phase 5 frontend migration завершена 2026-05-20, frontend deploy 2026-05-21 (`FRONTEND_DEPLOY_OK`). Архив миграционных материалов: [`archive/migrations/2026-05-db-cutover/`](archive/migrations/2026-05-db-cutover/README.md). Актуальная архитектура: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), env: [`docs/RUNTIME_ENV.md`](docs/RUNTIME_ENV.md).
+- **Runtime БД**: Yandex Managed PostgreSQL (`rc1d-…mdb.yandexcloud.net:6432/HubTender`, sslmode=verify-full). Cutover выполнен 2026-05-18, Phase 5 frontend migration завершена 2026-05-20, frontend deploy 2026-05-21 (`FRONTEND_DEPLOY_OK`). Миграционные материалы удалены из рабочего дерева (были в `archive/migrations/2026-05-db-cutover/`, доступны в git-истории). Актуальная архитектура: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), env: [`docs/RUNTIME_ENV.md`](docs/RUNTIME_ENV.md).
 
 ## Команды разработки
 
@@ -39,7 +39,7 @@ curl http://localhost:3005/health/db  # readiness + пинг БД
 ## Критические правила
 
 ### База как единственный источник истины
-`supabase/schemas/prod.sql` — каноничная схема. ВСЕГДА сверяйся с ней перед любой работой с БД. НИКОГДА не доверяй TypeScript-типам больше, чем определениям из prod.sql. Бизнес-таблицы — в `supabase/migrations/`.
+`db/yandex/sql/*.sql` — каноничная схема (полная сборка), инкрементальные миграции — в `db/yandex/incremental/`. ВСЕГДА сверяйся с ней перед любой работой с БД. НИКОГДА не доверяй TypeScript-типам больше, чем определениям схемы.
 
 ### Секреты не должны начинаться с VITE_
 Vite инлайнит каждую `VITE_*`-переменную в клиентский бандл. НИКОГДА не добавляй префикс `VITE_` к секрету:
@@ -174,7 +174,7 @@ src/pages/PageName/
 - `src/lib/types/` — TS-типы + хелперы прав доступа (`hasPageAccess`, `canManageUsers`). SDK удалён.
 - `src/services/` — кросс-страничные сервисы (cost import, markup tactics). Логика расчётов Phase 5 всё ещё живёт здесь на TS-стороне.
 - `src/utils/` — общие хелперы, разбитые по подмодулям `boq/`, `excel/`, `matching/`, `versionTransfer/`
-- `scripts/` — Node dev-утилиты. Поддерживаемые: `cleanup/`, `build-prod.mjs`, `deploy-*.sh`. Архив исторических ad-hoc DBA-инструментов — `scripts/archive/` (не часть стандартного workflow, оставлен для истории).
+- `scripts/` — Node dev-утилиты. Поддерживаемые: `cleanup/`, `build-prod.mjs`, `deploy-*.sh`.
 
 Код бэкенда (Go BFF):
 - `backend/cmd/server/main.go` — точка входа c DI-проводкой

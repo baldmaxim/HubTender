@@ -175,7 +175,6 @@ playwright-report/
 # MCP wrapper script (auto-generated)
 mcp-supabase.js
 .git-credentials
-src/pages/Admin/MarkupConstructor/backup/
 
 # Временные дампы и артефакты редактора
 temp_*.txt
@@ -193,3 +192,6 @@ backend/hubtender-bff.exe
 # .claude/agents/*.md и .claude/commands/*.md трекаются намеренно, их НЕ игнорируем.
 .agents/
 .claude/scheduled_tasks.lock
+
+# Yandex Cloud SA authorized key (секрет, вне git)
+authorized_key.json

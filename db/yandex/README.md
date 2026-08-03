@@ -1,22 +1,10 @@
-# db/yandex — Cleaned PostgreSQL schema foundation for Yandex Managed PostgreSQL
+# db/yandex — PostgreSQL schema of record (Yandex Managed PostgreSQL)
 
-> **Status:** schema foundation only. **No data is migrated by anything in this
-> folder.** Source of truth = `supabase/migrations/` (NOT
-> `supabase/schemas/prod.sql`).
-
-This directory holds the deploy-ready, Supabase-free SQL schema for the target
-**Yandex Managed Service for PostgreSQL** cluster. It is the Stage 1 output of
-the Supabase→Yandex migration plan (history in `archive/migrations/`).
-
-## Source of truth
-
-| Allowed | Forbidden |
-|---|---|
-| `supabase/migrations/` (ordered application DDL — the canonical source) | `supabase/schemas/prod.sql` as a deploy script (public-only dump, broken cross-schema FKs `REFERENCES None.None`, no auth/RLS/triggers) |
-| PROD Supabase (`ocauafggjrqvopxjihas`) as the future data source | OLD Supabase (`wkywhjljrhewfpedbjzx`) — never a source for the Yandex stage |
-
-`prod.sql` may be consulted **only** as a cross-check reference for a single
-object, never run.
+> **Status:** live. Cutover to Yandex Managed PostgreSQL completed 2026-05-18.
+> This directory is the **canonical source of truth** for the runtime schema:
+> `sql/` — полная сборка схемы, `incremental/` — датированные пост-cutover
+> миграции. Легаси Supabase-материалы удалены из рабочего дерева (доступны в
+> git-истории).
 
 ## What was deliberately excluded
 
@@ -66,25 +54,12 @@ GUC set by the Go BFF — **not** Supabase GoTrue. GoTrue
 sessions/refresh-tokens are not modelled (users log in again after the auth
 cutover).
 
-## How to apply (NOT in this prompt)
+## How to apply
 
-Applying is a future, explicitly-authorised step. The mechanics:
+The full `sql/` build was applied during the 2026-05 cutover. New changes go
+through `incremental/<YYYY_MM>_<name>.sql`: apply manually via `psql` to the
+Yandex cluster, then sync the full-schema files in `sql/` to match.
 
-```bash
-cp scripts/prod-to-yandex/.env.prod-to-yandex.example \
-   scripts/prod-to-yandex/.env.prod-to-yandex   # fill from Lockbox; git-ignored
-
-npm run prod-to-yandex:check                     # read-only connectivity/version/ext/empty
-npm run prod-to-yandex:schema -- --dry-run       # list files + ranges, no DB connection
-
-# Real apply requires BOTH: env ALLOW_APPLY_SCHEMA=true AND operator intent.
-ALLOW_APPLY_SCHEMA=true npm run prod-to-yandex:schema
-# Range subset:
-npm run prod-to-yandex:schema -- --from 03_tables.sql --to 06_indexes_constraints.sql --dry-run
-```
-
-Secrets/DSN are never printed or committed. Data import (PROD → Yandex) is a
-separate later stage and is **not** performed by `01_apply_schema.mjs`.
-
-Migration history and planning docs are archived under
-`archive/migrations/2026-05-db-cutover/`.
+Secrets/DSN are never printed or committed. Migration history and planning
+docs were archived under `archive/migrations/2026-05-db-cutover/` and removed
+from the working tree (available in git history).
