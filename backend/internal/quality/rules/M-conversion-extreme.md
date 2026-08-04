@@ -57,7 +57,7 @@ SELECT
   cp.position_number,
   cp.item_no,
   l.id AS entity_id,
-  md5(concat_ws('|', l.k, l.quantity, l.wu, l.mu)) AS fingerprint,
+  md5(concat_ws('|', trim_scale(l.k), trim_scale(l.quantity), l.wu, l.mu)) AS fingerprint,
   CASE
     WHEN l.wu = l.mu THEN concat_ws(' ',
       'Коэффициент перевода', l.k::text,
