@@ -69,10 +69,10 @@ Production env-файл живёт на prod-сервере: `/srv/sites/tender.
 | `SUPABASE_JWT_SECRET` | HS256-вариант (никогда не активировался в проде) | удалена |
 | `VITE_AUTH_MODE` (frontend) | переключатель supabase/app для UI | удалена; UI всегда использует app-auth |
 | `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` (frontend) | конфиг supabase-js SDK | удалены вместе с SDK (см. doc 43) |
-| `SUPABASE_SERVICE_ROLE_KEY` | dev-скрипты, миграционные ETL | переехала в `archive/migrations/` |
+| `SUPABASE_SERVICE_ROLE_KEY` | dev-скрипты, миграционные ETL | удалена вместе с миграционным архивом |
 
 Миграционные переменные (`OLD_*`, `DUAL_RUN_*`, `ALLOW_*` и пр.) — см.
-`archive/migrations/2026-05-db-cutover/`.
+git-историю (`archive/migrations/2026-05-db-cutover/`, удалено из рабочего дерева).
 
 ## Local development
 

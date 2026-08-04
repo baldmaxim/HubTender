@@ -30,7 +30,6 @@ const Tasks = lazy(() => import('./pages/Tasks'));
 const Nomenclatures = lazy(() => import('./pages/Admin/Nomenclatures/Nomenclatures'));
 const AdminTenders = lazy(() => import('./pages/Admin/Tenders/Tenders'));
 const Tenders = lazy(() => import('./pages/Tenders/Tenders'));
-const ConstructionCost = lazy(() => import('./pages/Admin/ConstructionCost/ConstructionCost'));
 const MarkupConstructor = lazy(() => import('./pages/Admin/MarkupConstructor/MarkupConstructor'));
 const MarkupPercentages = lazy(() => import('./pages/Admin/MarkupPercentages/MarkupPercentages'));
 const Library = lazy(() => import('./pages/Library'));
@@ -113,7 +112,6 @@ function AppContent() {
               <Route index element={<Navigate to="/admin/nomenclatures" replace />} />
               <Route path="nomenclatures" element={<Nomenclatures />} />
               <Route path="tenders" element={<AdminTenders />} />
-              <Route path="construction_cost" element={<ConstructionCost />} />
               <Route path="markup_constructor" element={<MarkupConstructor />} />
               <Route path="markup" element={<MarkupPercentages />} />
               <Route path="import-log" element={<ImportLog />} />

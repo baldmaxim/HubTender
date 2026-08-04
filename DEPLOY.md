@@ -365,11 +365,11 @@ Source maps фронта льёт `@sentry/vite-plugin` — для этого в
 
 ## Миграции БД
 
-SQL-миграции применяются вручную (через Supabase MCP или `psql`) ДО или
-ПОСЛЕ деплоя — в зависимости от совместимости. Деплой-скрипты миграции не
-запускают.
+SQL-миграции применяются вручную (через `psql` к Yandex Managed PostgreSQL)
+ДО или ПОСЛЕ деплоя — в зависимости от совместимости. Деплой-скрипты миграции
+не запускают.
 
-Канонический источник схемы — [supabase/schemas/prod.sql](supabase/schemas/prod.sql).
+Канонический источник схемы — [db/yandex/sql/](db/yandex/sql/), миграции — [db/yandex/incremental/](db/yandex/incremental/).
 Перед изменением схемы сверься с ним. Env — [docs/RUNTIME_ENV.md](docs/RUNTIME_ENV.md).
 
 ## Проверки после деплоя

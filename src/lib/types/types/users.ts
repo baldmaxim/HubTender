@@ -72,7 +72,6 @@ export const ALL_PAGES = [
   '/tasks',
   '/admin/nomenclatures',
   '/admin/tenders',
-  '/admin/construction_cost',
   '/admin/markup_constructor',
   '/admin/markup',
   '/library',
@@ -156,7 +155,6 @@ export const PAGE_LABELS: Record<string, string> = {
   '/projects/:projectId': 'Детали объекта',
   '/admin/nomenclatures': 'Номенклатуры',
   '/admin/tenders': 'Тендеры',
-  '/admin/construction_cost': 'Справочник затрат',
   '/admin/markup': 'Проценты наценок',
   '/admin/markup_constructor': 'Конструктор наценок',
   '/admin/import-log': 'Журнал импортов строк',
@@ -195,7 +193,7 @@ export const PAGES_STRUCTURE = [
   },
   {
     title: 'Библиотеки',
-    pages: ['/library', '/library/templates', '/admin/nomenclatures', '/admin/construction_cost'],
+    pages: ['/library', '/library/templates', '/admin/nomenclatures'],
   },
   {
     title: null, // Без группы

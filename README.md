@@ -18,7 +18,6 @@ HUBTender/
 ├── index.html                ├─ FRONTEND  React 18 + Vite + TS + Ant Design
 ├── vite.config.ts            │             (entry: index.html → src/main.tsx)
 ├── tsconfig*.json            │
-├── vercel.json               │
 ├── .eslintrc.cjs            ─┘
 │
 ├── backend/                 ─┐ BACKEND   Go BFF (chi + pgx + WebSocket hub)
@@ -34,24 +33,17 @@ HUBTender/
 │   ├── go.mod                │
 │   └── Dockerfile           ─┘
 │
-├── supabase/                ─┐ DATABASE  Postgres 17 @ Supabase
-│   ├── migrations/           │           SQL-миграции
-│   ├── schemas/prod.sql      │           каноничный снимок схемы
-│   ├── exports/              │           DDL-дампы
-│   └── ai_context/          ─┘
-│
-├── tests/                   ─┐ QA        Playwright E2E
-├── playwright.config.ts     ─┘           (webServer на порту 3001)
+├── db/yandex/               ─┐ DATABASE  Yandex Managed PostgreSQL 17
+│   ├── sql/                  │           полная сборка схемы (каноничная)
+│   └── incremental/         ─┘           датированные миграции
 │
 ├── scripts/                 ─┐ DEV/OPS   Node.js утилиты
-│   ├── smoke/                │           smoke-тесты Go BFF
-│   └── dual-run/            ─┘           RPC-vs-Go diff harness
+│   ├── cleanup/              │           ручные ops-инструменты
+│   ├── checks/               │           parity-проверки расчётов
+│   ├── build-prod.mjs        │           production-сборка
+│   └── deploy-*.sh          ─┘           деплой на сервер (см. DEPLOY.md)
 │
-├── docs/                    ─┐ DOCS      архитектура и домен
-│   └── archive/             ─┘           устаревшие заметки
-│
-├── docker-compose.yml       ─┐ INFRA     api + redis + caddy
-├── Caddyfile                ─┘           reverse proxy
+├── docs/                       DOCS      архитектура и домен
 │
 ├── CLAUDE.md                   правила проекта и AI-агента
 ├── BRANDING.md                 дизайн-система
@@ -61,7 +53,7 @@ HUBTender/
 
 ## Быстрый старт
 
-Первым делом — `cp .env.example .env` и заполнить креды Supabase.
+Первым делом — `cp .env.example .env` и заполнить креды (БД, JWT-ключи).
 
 ### Frontend (React + Vite)
 
@@ -83,16 +75,9 @@ curl http://localhost:3005/health      # liveness
 curl http://localhost:3005/health/db   # readiness + DB ping
 ```
 
-Полный стек локально (`api + redis + caddy`):
-
-```bash
-docker compose up --build
-```
-
 ### База данных
 
 Yandex Managed PostgreSQL (Supabase удалён). Схема и миграции — в `db/yandex/`.
-`supabase/schemas/prod.sql` — исторический снимок канонической схемы.
 
 ## Конвенции
 

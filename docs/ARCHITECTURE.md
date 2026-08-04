@@ -136,6 +136,6 @@ App-auth only. Supabase Auth runtime полностью удалён.
 ## См. также
 
 - `docs/RUNTIME_ENV.md` — переменные окружения и где они живут
-- `archive/migrations/2026-05-db-cutover/README.md` — миграционная история
+- миграционная история 2026-05 db-cutover — в git-истории (`archive/migrations/2026-05-db-cutover/`, удалено из рабочего дерева)
 - `CLAUDE.md` — гайд для разработки (стек, команды, паттерны)
 - `BRANDING.md` — дизайн-система

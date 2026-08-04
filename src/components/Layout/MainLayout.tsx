@@ -319,7 +319,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             selectedKeys={[location.pathname]}
             defaultOpenKeys={(() => {
               const p = location.pathname;
-              if (['/library', '/library/templates', '/admin/nomenclatures', '/admin/construction_cost'].includes(p)) return ['library'];
+              if (['/library', '/library/templates', '/admin/nomenclatures'].includes(p)) return ['library'];
               if (['/costs', '/bsm', '/projects'].includes(p) || p.startsWith('/analytics')) return ['analytics'];
               if (['/settings', '/admin/import-log', '/admin/insurance'].includes(p)) return ['settings-group'];
               if (p.startsWith('/admin')) return ['admin'];
