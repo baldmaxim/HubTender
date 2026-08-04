@@ -24,7 +24,7 @@ SELECT
   cp.position_number,
   cp.item_no,
   (array_agg(b.id ORDER BY b.id))[1] AS entity_id,
-  md5(concat_ws('|', b.material_name_id::text, b.unit_rate, COUNT(*))) AS fingerprint,
+  md5(concat_ws('|', b.material_name_id::text, trim_scale(b.unit_rate), COUNT(*))) AS fingerprint,
   concat_ws(' ',
     'Материал', COALESCE(MIN(mn.name), '(без справочника)'),
     'заведён', COUNT(*)::text, 'раз с ценой',
