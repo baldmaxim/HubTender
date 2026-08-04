@@ -17,7 +17,7 @@
 | 09:38:12 | §18 **RETIREMENT** ×3 (~13,5 c) | триггеров grand-total **0**; tombstones fail-closed (`COMMERCIAL_COST_WRITE_RETIRED`, `REDISTRIBUTION_RESULT_WRITE_RETIRED`); backend жив. **Точка невозврата пройдена — далее roll-forward-only** |
 | 09:38 | §19 Финальный аудит | rollout=off, 84/84 calculated, застрявших 0, approved 20 целы, FK валидны |
 | 09:39+ | Phase D (Cursor) | удаление публичных `.js.map`, docker prune |
-| 09:40–10:11 | §21 Наблюдение 31 мин | см. artifacts/production-deploy-observation.log |
+| 09:39:23–10:10:30 | §21 Наблюдение | **31/31 проб зелёные, 0 сбоев**: api-гейт 401, фронт 200, calculating/stale/failed = 0 каждую минуту; сессии БД 16–37 (живые пользователи) |
 
 ## Отклонения от плана (все зафиксированы)
 
@@ -36,6 +36,10 @@
 
 `PROD_AI_PILOT_EARLIEST_AT = 2026-08-05 ~10:15 UTC` (production open + 24h). До этого: rollout остаётся off, наблюдать recovery/stale/failed/импорты/аналитику/ошибки браузера. Этап 3.4 (pilot_individual) — только после стабильных 24 часов и отдельного решения владельца.
 
+## Финальное закрытие (§ Closeout, выполнено в тот же день позднее)
+
+Повторный read-only readiness спустя часы работы под живыми пользователями: **84/84 тендеров `calculated`**, застрявших calculating **0**, failed **0**, approved **20** целы, rollout=**off**, AI-резерваций **0**, grand-total-триггеров **0**, tombstones **2**, композитные FK валидны, публичные health 200. Фактический даунтайм мутаций за весь деплой: **~8 секунд** (окно рестарта backend; nginx-maintenance не включался — отклонение задокументировано выше). Клон-кластер сохранён.
+
 ## Итог
 
-**PRODUCTION DEPLOYED — ROLLOUT OFF** (при условии зелёного 30-мин наблюдения — см. финальный отчёт сессии). Секреты не выводились; hot-edit'ов прод-кода не было; AI-пилот не включался.
+**PRODUCTION DEPLOYED — ROLLOUT OFF** — этап 3.3 закрыт. Секреты не выводились; hot-edit'ов прод-кода не было; AI-пилот не включался; политика после retirement — roll-forward-only. 24-hour hold идёт: `PROD_AI_PILOT_EARLIEST_AT ≈ 2026-08-05 10:10 UTC`; до его конца — не включать пилот и не удалять клон.
