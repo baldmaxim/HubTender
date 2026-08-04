@@ -54,6 +54,26 @@ type Client struct {
 	http     *http.Client
 	timeNow  func() time.Time // DI для тестов
 	sleepFor func(d time.Duration, ctx context.Context) error
+	// keySource — динамический источник ключа (feature/ai-key-ui): UI-ключ из
+	// БД (расшифрованный server-side) имеет приоритет над env cfg.APIKey.
+	// nil / пустой результат → используется cfg.APIKey. Значение никогда не
+	// логируется и наружу не отдаётся.
+	keySource func() string
+}
+
+// WithKeySource задаёт динамический источник ключа (приоритетнее env).
+func WithKeySource(fn func() string) Option {
+	return func(c *Client) { c.keySource = fn }
+}
+
+// currentKey — действующий ключ: keySource (UI) > cfg.APIKey (env).
+func (c *Client) currentKey() string {
+	if c.keySource != nil {
+		if k := strings.TrimSpace(c.keySource()); k != "" {
+			return k
+		}
+	}
+	return strings.TrimSpace(c.cfg.APIKey)
 }
 
 // New строит клиент. Пустой APIKey допустим — вызовы вернут ErrNotConfigured
@@ -115,7 +135,7 @@ func WithHTTPClient(h *http.Client) Option {
 }
 
 // Configured — задан ли API key (единственное, что видит admin API: §3).
-func (c *Client) Configured() bool { return strings.TrimSpace(c.cfg.APIKey) != "" }
+func (c *Client) Configured() bool { return c.currentKey() != "" }
 
 // BaseHost — host base URL для безопасного лога (без ключа/пути).
 func (c *Client) BaseHost() string { return c.baseURL.Host }
@@ -155,7 +175,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 		if err != nil {
 			return fmt.Errorf("openrouter: build request: %w", err)
 		}
-		req.Header.Set("Authorization", "Bearer "+c.cfg.APIKey)
+		req.Header.Set("Authorization", "Bearer "+c.currentKey())
 		req.Header.Set("Accept", "application/json")
 		if payload != nil {
 			req.Header.Set("Content-Type", "application/json")

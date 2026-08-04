@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/su10/hubtender/backend/internal/auth"
@@ -65,3 +67,15 @@ func newSentinel(msg string) error { return &sentinelErr{msg: msg} }
 type sentinelErr struct{ msg string }
 
 func (e *sentinelErr) Error() string { return e.msg }
+
+// loadJWTKeyMaterial — байты JWT-private-key (PEM) для keycrypt (feature/
+// ai-key-ui). Значение никогда не логируется.
+func loadJWTKeyMaterial(cfg *config.Config) ([]byte, error) {
+	if b64 := strings.TrimSpace(cfg.AppJWTPrivateKeyB64); b64 != "" {
+		return base64.StdEncoding.DecodeString(b64)
+	}
+	if p := strings.TrimSpace(cfg.AppJWTPrivateKeyPath); p != "" {
+		return os.ReadFile(p)
+	}
+	return nil, errors.New("APP_JWT_PRIVATE_KEY_PATH/_B64 не заданы")
+}

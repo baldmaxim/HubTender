@@ -340,6 +340,9 @@ func newRouter(
 			r.Post("/api/v1/admin/ai/openrouter/test-connection", d.aiAdminH.OpenRouterTestConnection)
 			r.Get("/api/v1/admin/ai/openrouter/models", d.aiAdminH.OpenRouterModels)
 			r.Post("/api/v1/admin/ai/openrouter/models/refresh", d.aiAdminH.OpenRouterModelsRefresh)
+			// feature/ai-key-ui: write-only управление ключом (ключ не читается назад).
+			r.Post("/api/v1/admin/ai/openrouter/key", d.aiAdminH.SetOpenRouterKey)
+			r.Delete("/api/v1/admin/ai/openrouter/key", d.aiAdminH.DeleteOpenRouterKey)
 			r.Get("/api/v1/admin/ai/nomenclature-settings", d.aiAdminH.GetNomenclatureSettings)
 			r.Put("/api/v1/admin/ai/nomenclature-settings", d.aiAdminH.PutNomenclatureSettings)
 			r.Post("/api/v1/admin/ai/nomenclature/test-model", d.aiAdminH.TestNomenclatureModel)

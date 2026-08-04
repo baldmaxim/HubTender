@@ -36,6 +36,17 @@ export interface AiConnectionView {
   key?: AiKeyStatus | null;
   checked_at?: string | null;
   base_host: string;
+  // feature/ai-key-ui: источник действующего ключа (сам ключ сюда не приходит никогда)
+  key_source: 'ui' | 'env' | 'none';
+  key_suffix?: string | null;
+  key_set_at?: string | null;
+  env_key_available: boolean;
+}
+
+export interface AiKeyState {
+  configured: boolean;
+  suffix?: string | null;
+  set_at?: string | null;
 }
 
 export interface AiCatalogModel {
@@ -304,6 +315,24 @@ export interface AiEvalRunResult {
 export async function fetchOpenRouterStatus(): Promise<AiConnectionView> {
   const res = await apiFetch<{ data: AiConnectionView }>('/api/v1/admin/ai/openrouter/status');
   return res.data;
+}
+
+// Write-only: ключ отправляется на сервер и никогда не читается назад.
+// Ответ сразу содержит свежий connection-view (авто-проверка нового ключа).
+export async function setOpenRouterKey(apiKey: string): Promise<AiConnectionView> {
+  const res = await apiFetch<{ data: { key_state: AiKeyState; connection: AiConnectionView } }>(
+    '/api/v1/admin/ai/openrouter/key',
+    { method: 'POST', body: JSON.stringify({ api_key: apiKey }), timeoutMs: 70_000 }
+  );
+  return res.data.connection;
+}
+
+export async function deleteOpenRouterKey(): Promise<AiConnectionView> {
+  const res = await apiFetch<{ data: { connection: AiConnectionView } }>(
+    '/api/v1/admin/ai/openrouter/key',
+    { method: 'DELETE', timeoutMs: 70_000 }
+  );
+  return res.data.connection;
 }
 
 export async function testOpenRouterConnection(): Promise<AiConnectionView> {

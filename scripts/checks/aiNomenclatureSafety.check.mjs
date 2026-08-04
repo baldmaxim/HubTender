@@ -285,6 +285,7 @@ for (const rel of [
   const allowedAIMigrations = new Set([
     '2026_07_ai_feature_settings.sql',      // этап 2.5: settings-only
     '2026_07_ai_rollout_controlled.sql',    // этап 2.6: rollout/ledger/feedback (safe metadata)
+    '2026_08_ai_api_key_ui.sql',            // feature/ai-key-ui: ТОЛЬКО ciphertext-поля (валидируется в openRouterAdministrationSafety)
   ]);
   if (existsSync(dir)) {
     for (const f of readdirSync(dir)) {
@@ -298,7 +299,12 @@ for (const rel of [
       if (/raw_prompt|raw_response|raw_completion|prompt_text|response_text|workbook|excel_bytes|models_catalog/i.test(sql)) {
         violations.push(`db/yandex/incremental/${f} — raw prompt/response/каталог в settings-таблице запрещены (§14/§17, этап 2.5)`);
       }
-      if (/api_key|apikey|secret/i.test(sql)) {
+      // feature/ai-key-ui: единственное исключение — ciphertext-поля ключа
+      // (plaintext-инвариант проверяет openRouterAdministrationSafety §27.4).
+      const sansKeyUI = f === '2026_08_ai_api_key_ui.sql'
+        ? sql.replace(/api_key_(ciphertext|suffix|set_at|set_by)/g, '')
+        : sql;
+      if (/api_key|apikey|secret/i.test(sansKeyUI)) {
         violations.push(`db/yandex/incremental/${f} — секреты в БД запрещены (этап 2.5 §3)`);
       }
     }

@@ -136,8 +136,17 @@ const pageSources = [
   '../../src/pages/AdminAiSettings/components/CatalogSection.tsx',
   '../../src/pages/AdminAiSettings/components/SelectedModelSection.tsx',
 ].map((p) => readFileSync(new URL(p, import.meta.url), 'utf8')).join('\n');
-check('28. поля ввода API key нет (Input.Password/apiKey отсутствуют)',
-  !/Input\.Password/.test(pageSources) && !/api[_-]?key.{0,20}(value|onChange)/i.test(pageSources)
+// 28 (feature/ai-key-ui): ввод ключа разрешён ТОЛЬКО write-only модалом в
+// ConnectionSection: Input.Password, значение немедленно сбрасывается после
+// submit и никогда не рендерится назад.
+const connectionSrc = readFileSync(new URL('../../src/pages/AdminAiSettings/components/ConnectionSection.tsx', import.meta.url), 'utf8');
+const nonConnectionSources = pageSources.replace(connectionSrc, '');
+check('28. ввод ключа — только write-only модал в ConnectionSection',
+  /Input\.Password/.test(connectionSrc)
+  && !/Input\.Password/.test(nonConnectionSources)
+  && /setKeyDraft\(''\)/.test(connectionSrc)          // ключ забывается после submit/cancel
+  && !/>\s*\{keyDraft\}/.test(connectionSrc)          // значение не рендерится как текст
+  && /key_suffix/.test(connectionSrc)                    // назад — только суффикс
   && API_KEY_HINT.includes('OPENROUTER_API_KEY'));
 check('29. free-text ввода model ID нет (выбор только radio из таблицы)',
   !/Input[^.]*placeholder=.{0,40}(model|модел)/i.test(pageSources)

@@ -17,6 +17,8 @@ import {
   saveAiNomenclatureDraft,
   testAiNomenclatureModel,
   testOpenRouterConnection,
+  setOpenRouterKey,
+  deleteOpenRouterKey,
 } from '../../lib/api/adminAi';
 import { getErrorMessage } from '../../utils/errors';
 import {
@@ -48,6 +50,7 @@ export default function AdminAiSettings() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [activating, setActivating] = useState(false);
+  const [keySaving, setKeySaving] = useState(false);
 
   const loadInitial = useCallback(async () => {
     try {
@@ -89,6 +92,31 @@ export default function AdminAiSettings() {
       message.error(getErrorMessage(e));
     } finally {
       setChecking(false);
+    }
+  };
+
+  const handleSetKey = async (apiKey: string) => {
+    setKeySaving(true);
+    try {
+      setConnection(await setOpenRouterKey(apiKey));
+      message.success('Ключ сохранён, подключение проверено');
+    } catch (e) {
+      message.error(getErrorMessage(e));
+      throw e;
+    } finally {
+      setKeySaving(false);
+    }
+  };
+
+  const handleDeleteKey = async () => {
+    setKeySaving(true);
+    try {
+      setConnection(await deleteOpenRouterKey());
+      message.success('UI-ключ удалён');
+    } catch (e) {
+      message.error(getErrorMessage(e));
+    } finally {
+      setKeySaving(false);
     }
   };
 
@@ -181,6 +209,9 @@ export default function AdminAiSettings() {
           connection={connection}
           checking={checking}
           onTestConnection={handleTestConnection}
+          onSetKey={handleSetKey}
+          onDeleteKey={handleDeleteKey}
+          keySaving={keySaving}
         />
 
         <CatalogSection

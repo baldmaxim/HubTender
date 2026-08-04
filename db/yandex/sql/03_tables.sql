@@ -702,6 +702,12 @@ CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
     circuit_failure_threshold integer NOT NULL DEFAULT 3,
     circuit_cooldown_seconds integer NOT NULL DEFAULT 300,
     reservation_timeout_seconds integer NOT NULL DEFAULT 120,
+    -- feature/ai-key-ui: UI-ключ OpenRouter — ТОЛЬКО шифротекст (AES-GCM от
+    -- серверного JWT-private-key); plaintext в БД запрещён.
+    api_key_ciphertext bytea,
+    api_key_suffix text,
+    api_key_set_at timestamp with time zone,
+    api_key_set_by uuid,
     pilot_started_at timestamp with time zone,
     pilot_ended_at timestamp with time zone,
     last_live_evaluation_id uuid,
@@ -718,6 +724,8 @@ CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
     -- Имена/состав совпадают с 2026_07_ai_rollout_controlled.sql (schema
     -- equivalence: baseline == migration chain; DO-блок миграции увидит
     -- существующий conname и пропустит ADD CONSTRAINT).
+    CONSTRAINT ai_feature_settings_api_key_suffix_chk
+        CHECK (api_key_suffix IS NULL OR length(api_key_suffix) <= 8),
     CONSTRAINT ai_feature_settings_rollout_mode_chk
         CHECK (rollout_mode IN ('off', 'evaluation', 'pilot_individual', 'pilot_bulk')),
     CONSTRAINT ai_feature_settings_rollout_limits_chk CHECK (

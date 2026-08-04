@@ -4,11 +4,13 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
+	"github.com/su10/hubtender/backend/internal/ai/keycrypt"
 	ainom "github.com/su10/hubtender/backend/internal/ai/nomenclature"
 	"github.com/su10/hubtender/backend/internal/ai/openrouter"
 	"github.com/su10/hubtender/backend/internal/cache"
@@ -245,22 +247,36 @@ func buildDeps(
 				Msg("OPENROUTER_API_BASE вне allowlist разрешён только вне production (fake-server тесты)")
 		}
 	}
+	// feature/ai-key-ui: UI-ключ хранится в БД шифротекстом (AES-GCM от
+	// JWT-private-key) и имеет приоритет над env; без JWT-материала фича
+	// честно отключена (действует только env-ключ).
+	aiSettingsRepo := repository.NewAISettingsRepo(pool)
+	var aiKeyCipher *keycrypt.Cipher
+	if master, kerr := loadJWTKeyMaterial(cfg); kerr != nil {
+		logger.Warn().Err(kerr).Msg("ai-key-ui: JWT-материал недоступен — UI-управление ключом отключено")
+	} else if c, cerr := keycrypt.New(master); cerr != nil {
+		logger.Warn().Err(cerr).Msg("ai-key-ui: keycrypt init failed — UI-управление ключом отключено")
+	} else {
+		aiKeyCipher = c
+	}
+	aiKeyResolver := services.NewAIKeyResolver(aiSettingsRepo, aiKeyCipher)
+
 	orClient, orErr := openrouter.New(openrouter.Config{
 		APIKey:      cfg.OpenRouterAPIKey,
 		BaseURL:     orBase,
 		HTTPReferer: cfg.OpenRouterHTTPReferer,
 		AppTitle:    cfg.OpenRouterAppTitle,
 		Timeout:     time.Duration(cfg.OpenRouterTimeoutSeconds) * time.Second,
-	})
+	}, openrouter.WithKeySource(aiKeyResolver.Current))
 	if orErr != nil {
 		// Невалидный base — не валим приложение: клиент без конфигурации.
 		logger.Warn().Err(orErr).Msg("openrouter client init failed; AI administration будет not_configured")
-		orClient, _ = openrouter.New(openrouter.Config{})
+		orClient, _ = openrouter.New(openrouter.Config{}, openrouter.WithKeySource(aiKeyResolver.Current))
 	}
 	orCatalog := openrouter.NewCatalogCache(orClient, openrouter.CatalogTTL)
-	aiSettingsRepo := repository.NewAISettingsRepo(pool)
 	aiAdminSvc := services.NewAIAdminService(orClient, orCatalog, aiSettingsRepo).
-		WithLiveTestFlag(os.Getenv("OPENROUTER_LIVE_TEST") == "true")
+		WithLiveTestFlag(os.Getenv("OPENROUTER_LIVE_TEST") == "true").
+		WithKeyManagement(aiSettingsRepo, aiKeyCipher, aiKeyResolver, strings.TrimSpace(cfg.OpenRouterAPIKey) != "")
 	// Этап 2.6: live-gateway пилота. Rollout по умолчанию off (БД);
 	// non-pilot и любые exact/alias/execute пути провайдера не вызывают.
 	smartImportSvc.WithAIRolloutGateway(aiAdminSvc)

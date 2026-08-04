@@ -9,6 +9,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/su10/hubtender/backend/internal/ai/keycrypt"
 	"github.com/su10/hubtender/backend/internal/ai/openrouter"
 	"github.com/su10/hubtender/backend/internal/repository"
 )
@@ -56,6 +57,12 @@ type AIAdminService struct {
 	keyStatus    *openrouter.KeyStatus
 	keyErrCode   string
 	keyCheckedAt time.Time
+
+	// feature/ai-key-ui: UI-управление ключом (WithKeyManagement).
+	keys             aiKeyStore
+	keyCipher        *keycrypt.Cipher
+	keyResolver      *AIKeyResolver
+	envKeyConfigured bool
 	keyTTL       time.Duration
 }
 
@@ -92,6 +99,12 @@ type AIConnectionView struct {
 	Key              *openrouter.KeyStatus `json:"key,omitempty"`
 	CheckedAt        *time.Time            `json:"checked_at,omitempty"`
 	BaseHost         string                `json:"base_host"`
+	// feature/ai-key-ui: источник действующего ключа и безопасные метаданные
+	// UI-ключа. Самого ключа во view нет и быть не может.
+	KeySource   string     `json:"key_source"` // ui | env | none
+	KeySuffix   string     `json:"key_suffix,omitempty"`
+	KeySetAt    *time.Time `json:"key_set_at,omitempty"`
+	EnvFallback bool       `json:"env_key_available"` // задан ли env-ключ (как fallback)
 }
 
 // AICatalogView — каталог для admin UI.
@@ -188,6 +201,7 @@ func (s *AIAdminService) keyStatusView(ctx context.Context, force bool) AIConnec
 		APIKeyConfigured: s.client.Configured(),
 		BaseHost:         s.client.BaseHost(),
 	}
+	s.decorateKeySource(ctx, &view)
 	if !view.APIKeyConfigured {
 		view.Connection = "not_configured"
 		return view
