@@ -38,6 +38,34 @@ dayjs.locale('ru');
 
 const { Header, Sider, Content } = Layout;
 
+// Состояние бокового меню переживает перезагрузку: в push-режиме (≥768px) сайдбар —
+// часть интерфейса, а не всплывашка, и должен остаться таким, каким его оставили.
+// Конвенция ключа — как tenderHub_theme в ThemeContext.
+const SIDEBAR_STORAGE_KEY = 'tenderHub_sidebar_collapsed';
+
+/**
+ * Оверлей-режим по «сырому» вьюпорту — то же правило, что isMobile || isLandscapePhone
+ * в useIsMobile, но без antd Grid: тот на первом рендере отдаёт {} (подписка живёт в
+ * useLayoutEffect), поэтому для стартового состояния он непригоден.
+ */
+const isOverlayViewport = () => {
+  if (typeof window === 'undefined') return false;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  return w < 768 || (w > h && Math.min(w, h) < 576);
+};
+
+const readStoredCollapsed = () => {
+  try {
+    // На узком вьюпорте раскрытое меню — оверлей поверх всей страницы: восстанавливать
+    // его не надо, иначе на телефоне первый кадр уходит под затемнение.
+    if (isOverlayViewport()) return true;
+    return localStorage.getItem(SIDEBAR_STORAGE_KEY) !== 'false'; // по умолчанию свёрнуто
+  } catch {
+    return true; // private mode / заблокированное хранилище
+  }
+};
+
 // ── Обработка пунктов меню: чистые функции на уровне модуля ──────────────────
 // Раньше жили внутри компонента и прогонялись на каждый его рендер (навигация,
 // уведомления, resize) — заметный вклад в INP кликов по меню на телефоне.
@@ -158,24 +186,42 @@ interface MainLayoutProps {
 }
 
 const MainLayout: React.FC<MainLayoutProps> = () => {
-  const [collapsed, setCollapsed] = useState(true);
+  const { isPhone, isLandscapePhone, isPhoneDevice, isMobile, screens } = useIsMobile();
+  // «Мобильный» layout = <992px (телефон + планшет), как и переключение на карточный вид.
+  const isMobileLayout = !screens.lg;
+  // Оверлей — только на телефонах: <768px по ширине плюс ландшафтный телефон (932×430
+  // по ширине проходит как планшет, но раздвигать там нечего). На ≥768px меню — обычный
+  // flex-сосед в потоке: раскрытие сдвигает и сужает контент, а не наезжает на него.
+  //
+  // До первого рендера antd Grid.useBreakpoint() отдаёт {} (подписка — в useLayoutEffect),
+  // и isMobile там ложно-истинен. Без фолбэка на «сырой» вьюпорт это стоило бы дважды:
+  // эффект ниже затирал бы восстановленное из localStorage состояние, а collapsedWidth
+  // успевал бы отрисоваться нулём — рейл 80px въезжал бы при каждой загрузке страницы.
+  const screensReady = Object.keys(screens).length > 0;
+  const isMenuOverlay = screensReady ? isMobile || isLandscapePhone : isOverlayViewport();
+
+  const [collapsed, setCollapsed] = useState(readStoredCollapsed);
   // Гасит внутренние transition/motion антд-меню на время явного открытия/закрытия
   // сайдбара, чтобы анимировалась только его ширина (см. .sidebar-toggling в CSS).
   const [isToggling, setIsToggling] = useState(false);
-  const toggleSidebar = (next: boolean) => {
+  // persist=false — для служебных сворачиваний (закрытие оверлея после выбора пункта):
+  // они не должны затирать выбор пользователя, сделанный на десктопе.
+  const toggleSidebar = (next: boolean, persist = true) => {
     setIsToggling(true);
     setCollapsed(next);
+    if (persist && !isMenuOverlay) {
+      try {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+      } catch {
+        /* private mode / заблокированное хранилище — состояние живёт только в сессии */
+      }
+    }
     window.setTimeout(() => setIsToggling(false), 260);
   };
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
-  const { isPhone, isLandscapePhone, isPhoneDevice, isMobile, screens } = useIsMobile();
-  // «Мобильный» layout = <992px (телефон + планшет), как и переключение на карточный вид.
-  const isMobileLayout = !screens.lg;
-  // Меню всплывает поверх контента на всех вьюпортах (телефон, планшет, десктоп), не сдвигая страницу.
-  const isMenuOverlay = true;
 
   // Название текущей страницы для шапки (на телефонах). /path → PAGE_LABELS,
   // c учётом параметрических роутов (паттерн как в hasPageAccess).
@@ -188,12 +234,12 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     return match ? PAGE_LABELS[match] : '';
   }, [location.pathname]);
 
-  // На телефоне (портрет <576px и ландшафт) автоматически сворачивать боковое меню,
-  // освобождая место под контент. isLandscapePhone в зависимостях — чтобы свернуть
-  // при повороте в ландшафт. Планшет/десктоп не затрагиваем.
+  // Вход в оверлей-режим (сужение окна <768px, поворот телефона в ландшафт) — сворачиваем:
+  // раскрытое меню поверх узкого экрана перекрывает страницу целиком. Не персистим —
+  // это вынужденное сворачивание, а не выбор пользователя.
   useEffect(() => {
-    if (isPhone || isLandscapePhone) setCollapsed(true);
-  }, [isPhone, isLandscapePhone]);
+    if (isMenuOverlay) setCollapsed(true);
+  }, [isMenuOverlay]);
 
   // tenderId доступен, когда пользователь находится на странице позиций заказчика
   const currentTenderId = location.pathname === '/positions'
@@ -243,8 +289,9 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     if (e.domEvent && 'button' in e.domEvent && !e.domEvent.button) {
       e.domEvent.preventDefault();
       navigate(e.key);
-      // Меню — оверлей на всех вьюпортах: после выбора пункта сворачиваем, освобождая контент
-      toggleSidebar(true);
+      // В оверлее (телефон) сворачиваем — иначе выбранная страница остаётся под затемнением.
+      // В push-режиме меню — часть интерфейса и остаётся таким, каким его оставил пользователь.
+      if (isMenuOverlay) toggleSidebar(true, false);
     }
   };
 
@@ -256,34 +303,43 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   );
 
   return (
-    <Layout style={{ minHeight: '100vh', height: '100vh' }}>
+    // hasSider явно: antd и сам находит Sider среди детей (useHasSider делает это
+    // синхронно, моргания нет), но проп фиксирует flex-direction: row на случай, если
+    // Sider когда-нибудь окажется завёрнут в условие или фрагмент.
+    <Layout hasSider style={{ minHeight: '100vh', height: '100vh' }}>
       <Sider
         trigger={null}
         collapsible
         collapsed={collapsed}
-        collapsedWidth={screens.lg ? 80 : 0}
+        collapsedWidth={isMenuOverlay ? 0 : 80}
         className={`sidebar-${currentTheme} ${isToggling ? 'sidebar-toggling' : ''}`}
         style={{
           background: currentTheme === 'dark' ? '#0a0a0a' : '#fff',
-          borderRight: currentTheme === 'light' ? '1px solid #f0f0f0' : 'none',
+          // В потоке (≥768px) сайдбар граничит с контентом, поэтому граница нужна и в тёмной
+          // теме: стык #0a0a0a с colorBgContainer иначе читается как случайный перепад фона.
+          borderRight:
+            currentTheme === 'light' ? '1px solid #f0f0f0' : '1px solid rgba(255, 255, 255, 0.06)',
           display: 'flex',
           flexDirection: 'column',
-          height: '100vh',
-          // На телефоне (портрет и ландшафт) меню всплывает поверх страницы (не сдвигает контент).
+          // iOS safe-area нужна в обоих режимах: в потоке сайдбар тоже начинается от x=0/y=0,
+          // и в standalone-PWA на iPad логотип уходил бы под статус-бар. Логотип встаёт на
+          // один уровень с кнопкой меню в шапке — у Header тот же paddingTop. На десктопе
+          // env() = 0, разницы нет; высоту паддинг не добавляет — box-sizing: border-box глобальный.
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingLeft: 'env(safe-area-inset-left)',
+          // Телефон (портрет и ландшафт): меню всплывает поверх страницы, не сдвигая контент.
+          // На ≥768px ветка не срабатывает — Sider остаётся в потоке и раздвигает лейаут.
+          // height здесь не задаём: .sidebar-{theme} в CSS ставит height: 100% !important.
           ...(isMenuOverlay
             ? {
                 position: 'fixed' as const,
                 left: 0,
                 top: 0,
                 zIndex: 1000,
-                // iOS safe-area: содержимое меню (логотип TenderHUB) — ниже Dynamic Island,
-                // на одном уровне с кнопкой раскрытия меню в шапке; учесть боковой вырез в ландшафте.
-                paddingTop: 'env(safe-area-inset-top)',
-                paddingLeft: 'env(safe-area-inset-left)',
               }
             : {}),
         }}
-        width={screens.lg ? 300 : 250}
+        width={screens.lg ? 260 : 250}
       >
         <div
           className={`logo logo-${currentTheme} ${!collapsed ? 'logo-compact' : ''}`}
@@ -292,7 +348,10 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
         >
           {collapsed ? (
             <div className="logo-collapsed">
-              <LogoIcon size={isPhone ? 32 : (screens.lg ? 36 : 80)} color={currentTheme === 'dark' ? '#10b981' : '#ffffff'} />
+              {/* Свёрнутый рейл — 80px на всех push-вьюпортах (планшет и десктоп), а .logo
+                  в этом состоянии 64px с паддингом 12/8 → под иконку остаётся ~40×64.
+                  Раньше на планшете стояло 80 и это не мешало: там рейл был 0-ширины. */}
+              <LogoIcon size={isPhone ? 32 : 36} color={currentTheme === 'dark' ? '#10b981' : '#ffffff'} />
             </div>
           ) : (
             <div className="logo-expanded">
@@ -327,6 +386,10 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             })()}
             items={filteredMenuItems}
             onClick={handleMenuClick}
+            // 16 вместо дефолтных 24: при ширине 260px у вложенного пункта после отступа
+            // (2×24), иконки и padding оставалось ~172px — «Страхование от судимостей»
+            // и «Затраты на строительство» обрезались. С 16 текстовый бокс ~188px.
+            inlineIndent={16}
             style={{
               background: 'transparent',
               borderRight: 0,
@@ -341,7 +404,11 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 999 }}
         />
       )}
-      <Layout style={{ marginLeft: screens.lg ? 80 : 0, transition: 'margin-left 0.2s' }}>
+      {/* minWidth: 0 обязателен. antd задаёт .ant-layout { flex: auto; min-height: 0 }, но не
+          min-width: 0 — а во flex-direction: row (hasSider) без него контентный Layout не
+          сожмётся ниже intrinsic-ширины, и широкая таблица (scroll.x = 1840 в «Форме КП»)
+          выдавит страницу за экран вместо горизонтального скролла внутри <Content>. */}
+      <Layout style={{ minWidth: 0 }}>
         <Header
           style={{
             // iOS safe-area (PWA на весь экран): шапка ниже Dynamic Island, кнопка меню нажимается.

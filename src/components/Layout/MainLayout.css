@@ -149,12 +149,14 @@
   background: rgba(16, 185, 129, 0.08) !important;
 }
 
-/* Sidebar scroll fix */
+/* Sidebar scroll fix.
+   height: 100% (а не 100vh) — в push-режиме сайдбар flex-потомок корневого Layout'а
+   с height: 100vh, и 100% не даёт переполнения при env()-паддингах. */
 .sidebar-dark,
 .sidebar-light {
   display: flex !important;
   flex-direction: column !important;
-  height: 100vh !important;
+  height: 100% !important;
   overflow: hidden !important;
 }
 
