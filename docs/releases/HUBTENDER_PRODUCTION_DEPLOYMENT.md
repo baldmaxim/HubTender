@@ -11,7 +11,7 @@
 | 09:27:48–09:31:26 | §8 ADDITIVE ×2 на живом проде | **PASS**, 23 файла, идемпотентность подтверждена; verification: section_fields=2, revision_cols=3, ai_tables=6, memory=2, композитные FK валидны, rollout=off; старый backend работал всё время |
 | 09:31 | §9 Backfill | подтверждённый no-op (0→0) |
 | 09:34:27–09:34:35 | Phase B (Cursor): стоп старого 6e8ea39 → старт `prod-04ef152` | health×4 = **200** (вкл. новые /health/recalc, /health/ai), логи чистые. **Отклонение**: nginx-maintenance не включился (sed сломан SSH-враппером) — мутации не блокировались; несущественно: опасное окно = сам рестарт (~8 сек), новый backend совместим со схемой |
-| 09:35 | Внешний API-smoke | 401-гейты корректны, фронт 200, 22 сессии нового пула, застрявших расчётов 0 |
+| 09:35 | Внешний API-smoke | 401-гейты корректны (ответ бэкенда), фронт 200, 22 сессии нового пула, застрявших расчётов 0. Внешние `/health*` дают SPA-фолбэк nginx — настоящие health-пробы делались с хоста (`localhost:3005`, Phase B) |
 | 09:36:48 | Phase C (Cursor): frontend | rsync нового dist, бэкап `public.backup-20260804T093648`, фронт 200 |
 | 09:37 | Браузерный смоук | консоль/ошибки/failed-запросы = 0; логин-страница нового UI живая |
 | 09:38:12 | §18 **RETIREMENT** ×3 (~13,5 c) | триггеров grand-total **0**; tombstones fail-closed (`COMMERCIAL_COST_WRITE_RETIRED`, `REDISTRIBUTION_RESULT_WRITE_RETIRED`); backend жив. **Точка невозврата пройдена — далее roll-forward-only** |
