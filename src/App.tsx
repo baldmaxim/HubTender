@@ -7,6 +7,7 @@ import { WorkspaceTabsProvider } from './contexts/WorkspaceTabsContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import MainLayout from './components/Layout/MainLayout';
 import ErrorFallback from './components/ErrorFallback';
+import UpdateBanner from './components/UpdateBanner';
 import { Sentry } from './lib/sentry';
 // Страницы аутентификации — статически: нужны на первом рендере неавторизованному пользователю.
 import Login from './pages/Auth/Login';
@@ -68,6 +69,9 @@ function AppContent() {
       }}
     >
       <AntApp>
+        {/* Вне Routes: обновление фронтенда не связано с сессией и должно
+            предлагаться в том числе на /login */}
+        <UpdateBanner />
         <Routes>
           {/* Публичные маршруты */}
           <Route path="/login" element={<Login />} />

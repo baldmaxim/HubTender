@@ -1,0 +1,20 @@
+/* Баннер обновления: фиксированный оверлей сверху по центру.
+   z-index выше Sider (1000) и его маски (999) из MainLayout. */
+.update-banner {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  width: min(560px, calc(100vw - 32px));
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.24);
+}
+
+/* На телефоне прижимаем к краям — 560px там не помещаются */
+.update-banner--phone {
+  left: calc(8px + env(safe-area-inset-left));
+  right: calc(8px + env(safe-area-inset-right));
+  transform: none;
+  width: auto;
+}

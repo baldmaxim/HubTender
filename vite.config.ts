@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv, type PluginOption } from 'vite'
+import { defineConfig, loadEnv, type Plugin, type PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig(async ({ mode }) => {
@@ -10,13 +10,34 @@ export default defineConfig(async ({ mode }) => {
   const enableSentryUpload =
     isProd && !noSourcemap && Boolean(sentryAuthToken) && Boolean(sentryRelease)
 
-  const plugins: PluginOption[] = [react()]
+  // Идентификатор сборки: git-хеш из VITE_SENTRY_RELEASE (его проставляет
+  // scripts/build-prod.mjs), иначе — отметка времени сборки. По нему баннер
+  // обновления понимает, какую именно версию пользователь отложил кнопкой «Позже».
+  const buildId = sentryRelease?.split('@')[1] || String(Date.now())
+
+  // version.json намеренно вне precache: globPatterns ниже покрывает только
+  // js/css/html/svg/woff — иначе SW отдавал бы старую версию из кеша.
+  const emitVersionJson: Plugin = {
+    name: 'emit-version-json',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ version: buildId }),
+      })
+    },
+  }
+
+  const plugins: PluginOption[] = [react(), emitVersionJson]
 
   try {
     const { VitePWA } = await import('vite-plugin-pwa')
     plugins.push(
       VitePWA({
-        registerType: 'autoUpdate',
+        // 'prompt', а не 'autoUpdate': новая версия применяется только по кнопке
+        // «Обновить» в UpdateBanner — молчаливая перезагрузка теряла несохранённые
+        // данные форм. Ожидающий SW всё равно активируется, когда закрыты все вкладки.
+        registerType: 'prompt',
         injectRegister: false,
         includeAssets: ['logo.svg'],
         manifest: {
@@ -73,6 +94,9 @@ export default defineConfig(async ({ mode }) => {
 
   return {
     plugins,
+    define: {
+      __BUILD_ID__: JSON.stringify(buildId),
+    },
     server: {
       port: 5185,
       open: true,
