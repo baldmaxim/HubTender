@@ -651,7 +651,8 @@ CREATE TABLE IF NOT EXISTS public.nomenclature_import_aliases (
 -- prompt/response, без models catalog, без Excel/BOQ и финансовых данных.
 CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
     feature_code text NOT NULL CHECK (length(btrim(feature_code)) > 0),
-    provider text NOT NULL DEFAULT 'openrouter' CHECK (provider IN ('openrouter')),
+    -- proxy_llm — режим собственного OpenAI-совместимого прокси (2026_08).
+    provider text NOT NULL DEFAULT 'openrouter',
     selected_model_id text,
     selected_model_name text,
     selected_model_context_length integer,
@@ -667,8 +668,8 @@ CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
         CHECK (data_collection_policy IN ('deny', 'allow')),
     require_parameters boolean NOT NULL DEFAULT true,
     allow_provider_fallbacks boolean NOT NULL DEFAULT false,
-    request_timeout_seconds integer NOT NULL DEFAULT 30
-        CHECK (request_timeout_seconds BETWEEN 5 AND 120),
+    -- Потолок 240 (а не 120): дедлайн LLM-прокси ~190 с (2026_08).
+    request_timeout_seconds integer NOT NULL DEFAULT 30,
     max_output_tokens integer NOT NULL DEFAULT 2000
         CHECK (max_output_tokens BETWEEN 128 AND 32000),
     temperature numeric(3, 2) NOT NULL DEFAULT 0
@@ -691,6 +692,16 @@ CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
     model_test_output_tokens integer,
     model_test_estimated_cost text,
     model_test_error_code text,
+    -- 2026_08 (proxy_llm): цена модели у прокси неизвестна, поэтому USD-бюджет
+    -- дополняется измеримым потолком в токенах; фактическая модель ответа
+    -- фиксируется отдельно, а тест протухает по возрасту.
+    monthly_token_budget bigint,
+    model_test_observed_model text,
+    model_test_max_age_hours integer NOT NULL DEFAULT 168,
+    -- Аудируемое подтверждение делегирования privacy-политики оператору прокси.
+    proxy_privacy_ack_by uuid,
+    proxy_privacy_ack_at timestamp with time zone,
+    proxy_privacy_ack_policy_version text,
     enabled boolean NOT NULL DEFAULT false,
     needs_review_reason text,
     -- Этап 2.6: controlled rollout (off по умолчанию; general availability НЕТ).
@@ -736,7 +747,20 @@ CREATE TABLE IF NOT EXISTS public.ai_feature_settings (
         AND circuit_failure_threshold BETWEEN 1 AND 100
         AND circuit_cooldown_seconds BETWEEN 10 AND 86400
         AND reservation_timeout_seconds BETWEEN 10 AND 3600
-    )
+    ),
+    -- Имена/состав совпадают с 2026_08_ai_proxy_llm_mode.sql.
+    CONSTRAINT ai_feature_settings_provider_chk
+        CHECK (provider IN ('openrouter', 'proxy_llm')),
+    CONSTRAINT ai_feature_settings_request_timeout_chk
+        CHECK (request_timeout_seconds BETWEEN 5 AND 240),
+    -- Резервация обязана переживать вызов с ретраем (2×timeout + запас):
+    -- иначе maintenance освободит её в полёте и ReconcileUsage учтёт расход дважды.
+    CONSTRAINT ai_feature_settings_reservation_covers_request_chk
+        CHECK (reservation_timeout_seconds >= request_timeout_seconds * 2 + 60),
+    CONSTRAINT ai_feature_settings_token_budget_chk
+        CHECK (monthly_token_budget IS NULL OR monthly_token_budget > 0),
+    CONSTRAINT ai_feature_settings_model_test_age_chk
+        CHECK (model_test_max_age_hours BETWEEN 1 AND 8760)
 );
 
 -- Этап 2.6: пилотная группа, usage ledger, feedback, circuit, evaluation.
@@ -769,7 +793,9 @@ CREATE TABLE IF NOT EXISTS public.ai_usage_requests (
     reservation_amount numeric(14, 8) NOT NULL CHECK (reservation_amount >= 0),
     actual_provider_cost numeric(14, 8) CHECK (actual_provider_cost IS NULL OR actual_provider_cost >= 0),
     estimated_cost numeric(14, 8) CHECK (estimated_cost IS NULL OR estimated_cost >= 0),
-    cost_source text CHECK (cost_source IS NULL OR cost_source IN ('provider_reported', 'catalog_estimate')),
+    -- unpriced_reservation (2026_08): режим без каталога цен — резерв плоский,
+    -- выдавать его за catalog_estimate значило бы соврать в отчётах о расходе.
+    cost_source text,
     prompt_tokens integer NOT NULL DEFAULT 0 CHECK (prompt_tokens >= 0),
     completion_tokens integer NOT NULL DEFAULT 0 CHECK (completion_tokens >= 0),
     total_tokens integer NOT NULL DEFAULT 0 CHECK (total_tokens >= 0),
@@ -780,7 +806,16 @@ CREATE TABLE IF NOT EXISTS public.ai_usage_requests (
     latency_ms integer,
     reservation_expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone NOT NULL DEFAULT now(),
-    completed_at timestamp with time zone
+    completed_at timestamp with time zone,
+    -- 2026_08 (proxy_llm): фактическая модель ответа ловит дрейф на стороне
+    -- оператора; upstream_request_id — мост к счёту OpenRouter; reserved_tokens
+    -- держит запросы «в полёте» внутри токенного потолка.
+    observed_model text,
+    upstream_request_id text,
+    reserved_tokens bigint,
+    CONSTRAINT ai_usage_requests_cost_source_chk
+        CHECK (cost_source IS NULL OR cost_source IN
+            ('provider_reported', 'catalog_estimate', 'unpriced_reservation'))
 );
 
 CREATE TABLE IF NOT EXISTS public.ai_row_feedback (
