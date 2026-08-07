@@ -198,3 +198,7 @@ artifacts/
 
 # Yandex Cloud SA authorized key (секрет, вне git)
 authorized_key.json
+
+# Локальный allowlist разрешений Claude Code: меняется каждую сессию,
+# общие настройки живут в .claude/settings.json.
+.claude/settings.local.json
