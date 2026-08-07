@@ -261,19 +261,54 @@ func buildDeps(
 	}
 	aiKeyResolver := services.NewAIKeyResolver(aiSettingsRepo, aiKeyCipher)
 
-	orClient, orErr := openrouter.New(openrouter.Config{
+	// Транспорт LLM: прямой OpenRouter либо собственный прокси (там, где у
+	// хоста нет исходящего доступа к openrouter.ai). Значение уже провалидировано
+	// в config.Load — опечатка валит старт, а не откатывается молча.
+	llmTransport, _ := openrouter.ParseTransport(cfg.AIProviderMode)
+	orCfg := openrouter.Config{
 		APIKey:      cfg.OpenRouterAPIKey,
 		BaseURL:     orBase,
 		HTTPReferer: cfg.OpenRouterHTTPReferer,
 		AppTitle:    cfg.OpenRouterAppTitle,
 		Timeout:     time.Duration(cfg.OpenRouterTimeoutSeconds) * time.Second,
-	}, openrouter.WithKeySource(aiKeyResolver.Current))
+		Transport:   llmTransport,
+	}
+	if llmTransport == openrouter.TransportProxyLLM {
+		orCfg.APIKey = cfg.ProxyLLMToken
+		orCfg.BaseURL = cfg.ProxyLLMBaseURL
+		orCfg.Timeout = time.Duration(cfg.ProxyLLMTimeoutSeconds) * time.Second
+		// Прокси вырезает объект provider ⇒ ZDR, data_collection=deny и
+		// require_parameters на стороне провайдера НЕ применяются. Работать в
+		// таком режиме без явного подтверждения оператора нельзя: это тихая
+		// потеря privacy-гарантии, записанной в настройках фичи.
+		//
+		// Не валим процесс — портал не должен падать из-за AI-фичи. Гасим
+		// транспорт тем же способом, что и пустой ключ: not_configured,
+		// сетевых вызовов нет.
+		if !cfg.ProxyLLMAckNoProviderPolicy {
+			orCfg.APIKey = ""
+			logger.Error().
+				Str("operation", "openrouter_config").
+				Msg("proxy_llm: не задан PROXY_LLM_ACK_NO_PROVIDER_POLICY — прокси вырезает provider, " +
+					"privacy-политика (ZDR, data_collection=deny, require_parameters, запрет fallback) " +
+					"НЕ применяется; транспорт отключён до явного подтверждения оператора")
+		}
+	}
+	orClient, orErr := openrouter.New(orCfg, openrouter.WithKeySource(aiKeyResolver.Current))
 	if orErr != nil {
 		// Невалидный base — не валим приложение: клиент без конфигурации.
 		logger.Warn().Err(orErr).Msg("openrouter client init failed; AI administration будет not_configured")
 		orClient, _ = openrouter.New(openrouter.Config{}, openrouter.WithKeySource(aiKeyResolver.Current))
 	}
-	orCatalog := openrouter.NewCatalogCache(orClient, openrouter.CatalogTTL)
+	// Источник каталога. У прокси нет GET /models/user — вместо сетевого вызова
+	// подставляется синтетический каталог из одной псевдо-модели (вариант A:
+	// модель выбирает прокси). Это сохраняет radio-выбор из server-каталога и
+	// валидацию model ID через FindModel вместо ветки «здесь не проверяем».
+	var catalogSource openrouter.ModelsLister = orClient
+	if llmTransport == openrouter.TransportProxyLLM {
+		catalogSource = openrouter.ProxyCatalogLister{}
+	}
+	orCatalog := openrouter.NewCatalogCache(catalogSource, openrouter.CatalogTTL)
 	aiAdminSvc := services.NewAIAdminService(orClient, orCatalog, aiSettingsRepo).
 		WithLiveTestFlag(os.Getenv("OPENROUTER_LIVE_TEST") == "true").
 		WithKeyManagement(aiSettingsRepo, aiKeyCipher, aiKeyResolver, strings.TrimSpace(cfg.OpenRouterAPIKey) != "")
@@ -296,10 +331,29 @@ func buildDeps(
 	if orBase != "" {
 		baseLabel = "custom-dev"
 	}
+	providerPolicyEnforced := llmTransport != openrouter.TransportProxyLLM
+	if llmTransport == openrouter.TransportProxyLLM {
+		baseLabel = "proxy_llm"
+		if cfg.ProxyLLMTimeoutSeconds <= 190 {
+			logger.Warn().
+				Str("operation", "openrouter_config").
+				Int("timeout_seconds", cfg.ProxyLLMTimeoutSeconds).
+				Msg("proxy_llm: таймаут не превышает серверный дедлайн прокси (~190 с) — его 504 deadline_exceeded недостижим")
+		}
+		if orClient.Configured() {
+			logger.Warn().
+				Str("operation", "openrouter_config").
+				Str("provider_policy_version", openrouter.ProviderPolicyVersionProxy).
+				Msg("proxy_llm: provider вырезается прокси — ZDR, data_collection=deny, require_parameters " +
+					"и запрет provider-fallback НЕ применяются; приватность делегирована оператору прокси")
+		}
+	}
 	logger.Info().
 		Str("operation", "openrouter_config").
 		Bool("api_key_configured", orClient.Configured()).
 		Str("api_base", baseLabel).
+		Str("llm_transport", openrouter.String(llmTransport)).
+		Bool("provider_policy_enforced", providerPolicyEnforced).
 		Str("prompt_version", ainom.PromptVersion).
 		Str("adapter_version", openrouter.AdapterVersion).
 		Str("rollout_status", services.AIRolloutStatus).

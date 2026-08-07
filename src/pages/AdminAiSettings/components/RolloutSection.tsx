@@ -13,6 +13,7 @@ import {
   EMERGENCY_OFF_CONFIRM, EMERGENCY_OFF_LABEL, ROLLOUT_MODE_LABELS, allGatesPassed,
   circuitDisplay, nextTransitionTargets, rolloutModeDisplay,
 } from '../../../lib/quality/aiRolloutPolicy';
+import { budgetSummary } from '../../../lib/quality/openRouterAdminPolicy';
 import { resetAiCircuit } from '../../../lib/api/adminAi';
 import { getErrorMessage } from '../../../utils/errors';
 
@@ -137,6 +138,14 @@ export default function RolloutSection({ rollout, onChanged }: Props) {
             {new Date(rollout.updated_at).toLocaleString('ru-RU')}
           </Descriptions.Item>
           <Descriptions.Item label="Единица стоимости">{rollout.cost_unit}</Descriptions.Item>
+          <Descriptions.Item label="Месячный бюджет" data-testid="ai-budget-summary">
+            {budgetSummary(rollout.budget_kind, rollout.monthly_budget_usd, rollout.max_requests_month)}
+          </Descriptions.Item>
+          <Descriptions.Item label="Потолок в токенах">
+            {rollout.monthly_token_budget === null
+              ? 'не задан'
+              : `${rollout.monthly_token_budget.toLocaleString('ru-RU')} токенов/мес`}
+          </Descriptions.Item>
         </Descriptions>
 
         {/* Гейты переходов (§4/§16): hard-гейты сервер не даёт ослабить. */}

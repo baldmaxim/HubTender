@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/su10/hubtender/backend/internal/ai/keycrypt"
+	"github.com/su10/hubtender/backend/internal/ai/openrouter"
 	"github.com/su10/hubtender/backend/internal/repository"
 )
 
@@ -24,6 +25,10 @@ import (
 
 // ErrAIKeyInvalid — ключ не похож на OpenRouter-ключ (write-валидация).
 var ErrAIKeyInvalid = errors.New("api key must start with sk-or- and be at least 20 characters")
+
+// ErrAIKeyProxyModeUnsupported — в режиме LLM-прокси ключ через UI не задаётся:
+// прокси аутентифицируется своим токеном из server env (PROXY_LLM_TOKEN).
+var ErrAIKeyProxyModeUnsupported = errors.New("api key is managed by server env in proxy_llm mode")
 
 // ErrAIKeyCryptoUnavailable — сервер не может шифровать (нет JWT-материала).
 var ErrAIKeyCryptoUnavailable = errors.New("key encryption unavailable on this server")
@@ -48,6 +53,13 @@ func (s *AIAdminService) SetAPIKey(ctx context.Context, plaintext, actorID strin
 		return nil, ErrAIKeyCryptoUnavailable
 	}
 	key := strings.TrimSpace(plaintext)
+	// UI-ключом управляется ТОЛЬКО прямой OpenRouter. Токен LLM-прокси приходит
+	// из server env: сохранённый через UI, он лёг бы в БД, а клиент в
+	// proxy-режиме его игнорирует (см. transportProfile.allowUIKey) — оператор
+	// получил бы «ключ сохранён» и неработающий провайдер.
+	if s.client != nil && s.client.Transport() == openrouter.TransportProxyLLM {
+		return nil, ErrAIKeyProxyModeUnsupported
+	}
 	if !strings.HasPrefix(key, "sk-or-") || len(key) < 20 {
 		return nil, ErrAIKeyInvalid
 	}

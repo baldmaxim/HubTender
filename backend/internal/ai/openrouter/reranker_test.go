@@ -206,3 +206,72 @@ func TestRerankerProviderStatusMapping(t *testing.T) {
 // вызывается ТОЛЬКО через NomenclatureReranker-интерфейс (компиляция) и
 // не открывает других путей.
 var _ ainom.NomenclatureReranker = (*Reranker)(nil)
+
+// 70. Свойства X-Idempotency-Key (SKILL §5.1): совпадает для одной и той же
+// задачи, различается при смене входа, модели, промпта и политики; ≤256 симв.
+func TestRerankerIdempotencyKeyProperties(t *testing.T) {
+	srv, _ := fakeChatServer(t, `{"results":[]}`)
+	defer srv.Close()
+	client := testClient(t, srv, "sk-test")
+
+	base := testSettings("prov/m")
+	keyFor := func(s RerankSettings, req ainom.RerankBatchRequest) string {
+		payload, err := ainom.MarshalProviderRequest(req)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		return NewReranker(client, s).idempotencyKey(payload)
+	}
+
+	same := keyFor(base, simpleBatch())
+	if got := keyFor(base, simpleBatch()); got != same {
+		t.Fatalf("ключ обязан совпадать для идентичной задачи:\n%s\n%s", same, got)
+	}
+	if len(same) > 256 {
+		t.Fatalf("ключ должен быть ≤256 символов, получено %d", len(same))
+	}
+
+	// Разные измерения задачи обязаны разводить ключи.
+	otherInput := simpleBatch()
+	otherInput.Rows[0].Row.Description = "Кабель ВВГнг-LS 3×4"
+
+	otherPrompt := base
+	otherPrompt.PromptVersion = "nomenclature-rerank-v2"
+
+	otherPolicy := base
+	otherPolicy.ProviderPolicyVersion = "proxy-llm-policy-v1"
+
+	otherTemp := base
+	otherTemp.Temperature = 0.7
+
+	for name, got := range map[string]string{
+		"другой вход":        keyFor(base, otherInput),
+		"другая модель":      keyFor(testSettings("prov/other"), simpleBatch()),
+		"другой промпт":      keyFor(otherPrompt, simpleBatch()),
+		"другая политика":    keyFor(otherPolicy, simpleBatch()),
+		"другая temperature": keyFor(otherTemp, simpleBatch()),
+	} {
+		if got == same {
+			t.Fatalf("%s обязана менять ключ, получен тот же: %s", name, got)
+		}
+	}
+}
+
+// 71. Ключ доезжает до HTTP-заголовка из боевого пути Rerank.
+func TestRerankerSendsIdempotencyHeader(t *testing.T) {
+	var gotKey string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.Header.Get("X-Idempotency-Key")
+		_, _ = w.Write([]byte(`{"id":"gen-1","model":"prov/m","choices":[{"finish_reason":"stop",
+"message":{"role":"assistant","content":"{\"results\":[]}"}}],"usage":{}}`))
+	}))
+	defer srv.Close()
+
+	r := NewReranker(testClient(t, srv, "sk-test"), testSettings("prov/m"))
+	if _, err := r.Rerank(context.Background(), simpleBatch()); err != nil {
+		t.Fatalf("Rerank: %v", err)
+	}
+	if !strings.HasPrefix(gotKey, "hub-rerank."+IdempotencyVersion+".") {
+		t.Fatalf("боевой путь обязан слать X-Idempotency-Key, получено %q", gotKey)
+	}
+}

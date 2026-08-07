@@ -37,6 +37,63 @@ export function connectionStatusDisplay(view: Pick<AiConnectionView, 'connection
   }
 }
 
+// ── Режим LLM-прокси ─────────────────────────────────────────────────────────
+
+/**
+ * Раскрытие потери privacy-гарантии в режиме proxy_llm.
+ *
+ * Прокси вырезает объект `provider` из тела запроса, поэтому записанные в
+ * настройках ZDR, запрет сбора данных, require_parameters и запрет
+ * provider-fallback на стороне провайдера НЕ применяются. Молчать об этом
+ * нельзя: гейт privacy_policy проверяет флаги в БД и горел бы зелёным ни за что.
+ */
+export const PROXY_PRIVACY_DISCLOSURE =
+  'Приватность делегирована оператору LLM-прокси. Прокси удаляет поле provider из запроса, поэтому ZDR, ' +
+  'запрет сбора данных, require_parameters и запрет provider-fallback, записанные в настройках HUBTender, ' +
+  'на стороне провайдера НЕ применяются — они существуют только как договорённость с оператором. ' +
+  'Локально сохраняются: отсутствие tools/plugins/streaming, отсутствие финансовых полей и идентификаторов ' +
+  'тендера в payload, повторная валидация candidate ID и отсутствие raw prompt/response в логах и БД.';
+
+/** Почему в режиме прокси не показываются лимиты и расход ключа. */
+export const PROXY_LIMITS_UNKNOWN =
+  'Прокси не отдаёт лимиты и расход ключа OpenRouter. Остаток кредитов в HUBTender неизвестен — ' +
+  'им распоряжается оператор прокси.';
+
+/** Почему каталог состоит из одной записи. */
+export const PROXY_CATALOG_SYNTHETIC =
+  'У прокси нет каталога моделей. Модель выбирает он сам (вариант A), поэтому здесь одна запись-заглушка: ' +
+  'цена, длина контекста и набор поддерживаемых параметров неизвестны.';
+
+/**
+ * Строки статуса прокси. Токена и любых секретов здесь нет и быть не может.
+ * Пустой массив при отсутствии данных — как и keyUsageRows.
+ */
+export function proxyStatusRows(
+  proxy: { health: string; health_checked_at?: string | null; observed_model?: string | null } | null | undefined,
+): Array<{ label: string; value: string }> {
+  if (!proxy) return [];
+  return [
+    { label: 'Доступность прокси', value: proxy.health === 'ok' ? 'Отвечает' : 'Недоступен' },
+    { label: 'Проверено', value: proxy.health_checked_at || '—' },
+    { label: 'Фактически отвечала модель', value: proxy.observed_model || 'ещё не вызывалась' },
+    { label: 'Лимиты ключа', value: 'неизвестны (у оператора прокси)' },
+  ];
+}
+
+/** Подпись бюджета: в режиме прокси это НЕ доллары, и говорить «$» нельзя. */
+export function budgetSummary(
+  budgetKind: 'usd' | 'reservation_units',
+  budget: number | null | undefined,
+  maxRequestsMonth: number | null | undefined,
+): string {
+  if (budget === null || budget === undefined || !Number.isFinite(budget)) return '—';
+  if (budgetKind === 'usd') return formatUsd(budget);
+  const cap = maxRequestsMonth && Number.isFinite(maxRequestsMonth)
+    ? ` · потолок ≈ ${maxRequestsMonth} запросов/мес`
+    : '';
+  return `${budget.toFixed(2)} у.е. резерва${cap}`;
+}
+
 /** USD-формат без NaN/Infinity: некорректные значения → «—». */
 export function formatUsd(v: number | null | undefined): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';

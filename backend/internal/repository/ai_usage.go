@@ -22,6 +22,9 @@ var (
 	ErrAIUserQuotaExhausted = errors.New("user_quota_exhausted")
 	ErrAIRowQuotaExhausted  = errors.New("row_quota_exhausted")
 	ErrAIBudgetExhausted    = errors.New("budget_exhausted")
+	// ErrAITokenBudgetExhausted — исчерпан месячный потолок в токенах. Нужен
+	// там, где цена модели неизвестна и денежный бюджет неизмерим.
+	ErrAITokenBudgetExhausted = errors.New("token_budget_exhausted")
 )
 
 // AIReservationInput — вход атомарной резервации.
@@ -42,6 +45,16 @@ type AIReservationInput struct {
 	// MonthlyBudget — "" = бюджет не задан (запрещаем в pilot на слое сервиса).
 	MonthlyBudget  string
 	TimeoutSeconds int
+	// MonthlyTokenBudget — измеримый потолок в токенах; 0 = не задан.
+	//
+	// Нужен там, где цена модели неизвестна (режим proxy_llm: каталога нет,
+	// usage.cost прокси обычно не отдаёт). В этом случае денежный бюджет
+	// вырождается в счётчик запросов по плоскому резерву, а токены остаются
+	// единственной величиной, которую действительно можно измерить.
+	MonthlyTokenBudget int64
+	// TokenReservation — оценка токенов запроса, та же формула, что и у
+	// денежного резерва. Учитывается для запросов «в полёте».
+	TokenReservation int64
 }
 
 // AIReservation — созданная запись.
@@ -110,17 +123,39 @@ func (r *AISettingsRepo) ReserveUsage(ctx context.Context, in AIReservationInput
 		}
 	}
 
+	// Месячный потолок в токенах: completed — по фактическим total_tokens,
+	// reserved/failed — по оценке reserved_tokens (запросы «в полёте» обязаны
+	// учитываться, иначе потолок превышается на max_concurrency × размер запроса).
+	if in.MonthlyTokenBudget > 0 {
+		var spentTokens int64
+		if err := tx.QueryRow(ctx, `
+			SELECT COALESCE(sum(CASE
+				WHEN request_status = 'completed'
+					THEN COALESCE(total_tokens, reserved_tokens, 0)
+				WHEN request_status IN ('reserved', 'failed') THEN COALESCE(reserved_tokens, 0)
+				ELSE 0 END), 0)
+			FROM public.ai_usage_requests
+			WHERE feature_code = $1
+			  AND created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`,
+			in.FeatureCode).Scan(&spentTokens); err != nil {
+			return nil, fmt.Errorf("aiUsage: monthly tokens: %w", err)
+		}
+		if spentTokens+in.TokenReservation > in.MonthlyTokenBudget {
+			return nil, ErrAITokenBudgetExhausted
+		}
+	}
+
 	res := &AIReservation{}
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO public.ai_usage_requests
 			(feature_code, user_id, model_id, prompt_version, config_hash, request_hash,
 			 rows_count, candidates_count, reservation_amount, request_status,
-			 reservation_expires_at)
+			 reservation_expires_at, reserved_tokens)
 		VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9::numeric, 'reserved',
-			now() + make_interval(secs => $10))
+			now() + make_interval(secs => $10), NULLIF($11::bigint, 0))
 		RETURNING id::text, reservation_expires_at`,
 		in.FeatureCode, in.UserID, in.ModelID, in.PromptVersion, in.ConfigHash, in.RequestHash,
-		in.RowsCount, in.CandidatesCount, in.Amount, in.TimeoutSeconds).
+		in.RowsCount, in.CandidatesCount, in.Amount, in.TimeoutSeconds, in.TokenReservation).
 		Scan(&res.RequestID, &res.ExpiresAt); err != nil {
 		return nil, fmt.Errorf("aiUsage: insert reservation: %w", err)
 	}
@@ -144,6 +179,11 @@ type AIUsageOutcome struct {
 	// EstimatedCost — catalog-оценка по токенам; "" = нет.
 	EstimatedCost string
 	LatencyMs     int
+	// ObservedModel — модель, ФАКТИЧЕСКИ ответившая. В режиме proxy_llm может
+	// отличаться от model_id: прокси игнорирует присланный model.
+	ObservedModel string
+	// UpstreamRequestID — x-openrouter-request-id (gen-…) для сверки биллинга.
+	UpstreamRequestID string
 }
 
 // ReconcileUsage — завершение reservation: фиксация фактов, освобождение
@@ -158,6 +198,12 @@ func (r *AISettingsRepo) ReconcileUsage(ctx context.Context, o AIUsageOutcome) e
 		actual = o.ActualProviderCost
 	} else if o.EstimatedCost != "" {
 		costSource = "catalog_estimate"
+	} else if o.Status == "completed" {
+		// Ни provider-reported стоимости, ни catalog-оценки: цена модели
+		// неизвестна (режим proxy_llm — каталога нет, usage.cost прокси обычно
+		// не отдаёт). Расход учитывается по плоскому резерву, и выдавать это за
+		// catalog_estimate нельзя — отчёты о расходе стали бы враньём.
+		costSource = "unpriced_reservation"
 	}
 	if o.EstimatedCost != "" {
 		estimated = o.EstimatedCost
@@ -173,11 +219,14 @@ func (r *AISettingsRepo) ReconcileUsage(ctx context.Context, o AIUsageOutcome) e
 			estimated_cost = $8::numeric,
 			cost_source = $9,
 			latency_ms = $10,
+			observed_model = NULLIF($11, ''),
+			upstream_request_id = NULLIF($12, ''),
 			reservation_underestimate = ($7::numeric IS NOT NULL AND $7::numeric > reservation_amount),
 			completed_at = now()
 		WHERE id = $1::uuid AND request_status = 'reserved'`,
 		o.RequestID, o.Status, o.ProviderOutcome, o.PromptTokens, o.CompletionTokens,
-		o.TotalTokens, actual, estimated, costSource, o.LatencyMs)
+		o.TotalTokens, actual, estimated, costSource, o.LatencyMs,
+		o.ObservedModel, o.UpstreamRequestID)
 	if err != nil {
 		return fmt.Errorf("aiUsage: reconcile: %w", err)
 	}

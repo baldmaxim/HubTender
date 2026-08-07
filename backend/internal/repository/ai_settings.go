@@ -68,6 +68,9 @@ type AIFeatureSettings struct {
 	// MonthlyBudgetText — тот же бюджет как numeric::text (exact decimal для
 	// учёта; *float64 остаётся только для отображения в admin UI).
 	MonthlyBudgetText *string
+	// MonthlyTokenBudget — измеримый месячный потолок в токенах; nil = не задан.
+	// Нужен там, где цена модели неизвестна (режим proxy_llm).
+	MonthlyTokenBudget *int64
 
 	ModelTestStatus        string
 	ModelTestConfigHash    *string
@@ -118,6 +121,7 @@ const aiSettingsColumns = `
 	require_zdr, data_collection_policy, require_parameters, allow_provider_fallbacks,
 	request_timeout_seconds, max_output_tokens, temperature::float8,
 	candidate_limit, max_rows_per_request, max_concurrency, monthly_budget_usd::float8, monthly_budget_usd::text,
+	monthly_token_budget,
 	model_test_status, model_test_config_hash, model_tested_model_id, model_tested_at,
 	model_test_latency_ms, model_test_input_tokens, model_test_output_tokens,
 	model_test_estimated_cost, model_test_error_code,
@@ -140,6 +144,7 @@ func scanAISettings(row pgx.Row) (*AIFeatureSettings, error) {
 		&s.RequireZDR, &s.DataCollectionPolicy, &s.RequireParameters, &s.AllowProviderFallbacks,
 		&s.RequestTimeoutSeconds, &s.MaxOutputTokens, &s.Temperature,
 		&s.CandidateLimit, &s.MaxRowsPerRequest, &s.MaxConcurrency, &s.MonthlyBudgetUSD, &s.MonthlyBudgetText,
+		&s.MonthlyTokenBudget,
 		&s.ModelTestStatus, &s.ModelTestConfigHash, &s.ModelTestedModelID, &s.ModelTestedAt,
 		&s.ModelTestLatencyMs, &s.ModelTestInputTokens, &s.ModelTestOutputTokens,
 		&s.ModelTestEstimatedCost, &s.ModelTestErrorCode,

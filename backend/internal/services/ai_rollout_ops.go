@@ -106,10 +106,13 @@ const (
 	AICapUserQuotaExhausted = "user_quota_exhausted"
 	AICapRowQuotaExhausted  = "row_quota_exhausted"
 	AICapBudgetExhausted    = "budget_exhausted"
-	AICapKeyLimitExhausted  = "key_limit_exhausted"
-	AICapCircuitOpen        = "circuit_open"
-	AICapProviderUnavail    = "provider_unavailable"
-	AICapRateLimited        = "rate_limited"
+	// AICapTokenBudgetExhausted — измеримый потолок в токенах (режим proxy_llm,
+	// где цены модели неизвестны).
+	AICapTokenBudgetExhausted = "token_budget_exhausted"
+	AICapKeyLimitExhausted    = "key_limit_exhausted"
+	AICapCircuitOpen          = "circuit_open"
+	AICapProviderUnavail      = "provider_unavailable"
+	AICapRateLimited          = "rate_limited"
 )
 
 // AIPilotCapabilityView — безопасное состояние ТЕКУЩЕГО пользователя (§17):
@@ -331,6 +334,23 @@ func computeReservationAmount(row *repository.AIFeatureSettings, rowsCount int) 
 		est = cap_
 	}
 	return formatRat8(est)
+}
+
+// computeTokenReservation — оценка токенов запроса той же формулой, что и
+// денежный резерв: prompt-часть от числа строк, completion-часть от
+// max_output_tokens × число батчей.
+//
+// В отличие от денежной оценки, эта работает всегда: она не зависит от цен
+// модели, которых в режиме proxy_llm не существует. Именно поэтому токенный
+// потолок остаётся измеримым там, где USD-бюджет вырождается в счётчик запросов.
+func computeTokenReservation(row *repository.AIFeatureSettings, rowsCount int) int64 {
+	batches := (rowsCount + 14) / 15
+	if batches < 1 {
+		batches = 1
+	}
+	inputTokens := int64(rowsCount)*500 + 800
+	outputTokens := int64(row.MaxOutputTokens) * int64(batches)
+	return inputTokens + outputTokens
 }
 
 func ratFromPtr(s *string) (*big.Rat, bool) {

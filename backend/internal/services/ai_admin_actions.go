@@ -37,9 +37,9 @@ func (s *AIAdminService) SaveDraft(ctx context.Context, modelID, updatedBy strin
 	}
 	oldHash := ""
 	if row.SelectedModelID != nil {
-		oldHash = configHashFor(row, *row.SelectedModelID)
+		oldHash = s.configHashFor(row, *row.SelectedModelID)
 	}
-	newHash := configHashFor(row, model.ID)
+	newHash := s.configHashFor(row, model.ID)
 	resetTest := oldHash != newHash // presentation-обновление той же модели тест не сбрасывает (§11)
 
 	row, err = s.settings.SaveDraftModel(ctx, repository.AIFeatureNomenclatureRerank, repository.AIDraftModel{
@@ -86,8 +86,8 @@ func (s *AIAdminService) TestModel(ctx context.Context, updatedBy string) (*open
 		return nil, nil, ErrAIModelExpired
 	}
 
-	configHash := configHashFor(row, modelID)
-	reranker := openrouter.NewReranker(s.client, rerankSettingsFor(row, modelID))
+	configHash := s.configHashFor(row, modelID)
+	reranker := openrouter.NewReranker(s.client, s.rerankSettingsFor(row, modelID))
 
 	testCtx, cancel := context.WithTimeout(ctx, time.Duration(row.RequestTimeoutSeconds)*time.Second)
 	defer cancel()
@@ -191,7 +191,7 @@ func (s *AIAdminService) Activate(ctx context.Context, updatedBy string) (*AISet
 	}
 
 	// Тест пройден, hash совпадает, тест относится к выбранной модели.
-	currentHash := configHashFor(row, modelID)
+	currentHash := s.configHashFor(row, modelID)
 	switch row.ModelTestStatus {
 	case repository.AITestPassed:
 		if row.ModelTestConfigHash == nil || *row.ModelTestConfigHash != currentHash ||

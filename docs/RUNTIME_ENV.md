@@ -90,6 +90,39 @@ cd backend && go build -o /tmp/hubtender ./cmd/server
 DATABASE_URL=... APP_JWT_ISSUER=... APP_JWT_PRIVATE_KEY_PATH=... CORS_ORIGINS=... /tmp/hubtender
 ```
 
+## AI / LLM (OpenRouter либо LLM-прокси)
+
+Раздел отсутствовал: переменные читались кодом и жили в `.env.prod`, но нигде не
+были описаны. Транспорт выбирается `AI_PROVIDER_MODE` и **только** server env —
+из request/frontend ни режим, ни base URL, ни модель не принимаются.
+
+| Переменная | Обяз. | Default | Назначение |
+|---|---|---|---|
+| `AI_PROVIDER_MODE` | нет | `openrouter` | `openrouter` \| `proxy_llm`. Опечатка **валит старт** — молчаливый откат означал бы вызовы в сеть, которой у прод-хоста нет |
+| `OPENROUTER_API_KEY` | нет | пусто | ❌ секрет. Пустой = `not_configured`, приложение работает |
+| `OPENROUTER_API_BASE` | нет | официальный | В production вне allowlist **игнорируется** |
+| `OPENROUTER_TIMEOUT_SECONDS` | нет | `60` | Таймаут вызова в режиме `openrouter` |
+| `OPENROUTER_HTTP_REFERER` / `OPENROUTER_APP_TITLE` | нет | пусто | Маркетинговые заголовки OpenRouter; в режиме прокси не отправляются |
+| `OPENROUTER_LIVE_TEST` | нет | `false` | Разрешает live evaluation |
+| `PROXY_LLM_BASE_URL` | да при `proxy_llm` | — | **ORIGIN** прокси (`/healthz` живёт вне `/api/v1`). В production обязателен https |
+| `PROXY_LLM_TOKEN` | да при `proxy_llm` | — | ❌ секрет. Ровно 64 hex-символа; ключ `sk-or-…` сюда не подходит |
+| `PROXY_LLM_TIMEOUT_SECONDS` | нет | `200` | Обязан быть **> 190** — иначе 504 `deadline_exceeded` прокси недостижим |
+| `PROXY_LLM_ACK_NO_PROVIDER_POLICY` | да при `proxy_llm` | `false` | Подтверждение, что прокси вырезает `provider` и privacy-политика делегирована его оператору. Без него транспорт **отключён** (`not_configured`), процесс не падает |
+| `AI_ROLLOUT_MAINTENANCE_ENABLED` / `_SCAN_INTERVAL` | нет | `true` | Recovery резерваций + retention |
+
+**Что теряется в режиме `proxy_llm`** (осознанный размен, не баг): прокси
+вырезает объект `provider`, поэтому `require_zdr`, `data_collection=deny`,
+`require_parameters` и запрет provider-fallback на стороне провайдера **не
+применяются** — они остаются договорённостью с оператором прокси. Админка
+показывает это явным красным баннером, а `provider_policy_version` меняется на
+`proxy-llm-policy-v1`, что автоматически снимает активацию и требует
+перезапустить model test.
+
+Каталога моделей и статуса ключа у прокси нет: цена модели неизвестна, поэтому
+месячный бюджет в USD вырождается в счётчик запросов по плоскому резерву
+(`budget_kind = reservation_units`). Измеримый потолок в этом режиме —
+`monthly_token_budget`.
+
 ## Что под секретом, что нет
 
 | Категория | Можно ли в логи/git | Пример |
@@ -100,3 +133,5 @@ DATABASE_URL=... APP_JWT_ISSUER=... APP_JWT_PRIVATE_KEY_PATH=... CORS_ORIGINS=..
 | `SMTP_PASSWORD` / `SMTP_USER` | ❌ никогда | provider creds |
 | Yandex cluster ID (`rc1d-…` / `c-…`) | ⚠ внутренний идентификатор, не credential | в docs допустимо как reference |
 | Yandex CA PEM | ✅ public (downloads from Yandex docs) | `/certs/yandex-ca.pem` |
+| `OPENROUTER_API_KEY` / `PROXY_LLM_TOKEN` | ❌ никогда — в логи не пишутся, наружу отдаётся только суффикс | `sk-or-…` / 64 hex |
+| `PROXY_LLM_BASE_URL` | ✅ адрес, не credential | `https://proxy.example.com` |

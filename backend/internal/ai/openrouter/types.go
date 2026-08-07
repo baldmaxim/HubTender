@@ -162,6 +162,12 @@ type ChatRequest struct {
 	Temperature    *float64        `json:"temperature,omitempty"`
 	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
 	Provider       *ProviderPrefs  `json:"provider,omitempty"`
+
+	// IdempotencyKey — стабильный ключ логической задачи. В тело НЕ попадает
+	// (json:"-"), уходит заголовком X-Idempotency-Key: без него повтор упавшего
+	// вызова уходит upstream новым платным запросом вместо схлопывания с
+	// исходным. Вычисляется в Reranker, а не передаётся вызывающим кодом.
+	IdempotencyKey string `json:"-"`
 }
 
 // Usage — токены/стоимость ответа (для admin model test и usage-ledger
@@ -184,6 +190,11 @@ type ChatResponse struct {
 	Model   string
 	Content string // content первого choice (JSON text при structured output)
 	Usage   Usage
+	// ProxyRequestID / UpstreamRequestID — id вызова в LLM-прокси и upstream-id
+	// OpenRouter (gen-…) для сверки биллинга. Пусты при прямом OpenRouter.
+	// Наружу пользователю не отдаются — только логи и usage-ledger.
+	ProxyRequestID    string
+	UpstreamRequestID string
 }
 
 // chatEnvelope — сырой ответ /chat/completions (non-streaming).

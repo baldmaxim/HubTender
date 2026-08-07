@@ -151,10 +151,16 @@ type CatalogSnapshot struct {
 	LastErrorCode string     `json:"last_error_code,omitempty"` // safe code (§20)
 }
 
-// modelsLister — DI-интерфейс клиента для тестов кэша.
-type modelsLister interface {
+// ModelsLister — источник каталога моделей: сетевой клиент OpenRouter либо
+// ProxyCatalogLister (у LLM-прокси эндпоинта каталога нет). rawModel
+// неэкспортирован намеренно — реализовать интерфейс можно только внутри
+// пакета, снаружи произвольный каталог не подсунуть.
+type ModelsLister interface {
 	ListUserModels(ctx context.Context) ([]rawModel, error)
 }
+
+// modelsLister — внутренний алиас для тестов кэша.
+type modelsLister = ModelsLister
 
 // CatalogCache — in-memory кэш каталога с TTL, manual refresh и
 // singleflight-дедупликацией конкурентных обновлений (§7). В PostgreSQL

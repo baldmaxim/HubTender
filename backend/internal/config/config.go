@@ -2,10 +2,13 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/spf13/viper"
+
+	"github.com/su10/hubtender/backend/internal/ai/openrouter"
 )
 
 // Config holds all runtime configuration for the BFF server.
@@ -80,6 +83,20 @@ type Config struct {
 	OpenRouterHTTPReferer    string
 	OpenRouterAppTitle       string
 	OpenRouterTimeoutSeconds int
+
+	// LLM-прокси. Нужен там, где у хоста нет исходящего доступа к openrouter.ai.
+	// AIProviderMode переключает транспорт и задаётся ТОЛЬКО здесь: из
+	// request/frontend режим не принимается, как и base URL с моделью.
+	// ProxyLLMToken — server-only secret на тех же правах, что OpenRouterAPIKey.
+	// ProxyLLMBaseURL хранится как ORIGIN (/healthz живёт вне /api/v1).
+	// ProxyLLMAckNoProviderPolicy — осознанное подтверждение, что прокси
+	// вырезает объект provider и privacy-политика делегирована его оператору;
+	// без него proxy-режим остаётся не сконфигурированным.
+	AIProviderMode              string
+	ProxyLLMBaseURL             string
+	ProxyLLMToken               string
+	ProxyLLMTimeoutSeconds      int
+	ProxyLLMAckNoProviderPolicy bool
 }
 
 // Load reads configuration from environment variables via Viper.
@@ -100,6 +117,9 @@ func Load() (*Config, error) {
 	v.SetDefault("SMTP_PORT", 587)
 	v.SetDefault("CBR_BASE_URL", "https://www.cbr.ru/scripts/XML_daily.asp")
 	v.SetDefault("OPENROUTER_TIMEOUT_SECONDS", 60)
+	// Дедлайн самого прокси ~190 с: клиентский таймаут обязан быть больше,
+	// иначе его 504 deadline_exceeded недостижим в принципе.
+	v.SetDefault("PROXY_LLM_TIMEOUT_SECONDS", 200)
 
 	dbURL := v.GetString("DATABASE_URL")
 	if dbURL == "" {
@@ -149,6 +169,12 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("config: DB_MAX_CONN_IDLE_TIME parse: %w", err)
 	}
 
+	appEnv := strings.ToLower(strings.TrimSpace(v.GetString("APP_ENV")))
+	providerMode, proxyBase, proxyToken, proxyTimeout, err := loadLLMTransport(v, appEnv)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		DatabaseURL:          dbURL,
 		AppJWTIssuer:         appIssuer,
@@ -168,7 +194,7 @@ func Load() (*Config, error) {
 		SentryDSN:            v.GetString("SENTRY_DSN"),
 		SentryEnvironment:    v.GetString("SENTRY_ENVIRONMENT"),
 		SentryRelease:        v.GetString("SENTRY_RELEASE"),
-		AppEnv:               strings.ToLower(strings.TrimSpace(v.GetString("APP_ENV"))),
+		AppEnv:               appEnv,
 		AppBaseURL:           strings.TrimRight(strings.TrimSpace(v.GetString("APP_BASE_URL")), "/"),
 		SMTPHost:             v.GetString("SMTP_HOST"),
 		SMTPPort:             v.GetInt("SMTP_PORT"),
@@ -182,9 +208,55 @@ func Load() (*Config, error) {
 		OpenRouterHTTPReferer:    v.GetString("OPENROUTER_HTTP_REFERER"),
 		OpenRouterAppTitle:       v.GetString("OPENROUTER_APP_TITLE"),
 		OpenRouterTimeoutSeconds: v.GetInt("OPENROUTER_TIMEOUT_SECONDS"),
+
+		AIProviderMode:              providerMode,
+		ProxyLLMBaseURL:             proxyBase,
+		ProxyLLMToken:               proxyToken,
+		ProxyLLMTimeoutSeconds:      proxyTimeout,
+		ProxyLLMAckNoProviderPolicy: v.GetBool("PROXY_LLM_ACK_NO_PROVIDER_POLICY"),
 	}
 
 	return cfg, nil
+}
+
+// proxyTokenRe — токен LLM-прокси: ровно 32 байта hex. Строже, чем проверка
+// ключа OpenRouter (префикс + длина), поэтому это не ослабление валидации.
+var proxyTokenRe = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
+
+// loadLLMTransport читает и валидирует переключатель транспорта LLM.
+//
+// Опечатка в режиме — fail-fast, а не молчаливый откат на openrouter: откат
+// означал бы вызовы в сеть, которой у прод-хоста может не быть, и диагностику
+// «AI просто не работает» вместо внятной ошибки старта.
+func loadLLMTransport(v *viper.Viper, appEnv string) (mode, baseURL, token string, timeout int, err error) {
+	mode = strings.ToLower(strings.TrimSpace(v.GetString("AI_PROVIDER_MODE")))
+	if mode == "" {
+		mode = openrouter.String(openrouter.TransportOpenRouter)
+	}
+	t, perr := openrouter.ParseTransport(mode)
+	if perr != nil {
+		return "", "", "", 0, fmt.Errorf("config: AI_PROVIDER_MODE: %w", perr)
+	}
+	mode = openrouter.String(t)
+	timeout = v.GetInt("PROXY_LLM_TIMEOUT_SECONDS")
+	if t != openrouter.TransportProxyLLM {
+		return mode, "", "", timeout, nil
+	}
+
+	baseURL, berr := openrouter.NormalizeProxyBaseURL(
+		v.GetString("PROXY_LLM_BASE_URL"), appEnv == "production")
+	if berr != nil {
+		return "", "", "", 0, fmt.Errorf("config: PROXY_LLM_BASE_URL: %w", berr)
+	}
+	// Значение токена в текст ошибки не попадает.
+	token = strings.TrimSpace(v.GetString("PROXY_LLM_TOKEN"))
+	if !proxyTokenRe.MatchString(token) {
+		return "", "", "", 0, fmt.Errorf("config: PROXY_LLM_TOKEN must be 64 hex characters")
+	}
+	if timeout < 5 || timeout > 600 {
+		return "", "", "", 0, fmt.Errorf("config: PROXY_LLM_TIMEOUT_SECONDS must be between 5 and 600")
+	}
+	return mode, baseURL, token, timeout, nil
 }
 
 // parseCORSOrigins splits and trims a comma-separated list of origins.

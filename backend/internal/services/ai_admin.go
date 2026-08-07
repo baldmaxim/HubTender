@@ -57,13 +57,16 @@ type AIAdminService struct {
 	keyStatus    *openrouter.KeyStatus
 	keyErrCode   string
 	keyCheckedAt time.Time
+	// proxyObservedModel — модель, фактически ответившая на последний реальный
+	// вызов через LLM-прокси (вариант A: присланный model игнорируется).
+	proxyObservedModel string
 
 	// feature/ai-key-ui: UI-управление ключом (WithKeyManagement).
 	keys             aiKeyStore
 	keyCipher        *keycrypt.Cipher
 	keyResolver      *AIKeyResolver
 	envKeyConfigured bool
-	keyTTL       time.Duration
+	keyTTL           time.Duration
 }
 
 // AIRolloutStatus — этап 2.5: пользовательские AI-вызовы выключены до
@@ -105,6 +108,30 @@ type AIConnectionView struct {
 	KeySuffix   string     `json:"key_suffix,omitempty"`
 	KeySetAt    *time.Time `json:"key_set_at,omitempty"`
 	EnvFallback bool       `json:"env_key_available"` // задан ли env-ключ (как fallback)
+
+	// ProviderMode — действующий транспорт: openrouter | proxy_llm.
+	ProviderMode string `json:"provider_mode"`
+	// Proxy — заполнен ТОЛЬКО в режиме proxy_llm. Key при этом всегда nil:
+	// лимитов и расхода ключа прокси не отдаёт, и выдумывать их нельзя.
+	Proxy *AIProxyStatus `json:"proxy,omitempty"`
+}
+
+// AIProxyStatus — то, что можно узнать о LLM-прокси без GET /key.
+type AIProxyStatus struct {
+	// Health — результат GET <origin>/healthz: ok | unreachable.
+	//
+	// ВАЖНО, чего он НЕ доказывает: /healthz публичный и лежит вне location
+	// /api/, на котором висит IP-allowlist прокси. Успешный healthz не значит
+	// ни что наш egress-IP разрешён, ни что токен принят — это подтверждает
+	// только реальный вызов (model test).
+	Health          string     `json:"health"`
+	HealthCheckedAt *time.Time `json:"health_checked_at,omitempty"`
+	// ObservedModel — модель, фактически ответившая на последний реальный
+	// вызов. В варианте A присланный model игнорируется прокси, поэтому это
+	// единственный способ узнать, что именно отработало.
+	ObservedModel string `json:"observed_model,omitempty"`
+	// LimitsKnown всегда false: бюджетом ключа владеет оператор прокси.
+	LimitsKnown bool `json:"limits_known"`
 }
 
 // AICatalogView — каталог для admin UI.
@@ -153,9 +180,15 @@ type AISettingsView struct {
 	ProviderPolicyVersion string `json:"provider_policy_version"`
 	AdapterVersion        string `json:"adapter_version"`
 	RequireZDR            bool   `json:"require_zdr"`
-	DataCollectionPolicy  string `json:"data_collection_policy"`
-	RequireParameters     bool   `json:"require_parameters"`
-	AllowFallbacks        bool   `json:"allow_provider_fallbacks"`
+	// ProviderPolicyEnforced — применяются ли require_zdr /
+	// data_collection_policy / require_parameters на стороне провайдера.
+	// В режиме proxy_llm — false: прокси вырезает объект provider, и эти
+	// поля остаются намерением, а не гарантией.
+	ProviderPolicyEnforced bool   `json:"provider_policy_enforced"`
+	ProviderMode           string `json:"provider_mode"`
+	DataCollectionPolicy   string `json:"data_collection_policy"`
+	RequireParameters      bool   `json:"require_parameters"`
+	AllowFallbacks         bool   `json:"allow_provider_fallbacks"`
 
 	RequestTimeoutSeconds int      `json:"request_timeout_seconds"`
 	MaxOutputTokens       int      `json:"max_output_tokens"`
@@ -200,11 +233,15 @@ func (s *AIAdminService) keyStatusView(ctx context.Context, force bool) AIConnec
 	view := AIConnectionView{
 		APIKeyConfigured: s.client.Configured(),
 		BaseHost:         s.client.BaseHost(),
+		ProviderMode:     openrouter.String(s.client.Transport()),
 	}
 	s.decorateKeySource(ctx, &view)
 	if !view.APIKeyConfigured {
 		view.Connection = "not_configured"
 		return view
+	}
+	if s.client.Transport() == openrouter.TransportProxyLLM {
+		return s.proxyStatusView(ctx, view, force)
 	}
 
 	s.keyMu.Lock()
@@ -245,6 +282,71 @@ func (s *AIAdminService) keyStatusView(ctx context.Context, force bool) AIConnec
 	return view
 }
 
+// proxyStatusView — статус в режиме proxy_llm. GET /key у прокси нет, поэтому
+// вместо лимитов и расхода ключа доступна только liveness-проба и фактическая
+// модель последнего вызова. Key остаётся nil — выдумывать лимиты нельзя.
+//
+// Переиспользует тот же кэш и тот же TTL, что и OpenRouter-ветка: гейты
+// rollout'а проверяют свежесть CheckedAt и не должны знать про режим.
+func (s *AIAdminService) proxyStatusView(ctx context.Context, view AIConnectionView, force bool) AIConnectionView {
+	s.keyMu.Lock()
+	cachedFresh := !s.keyCheckedAt.IsZero() && time.Since(s.keyCheckedAt) < s.keyTTL
+	if !force && cachedFresh {
+		checked := s.keyCheckedAt
+		code, observed := s.keyErrCode, s.proxyObservedModel
+		s.keyMu.Unlock()
+		view.CheckedAt = &checked
+		view.Connection = connectionFromCode(code)
+		view.Proxy = &AIProxyStatus{
+			Health: proxyHealthLabel(code), HealthCheckedAt: &checked, ObservedModel: observed,
+		}
+		return view
+	}
+	s.keyMu.Unlock()
+
+	err := s.client.ProxyHealth(ctx)
+	now := time.Now()
+
+	s.keyMu.Lock()
+	s.keyCheckedAt = now
+	s.keyStatus = nil // лимиты ключа в этом режиме неизвестны by design
+	s.keyErrCode = openrouter.StatusCode(err)
+	code, observed := s.keyErrCode, s.proxyObservedModel
+	s.keyMu.Unlock()
+
+	view.CheckedAt = &now
+	view.Connection = connectionFromCode(code)
+	view.Proxy = &AIProxyStatus{
+		Health: proxyHealthLabel(code), HealthCheckedAt: &now, ObservedModel: observed,
+	}
+	log.Info().
+		Str("operation", "ai_proxy_health").
+		Str("provider_mode", openrouter.String(openrouter.TransportProxyLLM)).
+		Str("health", view.Proxy.Health).
+		Bool("forced", force).
+		Msg("llm proxy health checked")
+	return view
+}
+
+func proxyHealthLabel(code string) string {
+	if code == "" {
+		return "ok"
+	}
+	return "unreachable"
+}
+
+// SetProxyObservedModel фиксирует модель, фактически ответившую на реальный
+// вызов. В варианте A прокси игнорирует присланный model, поэтому расхождение
+// с протестированной моделью — единственный сигнал о её подмене оператором.
+func (s *AIAdminService) SetProxyObservedModel(model string) {
+	if strings.TrimSpace(model) == "" {
+		return
+	}
+	s.keyMu.Lock()
+	s.proxyObservedModel = model
+	s.keyMu.Unlock()
+}
+
 func connectionFromCode(code string) string {
 	switch code {
 	case "":
@@ -276,25 +378,61 @@ func (s *AIAdminService) Models(ctx context.Context, forceRefresh bool) AICatalo
 
 // rerankSettingsFor — effective adapter-настройки из строки БД (§15: только
 // backend; frontend не влияет на provider/model/policy/prompt).
+// effectivePolicyVersion — действующая версия privacy/routing-политики.
+//
+// В режиме proxy_llm она ОТЛИЧАЕТСЯ от записанной в БД, потому что прокси
+// вырезает объект provider и политика из настроек фактически не применяется.
+// Значение входит в ComputeConfigHash, поэтому смена транспорта автоматически
+// расходится с сохранённым model_test_config_hash: активация снимается,
+// rollout выключается, и оператор обязан перезапустить model test, уже видя
+// новую версию политики. Fail-closed без единой новой проверки.
+//
+// Считается от транспорта, а не хранится в колонке: иначе откат env оставил бы
+// в БД лгущее значение.
+func (s *AIAdminService) effectivePolicyVersion(row *repository.AIFeatureSettings) string {
+	if s.client != nil && s.client.Transport() == openrouter.TransportProxyLLM {
+		return openrouter.ProviderPolicyVersionProxy
+	}
+	return row.ProviderPolicyVersion
+}
+
+// ProviderPolicyEnforced — применяется ли записанная в настройках
+// privacy-политика на стороне провайдера.
+func (s *AIAdminService) ProviderPolicyEnforced() bool {
+	return s.client == nil || s.client.Transport() != openrouter.TransportProxyLLM
+}
+
+func (s *AIAdminService) rerankSettingsFor(row *repository.AIFeatureSettings, modelID string) openrouter.RerankSettings {
+	st := rerankSettingsFor(row, modelID)
+	st.ProviderPolicyVersion = s.effectivePolicyVersion(row)
+	return st
+}
+
+func (s *AIAdminService) configHashFor(row *repository.AIFeatureSettings, modelID string) string {
+	return configHashWithPolicy(row, modelID, s.effectivePolicyVersion(row))
+}
+
 func rerankSettingsFor(row *repository.AIFeatureSettings, modelID string) openrouter.RerankSettings {
 	return openrouter.RerankSettings{
-		ModelID:           modelID,
-		Temperature:       row.Temperature,
-		MaxOutputTokens:   row.MaxOutputTokens,
-		RequireZDR:        row.RequireZDR,
-		DataCollection:    row.DataCollectionPolicy,
-		RequireParameters: row.RequireParameters,
-		AllowFallbacks:    row.AllowProviderFallbacks,
+		ModelID:               modelID,
+		Temperature:           row.Temperature,
+		MaxOutputTokens:       row.MaxOutputTokens,
+		RequireZDR:            row.RequireZDR,
+		DataCollection:        row.DataCollectionPolicy,
+		RequireParameters:     row.RequireParameters,
+		AllowFallbacks:        row.AllowProviderFallbacks,
+		PromptVersion:         row.PromptVersion,
+		ProviderPolicyVersion: row.ProviderPolicyVersion,
 	}
 }
 
 // configHashFor — текущий config hash (§11) для произвольного model ID.
-func configHashFor(row *repository.AIFeatureSettings, modelID string) string {
+func configHashWithPolicy(row *repository.AIFeatureSettings, modelID, policyVersion string) string {
 	return openrouter.ComputeConfigHash(openrouter.ConfigHashInput{
 		ModelID:                modelID,
 		PromptVersion:          row.PromptVersion,
 		SchemaVersion:          openrouter.SchemaVersion,
-		ProviderPolicyVersion:  row.ProviderPolicyVersion,
+		ProviderPolicyVersion:  policyVersion,
 		RequireZDR:             row.RequireZDR,
 		DataCollectionPolicy:   row.DataCollectionPolicy,
 		RequireParameters:      row.RequireParameters,
@@ -391,14 +529,16 @@ func (s *AIAdminService) buildView(row *repository.AIFeatureSettings, availabili
 		Provider:         row.Provider,
 		APIKeyConfigured: s.client.Configured(),
 
-		PromptVersion:         row.PromptVersion,
-		SchemaVersion:         openrouter.SchemaVersion,
-		ProviderPolicyVersion: row.ProviderPolicyVersion,
-		AdapterVersion:        openrouter.AdapterVersion,
-		RequireZDR:            row.RequireZDR,
-		DataCollectionPolicy:  row.DataCollectionPolicy,
-		RequireParameters:     row.RequireParameters,
-		AllowFallbacks:        row.AllowProviderFallbacks,
+		PromptVersion:          row.PromptVersion,
+		SchemaVersion:          openrouter.SchemaVersion,
+		ProviderPolicyVersion:  s.effectivePolicyVersion(row),
+		ProviderPolicyEnforced: s.ProviderPolicyEnforced(),
+		ProviderMode:           openrouter.String(s.client.Transport()),
+		AdapterVersion:         openrouter.AdapterVersion,
+		RequireZDR:             row.RequireZDR,
+		DataCollectionPolicy:   row.DataCollectionPolicy,
+		RequireParameters:      row.RequireParameters,
+		AllowFallbacks:         row.AllowProviderFallbacks,
 
 		RequestTimeoutSeconds: row.RequestTimeoutSeconds,
 		MaxOutputTokens:       row.MaxOutputTokens,
@@ -445,7 +585,7 @@ func (s *AIAdminService) buildView(row *repository.AIFeatureSettings, availabili
 		if row.SelectedModelCompletionPrice != nil {
 			view.SelectedModel.PricePer1MOutput = openrouter.PricePer1M(*row.SelectedModelCompletionPrice)
 		}
-		view.CurrentConfigHash = configHashFor(row, *row.SelectedModelID)
+		view.CurrentConfigHash = s.configHashFor(row, *row.SelectedModelID)
 	}
 	view.ActivationBlockers = activationBlockers(row, view, availability)
 	view.CanActivate = len(view.ActivationBlockers) == 0 && !row.Enabled

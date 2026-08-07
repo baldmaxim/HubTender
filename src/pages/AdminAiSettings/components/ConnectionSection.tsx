@@ -6,8 +6,10 @@ import { ApiOutlined, DeleteOutlined, KeyOutlined, ReloadOutlined } from '@ant-d
 import type { AiConnectionView } from '../../../lib/api/adminAi';
 import {
   API_KEY_HINT,
+  PROXY_LIMITS_UNKNOWN,
   connectionStatusDisplay,
   keyUsageRows,
+  proxyStatusRows,
 } from '../../../lib/quality/openRouterAdminPolicy';
 
 const { Text } = Typography;
@@ -31,7 +33,10 @@ export default function ConnectionSection({
   connection, checking, onTestConnection, onSetKey, onDeleteKey, keySaving,
 }: Props) {
   const status = connectionStatusDisplay(connection);
-  const usageRows = keyUsageRows(connection?.key);
+  const isProxy = connection?.provider_mode === 'proxy_llm';
+  // В proxy-режиме лимитов ключа не существует: usageRows пуст, и вместо них
+  // показываются достижимость прокси и фактически ответившая модель.
+  const usageRows = isProxy ? proxyStatusRows(connection?.proxy) : keyUsageRows(connection?.key);
   const [keyModalOpen, setKeyModalOpen] = useState(false);
   const [keyDraft, setKeyDraft] = useState('');
 
@@ -103,13 +108,19 @@ export default function ConnectionSection({
     >
       <Space direction="vertical" style={{ width: '100%' }} size={8}>
         <Alert type={status.tone} showIcon message={status.text} data-testid="ai-connection-status" />
+        {isProxy && (
+          <>
+            <Tag color="processing" data-testid="ai-provider-mode">Режим: LLM-прокси (модель выбирает прокси)</Tag>
+            <Alert type="warning" showIcon message={PROXY_LIMITS_UNKNOWN} data-testid="ai-proxy-limits-unknown" />
+          </>
+        )}
         {keySource === 'ui' && connection?.key_set_at && (
           <Text type="secondary">
             Ключ задан из UI {new Date(connection.key_set_at).toLocaleString('ru-RU')}
             {connection.env_key_available ? ' (env-ключ остаётся резервным)' : ''}
           </Text>
         )}
-        {keySource !== 'ui' && <Text type="secondary">{API_KEY_HINT}</Text>}
+        {!isProxy && keySource !== 'ui' && <Text type="secondary">{API_KEY_HINT}</Text>}
         {usageRows.length > 0 && (
           <Descriptions
             size="small"

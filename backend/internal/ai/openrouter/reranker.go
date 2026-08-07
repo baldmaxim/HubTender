@@ -2,6 +2,8 @@ package openrouter
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,8 +18,20 @@ const (
 	SchemaVersion = "nomenclature-rerank-schema-v1"
 	// ProviderPolicyVersion — версия privacy/routing-политики (§10).
 	ProviderPolicyVersion = "openrouter-policy-v1"
+	// ProviderPolicyVersionProxy — версия политики в режиме LLM-прокси.
+	//
+	// Отдельное значение — не косметика: оно входит в ComputeConfigHash, поэтому
+	// переключение транспорта автоматически расходится с сохранённым
+	// model_test_config_hash → активация снимается, rollout выключается, и
+	// оператор обязан перезапустить model test, уже видя новую версию политики.
+	// Fail-closed без единой новой проверки.
+	ProviderPolicyVersionProxy = "proxy-llm-policy-v1"
 	// AdapterVersion — версия OpenRouterReranker.
 	AdapterVersion = "openrouter-reranker-v1"
+	// IdempotencyVersion — ручка инвалидации X-Idempotency-Key. Поднимается,
+	// если нужно принудительно разорвать схлопывание со старыми вызовами при
+	// неизменных модели/промпте/схеме.
+	IdempotencyVersion = "v1"
 )
 
 // RerankSettings — effective-настройки adapter'а. Приходят ТОЛЬКО из backend
@@ -31,6 +45,12 @@ type RerankSettings struct {
 	DataCollection    string // "deny" (§10; UI в 2.5 не ослабляет)
 	RequireParameters bool
 	AllowFallbacks    bool
+	// PromptVersion / ProviderPolicyVersion — из строки БД. Нужны, чтобы
+	// X-Idempotency-Key учитывал те же значимые параметры, что и config hash:
+	// смена промпта или политики обязана разрывать схлопывание со старыми
+	// вызовами.
+	PromptVersion         string
+	ProviderPolicyVersion string
 }
 
 // rerankResponseSchema — strict JSON Schema (§14): additionalProperties=false,
@@ -76,11 +96,39 @@ const rerankResponseSchema = `{
 type Reranker struct {
 	client   *Client
 	settings RerankSettings
+	// configHash — конфигурационное измерение X-Idempotency-Key, считается один
+	// раз на adapter. Тот же набор параметров, что и у model test config hash.
+	configHash string
 }
 
 // NewReranker — adapter поверх клиента с effective-настройками backend.
 func NewReranker(client *Client, s RerankSettings) *Reranker {
-	return &Reranker{client: client, settings: s}
+	return &Reranker{client: client, settings: s, configHash: ComputeConfigHash(ConfigHashInput{
+		ModelID:                s.ModelID,
+		PromptVersion:          s.PromptVersion,
+		SchemaVersion:          SchemaVersion,
+		ProviderPolicyVersion:  s.ProviderPolicyVersion,
+		RequireZDR:             s.RequireZDR,
+		DataCollectionPolicy:   s.DataCollection,
+		RequireParameters:      s.RequireParameters,
+		AllowProviderFallbacks: s.AllowFallbacks,
+		Temperature:            s.Temperature,
+		MaxOutputTokens:        s.MaxOutputTokens,
+		AdapterVersion:         AdapterVersion,
+	})}
+}
+
+// idempotencyKey — стабильный ключ логической задачи (одного батча rerank'а).
+// Совпадает между ретраями той же задачи; различается на разные входы, модель,
+// промпт, схему и политику (через configHash). Длина ≈91 символ ≤ 256.
+//
+// Ключ строится здесь, а не передаётся параметром: у RerankWithUsage четыре
+// вызывающих (Rerank, model test, live-gateway, evaluation), и параметр —
+// гарантия, что один из них рано или поздно забудут.
+func (r *Reranker) idempotencyKey(payload []byte) string {
+	sum := sha256.Sum256(payload)
+	return "hub-rerank." + IdempotencyVersion + "." +
+		HashPrefix(r.configHash) + "." + hex.EncodeToString(sum[:])
 }
 
 // Rerank implements ainom.NomenclatureReranker.
@@ -123,6 +171,7 @@ func (r *Reranker) RerankWithUsage(ctx context.Context, req ainom.RerankBatchReq
 			RequireParameters: &reqParams,
 			AllowFallbacks:    &fallbacks,
 		},
+		IdempotencyKey: r.idempotencyKey(payload),
 	}
 
 	chatResp, err := r.client.CreateChatCompletion(ctx, chatReq)
@@ -176,6 +225,10 @@ func (r *Reranker) RerankWithUsage(ctx context.Context, req ainom.RerankBatchReq
 func providerStatusFromErr(err error) string {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
+		return ainom.ProviderTimeout
+	case errors.Is(err, ErrUpstreamTimeout):
+		// Выше ErrInvalidResponse/ErrUnavailable: ErrUpstreamTimeout
+		// оборачивает ErrUnavailable и иначе был бы поглощён default-веткой.
 		return ainom.ProviderTimeout
 	case errors.Is(err, ErrRateLimited):
 		return ainom.ProviderRateLimited

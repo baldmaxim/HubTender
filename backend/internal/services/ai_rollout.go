@@ -10,6 +10,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/su10/hubtender/backend/internal/ai/openrouter"
 	"github.com/su10/hubtender/backend/internal/repository"
 )
 
@@ -115,6 +116,15 @@ type AIRolloutView struct {
 	UpdatedBy           *string                    `json:"updated_by"`
 	UpdatedAt           time.Time                  `json:"updated_at"`
 	CostUnit            string                     `json:"cost_unit"`
+	// BudgetKind — смысл числа в monthly_budget_usd: usd | reservation_units.
+	// В режиме proxy_llm цены модели неизвестны, и это НЕ доллары.
+	BudgetKind string `json:"budget_kind"`
+	// MaxRequestsMonth — потолок числа запросов при плоском резерве
+	// (бюджет / request_max_reserved_cost). Единственная честная
+	// интерпретация бюджета там, где цены неизвестны.
+	MaxRequestsMonth *int `json:"max_requests_month"`
+	// MonthlyTokenBudget — измеримый потолок в токенах; null = не задан.
+	MonthlyTokenBudget *int64 `json:"monthly_token_budget"`
 }
 
 // AIEvaluationStatusView — статус последнего live-eval для гейтов.
@@ -130,6 +140,52 @@ type AIEvaluationStatusView struct {
 // AICostUnit — явная единица учёта (§8): кредиты OpenRouter, деноминированные
 // в USD (официальная документация GET /key: usage «in USD»).
 const AICostUnit = "USD (кредиты OpenRouter)"
+
+// AICostUnitProxy — единица учёта в режиме proxy_llm.
+//
+// Утверждать «USD» здесь нельзя: каталога с ценами у прокси нет, usage.cost он
+// обычно не отдаёт, поэтому резерв плоский (request_max_reserved_cost), и
+// месячный бюджет фактически ограничивает ЧИСЛО ЗАПРОСОВ, а не сумму в
+// долларах. Измеримый потолок в этом режиме — monthly_token_budget.
+const AICostUnitProxy = "у.е. резерва (цена модели прокси неизвестна)"
+
+// Единицы учёта расхода.
+const (
+	AIBudgetKindUSD   = "usd"
+	AIBudgetKindUnits = "reservation_units"
+)
+
+// budgetKindFor — какой смысл имеет число в monthly_budget_usd.
+func (s *AIAdminService) budgetKindFor() string {
+	if s.client != nil && s.client.Transport() == openrouter.TransportProxyLLM {
+		return AIBudgetKindUnits
+	}
+	return AIBudgetKindUSD
+}
+
+func (s *AIAdminService) costUnitFor() string {
+	if s.budgetKindFor() == AIBudgetKindUnits {
+		return AICostUnitProxy
+	}
+	return AICostUnit
+}
+
+// maxRequestsMonth — потолок числа запросов при плоском резерве. Единственная
+// честная интерпретация бюджета там, где цены неизвестны.
+func maxRequestsMonth(row *repository.AIFeatureSettings) *int {
+	if row.MonthlyBudgetText == nil {
+		return nil
+	}
+	budget, ok := new(big.Rat).SetString(*row.MonthlyBudgetText)
+	perRequest, ok2 := new(big.Rat).SetString(row.RequestMaxReservedCost)
+	if !ok || !ok2 || perRequest.Sign() <= 0 {
+		return nil
+	}
+	q := new(big.Rat).Quo(budget, perRequest)
+	f, _ := q.Float64()
+	n := int(f)
+	return &n
+}
 
 // GetRollout — состояние rollout + checklist гейтов следующего перехода.
 func (s *AIAdminService) GetRollout(ctx context.Context) (*AIRolloutView, error) {
@@ -164,10 +220,13 @@ func (s *AIAdminService) GetRollout(ctx context.Context) (*AIRolloutView, error)
 		PilotEndedAt:       row.PilotEndedAt,
 		UpdatedBy:          row.UpdatedBy,
 		UpdatedAt:          row.UpdatedAt,
-		CostUnit:           AICostUnit,
+		CostUnit:           s.costUnitFor(),
+		BudgetKind:         s.budgetKindFor(),
+		MaxRequestsMonth:   maxRequestsMonth(row),
+		MonthlyTokenBudget: row.MonthlyTokenBudget,
 	}
 	if row.SelectedModelID != nil {
-		view.ConfigHash = configHashFor(row, *row.SelectedModelID)
+		view.ConfigHash = s.configHashFor(row, *row.SelectedModelID)
 	}
 	view.LiveEvaluation = s.liveEvaluationStatus(ctx, row, view.ConfigHash)
 	view.NextTransitionGates = map[string][]AIGateCheck{}
@@ -273,9 +332,19 @@ func (s *AIAdminService) transitionGates(ctx context.Context, row *repository.AI
 }
 
 // keyRemainingHealthy — свежий /key: remaining limit не исчерпан.
+//
+// В режиме proxy_llm гейт вырождается в проверку достижимости прокси: остатка
+// кредитов он не отдаёт, им распоряжается его оператор. Гейт при этом не
+// удаляется — иначе исчезла бы проверка того, что провайдер вообще отвечает.
 func (s *AIAdminService) keyRemainingHealthy(ctx context.Context) (bool, string) {
 	conn := s.Status(ctx)
-	if conn.Connection != "connected" || conn.Key == nil {
+	if conn.Connection != "connected" {
+		return false, conn.Connection
+	}
+	if conn.ProviderMode == openrouter.String(openrouter.TransportProxyLLM) {
+		return true, "лимиты ключа известны только оператору прокси"
+	}
+	if conn.Key == nil {
 		return false, conn.Connection
 	}
 	if conn.Key.LimitRemaining == nil {
@@ -326,7 +395,7 @@ func (s *AIAdminService) TransitionRollout(ctx context.Context, target, confirma
 		}
 		currentHash := ""
 		if row.SelectedModelID != nil {
-			currentHash = configHashFor(row, *row.SelectedModelID)
+			currentHash = s.configHashFor(row, *row.SelectedModelID)
 		}
 		circuit, cerr := s.rollout.GetCircuit(ctx, row.FeatureCode)
 		if cerr != nil {

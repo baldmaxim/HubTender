@@ -36,6 +36,9 @@ const F = {
   page: 'src/pages/AdminAiSettings/AdminAiSettings.tsx',
   catalogSection: 'src/pages/AdminAiSettings/components/CatalogSection.tsx',
   apiHelper: 'src/lib/api/adminAi.ts',
+  transport: 'backend/internal/ai/openrouter/transport.go',
+  proxyCatalog: 'backend/internal/ai/openrouter/proxycatalog.go',
+  adminPolicy: 'src/lib/quality/openRouterAdminPolicy.ts',
 };
 
 // makeReader(overrides) — файловый доступ с in-memory подменами (self-check).
@@ -492,6 +495,88 @@ const RULES = [
     scan('src');
     return v;
   }],
+
+  // §27.27 База LLM-прокси приходит ТОЛЬКО из server env и валидируется в
+  // config-слое. Правило 21 охраняет allowlist OpenRouter; без этого правила
+  // proxy-база стала бы дырой в том же инварианте.
+  ['proxy base url — только server config', (read) => {
+    const v = [];
+    const cfg = read(F.config);
+    if (!/PROXY_LLM_BASE_URL/.test(cfg) || !/NormalizeProxyBaseURL/.test(cfg)) {
+      v.push(`${F.config} — PROXY_LLM_BASE_URL обязан читаться и валидироваться в config-слое (§27.27)`);
+    }
+    const tr = read(F.transport);
+    if (!/requireHTTPS/.test(tr) || !/must use https in production/.test(tr)) {
+      v.push(`${F.transport} — https обязателен для базы прокси в production (§27.27)`);
+    }
+    for (const f of [F.handler, F.service, F.apiHelper]) {
+      if (/PROXY_LLM_BASE_URL|PROXY_LLM_TOKEN/.test(read(f))) {
+        v.push(`${f} — параметры прокси не должны приходить через handler/frontend (§27.27)`);
+      }
+    }
+    return v;
+  }],
+
+  // §27.28 Синтетический каталог обязан быть помечен как синтетический и не
+  // содержать вендорных слагов: иначе пустые цены прочитаются как данные модели.
+  ['синтетический каталог помечен', (read) => {
+    const v = [];
+    const pc = read(F.proxyCatalog);
+    if (!/ProxyModelID\s*=\s*"proxy"/.test(pc)) {
+      v.push(`${F.proxyCatalog} — заглушка модели обязана быть литералом "proxy" (§27.28)`);
+    }
+    if (/"(anthropic|openai|google|meta-llama|mistralai)\//.test(pc)) {
+      v.push(`${F.proxyCatalog} — вендорные слаги моделей хардкодить запрещено (§27.28)`);
+    }
+    if (!/PROXY_CATALOG_SYNTHETIC/.test(read(F.adminPolicy))) {
+      v.push(`${F.adminPolicy} — синтетический каталог обязан раскрываться оператору (§27.28)`);
+    }
+    return v;
+  }],
+
+  // §27.29 X-Idempotency-Key: ретраи существуют, и без ключа каждый повтор
+  // оплачивается заново. Проверяем и отправку, и отсутствие второго места вызова.
+  ['idempotency key отправляется из единственной точки', (read) => {
+    const v = [];
+    if (!/X-Idempotency-Key/.test(read(F.client))) {
+      v.push(`${F.client} — X-Idempotency-Key обязан отправляться (§27.29)`);
+    }
+    if (!/idempotencyKey\(/.test(read(F.reranker))) {
+      v.push(`${F.reranker} — ключ обязан вычисляться в единственной точке сборки запроса (§27.29)`);
+    }
+    const backendHits = [];
+    const scan = (dir) => {
+      for (const e of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
+        const rel = `${dir}/${e.name}`;
+        if (e.isDirectory()) { scan(rel); continue; }
+        if (!/\.go$/.test(e.name) || /_test\.go$/.test(e.name)) continue;
+        if (/"\/chat\/completions"/.test(readFileSync(join(ROOT, rel), 'utf8'))) backendHits.push(rel);
+      }
+    };
+    scan('backend');
+    if (backendHits.length > 1) {
+      v.push(`несколько мест вызова chat/completions (${backendHits.join(', ')}) — ключ обойдут в одном из них (§27.29)`);
+    }
+    return v;
+  }],
+
+  // §27.30 Делегирование privacy-политики раскрыто. Прокси вырезает provider,
+  // поэтому ZDR/data_collection не применяются — молчать об этом нельзя.
+  ['делегирование privacy раскрыто', (read) => {
+    const v = [];
+    const pol = read(F.adminPolicy);
+    if (!/PROXY_PRIVACY_DISCLOSURE/.test(pol) || !/НЕ применяются/.test(pol)) {
+      v.push(`${F.adminPolicy} — потеря privacy-гарантии обязана раскрываться явным текстом (§27.30)`);
+    }
+    const svc = read(F.service);
+    if (!/ProviderPolicyEnforced/.test(svc) || !/effectivePolicyVersion/.test(svc)) {
+      v.push(`${F.service} — эффективная версия политики и факт её применения обязаны быть во view (§27.30)`);
+    }
+    if (!/ProviderPolicyVersionProxy/.test(read(F.reranker))) {
+      v.push(`${F.reranker} — режим прокси обязан иметь отдельную provider_policy_version (§27.30)`);
+    }
+    return v;
+  }],
 ];
 
 function runRules(read) {
@@ -540,6 +625,14 @@ const SELF_CHECKS = [
     (s) => s.replace('resetTest := oldHash != newHash', 'resetTest := false')],
   ['admin-гейт снят', F.routes,
     (s) => s.replace('r.Use(middleware.RequireRoles(handlers.AIAdminRoles))', '')],
+  ['idempotency key убран', F.client,
+    (s) => s.replaceAll('X-Idempotency-Key', 'X-Ignored-Key')],
+  ['раскрытие privacy убрано', F.adminPolicy,
+    (s) => s.replaceAll('НЕ применяются', 'применяются')],
+  ['вендорный слаг в заглушке каталога', F.proxyCatalog,
+    (s) => s.replace('ProxyModelID = "proxy"', 'ProxyModelID = "openai/gpt-4o"')],
+  ['валидация базы прокси ослаблена', F.config,
+    (s) => s.replace('NormalizeProxyBaseURL', 'strings.TrimSpace')],
 ];
 
 let selfCheckFailures = 0;
@@ -570,4 +663,4 @@ if (selfCheckFailures > 0) {
   console.error(`\nopenRouterAdministrationSafety.check: self-check failures: ${selfCheckFailures}`);
   process.exit(1);
 }
-console.log('\nopenRouterAdministrationSafety.check: passed (26 rules + ' + SELF_CHECKS.length + ' negative self-checks)');
+console.log('\nopenRouterAdministrationSafety.check: passed (30 rules + ' + SELF_CHECKS.length + ' negative self-checks)');

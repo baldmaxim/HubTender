@@ -6,6 +6,7 @@ import {
 import type { AiModelTestReport, AiScenarioResult, AiSettingsView } from '../../../lib/api/adminAi';
 import {
   LIMITS_READONLY_HINT,
+  PROXY_PRIVACY_DISCLOSURE,
   activationEligibility,
   pricePerMillionDisplay,
   rolloutDisplay,
@@ -118,8 +119,23 @@ export default function SelectedModelSection({
           <Alert type="info" showIcon message="Модель не выбрана. Выберите модель в каталоге выше." />
         )}
 
+        {settings?.provider_policy_enforced === false && (
+          <Alert
+            type="error"
+            showIcon
+            message="Privacy-политика на стороне провайдера НЕ применяется"
+            description={PROXY_PRIVACY_DISCLOSURE}
+            data-testid="ai-privacy-delegated"
+          />
+        )}
+
         <Descriptions size="small" bordered column={{ xs: 1, sm: 2 }} title="Политика и версии">
           <Descriptions.Item label="Privacy">
+            {settings?.provider_policy_enforced === false ? (
+              <Text type="danger">
+                Не применяется: прокси вырезает объект provider. Значения ниже — намерение, а не гарантия.
+              </Text>
+            ) : null}
             ZDR: обязателен · data collection: {settings?.data_collection_policy ?? 'deny'} ·
             require_parameters: {String(settings?.require_parameters ?? true)} · fallbacks:{' '}
             {String(settings?.allow_provider_fallbacks ?? false)}

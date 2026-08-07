@@ -3,6 +3,8 @@ package openrouter
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +46,9 @@ type Config struct {
 	HTTPReferer string // необязательный маркетинговый заголовок OpenRouter
 	AppTitle    string
 	Timeout     time.Duration // общий таймаут одного вызова (default 30s)
+	// Transport — прямой OpenRouter (default) либо LLM-прокси. Задаётся ТОЛЬКО
+	// server config; из request/frontend не принимается (см. transport.go).
+	Transport Transport
 }
 
 // Client — изолированный HTTP-клиент OpenRouter (§4). Все вызовы server-side;
@@ -59,7 +64,13 @@ type Client struct {
 	// nil / пустой результат → используется cfg.APIKey. Значение никогда не
 	// логируется и наружу не отдаётся.
 	keySource func() string
+	// proxyOrigin — база прокси БЕЗ /api/v1: /healthz живёт на origin.
+	// Пусто в режиме прямого OpenRouter.
+	proxyOrigin string
 }
+
+// Transport — действующий режим транспорта (для логов и admin-слоя).
+func (c *Client) Transport() Transport { return c.cfg.Transport }
 
 // WithKeySource задаёт динамический источник ключа (приоритетнее env).
 func WithKeySource(fn func() string) Option {
@@ -67,8 +78,12 @@ func WithKeySource(fn func() string) Option {
 }
 
 // currentKey — действующий ключ: keySource (UI) > cfg.APIKey (env).
+//
+// В proxy-режиме UI-ключ игнорируется: в БД лежит sk-or-…, прокси отвергнет
+// его 401-м при полностью «зелёной» админке — многочасовой разбор на ровном
+// месте. Токен прокси приходит только из server env.
 func (c *Client) currentKey() string {
-	if c.keySource != nil {
+	if c.keySource != nil && c.cfg.Transport.profile().allowUIKey {
 		if k := strings.TrimSpace(c.keySource()); k != "" {
 			return k
 		}
@@ -79,6 +94,19 @@ func (c *Client) currentKey() string {
 // New строит клиент. Пустой APIKey допустим — вызовы вернут ErrNotConfigured
 // (§3: приложение обязано запускаться без ключа).
 func New(cfg Config, opts ...Option) (*Client, error) {
+	if cfg.Transport == "" {
+		cfg.Transport = TransportOpenRouter
+	}
+	var proxyOrigin string
+	if cfg.Transport == TransportProxyLLM {
+		// База прокси хранится как origin (см. NormalizeProxyBaseURL): /healthz
+		// живёт вне /api/v1, поэтому путь до chat-эндпоинта достраивается здесь.
+		if strings.TrimSpace(cfg.BaseURL) == "" {
+			return nil, fmt.Errorf("openrouter: proxy transport requires base URL")
+		}
+		proxyOrigin = strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+		cfg.BaseURL = chatBaseURL(cfg.Transport, proxyOrigin)
+	}
 	if strings.TrimSpace(cfg.BaseURL) == "" {
 		cfg.BaseURL = DefaultBaseURL
 	}
@@ -90,9 +118,10 @@ func New(cfg Config, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("openrouter: invalid base URL")
 	}
 	c := &Client{
-		cfg:     cfg,
-		baseURL: base,
-		timeNow: time.Now,
+		cfg:         cfg,
+		baseURL:     base,
+		proxyOrigin: proxyOrigin,
+		timeNow:     time.Now,
 		sleepFor: func(d time.Duration, ctx context.Context) error {
 			t := time.NewTimer(d)
 			defer t.Stop()
@@ -142,15 +171,39 @@ func (c *Client) BaseHost() string { return c.baseURL.Host }
 
 // ── HTTP core ────────────────────────────────────────────────────────────────
 
+// callOpts — дополнительные параметры вызова. Нужны только chat-пути, поэтому
+// передаются отдельным nil-able аргументом, а не размазаны по сигнатуре.
+type callOpts struct {
+	// idempotencyKey — X-Idempotency-Key: ОДИН И ТОТ ЖЕ на все попытки внутри
+	// вызова, иначе дедуп на стороне прокси не сработает и ретрай станет
+	// отдельным платным upstream-вызовом. Пустой — заголовок не отправляется.
+	idempotencyKey string
+	// respHeaders — если задан, сюда копируются заголовки успешного ответа
+	// (x-proxy-request-id / x-openrouter-request-id для сверки биллинга).
+	respHeaders *http.Header
+}
+
+// newRequestID — X-Request-Id одной ПОПЫТКИ (не задачи): уникален на каждый
+// retry, ≤128 символов. Сбой энтропии вызов не роняет — трассировка не
+// критичный путь.
+func newRequestID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "hub-" + strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
+	return "hub-" + hex.EncodeToString(b[:])
+}
+
 // doJSON — один вызов с общим таймаутом, лимитом тела и одним transient
 // retry (§4.13-14). out — указатель на envelope; тело при не-2xx парсится
 // только для классификации и НИКОГДА не возвращается наружу.
-func (c *Client) doJSON(ctx context.Context, method, path string, query url.Values, body any, out any, maxBody int64) error {
+func (c *Client) doJSON(ctx context.Context, method, path string, query url.Values, body any, out any, maxBody int64, o *callOpts) error {
 	if !c.Configured() {
 		return ErrNotConfigured
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
 	defer cancel()
+	prof := c.cfg.Transport.profile()
 
 	var payload []byte
 	if body != nil {
@@ -180,11 +233,19 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 		if payload != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
-		if c.cfg.HTTPReferer != "" {
-			req.Header.Set("HTTP-Referer", c.cfg.HTTPReferer)
+		if prof.sendVendorHeaders {
+			if c.cfg.HTTPReferer != "" {
+				req.Header.Set("HTTP-Referer", c.cfg.HTTPReferer)
+			}
+			if c.cfg.AppTitle != "" {
+				req.Header.Set("X-Title", c.cfg.AppTitle)
+			}
 		}
-		if c.cfg.AppTitle != "" {
-			req.Header.Set("X-Title", c.cfg.AppTitle)
+		// Трассировка одной попытки: новый id на каждый retry.
+		req.Header.Set("X-Request-Id", newRequestID())
+		// Дедуп логической задачи: стабилен между попытками (см. callOpts).
+		if o != nil && o.idempotencyKey != "" {
+			req.Header.Set("X-Idempotency-Key", o.idempotencyKey)
 		}
 
 		resp, err := c.http.Do(req)
@@ -192,6 +253,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 			return classifyTransportError(err)
 		}
 		defer resp.Body.Close()
+		if o != nil && o.respHeaders != nil {
+			*o.respHeaders = resp.Header.Clone()
+		}
 
 		limited := io.LimitReader(resp.Body, maxBody+1)
 		data, err := io.ReadAll(limited)
@@ -215,7 +279,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 	if err == nil {
 		return nil
 	}
-	if wait, ok := retryDelay(err); ok {
+	if wait, ok := c.retryDelay(err); ok {
 		if deadline, has := ctx.Deadline(); has {
 			remaining := deadline.Sub(c.timeNow())
 			if wait >= remaining {
@@ -244,7 +308,11 @@ func httpError(resp *http.Response, data []byte) error {
 		code = env.Error.Code
 	}
 	err := &apiError{httpStatus: resp.StatusCode, code: code, sentinel: sentinel}
-	if resp.StatusCode == 429 {
+	// Retry-After шлёт не только OpenRouter при 429: LLM-прокси отдаёт его при
+	// 503 (queue_full / dedup_full) и 504. Без этой ветки back-pressure ретрайся
+	// через фиксированные 500 мс — очередь ещё полна, попытка сгорает впустую.
+	switch resp.StatusCode {
+	case 429, 503, 504:
 		if d, ok := parseRetryAfter(resp.Header.Get("Retry-After")); ok {
 			return &retryAfterError{apiError: err, after: d}
 		}
@@ -287,6 +355,18 @@ func (e *transientError) Unwrap() error { return e.inner }
 
 // retryDelay — решение о единственном retry (§4.13): transient network,
 // 429 c Retry-After, 5xx. Всё остальное — нет.
+func (c *Client) retryDelay(err error) (time.Duration, bool) {
+	// 502 у прокси — upstream_response_too_large: отказ детерминированный,
+	// ретрай только сожжёт бюджет (SKILL §7).
+	if !c.cfg.Transport.profile().retryOn502 {
+		var ae *apiError
+		if errors.As(err, &ae) && ae.httpStatus == 502 {
+			return 0, false
+		}
+	}
+	return retryDelay(err)
+}
+
 func retryDelay(err error) (time.Duration, bool) {
 	var ra *retryAfterError
 	if errors.As(err, &ra) {
@@ -326,8 +406,11 @@ func parseRetryAfter(v string) (time.Duration, bool) {
 
 // GetKeyStatus — GET /key: label/limit/usage. Ключ в ответе отсутствует.
 func (c *Client) GetKeyStatus(ctx context.Context) (KeyStatus, error) {
+	if !c.cfg.Transport.profile().supportsKeyAPI {
+		return KeyStatus{}, ErrEndpointUnsupported
+	}
 	var env keyStatusEnvelope
-	if err := c.doJSON(ctx, http.MethodGet, "/key", nil, nil, &env, maxKeyBodyBytes); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, "/key", nil, nil, &env, maxKeyBodyBytes, nil); err != nil {
 		return KeyStatus{}, err
 	}
 	d := env.Data
@@ -342,6 +425,9 @@ func (c *Client) GetKeyStatus(ctx context.Context) (KeyStatus, error) {
 // ListUserModels — GET /models/user со ВСЕЙ pagination (§5: не предполагаем
 // одну страницу). Возвращает сырые модели; нормализация — в catalog.go.
 func (c *Client) ListUserModels(ctx context.Context) ([]rawModel, error) {
+	if !c.cfg.Transport.profile().supportsCatalog {
+		return nil, ErrEndpointUnsupported
+	}
 	var all []rawModel
 	offset := 0
 	for page := 0; page < maxModelPages; page++ {
@@ -351,7 +437,7 @@ func (c *Client) ListUserModels(ctx context.Context) ([]rawModel, error) {
 			q.Set("offset", strconv.Itoa(offset))
 		}
 		var env modelsEnvelope
-		if err := c.doJSON(ctx, http.MethodGet, "/models/user", q, nil, &env, maxModelsBodyBytes); err != nil {
+		if err := c.doJSON(ctx, http.MethodGet, "/models/user", q, nil, &env, maxModelsBodyBytes, nil); err != nil {
 			return nil, err
 		}
 		all = append(all, env.Data...)
@@ -366,10 +452,54 @@ func (c *Client) ListUserModels(ctx context.Context) ([]rawModel, error) {
 	return all, nil
 }
 
+// ProxyHealth — GET <origin>/healthz LLM-прокси: замена отсутствующему
+// GET /key на уровне liveness.
+//
+// ВАЖНО, что она НЕ доказывает: /healthz публичный и лежит вне location /api/,
+// на котором висит IP-allowlist прокси. Успешный healthz не означает ни того,
+// что наш egress-IP разрешён, ни того, что токен принят — это проверяет только
+// реальный chat-вызов.
+func (c *Client) ProxyHealth(ctx context.Context) error {
+	if c.cfg.Transport != TransportProxyLLM {
+		return ErrEndpointUnsupported
+	}
+	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.proxyOrigin+"/healthz", nil)
+	if err != nil {
+		return fmt.Errorf("openrouter: build health request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Request-Id", newRequestID())
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return classifyTransportError(err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return &apiError{httpStatus: resp.StatusCode, sentinel: classifyHTTPStatus(resp.StatusCode)}
+	}
+	return nil
+}
+
 // CreateChatCompletion — POST /chat/completions (non-streaming, без tools).
 func (c *Client) CreateChatCompletion(ctx context.Context, req ChatRequest) (ChatResponse, error) {
+	prof := c.cfg.Transport.profile()
+	if prof.requireIdempotencyKey && strings.TrimSpace(req.IdempotencyKey) == "" {
+		return ChatResponse{}, ErrIdempotencyKeyRequired
+	}
+	if !prof.sendProvider {
+		// Прокси вырезает provider из тела. Отправлять его «на всякий случай»
+		// значило бы маскировать факт, что ZDR / data_collection /
+		// require_parameters на стороне провайдера НЕ применяются. Политика
+		// делегирована оператору прокси — см. provider_policy_version.
+		req.Provider = nil
+	}
 	var env chatEnvelope
-	if err := c.doJSON(ctx, http.MethodPost, "/chat/completions", nil, req, &env, maxChatBodyBytes); err != nil {
+	var hdr http.Header
+	opts := &callOpts{idempotencyKey: req.IdempotencyKey, respHeaders: &hdr}
+	if err := c.doJSON(ctx, http.MethodPost, "/chat/completions", nil, req, &env, maxChatBodyBytes, opts); err != nil {
 		return ChatResponse{}, err
 	}
 	if env.Error != nil {
@@ -382,7 +512,11 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatRequest) (Cha
 	if err := json.Unmarshal(env.Choices[0].Message.Content, &content); err != nil {
 		return ChatResponse{}, fmt.Errorf("openrouter: non-text content: %w", ErrInvalidResponse)
 	}
-	return ChatResponse{ID: env.ID, Model: env.Model, Content: content, Usage: env.Usage}, nil
+	return ChatResponse{
+		ID: env.ID, Model: env.Model, Content: content, Usage: env.Usage,
+		ProxyRequestID:    hdr.Get("x-proxy-request-id"),
+		UpstreamRequestID: hdr.Get("x-openrouter-request-id"),
+	}, nil
 }
 
 // classifyEmbeddedError — error-объект внутри 200-тела.

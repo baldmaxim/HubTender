@@ -95,7 +95,7 @@ func (s *AIAdminService) RunEvaluation(ctx context.Context, mode string, execute
 		// §15: все live-гейты одновременно.
 		currentHash := ""
 		if row.SelectedModelID != nil {
-			currentHash = configHashFor(row, *row.SelectedModelID)
+			currentHash = s.configHashFor(row, *row.SelectedModelID)
 		}
 		switch {
 		case !s.liveTestEnabled,
@@ -109,7 +109,7 @@ func (s *AIAdminService) RunEvaluation(ctx context.Context, mode string, execute
 		}
 		costAcc = newCostAccumulator()
 		wrapper := &evalUsageReranker{
-			inner: openrouter.NewReranker(s.client, rerankSettingsFor(row, modelID)),
+			inner: openrouter.NewReranker(s.client, s.rerankSettingsFor(row, modelID)),
 			cost:  costAcc,
 		}
 		provider = wrapper
@@ -151,7 +151,7 @@ func (s *AIAdminService) RunEvaluation(ctx context.Context, mode string, execute
 			GateDetails:   result.GatesJSON(),
 		}
 		if row.SelectedModelID != nil {
-			summary.ConfigHash = configHashFor(row, *row.SelectedModelID)
+			summary.ConfigHash = s.configHashFor(row, *row.SelectedModelID)
 		}
 		if executedBy != "" {
 			summary.ExecutedBy = &executedBy

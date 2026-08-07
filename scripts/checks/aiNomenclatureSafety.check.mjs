@@ -286,6 +286,7 @@ for (const rel of [
     '2026_07_ai_feature_settings.sql',      // этап 2.5: settings-only
     '2026_07_ai_rollout_controlled.sql',    // этап 2.6: rollout/ledger/feedback (safe metadata)
     '2026_08_ai_api_key_ui.sql',            // feature/ai-key-ui: ТОЛЬКО ciphertext-поля (валидируется в openRouterAdministrationSafety)
+    '2026_08_ai_proxy_llm_mode.sql',        // режим proxy_llm: токенный бюджет, наблюдаемая модель, privacy-ack. Секретов и raw prompt/response нет — проверяется ниже теми же правилами
   ]);
   if (existsSync(dir)) {
     for (const f of readdirSync(dir)) {

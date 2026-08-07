@@ -38,7 +38,11 @@ type AILiveSession struct {
 	settings *repository.AIFeatureSettings
 	inner    *openrouter.Reranker
 
-	mu             sync.Mutex
+	mu sync.Mutex
+	// observedModel — модель, фактически ответившая в этой сессии. В варианте A
+	// прокси игнорирует присланный model, поэтому это единственный источник
+	// правды о том, что реально отработало.
+	observedModel  string
 	promptTokens   int
 	completionToks int
 	providerCost   *big.Rat // сумма usage.cost (exact)
@@ -82,7 +86,7 @@ func (s *AIAdminService) AcquireLiveSession(ctx context.Context, userID string, 
 	if row.SelectedModelID == nil || !s.client.Configured() {
 		return nil, AICapProviderUnavail, nil
 	}
-	currentHash := configHashFor(row, *row.SelectedModelID)
+	currentHash := s.configHashFor(row, *row.SelectedModelID)
 	if row.ModelTestStatus != repository.AITestPassed ||
 		row.ModelTestConfigHash == nil || *row.ModelTestConfigHash != currentHash {
 		return nil, AICapProviderUnavail, nil
@@ -132,20 +136,28 @@ func (s *AIAdminService) AcquireLiveSession(ctx context.Context, userID string, 
 		return nil, denial, nil
 	}
 	budget := budgetRat.FloatString(8)
+	// Токенный потолок опционален и дополняет денежный, а не заменяет его:
+	// денежный остаётся обязательным (fail-closed выше).
+	var tokenBudget int64
+	if row.MonthlyTokenBudget != nil {
+		tokenBudget = *row.MonthlyTokenBudget
+	}
 	reservation, err := s.rollout.ReserveUsage(ctx, repository.AIReservationInput{
-		FeatureCode:       row.FeatureCode,
-		UserID:            userID,
-		ModelID:           *row.SelectedModelID,
-		PromptVersion:     row.PromptVersion,
-		ConfigHash:        currentHash,
-		RequestHash:       requestHash,
-		RowsCount:         rowsCount,
-		CandidatesCount:   candidatesCount,
-		Amount:            amount,
-		DailyRequestLimit: reqLimit,
-		DailyRowLimit:     rowLimit,
-		MonthlyBudget:     budget,
-		TimeoutSeconds:    row.ReservationTimeoutSeconds,
+		FeatureCode:        row.FeatureCode,
+		UserID:             userID,
+		ModelID:            *row.SelectedModelID,
+		PromptVersion:      row.PromptVersion,
+		ConfigHash:         currentHash,
+		RequestHash:        requestHash,
+		RowsCount:          rowsCount,
+		CandidatesCount:    candidatesCount,
+		Amount:             amount,
+		DailyRequestLimit:  reqLimit,
+		DailyRowLimit:      rowLimit,
+		MonthlyBudget:      budget,
+		TimeoutSeconds:     row.ReservationTimeoutSeconds,
+		MonthlyTokenBudget: tokenBudget,
+		TokenReservation:   computeTokenReservation(row, rowsCount),
 	})
 	if err != nil {
 		switch {
@@ -155,6 +167,8 @@ func (s *AIAdminService) AcquireLiveSession(ctx context.Context, userID string, 
 			return nil, AICapRowQuotaExhausted, nil
 		case errors.Is(err, repository.ErrAIBudgetExhausted):
 			return nil, AICapBudgetExhausted, nil
+		case errors.Is(err, repository.ErrAITokenBudgetExhausted):
+			return nil, AICapTokenBudgetExhausted, nil
 		}
 		return nil, "", err
 	}
@@ -169,7 +183,7 @@ func (s *AIAdminService) AcquireLiveSession(ctx context.Context, userID string, 
 		snapModelID:  *row.SelectedModelID,
 		settings:     row,
 		providerCost: new(big.Rat),
-		inner:        openrouter.NewReranker(s.client, rerankSettingsFor(row, *row.SelectedModelID)),
+		inner:        openrouter.NewReranker(s.client, s.rerankSettingsFor(row, *row.SelectedModelID)),
 	}
 	log.Info().
 		Str("operation", "ai_live_session_acquired").
@@ -189,13 +203,23 @@ func (s *AIAdminService) keyLimitGate(ctx context.Context, reservationAmount str
 	if view.CheckedAt == nil || time.Since(*view.CheckedAt) > aiKeyStatusMaxAge {
 		return AICapProviderUnavail
 	}
-	if view.Connection != "connected" || view.Key == nil {
+	if view.Connection != "connected" {
 		switch view.Connection {
 		case "rate_limited":
 			return AICapRateLimited
 		default:
 			return AICapProviderUnavail
 		}
+	}
+	// В режиме proxy_llm лимитов ключа не существует: GET /key у прокси нет,
+	// бюджетом ключа владеет его оператор. Проверка свежести выше сохраняется,
+	// проверка остатка пропускается. Требовать здесь view.Key != nil означало
+	// бы provider_unavailable на КАЖДОМ вызове и неработающий пилот навсегда.
+	if view.ProviderMode == openrouter.String(openrouter.TransportProxyLLM) {
+		return ""
+	}
+	if view.Key == nil {
+		return AICapProviderUnavail
 	}
 	if view.Key.LimitRemaining != nil {
 		remaining := new(big.Rat).SetFloat64(*view.Key.LimitRemaining)
@@ -235,6 +259,15 @@ func (ls *AILiveSession) Rerank(ctx context.Context, req ainom.RerankBatchReques
 	ls.promptTokens += usage.PromptTokens
 	ls.completionToks += usage.CompletionTokens
 	ls.latencyMs += elapsed
+	// Фактическая модель ответа. В варианте A прокси игнорирует присланный
+	// model и вправе сменить его без нашего релиза, а config hash содержит
+	// константу "proxy" и такой подмены не увидит НИКОГДА. Запрос при этом не
+	// проваливаем: ответ валиден и локально перевалидирован — дрейф здесь
+	// штатное поведение, автоотключение на нём было бы самонанесённым простоем.
+	if resp.Model != "" && resp.Model != ls.observedModel {
+		ls.observedModel = resp.Model
+		ls.svc.SetProxyObservedModel(resp.Model)
+	}
 	if usage.Cost != "" {
 		if c, ok := new(big.Rat).SetString(usage.Cost.String()); ok {
 			ls.providerCost.Add(ls.providerCost, c)
@@ -286,7 +319,7 @@ func (ls *AILiveSession) isStale(ctx context.Context) bool {
 	if row.SelectedModelID == nil || *row.SelectedModelID != ls.snapModelID {
 		return true
 	}
-	if configHashFor(row, *row.SelectedModelID) != ls.snapHash {
+	if ls.svc.configHashFor(row, *row.SelectedModelID) != ls.snapHash {
 		return true
 	}
 	member, err := ls.svc.rollout.GetActivePilotMembership(ctx, row.FeatureCode, ls.userID)
@@ -337,7 +370,13 @@ func (ls *AILiveSession) Finish(ctx context.Context, rows []ainom.SuggestionRow)
 	if ls.providerCost.Sign() > 0 {
 		actual = ls.providerCost.FloatString(8)
 	}
+	observed := ls.observedModel
 	ls.mu.Unlock()
+
+	// upstreamID пока не собирается по батчам: заголовки ответа доступны на
+	// уровне клиента, а сессия агрегирует несколько вызовов. Пустая строка —
+	// корректное «неизвестно», колонка nullable.
+	upstreamID := ""
 
 	estimated := ""
 	if pp := ls.settings.SelectedModelPromptPrice; pp != nil {
@@ -360,6 +399,8 @@ func (ls *AILiveSession) Finish(ctx context.Context, rows []ainom.SuggestionRow)
 		ActualProviderCost: actual,
 		EstimatedCost:      estimated,
 		LatencyMs:          int(latency),
+		ObservedModel:      observed,
+		UpstreamRequestID:  upstreamID,
 	}); err != nil {
 		log.Warn().Err(err).Str("request_id", ls.RequestID).Msg("ai usage reconcile failed")
 	}

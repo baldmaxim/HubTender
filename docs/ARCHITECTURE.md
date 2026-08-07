@@ -132,6 +132,8 @@ App-auth only. Supabase Auth runtime полностью удалён.
 | SMTP provider | Только password recovery (forgot-password) | `/forgot-password` уже отдаёт 503 в проде если SMTP не настроен; нет регрессии до настройки |
 | nginx | TLS termination + reverse proxy | Frontend недоступен извне |
 | systemd `hubtender-bff` | Go BFF process supervisor | Авто-перезапуск при крэше |
+| OpenRouter **либо** LLM-прокси | AI-подбор номенклатуры в Smart Import (пилот) | AI-подбор отключается, детерминированный подбор и ручной поиск работают без регрессии |
+| cbr.ru | Курсы валют для тендеров | Курсы не автозаполняются, вводятся вручную |
 
 ## См. также
 

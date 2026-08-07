@@ -41,6 +41,27 @@ export interface AiConnectionView {
   key_suffix?: string | null;
   key_set_at?: string | null;
   env_key_available: boolean;
+  /** Транспорт LLM. В режиме proxy_llm ключа и его лимитов не существует. */
+  provider_mode: 'openrouter' | 'proxy_llm';
+  /** Заполнен только в режиме proxy_llm; при этом key всегда null. */
+  proxy?: AiProxyStatus | null;
+}
+
+/**
+ * Всё, что известно о LLM-прокси без GET /key.
+ *
+ * `health` — публичная проба /healthz. Она НЕ доказывает ни того, что наш
+ * egress-IP в allowlist прокси, ни того, что токен принят: allowlist висит на
+ * location /api/, а /healthz лежит вне его. Это подтверждает только реальный
+ * вызов — model test.
+ */
+export interface AiProxyStatus {
+  health: 'ok' | 'unreachable';
+  health_checked_at?: string | null;
+  /** Модель, фактически ответившая на последний вызов (прокси выбирает сам). */
+  observed_model?: string | null;
+  /** Всегда false: лимитами и расходом ключа распоряжается оператор прокси. */
+  limits_known: boolean;
 }
 
 export interface AiKeyState {
@@ -116,6 +137,13 @@ export interface AiSettingsView {
   prompt_version: string;
   schema_version: string;
   provider_policy_version: string;
+  /**
+   * Применяются ли require_zdr / data_collection_policy / require_parameters
+   * на стороне провайдера. В режиме proxy_llm — false: прокси вырезает объект
+   * provider, и эти поля остаются намерением, а не гарантией.
+   */
+  provider_policy_enforced: boolean;
+  provider_mode: 'openrouter' | 'proxy_llm';
   adapter_version: string;
   require_zdr: boolean;
   data_collection_policy: string;
@@ -174,6 +202,7 @@ export type AiCapabilityStatus =
   | 'user_quota_exhausted'
   | 'row_quota_exhausted'
   | 'budget_exhausted'
+  | 'token_budget_exhausted'
   | 'key_limit_exhausted'
   | 'circuit_open'
   | 'provider_unavailable'
@@ -244,6 +273,12 @@ export interface AiRolloutView {
   updated_by: string | null;
   updated_at: string;
   cost_unit: string;
+  /** Смысл числа в monthly_budget_usd. В режиме proxy_llm это НЕ доллары. */
+  budget_kind: 'usd' | 'reservation_units';
+  /** Потолок числа запросов при плоском резерве (бюджет / резерв за запрос). */
+  max_requests_month: number | null;
+  /** Измеримый потолок в токенах; null = не задан. */
+  monthly_token_budget: number | null;
 }
 
 export interface AiPilotUser {

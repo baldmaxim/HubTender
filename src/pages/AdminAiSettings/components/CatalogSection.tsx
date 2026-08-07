@@ -8,6 +8,7 @@ import { DatabaseOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { AiCatalogModel, AiCatalogView, AiSettingsView } from '../../../lib/api/adminAi';
 import {
   FREE_VARIANT_WARNING,
+  PROXY_CATALOG_SYNTHETIC,
   ModelFilters,
   catalogStateDisplay,
   expirationDisplay,
@@ -41,6 +42,9 @@ export default function CatalogSection({
   );
   const authors = useMemo(() => modelAuthors(catalog?.models), [catalog?.models]);
   const state = catalogStateDisplay(catalog);
+  // Синтетический каталог режима proxy_llm: одна запись-заглушка без цен.
+  // Помечаем явно, иначе пустые цены и контекст прочитаются как данные модели.
+  const isSynthetic = (catalog?.models?.length ?? 0) === 1 && catalog?.models?.[0]?.id === 'proxy';
   const catalogUnavailable = !catalog || catalog.status === 'unavailable';
 
   const columns: ColumnsType<AiCatalogModel> = [
@@ -148,8 +152,8 @@ export default function CatalogSection({
       title={
         <Space>
           <DatabaseOutlined />
-          <span>Каталог моделей OpenRouter</span>
-          <Tag>{catalog?.total_count ?? 0}</Tag>
+          <span>{isSynthetic ? 'Модель LLM-прокси (каталога нет)' : 'Каталог моделей OpenRouter'}</span>
+          {!isSynthetic && <Tag>{catalog?.total_count ?? 0}</Tag>}
         </Space>
       }
       extra={
@@ -160,6 +164,14 @@ export default function CatalogSection({
     >
       <Space direction="vertical" style={{ width: '100%' }} size={8}>
         <Alert type={state.tone} showIcon message={state.text} data-testid="ai-catalog-state" />
+        {isSynthetic && (
+          <Alert
+            type="warning"
+            showIcon
+            message={PROXY_CATALOG_SYNTHETIC}
+            data-testid="ai-catalog-synthetic"
+          />
+        )}
         <Space wrap size={8}>
           <Input.Search
             allowClear
