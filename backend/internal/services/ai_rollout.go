@@ -270,10 +270,21 @@ func (s *AIAdminService) transitionGates(ctx context.Context, row *repository.AI
 		add("connection", "Подключение подтверждено", conn.Connection == "connected", conn.Connection)
 		add("model_selected", "Модель выбрана", row.SelectedModelID != nil, "")
 		add("model_test", "Тест модели пройден", row.ModelTestStatus == repository.AITestPassed, row.ModelTestStatus)
+		// Свежесть теста — гейт только в proxy-режиме (см. modelTestMaxAge):
+		// там модель не пришпилена config hash'ем, и пройденный месяц назад
+		// тест ничего не говорит о том, что отвечает сейчас.
+		if maxAge := s.modelTestMaxAge(row); maxAge > 0 {
+			add("model_test_fresh", fmt.Sprintf("Тест модели не старше %d ч", row.ModelTestMaxAgeHours),
+				!s.modelTestStale(row), "")
+		}
 		hashOK := row.ModelTestConfigHash != nil && *row.ModelTestConfigHash == currentHash && currentHash != ""
 		add("config_hash", "Config hash совпадает", hashOK, "")
 		avail := s.modelAvailability(ctx, row, false)
-		add("model_available", "Модель в каталоге и не истекла", avail == "available", avail)
+		// unverifiable — proxy_llm с вручную заданным слагом: каталога, по
+		// которому можно сверить, не существует. Гейт пропускает, но статус
+		// остаётся в detail: оператор обязан видеть, что сверки не было.
+		add("model_available", "Модель в каталоге и не истекла",
+			avail == "available" || avail == "unverifiable", avail)
 		policyOK := row.RequireZDR && row.DataCollectionPolicy == "deny" && row.RequireParameters && !row.AllowProviderFallbacks
 		add("privacy_policy", "Privacy policy этапа 2.5 не изменена", policyOK, "")
 

@@ -43,6 +43,7 @@ func newFakeAIStore() *fakeAIStore {
 		MaxRowsPerRequest:      200,
 		MaxConcurrency:         2,
 		ModelTestStatus:        repository.AITestRequired,
+		ModelTestMaxAgeHours:   168, // зеркало DEFAULT схемы
 		Enabled:                false,
 		// Этап 2.6: rollout-default'ы (зеркало DB-схемы).
 		RolloutMode:               repository.AIRolloutOff,

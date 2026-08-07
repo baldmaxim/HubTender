@@ -150,6 +150,19 @@ export default function SelectedModelSection({
         </Descriptions>
 
         <Alert type={test.tone} showIcon message={test.text} data-testid="ai-test-status" />
+        {settings?.model_test?.stale && (
+          <Alert
+            type="warning"
+            showIcon
+            message={`Проверка модели устарела (старше ${settings.model_test.max_age_hours} ч)`}
+            description={
+              'Модель считается непроверенной: живые вызовы заблокированы, пилот не активируется. ' +
+              'Прокси не пришпиливает модель к config hash — оператор мог сменить её после теста. ' +
+              'Запустите проверку модели заново.'
+            }
+            data-testid="ai-test-stale"
+          />
+        )}
         {settings?.model_test?.tested_at && (
           <Text type="secondary">
             Последний тест: {new Date(settings.model_test.tested_at).toLocaleString('ru-RU')}

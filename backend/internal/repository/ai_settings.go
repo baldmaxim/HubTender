@@ -81,6 +81,10 @@ type AIFeatureSettings struct {
 	ModelTestOutputTokens  *int
 	ModelTestEstimatedCost *string
 	ModelTestErrorCode     *string
+	// ModelTestMaxAgeHours — окно годности пройденного теста. Применяется
+	// только в режиме proxy_llm: там config hash не пришпиливает модель, и
+	// протухание теста — единственная защита от её подмены оператором.
+	ModelTestMaxAgeHours int
 
 	Enabled           bool
 	NeedsReviewReason *string
@@ -124,7 +128,7 @@ const aiSettingsColumns = `
 	monthly_token_budget,
 	model_test_status, model_test_config_hash, model_tested_model_id, model_tested_at,
 	model_test_latency_ms, model_test_input_tokens, model_test_output_tokens,
-	model_test_estimated_cost, model_test_error_code,
+	model_test_estimated_cost, model_test_error_code, model_test_max_age_hours,
 	enabled, needs_review_reason,
 	rollout_mode, rollout_config_version, daily_request_limit, daily_row_limit,
 	request_max_reserved_cost::text, circuit_failure_threshold, circuit_cooldown_seconds,
@@ -147,7 +151,7 @@ func scanAISettings(row pgx.Row) (*AIFeatureSettings, error) {
 		&s.MonthlyTokenBudget,
 		&s.ModelTestStatus, &s.ModelTestConfigHash, &s.ModelTestedModelID, &s.ModelTestedAt,
 		&s.ModelTestLatencyMs, &s.ModelTestInputTokens, &s.ModelTestOutputTokens,
-		&s.ModelTestEstimatedCost, &s.ModelTestErrorCode,
+		&s.ModelTestEstimatedCost, &s.ModelTestErrorCode, &s.ModelTestMaxAgeHours,
 		&s.Enabled, &s.NeedsReviewReason,
 		&s.RolloutMode, &s.RolloutConfigVersion, &s.DailyRequestLimit, &s.DailyRowLimit,
 		&s.RequestMaxReservedCost, &s.CircuitFailureThreshold, &s.CircuitCooldownSeconds,

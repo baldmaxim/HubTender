@@ -151,6 +151,11 @@ type AITestView struct {
 	OutputTokens  *int       `json:"output_tokens,omitempty"`
 	EstimatedCost *string    `json:"estimated_cost_usd,omitempty"`
 	ErrorCode     *string    `json:"error_code,omitempty"`
+	// MaxAgeHours / Stale — окно годности теста и факт его истечения.
+	// Заполняются только в режиме proxy_llm (см. modelTestMaxAge): в прямом
+	// режиме модель пришпилена config hash'ем и тест не протухает.
+	MaxAgeHours int  `json:"max_age_hours,omitempty"`
+	Stale       bool `json:"stale"`
 }
 
 // AISelectedModelView — snapshot выбранной модели (остаётся видимым даже при
@@ -204,7 +209,9 @@ type AISettingsView struct {
 	Enabled           bool       `json:"enabled"`
 	NeedsReviewReason *string    `json:"needs_review_reason,omitempty"`
 
-	// ModelAvailability: not_selected|available|missing|expired|catalog_unavailable.
+	// ModelAvailability: not_selected|available|unverifiable|missing|expired|
+	// catalog_unavailable. unverifiable — proxy_llm со слагом, заданным вручную:
+	// каталога для сверки нет, подтверждает только model test.
 	ModelAvailability  string   `json:"model_availability"`
 	CanActivate        bool     `json:"can_activate"`
 	ActivationBlockers []string `json:"activation_blockers"`
@@ -402,6 +409,34 @@ func (s *AIAdminService) ProviderPolicyEnforced() bool {
 	return s.client == nil || s.client.Transport() != openrouter.TransportProxyLLM
 }
 
+// isProxyTransport — режим LLM-прокси. Отличается от ProviderPolicyEnforced
+// только смыслом: там речь о privacy-гарантии, здесь — о том, что каталога
+// моделей и валидации слага на стороне провайдера не существует.
+func (s *AIAdminService) isProxyTransport() bool {
+	return s.client != nil && s.client.Transport() == openrouter.TransportProxyLLM
+}
+
+// modelTestMaxAge — окно годности model test. Значение из БД, но применяется
+// ТОЛЬКО в proxy-режиме: там config hash не пришпиливает модель (оператор
+// может сменить её под нами между тестом и боевым вызовом), и протухание —
+// единственная защита от дрейфа. В прямом режиме модель пришпилена хэшем, и
+// включать протухание значило бы молча гасить прод через неделю после теста.
+func (s *AIAdminService) modelTestMaxAge(row *repository.AIFeatureSettings) time.Duration {
+	if !s.isProxyTransport() || row.ModelTestMaxAgeHours <= 0 {
+		return 0
+	}
+	return time.Duration(row.ModelTestMaxAgeHours) * time.Hour
+}
+
+// modelTestStale — тест пройден, но слишком давно (см. modelTestMaxAge).
+func (s *AIAdminService) modelTestStale(row *repository.AIFeatureSettings) bool {
+	maxAge := s.modelTestMaxAge(row)
+	if maxAge == 0 || row.ModelTestStatus != repository.AITestPassed || row.ModelTestedAt == nil {
+		return false
+	}
+	return time.Since(*row.ModelTestedAt) > maxAge
+}
+
 func (s *AIAdminService) rerankSettingsFor(row *repository.AIFeatureSettings, modelID string) openrouter.RerankSettings {
 	st := rerankSettingsFor(row, modelID)
 	st.ProviderPolicyVersion = s.effectivePolicyVersion(row)
@@ -487,6 +522,14 @@ func (s *AIAdminService) modelAvailability(ctx context.Context, row *repository.
 	if expiredSnapshot(row) {
 		return "expired"
 	}
+	// Вариант B/C: слаг введён вручную, сверять его не с чем — каталога у
+	// прокси нет. Возвращаем отдельный статус, а не "available": подтверждать
+	// нечем, и выдавать это за сверку с каталогом значило бы соврать в гейте.
+	if s.isProxyTransport() {
+		if _, ok := openrouter.ProxyCustomModel(modelID); ok {
+			return "unverifiable"
+		}
+	}
 	snap := s.catalog.Get(ctx, false)
 	if snap.Status == openrouter.CatalogUnavailable {
 		return "catalog_unavailable"
@@ -559,6 +602,8 @@ func (s *AIAdminService) buildView(row *repository.AIFeatureSettings, availabili
 			OutputTokens:  row.ModelTestOutputTokens,
 			EstimatedCost: row.ModelTestEstimatedCost,
 			ErrorCode:     row.ModelTestErrorCode,
+			MaxAgeHours:   int(s.modelTestMaxAge(row) / time.Hour),
+			Stale:         s.modelTestStale(row),
 		},
 		Enabled:           row.Enabled,
 		NeedsReviewReason: row.NeedsReviewReason,

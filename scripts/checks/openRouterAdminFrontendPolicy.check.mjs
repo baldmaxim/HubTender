@@ -148,9 +148,16 @@ check('28. ввод ключа — только write-only модал в Connect
   && !/>\s*\{keyDraft\}/.test(connectionSrc)          // значение не рендерится как текст
   && /key_suffix/.test(connectionSrc)                    // назад — только суффикс
   && API_KEY_HINT.includes('OPENROUTER_API_KEY'));
-check('29. free-text ввода model ID нет (выбор только radio из таблицы)',
-  !/Input[^.]*placeholder=.{0,40}(model|модел)/i.test(pageSources)
-  && /rowSelection/.test(pageSources) && /type: 'radio'/.test(pageSources));
+// 29. Каталог остаётся radio-выбором. Единственное исключение — ручной ввод
+// слага в режиме proxy_llm: каталога у прокси нет, списка моделей взять
+// неоткуда. Исключение обязано быть за гардом isProxy и обязано проверять
+// формат до отправки (proxyModelSlugError), иначе опечатка вернётся ошибкой
+// OpenRouter из-за прокси — диагностика на часы.
+const manualModelInput = /ai-manual-model-input/.test(pageSources);
+check('29. выбор модели — radio из таблицы; ручной слаг только за гардом proxy',
+  /rowSelection/.test(pageSources) && /type: 'radio'/.test(pageSources)
+  && (!manualModelInput || (/isProxy\s*&&/.test(pageSources) && /proxyModelSlugError/.test(pageSources)))
+  && (manualModelInput || !/Input[^.]*placeholder=.{0,40}(model|модел)/i.test(pageSources)));
 
 // 30. Цены без NaN (§26.30).
 check('30. pricePerMillionDisplay: мусор → «—», значение → $',

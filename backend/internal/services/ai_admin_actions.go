@@ -13,8 +13,25 @@ import (
 
 // Действия admin-flow (§12 задания): draft → test → activate → deactivate.
 
+// resolveDraftModel — единственная точка, где model ID превращается в модель.
+//
+// Прямой режим: только server-returned каталог (§9). Режим proxy_llm: каталог
+// синтетический, поэтому слаг, введённый вручную (вариант B/C), проходит
+// проверку формата в ProxyCustomModel. Существование модели не подтверждает
+// ни та, ни другая ветка в proxy-режиме — это делает только model test.
+func (s *AIAdminService) resolveDraftModel(modelID string) (openrouter.Model, bool) {
+	if model, ok := s.catalog.FindModel(modelID); ok {
+		return model, true
+	}
+	if s.isProxyTransport() {
+		return openrouter.ProxyCustomModel(modelID)
+	}
+	return openrouter.Model{}, false
+}
+
 // SaveDraft — §12.A: сохранить выбранную модель как draft. Model ID приходит
-// ТОЛЬКО из server-returned каталога (§9): произвольный/router/expired ID
+// ТОЛЬКО из server-returned каталога (§9); исключение — proxy_llm, где каталога
+// нет и слаг вводится вручную (см. resolveDraftModel). Router/expired ID
 // отклоняется. Активации здесь нет; смена config hash сбрасывает тест.
 func (s *AIAdminService) SaveDraft(ctx context.Context, modelID, updatedBy string) (*AISettingsView, error) {
 	if !s.client.Configured() {
@@ -24,7 +41,7 @@ func (s *AIAdminService) SaveDraft(ctx context.Context, modelID, updatedBy strin
 	if snap.Status == openrouter.CatalogUnavailable {
 		return nil, ErrAICatalogUnavailable
 	}
-	model, ok := s.catalog.FindModel(modelID)
+	model, ok := s.resolveDraftModel(modelID)
 	if !ok {
 		// Каталог по построению не содержит router/alias и истёкшие модели
 		// (FilterCatalog §6) — всё вне каталога отклоняется одинаково.

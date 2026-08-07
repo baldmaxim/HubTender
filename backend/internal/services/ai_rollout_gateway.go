@@ -91,6 +91,11 @@ func (s *AIAdminService) AcquireLiveSession(ctx context.Context, userID string, 
 		row.ModelTestConfigHash == nil || *row.ModelTestConfigHash != currentHash {
 		return nil, AICapProviderUnavail, nil
 	}
+	// Протухший тест = непроверенная модель. В proxy-режиме config hash не
+	// пришпиливает модель, поэтому только это ловит её подмену оператором.
+	if s.modelTestStale(row) {
+		return nil, AICapProviderUnavail, nil
+	}
 	// 4. Circuit.
 	circuit, err := s.rollout.GetCircuit(ctx, row.FeatureCode)
 	if err != nil {

@@ -9,7 +9,9 @@ import type { AiCatalogModel, AiCatalogView, AiSettingsView } from '../../../lib
 import {
   FREE_VARIANT_WARNING,
   PROXY_CATALOG_SYNTHETIC,
+  PROXY_MANUAL_MODEL_WARNING,
   ModelFilters,
+  proxyModelSlugError,
   catalogStateDisplay,
   expirationDisplay,
   filterModels,
@@ -29,12 +31,15 @@ interface Props {
   onRefresh: () => void;
 }
 
-/** §18.B/§19: каталог моделей. Выбор строки — ЕДИНСТВЕННЫЙ способ задать
- *  модель: free-text ввода model ID нет по построению. */
+/** §18.B/§19: каталог моделей. Выбор строки — единственный способ задать модель
+ *  в прямом режиме OpenRouter. Исключение — proxy_llm: каталога у прокси нет,
+ *  списка моделей взять неоткуда, поэтому слаг вводится вручную. */
 export default function CatalogSection({
   catalog, settings, loading, selectedModelId, onSelect, onRefresh,
 }: Props) {
   const [filters, setFilters] = useState<ModelFilters>({ testState: 'all' });
+  const [manualSlug, setManualSlug] = useState('');
+  const [manualTouched, setManualTouched] = useState(false);
 
   const models = useMemo(
     () => sortModels(filterModels(catalog?.models, filters, settings)),
@@ -46,6 +51,8 @@ export default function CatalogSection({
   // Помечаем явно, иначе пустые цены и контекст прочитаются как данные модели.
   const isSynthetic = (catalog?.models?.length ?? 0) === 1 && catalog?.models?.[0]?.id === 'proxy';
   const catalogUnavailable = !catalog || catalog.status === 'unavailable';
+  const isProxy = settings?.provider_mode === 'proxy_llm';
+  const manualError = manualTouched ? proxyModelSlugError(manualSlug) : null;
 
   const columns: ColumnsType<AiCatalogModel> = [
     {
@@ -170,6 +177,50 @@ export default function CatalogSection({
             showIcon
             message={PROXY_CATALOG_SYNTHETIC}
             data-testid="ai-catalog-synthetic"
+          />
+        )}
+        {isProxy && (
+          <Alert
+            type="info"
+            showIcon
+            message={PROXY_MANUAL_MODEL_WARNING}
+            description={
+              <Space direction="vertical" size={4} style={{ width: '100%', marginTop: 8 }}>
+                <Space.Compact style={{ width: '100%', maxWidth: 520 }}>
+                  <Input
+                    allowClear
+                    placeholder="организация/модель, например openai/gpt-4o-mini"
+                    value={manualSlug}
+                    status={manualError ? 'error' : undefined}
+                    onChange={(e) => {
+                      setManualSlug(e.target.value);
+                      setManualTouched(true);
+                    }}
+                    onPressEnter={() => {
+                      setManualTouched(true);
+                      if (!proxyModelSlugError(manualSlug)) onSelect(manualSlug.trim().toLowerCase());
+                    }}
+                    data-testid="ai-manual-model-input"
+                  />
+                  <Button
+                    type="primary"
+                    onClick={() => {
+                      setManualTouched(true);
+                      if (!proxyModelSlugError(manualSlug)) onSelect(manualSlug.trim().toLowerCase());
+                    }}
+                    data-testid="ai-manual-model-apply"
+                  >
+                    Задать модель
+                  </Button>
+                </Space.Compact>
+                {manualError && <Text type="danger">{manualError}</Text>}
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Смена модели сбрасывает проверку модели и выключает пилот — это ожидаемо.
+                  Откат к варианту A: выбрать строку «proxy» в таблице ниже.
+                </Text>
+              </Space>
+            }
+            data-testid="ai-manual-model"
           />
         )}
         <Space wrap size={8}>

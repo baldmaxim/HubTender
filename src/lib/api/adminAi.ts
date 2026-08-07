@@ -114,6 +114,10 @@ export interface AiTestView {
   output_tokens?: number | null;
   estimated_cost_usd?: string | null;
   error_code?: string | null;
+  /** Окно годности теста; заполняется только в режиме proxy_llm. */
+  max_age_hours?: number;
+  /** Тест пройден, но устарел — модель считается непроверенной. */
+  stale?: boolean;
 }
 
 export interface AiSelectedModelView {
@@ -164,6 +168,8 @@ export interface AiSettingsView {
   model_availability:
     | 'not_selected'
     | 'available'
+    /** proxy_llm со слагом, заданным вручную: каталога для сверки не существует. */
+    | 'unverifiable'
     | 'missing'
     | 'expired'
     | 'catalog_unavailable';

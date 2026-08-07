@@ -135,20 +135,45 @@ const RULES = [
     if (/Input[^.]*placeholder=.{0,50}(model id|модель id|введите модель)/i.test(code)) {
       v.push('CatalogSection.tsx — free-text ввод model ID запрещён (§27.6)');
     }
+    // Ручной ввод слага существует только ради proxy_llm, где каталога нет.
+    // Без гарда isProxy он был бы обходом каталога и в прямом режиме.
+    if (/ai-manual-model-input/.test(code) && !/isProxy\s*&&/.test(code)) {
+      v.push('CatalogSection.tsx — ручной ввод слага обязан быть за гардом isProxy (§27.6)');
+    }
     return v;
   }],
   ['7. exact model ID сохраняется из каталога', (read) => {
     const src = read(F.actions);
     if (src == null) return ['ai_admin_actions.go отсутствует'];
     const code = stripComments(src);
+    const v = [];
+
+    // SaveDraft обязан идти через ЕДИНСТВЕННЫЙ резолвер, а не сверять сам:
+    // две ветки проверки — это две возможности разойтись.
     const save = code.slice(code.indexOf('func (s *AIAdminService) SaveDraft'));
     const body = save.slice(0, save.indexOf('\n}\n') + 2);
-    const v = [];
-    if (!/FindModel\(modelID\)/.test(body)) {
-      v.push('SaveDraft — model ID обязан проверяться по server-каталогу (FindModel) (§27.7)');
+    if (!/resolveDraftModel\(modelID\)/.test(body)) {
+      v.push('SaveDraft — model ID обязан резолвиться через resolveDraftModel (§27.7)');
     }
     if (!/ErrAIModelNotAvailable/.test(body)) {
       v.push('SaveDraft — модель вне каталога обязана отклоняться (§27.7)');
+    }
+
+    // Резолвер: каталог первым, ручной слаг — ТОЛЬКО за гардом proxy-режима.
+    // Без гарда произвольный ID проходил бы и в прямом режиме OpenRouter, где
+    // каталог есть и сверка обязательна.
+    const resolveIdx = code.indexOf('func (s *AIAdminService) resolveDraftModel');
+    if (resolveIdx < 0) {
+      v.push('ai_admin_actions.go — резолвер resolveDraftModel отсутствует (§27.7)');
+      return v;
+    }
+    const resolve = code.slice(resolveIdx);
+    const rbody = resolve.slice(0, resolve.indexOf('\n}\n') + 2);
+    if (!/FindModel\(modelID\)/.test(rbody)) {
+      v.push('resolveDraftModel — сверка с server-каталогом (FindModel) обязательна (§27.7)');
+    }
+    if (/ProxyCustomModel/.test(rbody) && !/isProxyTransport\(\)/.test(rbody)) {
+      v.push('resolveDraftModel — ручной слаг допустим ТОЛЬКО за гардом isProxyTransport (§27.7)');
     }
     return v;
   }],
@@ -633,6 +658,13 @@ const SELF_CHECKS = [
     (s) => s.replace('ProxyModelID = "proxy"', 'ProxyModelID = "openai/gpt-4o"')],
   ['валидация базы прокси ослаблена', F.config,
     (s) => s.replace('NormalizeProxyBaseURL', 'strings.TrimSpace')],
+  // Ручной слаг (вариант B/C) допустим только в proxy-режиме: без гарда он
+  // становится обходом каталога в прямом режиме OpenRouter.
+  ['ручной слаг без гарда транспорта', F.actions,
+    (s) => s.replace('if s.isProxyTransport() {\n\t\treturn openrouter.ProxyCustomModel(modelID)\n\t}',
+      'return openrouter.ProxyCustomModel(modelID)')],
+  ['ручной ввод слага без гарда isProxy', F.catalogSection,
+    (s) => s.replace('{isProxy && (', '{true && (')],
 ];
 
 let selfCheckFailures = 0;
