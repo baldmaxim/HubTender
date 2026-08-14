@@ -32,9 +32,14 @@ const RoundingPolicyUnitPrice2dp = "unit_price_2dp"
 // ─── input ───────────────────────────────────────────────────────────────────
 
 // PreparedPositionInput is one client position (server-loaded metadata).
+//
+// PositionNumber is float64 because public.client_positions.position_number is
+// numeric and ДОП-позиции carry a decimal suffix (12.1) — see
+// repository.CreateAdditionalPosition. Scanning such a value into an int fails
+// in pgx ("cannot convert 12.1 to integer") and takes the whole save down.
 type PreparedPositionInput struct {
 	ID               string
-	PositionNumber   int
+	PositionNumber   float64
 	SectionNumber    *string
 	PositionName     string
 	ItemNo           *string
@@ -81,8 +86,9 @@ type PreparedRedistributionInput struct {
 // Server-generated prepared redistribution result.
 // Must never be populated from an HTTP request.
 type PreparedPositionRow struct {
-	PositionID     string   `json:"position_id"`
-	PositionNumber int      `json:"position_number"`
+	PositionID string `json:"position_id"`
+	// float64: ДОП-позиции нумеруются с десятичным суффиксом (12.1).
+	PositionNumber float64  `json:"position_number"`
 	SectionNumber  *string  `json:"section_number"`
 	PositionName   string   `json:"position_name"`
 	ItemNo         *string  `json:"item_no"`

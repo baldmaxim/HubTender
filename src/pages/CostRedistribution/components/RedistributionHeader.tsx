@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Card, Row, Col, Select, Space, Statistic, Button, Tag } from 'antd';
+import { Card, Row, Col, Select, Space, Statistic, Button, Tag, Tooltip } from 'antd';
 import { DownloadOutlined, LoadingOutlined } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import type { MarkupTactic } from '../hooks';
@@ -34,6 +34,8 @@ interface RedistributionHeaderProps {
   insuranceTotal?: number;
   hasResults?: boolean;
   onExport?: () => void;
+  // Текст причины, по которой экспорт закрыт (null = доступен).
+  exportBlockedReason?: string | null;
   saving?: boolean;
   savedRecently?: boolean;
 }
@@ -50,6 +52,7 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
   insuranceTotal = 0,
   hasResults = false,
   onExport,
+  exportBlockedReason = null,
   saving = false,
   savedRecently = false,
 }) => {
@@ -182,15 +185,20 @@ export const RedistributionHeader: React.FC<RedistributionHeaderProps> = ({
                     </div>
                   )}
                   {hasResults && onExport && !isPhoneDevice && (
-                    <Button
-                      type="primary"
-                      icon={<DownloadOutlined />}
-                      onClick={onExport}
-                      size="large"
-                      style={{ marginLeft: 12 }}
-                    >
-                      Экспорт в Excel
-                    </Button>
+                    // Причину недоступности показываем ДО клика: раньше кнопка
+                    // была активна всегда и объясняла отказ только ошибкой.
+                    <Tooltip title={exportBlockedReason ?? ''}>
+                      <Button
+                        type="primary"
+                        icon={<DownloadOutlined />}
+                        onClick={onExport}
+                        disabled={!!exportBlockedReason}
+                        size="large"
+                        style={{ marginLeft: 12 }}
+                      >
+                        Экспорт в Excel
+                      </Button>
+                    </Tooltip>
                   )}
                 </>
               )}

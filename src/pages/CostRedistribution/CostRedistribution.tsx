@@ -30,7 +30,10 @@ import { mapServerPrepared } from './utils/mapServerPrepared';
 import { resolveRedistributionConsumptionState } from '../../lib/redistribution/consumptionState';
 import { TabPositionAdjustment } from './components/PositionAdjustment/TabPositionAdjustment';
 import type { PositionAdjustmentRule } from './types/positionAdjustment';
-import type { PreparedServerRedistribution } from '../../lib/api/redistributions';
+import type {
+  PreparedServerRedistribution,
+  RedistributionSnapshotStatus,
+} from '../../lib/api/redistributions';
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const SAVED_TAG_DURATION_MS = 2000;
@@ -44,13 +47,24 @@ const CostRedistribution: React.FC = () => {
   // строк/сумм после save/load. null = показывается локальный preview с
   // явным статусом «не сохранён».
   const [serverPrepared, setServerPrepared] = useState<PreparedServerRedistribution | null>(null);
+  // status/reason последнего ответа сервера — источник ОБЪЯСНЕНИЯ, почему
+  // экспорт закрыт (ветвление всегда по коду, не по тексту).
+  const [snapshotState, setSnapshotState] = useState<{
+    status: RedistributionSnapshotStatus;
+    reason?: string;
+    message?: string;
+  } | null>(null);
   // Флаг «Распределить во все строки» (страница «Страхование»). Гейтит per-row
   // разнесение страхования (server prepared учитывает его сам; preview — здесь).
   const [distributeToRows, setDistributeToRows] = useState(true);
   const [savedRecently, setSavedRecently] = useState(false);
   const [autosaveNonce, setAutosaveNonce] = useState(0);
+  const [hydrationTick, setHydrationTick] = useState(0);
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
+  // Слепок правил, который сервер уже подтвердил (после load или успешного
+  // save). Автосохранение молчит, пока текущие правила ему равны.
+  const serverKnownRulesRef = useRef<string | null>(null);
 
   // Хуки для управления данными
   const {
@@ -182,6 +196,7 @@ const CostRedistribution: React.FC = () => {
         clearResults();
         adjustment.reset();
         setServerPrepared(null);
+        setSnapshotState(null);
         return;
       }
 
@@ -190,6 +205,11 @@ const CostRedistribution: React.FC = () => {
 
         if (savedData && savedData.results.length > 0) {
           const isServerSnapshot = savedData.status === 'calculated';
+          setSnapshotState({
+            status: savedData.status,
+            reason: savedData.reason,
+            message: savedData.message,
+          });
 
           if (isServerSnapshot) {
             // Server-authoritative снимок — результаты можно применять.
@@ -260,10 +280,15 @@ const CostRedistribution: React.FC = () => {
           clearResults();
           adjustment.reset();
           setServerPrepared(null);
+          setSnapshotState({ status: 'not_configured' });
           setActiveTab('setup');
         }
       } catch (error) {
         console.error('Ошибка загрузки сохраненных результатов:', error);
+      } finally {
+        // Гидрация завершена — зафиксировать «то, что уже есть на сервере»,
+        // чтобы автосохранение не отправляло только что загруженные правила.
+        setHydrationTick((n) => n + 1);
       }
     };
 
@@ -307,6 +332,8 @@ const CostRedistribution: React.FC = () => {
       }
       setResults(saved.results);
       setServerPrepared(saved.prepared ?? null);
+      setSnapshotState({ status: 'calculated' });
+      serverKnownRulesRef.current = JSON.stringify([sourceRules, targetCosts, []]);
       setActiveTab('results');
     } catch (error) {
       console.error('Ошибка при переходе к результатам:', error);
@@ -330,7 +357,30 @@ const CostRedistribution: React.FC = () => {
     clearResults();
     adjustment.reset();
     setServerPrepared(null);
+    setSnapshotState({ status: 'not_configured' });
   }, [clearRules, clearTargets, clearResults, adjustment]);
+
+  // REDISTRIBUTION_EXPORT_NOT_READY: экспортируются только SERVER prepared
+  // строки — несохранённый preview / legacy snapshot файл не создают. Причину
+  // берём из ЕДИНОЙ политики потребления (по status/reason сервера), иначе
+  // пользователь видит один и тот же текст и для «ещё не сохранено», и для
+  // «снимок устарел», и для «страхование не разносится».
+  const exportBlockedMessage = useMemo(() => {
+    if (serverPrepared && preparedResults && !preparedResults.isPreview) {
+      return null;
+    }
+    const policy = resolveRedistributionConsumptionState(
+      snapshotState?.status ?? 'not_configured',
+      snapshotState?.reason,
+      snapshotState?.message,
+    );
+    const why =
+      policy.alert ??
+      (preparedResults?.isPreview
+        ? 'Расчёт ещё не сохранён на сервере — дождитесь завершения автосохранения.'
+        : 'Перераспределение для этого тендера ещё не рассчитано.');
+    return `Экспорт недоступен: ${why} (REDISTRIBUTION_EXPORT_NOT_READY)`;
+  }, [serverPrepared, preparedResults, snapshotState]);
 
   const handleExport = useCallback(() => {
     if (!selectedTenderId) {
@@ -340,12 +390,8 @@ const CostRedistribution: React.FC = () => {
       message.error(formatFXUnavailable(fxMissing));
       return;
     }
-    // REDISTRIBUTION_EXPORT_NOT_READY: экспортируются только SERVER prepared
-    // строки. Несохранённый preview / legacy snapshot файл не создают.
-    if (!serverPrepared || !preparedResults || preparedResults.isPreview) {
-      message.error(
-        'Экспорт недоступен: расчёт перераспределения не сохранён на сервере (REDISTRIBUTION_EXPORT_NOT_READY)',
-      );
+    if (exportBlockedMessage || !preparedResults) {
+      message.error(exportBlockedMessage ?? 'Экспорт недоступен');
       return;
     }
 
@@ -361,7 +407,21 @@ const CostRedistribution: React.FC = () => {
         tenderTitle: `${selectedTender.title} (v${selectedTender.version})`,
       });
     });
-  }, [selectedTenderId, tenders, preparedResults, serverPrepared, fxMissing]);
+  }, [selectedTenderId, tenders, preparedResults, exportBlockedMessage, fxMissing]);
+
+  // Слепок ровно того набора, который уходит в save (правила, не деньги).
+  const currentRulesSignature = useMemo(
+    () => JSON.stringify([sourceRules, targetCosts, adjustment.appliedRules]),
+    [sourceRules, targetCosts, adjustment.appliedRules],
+  );
+
+  // После завершения загрузки текущее состояние = состояние сервера.
+  useEffect(() => {
+    if (hydrationTick === 0) return;
+    serverKnownRulesRef.current = currentRulesSignature;
+    // Намеренно только по hydrationTick: слепок берём в момент гидрации.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrationTick]);
 
   const handleSavePositionAdjustment = useCallback(async () => {
     if (!selectedTenderId || !selectedTacticId) {
@@ -384,6 +444,8 @@ const CostRedistribution: React.FC = () => {
       // Серверные category+prepared результаты полностью заменяют preview.
       setResults(saved.results);
       setServerPrepared(saved.prepared ?? null);
+      setSnapshotState({ status: 'calculated' });
+      serverKnownRulesRef.current = currentRulesSignature;
       setSavedRecently(true);
     }
   }, [
@@ -392,6 +454,7 @@ const CostRedistribution: React.FC = () => {
     sourceRules,
     targetCosts,
     adjustment.appliedRules,
+    currentRulesSignature,
     saveResults,
     setResults,
   ]);
@@ -405,6 +468,22 @@ const CostRedistribution: React.FC = () => {
   useEffect(() => {
     if (!selectedTenderId || !selectedTacticId) return;
     if (calculationState.results.length === 0 && boqItems.length === 0) return;
+
+    // Здоровый снимок + неизменные правила = сохранять нечего. Без этой
+    // проверки открытие тендера само по себе выпускало save (идентичность
+    // handleSavePositionAdjustment меняется после гидрации), а каждый такой
+    // save инкрементит financial_input_revision и снимает подтверждение
+    // финансов с тендера.
+    //
+    // Для requires_recalculation / not_configured пересохранение НЕ подавляем:
+    // сервер не отдаёт годного prepared, поэтому первый автосейв после
+    // загрузки — это и есть тот «выполните пересчёт», о котором говорит алерт.
+    if (
+      snapshotState?.status === 'calculated' &&
+      currentRulesSignature === serverKnownRulesRef.current
+    ) {
+      return;
+    }
 
     let cancelled = false;
     const timer = window.setTimeout(async () => {
@@ -434,7 +513,15 @@ const CostRedistribution: React.FC = () => {
     // state that handleSavePositionAdjustment reads. Including them would cause
     // an extra save on initial load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adjustment.appliedRules, selectedTenderId, selectedTacticId, autosaveNonce, handleSavePositionAdjustment]);
+  }, [
+    adjustment.appliedRules,
+    selectedTenderId,
+    selectedTacticId,
+    autosaveNonce,
+    currentRulesSignature,
+    snapshotState?.status,
+    handleSavePositionAdjustment,
+  ]);
 
   // «Сохранено» бейдж гаснет через 2 сек после завершения сохранения.
   useEffect(() => {
@@ -501,7 +588,17 @@ const CostRedistribution: React.FC = () => {
           type="warning"
           showIcon
           message="Предварительный расчёт — не сохранён"
-          description="Показан локальный предпросмотр. Итоговые значения будут рассчитаны сервером при сохранении."
+          description={
+            // При устаревшем/legacy снимке причина важнее общей фразы: без неё
+            // пользователь не понимает, почему пересчёт вообще потребовался.
+            snapshotState?.status === 'requires_recalculation'
+              ? resolveRedistributionConsumptionState(
+                  snapshotState.status,
+                  snapshotState.reason,
+                  snapshotState.message,
+                ).alert
+              : 'Показан локальный предпросмотр. Итоговые значения будут рассчитаны сервером при сохранении.'
+          }
           style={{ marginBottom: 12 }}
         />
       )}
@@ -517,6 +614,7 @@ const CostRedistribution: React.FC = () => {
         insuranceTotal={distributeToRows ? insuranceTotal : 0}
         hasResults={hasAnyRedistribution}
         onExport={handleExport}
+        exportBlockedReason={fxMissing.length > 0 ? formatFXUnavailable(fxMissing) : exportBlockedMessage}
         saving={saving}
         savedRecently={savedRecently}
       />

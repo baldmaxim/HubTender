@@ -75,13 +75,27 @@ export function useRedistributionData() {
 
     void loadBoqItems(selectedTenderId, selectedTacticId);
     void loadClientPositions(selectedTenderId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTenderId, selectedTacticId]);
 
+  // Тактика ВСЕГДА следует за выбранным тендером. Раньше подстановка работала
+  // только при пустом selectedTacticId, поэтому после переключения тендера
+  // оставалась тактика предыдущего: GET уходил с чужой тактикой (пустой снимок),
+  // а save — в 409 REDISTRIBUTION_TACTIC_MISMATCH, потому что backend считает
+  // перераспределение только для активной тактики тендера.
+  useEffect(() => {
+    if (!selectedTenderId) {
+      setSelectedTacticId(undefined);
+      return;
+    }
     const tender = tenders.find((item) => item.id === selectedTenderId);
-    if (tender?.markup_tactic_id && !selectedTacticId) {
+    if (tender?.markup_tactic_id && tender.markup_tactic_id !== selectedTacticId) {
       setSelectedTacticId(tender.markup_tactic_id);
     }
+    // selectedTacticId намеренно не в deps: ручной выбор в шапке не должен
+    // немедленно откатываться этим эффектом.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTenderId, selectedTacticId, tenders]);
+  }, [selectedTenderId, tenders]);
 
   // Native WS hub — refetch boq items when the tender row changes.
   // Self-echo собственного сохранения результатов подавляется через

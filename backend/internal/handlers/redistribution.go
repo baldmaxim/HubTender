@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/rs/zerolog/log"
+
 	"github.com/su10/hubtender/backend/internal/calc"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
@@ -94,7 +96,61 @@ func renderRedistributionError(w http.ResponseWriter, err error) bool {
 		apierr.InvalidInsuranceConfiguration(insErr.Field, insErr.Reason).Render(w)
 		return true
 	}
+
+	// Server-side invariants of the calculation pipeline. Before stage 0-F3
+	// these all fell through to a bare 500 ("failed to save redistribution
+	// results"), so a user could not tell a stale snapshot from a real bug and
+	// support had to read the server log. They are NOT internal-only: each one
+	// is a state the user can act on, so it gets a stable code + explanation.
+	// The typed context (item ids, expected/actual amounts) stays in the log.
+	if code, detail, ok := classifyRedistributionSaveConflict(err); ok {
+		log.Warn().Err(err).Str("code", code).Msg("redistribution save rejected by a server-side invariant")
+		apierr.RedistributionNotSaved(code, detail).Render(w)
+		return true
+	}
 	return false
+}
+
+// classifyRedistributionSaveConflict maps a pipeline invariant failure onto a
+// stable code + user-facing detail. Codes mirror the GET reason codes of
+// repository.LoadResults where the condition is the same.
+func classifyRedistributionSaveConflict(err error) (code, detail string, ok bool) {
+	var setErr *calc.RedistributionSnapshotSetMismatchError
+	if errors.As(err, &setErr) {
+		return "REDISTRIBUTION_SNAPSHOT_SET_MISMATCH",
+			"Состав BOQ изменился во время расчёта. Обновите страницу и повторите сохранение.", true
+	}
+	var insAlloc *calc.InvalidInsuranceAllocationError
+	if errors.As(err, &insAlloc) {
+		return "INSURANCE_ALLOCATION_INVALID",
+			"Страхование невозможно распределить: база работ нулевая. Проверьте страницу «Страхование».", true
+	}
+	var prepIn *calc.InvalidPreparedRedistributionInputError
+	if errors.As(err, &prepIn) {
+		return "REDISTRIBUTION_PREPARED_INPUT_INVALID",
+			"Данные позиций тендера не позволяют построить расчёт (например, ДОП-строка без основной позиции). Исправьте позиции и повторите.", true
+	}
+	var prepRes *calc.InvalidPreparedRedistributionResultError
+	if errors.As(err, &prepRes) {
+		return "REDISTRIBUTION_PREPARED_INVARIANT_FAILED",
+			"Расчёт перераспределения не прошёл проверку итогов и не был сохранён.", true
+	}
+	var calcRes *calc.InvalidRedistributionCalculationResultError
+	if errors.As(err, &calcRes) {
+		return "REDISTRIBUTION_CALCULATION_INVALID",
+			"Расчёт перераспределения не прошёл проверку по строкам и не был сохранён.", true
+	}
+	var commErr *repository.InvalidCommercialCalculationResultError
+	if errors.As(err, &commErr) {
+		return "COMMERCIAL_CALCULATION_INVALID",
+			"Коммерческие стоимости тендера некорректны (отрицательное или неконечное значение) — перераспределение не сохранено.", true
+	}
+	var staleErr *repository.StaleCalculationResultError
+	if errors.As(err, &staleErr) {
+		return "CALCULATION_SUPERSEDED",
+			"Финансовые данные тендера изменились во время сохранения. Повторите попытку.", true
+	}
+	return "", "", false
 }
 
 // Save handles POST /api/v1/redistributions/save.

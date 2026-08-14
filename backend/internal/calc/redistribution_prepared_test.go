@@ -15,7 +15,7 @@ const pipelineEps = 1e-6
 
 type plPosition struct {
 	ID               string   `json:"id"`
-	Number           int      `json:"number"`
+	Number           float64  `json:"number"`
 	Volume           *float64 `json:"volume"`
 	ManualVolume     *float64 `json:"manual_volume"`
 	IsAdditional     bool     `json:"is_additional"`
@@ -237,7 +237,7 @@ func propInput(seed uint64, n int) PreparedRedistributionInput {
 		id := string(rune('a'+i%26)) + string(rune('0'+i/26))
 		vol := 1 + lcg(&seed)/100
 		in.Positions = append(in.Positions, PreparedPositionInput{
-			ID: "p-" + id, PositionNumber: i + 1, WorkName: "w", UnitCode: "м2", ClientVolume: &vol,
+			ID: "p-" + id, PositionNumber: float64(i + 1), WorkName: "w", UnitCode: "м2", ClientVolume: &vol,
 		})
 		work := lcg(&seed)
 		mat := lcg(&seed)
@@ -485,6 +485,29 @@ func TestAdditionalPosition_WithParentIncluded(t *testing.T) {
 	}
 	if out.Summary.FinalWorkTotal != 300 {
 		t.Fatalf("final work total = %v, want 300 (100 + 200)", out.Summary.FinalWorkTotal)
+	}
+}
+
+// ДОП-позиции нумеруются с десятичным суффиксом (2.1) — public.client_positions
+// .position_number is numeric, not integer. PositionNumber must therefore stay
+// float64: an int field both fails the pgx scan in loadPreparedPositions and
+// would collapse 2.1 onto the parent's number 2 in the UI/Excel export.
+func TestAdditionalPosition_FractionalNumberPreserved(t *testing.T) {
+	in := additionalInput(true, true, 200)
+	in.Positions[1].PositionNumber = 2.1
+
+	out, err := BuildPreparedRedistribution(in)
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	var got float64
+	for _, r := range out.Rows {
+		if r.PositionID == "add1" {
+			got = r.PositionNumber
+		}
+	}
+	if got != 2.1 {
+		t.Fatalf("position_number = %v, want 2.1 (не усечён до int)", got)
 	}
 }
 

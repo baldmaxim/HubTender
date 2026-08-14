@@ -146,10 +146,14 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options) (*Report, error)
 			WHERE p.boq_item_type::text NOT IN ('раб', 'суб-раб')
 			  AND ($1 = '' OR b.tender_id::text = $1) ORDER BY 1`},
 		{"legacy_redistribution", "Redistribution snapshot без server-метаданных ревизии", StatusWarning, `
-			SELECT DISTINCT tender_id::text FROM public.cost_redistribution_results
-			WHERE (redistribution_rules IS NULL
-			       OR redistribution_rules -> 'server_metadata' ->> 'financial_input_revision' IS NULL)
-			  AND ($1 = '' OR tender_id::text = $1) ORDER BY 1`},
+			SELECT tender_id::text
+			FROM public.cost_redistribution_results
+			WHERE ($1 = '' OR tender_id::text = $1)
+			GROUP BY tender_id
+			HAVING count(*) FILTER (
+			         WHERE redistribution_rules ->> 'financial_input_revision' IS NOT NULL
+			       ) = 0
+			ORDER BY 1`},
 		{"alias_targets", "Import-memory aliases с недоступной целью", StatusWarning, `
 			SELECT a.id::text FROM public.nomenclature_import_aliases a
 			LEFT JOIN public.material_names mn ON mn.id = a.material_name_id

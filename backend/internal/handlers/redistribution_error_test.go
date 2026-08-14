@@ -401,3 +401,59 @@ func TestRedistributionLoadHandler_Statuses(t *testing.T) {
 		})
 	}
 }
+
+// ─── Pipeline invariants must not degrade into a bare 500 ────────────────────
+//
+// Before this mapping every failure below produced HTTP 500 with the constant
+// detail "failed to save redistribution results", so a stale snapshot, a broken
+// ДОП hierarchy and a genuine internal bug were indistinguishable both for the
+// user and for support. Each now carries a stable code the frontend can branch
+// on.
+func TestRedistributionSaveHandler_PipelineInvariants409(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"prepared input", &calc.InvalidPreparedRedistributionInputError{
+			Field: "positions", EntityID: "p1", Reason: calc.AdditionalPositionParentMissingReason,
+		}, "REDISTRIBUTION_PREPARED_INPUT_INVALID"},
+		{"prepared invariant", &calc.InvalidPreparedRedistributionResultError{
+			Field: "summary.final_total", Reason: "final_total != materials + works",
+		}, "REDISTRIBUTION_PREPARED_INVARIANT_FAILED"},
+		{"snapshot set", &calc.RedistributionSnapshotSetMismatchError{
+			ExpectedCount: 2, ActualCount: 1, Reason: "set mismatch",
+		}, "REDISTRIBUTION_SNAPSHOT_SET_MISMATCH"},
+		{"insurance allocation", &calc.InvalidInsuranceAllocationError{
+			ExpectedTotal: 50, AllocatedTotal: 0, Reason: calc.InsuranceZeroBaseReason,
+		}, "INSURANCE_ALLOCATION_INVALID"},
+		{"calculation result", &calc.InvalidRedistributionCalculationResultError{
+			Field: "persist", Reason: "exact-set mismatch",
+		}, "REDISTRIBUTION_CALCULATION_INVALID"},
+		{"commercial result", &repository.InvalidCommercialCalculationResultError{
+			ItemID: "b1", Field: "total_commercial_work_cost", Reason: "отрицательное значение",
+		}, "COMMERCIAL_CALCULATION_INVALID"},
+		{"superseded", &repository.StaleCalculationResultError{
+			TenderID: rTender, CalculatedRevision: 7,
+		}, "CALCULATION_SUPERSEDED"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &stubRedistributionSvc{err: wrappedR(tc.err)}
+			w := doRedistributionSave(t, svc, rulesOnlyBody())
+			if w.Code != 409 {
+				t.Fatalf("status = %d, want 409 (body %s)", w.Code, w.Body.String())
+			}
+			m := decodeProblem(t, w)
+			if m["code"] != tc.want {
+				t.Fatalf("code = %v, want %q", m["code"], tc.want)
+			}
+			// Internal diagnostics stay in the log: the response must not echo
+			// the raw error chain.
+			detail, _ := m["detail"].(string)
+			if detail == "" || strings.Contains(detail, "SaveAuthoritative") {
+				t.Fatalf("detail leaks internals or is empty: %q", detail)
+			}
+		})
+	}
+}

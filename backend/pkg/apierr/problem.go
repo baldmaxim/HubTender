@@ -307,6 +307,25 @@ func RedistributionNoBoqItems() *ProblemExtra {
 	}
 }
 
+// RedistributionNotSaved returns a 409 Problem for a save that was rejected by
+// a server-side invariant of the calculation pipeline (prepared projection,
+// snapshot set, insurance allocation, superseded revision …).
+//
+// code is a STABLE machine-readable marker the frontend can branch on; detail
+// is the user-facing explanation. Internal diagnostics (item ids, expected vs
+// actual amounts, error chains) stay in the server log and never reach here.
+func RedistributionNotSaved(code, detail string) *ProblemExtra {
+	return &ProblemExtra{
+		Problem: Problem{
+			Type:   problemTypeURI(http.StatusConflict),
+			Title:  "Conflict",
+			Status: http.StatusConflict,
+			Detail: detail,
+		},
+		Extras: map[string]any{"code": code},
+	}
+}
+
 // MissingFXRate returns a 400 Problem for a blocking missing currency-rate
 // condition. The machine-readable "code" and "currency" extension members let
 // the frontend surface a precise message ("Не задан курс USD …") instead of a

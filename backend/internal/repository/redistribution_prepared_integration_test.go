@@ -237,3 +237,64 @@ func TestPreparedRedistribution_DistributeToRowsOffSkipsInsurance(t *testing.T) 
 		}
 	}
 }
+
+// ─── Regression: ДОП-позиция с дробным position_number ───────────────────────
+//
+// public.client_positions.position_number is numeric and CreateAdditionalPosition
+// deliberately assigns a decimal suffix (2.1) to a ДОП row. loadPreparedPositions
+// used to scan that column into a Go int, which pgx rejects
+// ("cannot convert 2.1 to integer") — the whole SaveAuthoritative rolled back and
+// the handler answered a bare 500. Every tender with at least one ДОП position
+// was affected.
+func TestPreparedRedistribution_FractionalPositionNumber(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	f := seedRedistributionFixture(t, pool, "prepfrac", nil)
+	f.seedTwoItems(t, pool)
+
+	var dopID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO public.client_positions
+		  (tender_id, position_number, work_name, is_additional, parent_position_id)
+		VALUES ($1::uuid, 2.1, 'itest-rd-dop', true, $2::uuid)
+		RETURNING id::text`, f.tenderID, f.pos2ID).Scan(&dopID); err != nil {
+		t.Fatalf("seed ДОП position: %v", err)
+	}
+	f.addRdItem(t, pool, dopID, f.detail2ID, "RUB", 2, 50)
+
+	repo := NewRedistributionRepo(pool)
+	out, err := repo.SaveAuthoritative(ctx, f.tenderID, f.tacticID, f.d1toD2Rules(), rbActor)
+	if err != nil {
+		t.Fatalf("save with a fractional position_number failed: %v", err)
+	}
+	if out.Prepared == nil {
+		t.Fatal("save must return the prepared projection")
+	}
+
+	var dopRow *calc.PreparedPositionRow
+	for i := range out.Prepared.Rows {
+		if out.Prepared.Rows[i].PositionID == dopID {
+			dopRow = &out.Prepared.Rows[i]
+		}
+	}
+	if dopRow == nil {
+		t.Fatal("ДОП position is missing from the prepared projection")
+	}
+	// The decimal suffix must survive the round-trip — truncating it to 2 would
+	// collide with the parent row's number in the UI and the Excel export.
+	if dopRow.PositionNumber != 2.1 {
+		t.Fatalf("position_number = %v, want 2.1 (не усечён до int)", dopRow.PositionNumber)
+	}
+
+	// GET must rebuild the same projection through the same calc boundary.
+	loaded, err := repo.LoadResults(ctx, f.tenderID, f.tacticID)
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+	if loaded.Status != RedistributionStatusCalculated {
+		t.Fatalf("status = %s (reason %s), want calculated", loaded.Status, loaded.Reason)
+	}
+	if loaded.Prepared == nil {
+		t.Fatal("calculated snapshot must carry the prepared projection")
+	}
+}
