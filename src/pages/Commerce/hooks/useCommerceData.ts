@@ -26,6 +26,10 @@ import {
   resolveRedistributionConsumptionState,
   type RedistributionConsumptionState,
 } from '../../../lib/redistribution/consumptionState';
+import {
+  pickFinancialCalculationInput,
+  type FinancialCalculationInput,
+} from '../../../lib/financial/calculationState';
 import { computeLeafPositionIds } from '../../../utils/positions/leafPositions';
 // Этап 0.1.2.3b: Commerce НЕ импортирует клиентский redistribution pipeline
 // (applyRedistributionPipeline / buildResultRows / computeInsuranceTotal /
@@ -58,6 +62,10 @@ type CalculationTactic = Parameters<typeof calculateBoqItemCost>[1];
 
 type CommerceCalculationContext = {
   tenderRates: TenderRates;
+  // 0-F2: состояние финансового расчёта из per-tender чтения. Список тендеров
+  // грузится ОДИН раз на маунте, поэтому политика гейтов берётся отсюда —
+  // этот запрос повторяется на каждом loadPositions.
+  financial: FinancialCalculationInput | null;
   tactic: CalculationTactic | null;
   markupParameters: Map<string, number>;
   pricingDistribution: Awaited<ReturnType<typeof loadPricingDistribution>>;
@@ -237,6 +245,7 @@ async function loadCommerceCalculationContext(tenderId: string): Promise<Commerc
 
   return {
     tenderRates,
+    financial: pickFinancialCalculationInput(tender),
     tactic,
     markupParameters,
     pricingDistribution,
@@ -289,6 +298,12 @@ export function useCommerceData(isActive = true) {
   // prepared-пайплайн гейтит им per-row разнос; здесь он нужен для display
   // (effInsurance в Commerce.tsx) и экспорта.
   const [distributeToRows, setDistributeToRows] = useState<boolean>(true);
+  // 0-F2: состояние финансового расчёта выбранного тендера. Источник —
+  // per-tender чтение внутри loadPositions, а оно повторяется на realtime
+  // tender:<id>, focus/visibility и применении тактики. Строка из списка не
+  // годится: loadTenders() зовётся один раз на маунте, и после серверного
+  // пересчёта баннер со статусом висел бы до перезагрузки страницы.
+  const [tenderFinancial, setTenderFinancial] = useState<FinancialCalculationInput | null>(null);
 
   // Загрузка списка тендеров и тактик
   useEffect(() => {
@@ -298,6 +313,9 @@ export function useCommerceData(isActive = true) {
 
   // Загрузка позиций при выборе тендера
   useEffect(() => {
+    // Сброс именно здесь, а не в loadPositions: иначе гейт экспорта и баннер
+    // моргали бы на каждом рефетче (realtime, focus, смена тактики).
+    setTenderFinancial(null);
     if (selectedTenderId) {
       loadPositions(selectedTenderId);
     } else {
@@ -378,24 +396,31 @@ export function useCommerceData(isActive = true) {
     setBoqItems(null);
 
     try {
-      const [positionsResult, nextInsurance] = await Promise.all([
-        (async (): Promise<AggregatedPositionLoadResult> => {
+      const [aggregated, nextInsurance] = await Promise.all([
+        (async (): Promise<{
+          result: AggregatedPositionLoadResult;
+          financial: FinancialCalculationInput | null;
+        }> => {
           const [clientPositions, allBoqItems, calculationContext] = await Promise.all([
             loadClientPositions(tenderId),
             loadBoqItems(tenderId),
             loadCommerceCalculationContext(tenderId),
           ]);
 
-          return buildPositionsFromBoqItems(clientPositions, allBoqItems, calculationContext);
+          return {
+            result: buildPositionsFromBoqItems(clientPositions, allBoqItems, calculationContext),
+            financial: calculationContext.financial,
+          };
         })(),
         loadInsuranceTotal(tenderId),
       ]);
 
-      setPositions(positionsResult.positions);
-      setReferenceTotal(positionsResult.referenceTotal);
+      setPositions(aggregated.result.positions);
+      setReferenceTotal(aggregated.result.referenceTotal);
       setInsuranceTotal(nextInsurance.total);
       setDistributeToRows(nextInsurance.distributeToRows);
-      setBoqItems(positionsResult.boqItems);
+      setBoqItems(aggregated.result.boqItems);
+      setTenderFinancial(aggregated.financial);
     } catch (error) {
       console.error('Ошибка загрузки позиций:', error);
       message.error('Не удалось загрузить позиции заказчика');
@@ -552,5 +577,6 @@ export function useCommerceData(isActive = true) {
     insuranceTotal,
     redistributionState,
     distributeToRows,
+    tenderFinancial,
   };
 }

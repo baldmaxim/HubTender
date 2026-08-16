@@ -99,6 +99,29 @@ export function resolveFinancialCalculationState(
   }
 }
 
+/**
+ * Узкая проекция полей политики из полной строки тендера — страница держит в
+ * state только то, что решает гейты, без курсов/итогов/ссылок.
+ *
+ * Значения переносятся КАК ЕСТЬ. Пустой статус НЕ маскируется под null: иначе
+ * `?? 'stale'` в resolveFinancialCalculationState проглотил бы его как
+ * «поле не пришло», и регрессия «сервер не отдал колонку» снова стала бы
+ * невидимой (ровно она и блокировала экспорт «Формы КП» для всех тендеров).
+ */
+export function pickFinancialCalculationInput(
+  t: FinancialCalculationInput | null | undefined,
+): FinancialCalculationInput | null {
+  if (!t) return null;
+  return {
+    financial_input_revision: t.financial_input_revision,
+    financial_calculation_revision: t.financial_calculation_revision,
+    financial_calculation_status: t.financial_calculation_status,
+    financial_calculated_at: t.financial_calculated_at,
+    financial_calculation_error_code: t.financial_calculation_error_code,
+    financial_calculation_error_message: t.financial_calculation_error_message,
+  };
+}
+
 /** Подпись к сумме, когда расчёт не актуален. */
 export const LAST_CALCULATED_TOTAL_LABEL = 'Последний рассчитанный итог';
 

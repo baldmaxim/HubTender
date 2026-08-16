@@ -18,7 +18,10 @@
 //   8.  frontend approval/final-export decisions go through the shared
 //       resolveFinancialCalculationState policy;
 //   9.  the derived commercial writer does NOT touch boq_items.updated_at
-//       (user ETag); 10. user input writers still do.
+//       (user ETag); 10. user input writers still do;
+//   11. the tenders LIST projection carries the six 0-F2 financial columns —
+//       without them the endpoint ships an empty status and the fail-closed
+//       frontend policy blocks the final export for EVERY tender.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -217,6 +220,60 @@ function read(rel) {
   }
 }
 
+// ─── 11. the tenders LIST projection carries the 0-F2 financial columns ──────
+// Regression (август 2026): ListTenders had a bespoke SELECT without the six
+// columns, so GET /api/v1/tenders returned financial_calculation_status "" →
+// resolveFinancialCalculationState (fail-closed, "" is not nullish) resolved
+// 'stale' → «Форма КП» blocked the final Excel export for EVERY tender while
+// the DB said 'calculated'. §8 only checks that the page *mentions* the policy,
+// which is why the hole survived — this section checks the data feeding it.
+{
+  const FIN_COLS = [
+    'financial_input_revision',
+    'financial_calculation_revision',
+    'financial_calculation_status',
+    'financial_calculated_at::text', // *string → cast обязателен, иначе pgx падает
+    'financial_calculation_error_code',
+    'financial_calculation_error_message',
+  ];
+  const rel = 'backend/internal/repository/tender.go';
+  const raw = read(rel);
+  if (raw != null) {
+    const code = stripComments(raw);
+    const decl = /const tenderFinancialCols = `([\s\S]*?)`/.exec(code);
+    if (!decl) {
+      violations.push(`${rel} — tenderFinancialCols missing (единственный источник 0-F2 проекции)`);
+    } else {
+      for (const col of FIN_COLS) {
+        if (!decl[1].includes(col)) {
+          violations.push(`${rel} — tenderFinancialCols lost ${col}`);
+        }
+      }
+    }
+    const builder = /func buildTenderListQuery[\s\S]*?\n}/.exec(code);
+    const lister = /func \(r \*TenderRepo\) ListTenders[\s\S]*?\n}/.exec(code);
+    if (!lister) {
+      violations.push(`${rel} — ListTenders not found (guard must be kept in sync)`);
+    } else {
+      const projection = (builder ? builder[0] : '') + lister[0];
+      if (!projection.includes('tenderFinancialCols')) {
+        violations.push(`${rel} — ListTenders SELECT no longer projects tenderFinancialCols (список отдаёт пустой financial_calculation_status → фронт fail-closed блокирует финальный экспорт «Формы КП»)`);
+      }
+      for (const f of ['FinancialInputRevision', 'FinancialCalculationRevision',
+                       'FinancialCalculationStatus', 'FinancialCalculatedAt',
+                       'FinancialCalculationErrorCode', 'FinancialCalculationErrorMessage']) {
+        if (!lister[0].includes('row.' + f)) {
+          violations.push(`${rel} — ListTenders Scan no longer binds ${f}`);
+        }
+      }
+    }
+  }
+  const wr = read('backend/internal/repository/tender_write.go');
+  if (wr != null && !stripComments(wr).includes('tenderFinancialCols')) {
+    violations.push(`backend/internal/repository/tender_write.go — tenderScanCols больше не строится из tenderFinancialCols (проекция снова раздвоилась)`);
+  }
+}
+
 console.log('financialRevisionSafety.check:');
 if (violations.length > 0) {
   console.error('\n  ✗ FORBIDDEN: the financial revision/CAS safety net is broken.\n');
@@ -229,4 +286,5 @@ console.log('  ok — recalc: advisory lock + REPEATABLE READ + revision CAS; no
 console.log('  ok — approval gates on calculated/current revision (+redistribution marker)');
 console.log('  ok — import: stale in-tx, enqueue after commit; snapshot carries revision marker');
 console.log('  ok — frontend approve/final export via shared policy; derived writes keep the user ETag');
+console.log('  ok — tenders LIST projection carries the 0-F2 financial columns (гейт экспорта «Формы КП»)');
 console.log('\nfinancialRevisionSafety.check: passed');

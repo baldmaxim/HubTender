@@ -51,10 +51,7 @@ const tenderScanCols = `
 	is_archived, cached_grand_total,
 	usd_rate, eur_rate, cny_rate,
 	COALESCE(created_at,NOW()), COALESCE(updated_at,NOW()),
-	financial_input_revision, financial_calculation_revision,
-	financial_calculation_status, financial_calculated_at::text,
-	financial_calculation_error_code, financial_calculation_error_message
-`
+	` + tenderFinancialCols
 
 func scanTenderRow(row interface{ Scan(...any) error }) (*TenderRow, error) {
 	var t TenderRow

@@ -62,6 +62,7 @@ export default function Commerce() {
     insuranceTotal,
     redistributionState,
     distributeToRows,
+    tenderFinancial,
   } = useCommerceData(isTabActive);
 
   // Когда распределение по строкам выключено — страхование не показываем на
@@ -203,9 +204,17 @@ export default function Commerce() {
   }, [loading, boqItems, tenders, selectedTenderId]);
 
   // 0-F2: единая политика статуса финансового расчёта — final-export гейт.
+  //
+  // Приоритет у свежего per-tender чтения (GET /api/v1/tenders/:id внутри
+  // loadPositions — повторяется на realtime tender:<id>, focus/visibility и
+  // применении тактики). Строка из списка — фолбэк до первой загрузки позиций:
+  // loadTenders() зовётся один раз на маунте и после серверного пересчёта
+  // держала бы устаревший статус до перезагрузки страницы.
   const financialState = useMemo(
-    () => resolveFinancialCalculationState(tenders.find(t => t.id === selectedTenderId)),
-    [tenders, selectedTenderId],
+    () => resolveFinancialCalculationState(
+      tenderFinancial ?? tenders.find(t => t.id === selectedTenderId),
+    ),
+    [tenderFinancial, tenders, selectedTenderId],
   );
 
   // Навигация к позиции — открываем внутренней вкладкой приложения (keep-alive), «Форма КП»

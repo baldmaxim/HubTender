@@ -53,6 +53,24 @@ type TenderRow struct {
 	FinancialCalculationErrorMessage *string `json:"financial_calculation_error_message,omitempty"`
 }
 
+// tenderFinancialCols — 0-F2 проекция состояния финансового расчёта. ЕДИНЫЙ
+// источник: любой запрос, наполняющий TenderRow, обязан её включать.
+// Политика на фронте (src/lib/financial/calculationState.ts) fail-closed, и
+// пропущенная колонка приезжает не как null, а как "" — `?? 'stale'` её не
+// ловит, статус проваливается в 'stale' и НАВСЕГДА блокирует финальный экспорт
+// «Формы КП» (FINANCIAL_CALCULATION_NOT_READY) при полностью здоровой БД.
+// Ровно это и случилось, когда ListTenders остался со своим списком колонок.
+//
+// financial_calculated_at ОБЯЗАН идти с ::text — колонка timestamptz, поле
+// FinancialCalculatedAt имеет тип *string, без каста pgx падает на скане.
+//
+// Гарды: scripts/checks/financialRevisionSafety.check.mjs §11 +
+// tender_list_query_test.go.
+const tenderFinancialCols = `financial_input_revision, financial_calculation_revision,
+	financial_calculation_status, financial_calculated_at::text,
+	financial_calculation_error_code, financial_calculation_error_message
+`
+
 // TenderOverviewRow is the aggregate returned by GetTenderOverview.
 type TenderOverviewRow struct {
 	ID                string    `json:"id"`
@@ -99,9 +117,10 @@ func NewTenderRepo(pool *pgxpool.Pool) *TenderRepo {
 	return &TenderRepo{pool: pool}
 }
 
-// ListTenders returns a page of tenders ordered by (updated_at DESC, id DESC).
-// Pagination is keyset-based via CursorUpdatedAt + CursorID.
-func (r *TenderRepo) ListTenders(ctx context.Context, p TenderListParams) ([]TenderRow, error) {
+// buildTenderListQuery builds the ListTenders projection and its arguments.
+// Pure (no pool, no ctx) — so the financial projection is assertable without a
+// test database (tender_list_query_test.go).
+func buildTenderListQuery(p TenderListParams) (string, []any) {
 	args := []any{}
 	argN := 1
 
@@ -160,12 +179,21 @@ func (r *TenderRepo) ListTenders(ctx context.Context, p TenderListParams) ([]Ten
 		       upload_folder, bsm_link, tz_link, qa_form_link, project_folder_link,
 		       apply_subcontract_materials_growth, apply_subcontract_works_growth,
 		       created_by::text,
-		       COALESCE(created_at, NOW()), COALESCE(updated_at, NOW())
+		       COALESCE(created_at, NOW()), COALESCE(updated_at, NOW()),
+		       `+tenderFinancialCols+`
 		FROM public.tenders
 		%s
 		ORDER BY updated_at DESC, id DESC
 		LIMIT $%d
 	`, where, argN)
+
+	return q, args
+}
+
+// ListTenders returns a page of tenders ordered by (updated_at DESC, id DESC).
+// Pagination is keyset-based via CursorUpdatedAt + CursorID.
+func (r *TenderRepo) ListTenders(ctx context.Context, p TenderListParams) ([]TenderRow, error) {
+	q, args := buildTenderListQuery(p)
 
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
@@ -191,6 +219,9 @@ func (r *TenderRepo) ListTenders(ctx context.Context, p TenderListParams) ([]Ten
 			&row.ApplySubcontractMaterialsGrowth, &row.ApplySubcontractWorksGrowth,
 			&row.CreatedBy,
 			&row.CreatedAt, &row.UpdatedAt,
+			&row.FinancialInputRevision, &row.FinancialCalculationRevision,
+			&row.FinancialCalculationStatus, &row.FinancialCalculatedAt,
+			&row.FinancialCalculationErrorCode, &row.FinancialCalculationErrorMessage,
 		); err != nil {
 			return nil, fmt.Errorf("tenderRepo.ListTenders: scan: %w", err)
 		}
