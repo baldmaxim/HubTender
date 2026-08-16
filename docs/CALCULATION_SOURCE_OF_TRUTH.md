@@ -789,11 +789,27 @@ invalidation, финальная приёмка.
 9. **ETag**: derived commercial writer (`PersistCalculatedCommercialCostsTx`)
    больше НЕ трогает `boq_items.updated_at` — пользовательский ETag меняют
    только input-мутации (интеграционно доказано).
+10. **Проекция состояния — часть контракта, а не деталь запроса** (август 2026).
+    Политика фронта fail-closed, поэтому НЕотданная колонка неотличима от
+    честного «расчёт устарел»: `financial_calculation_status` приезжает как `""`,
+    `?? 'stale'` его не ловит, и гейт закрывается навсегда при здоровой БД.
+    Ровно это и произошло: `ListTenders` остался со своим рукописным списком
+    колонок, `GET /api/v1/tenders` отдавал пустой статус, и «Форма КП»
+    блокировала финальный экспорт для каждого тендера. Проекция теперь одна —
+    `repository.tenderFinancialCols`, из неё же строится `tenderScanCols`;
+    любой новый запрос, наполняющий `TenderRow`, обязан её включать
+    (`financial_calculated_at` — только с `::text`, поле `*string`).
+    Следствие для UI: страница обязана брать статус из перечитываемого
+    источника. Commerce берёт его из per-tender чтения внутри `loadPositions`
+    (повторяется на realtime/focus/смене тактики), а не из списка тендеров,
+    который грузится один раз на маунте.
 
 Защита от регресса: `scripts/checks/financialRevisionSafety.check.mjs`
 (17 mutation paths → central helper; CAS в recalc и отсутствие безусловного
 'calculated'; approval-гейты; stale+enqueue импорта; revision marker;
-frontend shared policy; derived writes не трогают updated_at).
+frontend shared policy; derived writes не трогают updated_at; §11 — list-проекция
+несёт все шесть 0-F2 колонок) + `backend/internal/repository/tender_list_query_test.go`
+(проекция и порядок аргументов, без тестовой БД).
 
 ## 8. Что сделано в 0.1.2 (только безопасное)
 
