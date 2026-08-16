@@ -40,20 +40,7 @@ import {
 } from './styles';
 import { injectStrikeRuns, injectFreezePane, type StrikeCell } from './strikeInject';
 import { buildItemFormulas, computeSubtotalRanges } from './positionFormulas';
-
-function triggerDownload(data: Uint8Array, fileName: string): void {
-  const blob = new Blob([data as unknown as BlobPart], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+import { triggerDownload } from './sheetWriter';
 
 async function loadClientPositions(tenderId: string): Promise<ClientPosition[]> {
   const rows = await fetchPositionsWithCosts(tenderId);

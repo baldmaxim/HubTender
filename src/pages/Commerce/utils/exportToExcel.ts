@@ -6,6 +6,8 @@ import { message } from 'antd';
 import * as XLSX from 'xlsx-js-style';
 import type { Tender } from '../../../lib/types';
 import type { PositionWithCommercialCost } from '../types';
+import { cellBorderStyle, headerStyle, NUM_FMT_2 } from '../../../utils/excel/styles';
+import { setFormula, writeSheetWithFrozenHeader } from '../../../utils/excel/sheetWriter';
 
 export function exportCommerceToExcel(
   positions: PositionWithCommercialCost[],
@@ -105,6 +107,12 @@ export function exportCommerceToExcel(
       isZeroCost,
       volumesMatch,
       isSectionItemNo: /^\d+\.?$/.test(itemNo),
+      // Нужны для Excel-формул: при gpVolume = 0 цены за единицу тоже 0,
+      // поэтому формулу «кол-во × цена» ставить нельзя — она обнулит суммы.
+      gpVolume,
+      materialCostTotal,
+      workCostTotal,
+      commercialTotal,
     };
   });
 
@@ -115,9 +123,11 @@ export function exportCommerceToExcel(
   const totalMaterials = positions.reduce((sum, pos) => sum + (pos.material_cost_total ?? 0), 0);
   const totalWorks = positions.reduce((sum, pos) => sum + (pos.work_cost_total ?? 0), 0) + insuranceTotal;
   const totalCommercial = totalMaterials + totalWorks;
-  const avgMarkup = totalBase > 0 ? ((totalCommercial - totalBase) / totalBase) * 100 : 0;
+  const totalGpVolume = positions.reduce((sum, pos) => sum + (pos.manual_volume || 0), 0);
+  const totalClientVolume = positions.reduce((sum, pos) => sum + (pos.volume || 0), 0);
 
-  // Итоговая строка
+  // Итоговая строка. Колонки «За единицу» не суммируются — усреднять цену по
+  // разным единицам измерения бессмысленно.
   const totals = [
     '',
     '',
@@ -125,16 +135,16 @@ export function exportCommerceToExcel(
     '',
     '',
     '',
-    positions.reduce((sum, pos) => sum + (pos.manual_volume || 0), 0),
-    positions.reduce((sum, pos) => sum + (pos.items_count || 0), 0),
+    totalGpVolume,
+    totalClientVolume,
     totalBase,
     totalMaterials,
     totalWorks,
     totalCommercial,
-    Number(avgMarkup.toFixed(2)),
-    0,
-    0,
-    0,
+    '',
+    '',
+    '',
+    '',
   ];
 
   // Создаем массив данных
@@ -142,23 +152,6 @@ export function exportCommerceToExcel(
 
   // Создаем рабочий лист
   const ws = XLSX.utils.aoa_to_sheet(sheetData);
-
-  // Стили для заголовка
-  const headerStyle = {
-    font: { bold: true },
-    fill: { fgColor: { rgb: 'E0E0E0' } },
-    alignment: {
-      horizontal: 'center',
-      vertical: 'center',
-      wrapText: true,
-    },
-    border: {
-      top: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      bottom: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      left: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      right: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    },
-  };
 
   // Стили для строки итогов
   const totalStyle = {
@@ -170,19 +163,10 @@ export function exportCommerceToExcel(
       wrapText: true,
     },
     border: {
+      ...cellBorderStyle,
       top: { style: 'medium', color: { rgb: '000000' } },
       bottom: { style: 'medium', color: { rgb: '000000' } },
-      left: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      right: { style: 'thin', color: { rgb: 'D3D3D3' } },
     },
-  };
-
-  // Стиль границ для ячеек данных
-  const cellBorderStyle = {
-    top: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    bottom: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    left: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    right: { style: 'thin', color: { rgb: 'D3D3D3' } },
   };
 
   // Индексы числовых колонок
@@ -215,6 +199,7 @@ export function exportCommerceToExcel(
           vertical: 'center',
           horizontal: col === nameColIndex ? 'left' : 'center',
         },
+        ...(isNumeric && { numFmt: NUM_FMT_2 }),
       };
 
       // Добавляем бледно-красный фон для листовых строк с нулевой стоимостью
@@ -234,10 +219,8 @@ export function exportCommerceToExcel(
 
       ws[cellAddress].s = baseStyle;
 
-      // Установить числовой формат для числовых колонок
+      // Числовой формат задан через .s.numFmt выше — здесь только гарантируем тип 'n'
       if (isNumeric) {
-        ws[cellAddress].z = '# ##0.00';
-
         // Если ячейка не пустая, убедиться что это число
         if (ws[cellAddress].v !== '' && ws[cellAddress].v !== null && ws[cellAddress].v !== undefined) {
           if (typeof ws[cellAddress].v === 'number') {
@@ -259,11 +242,11 @@ export function exportCommerceToExcel(
   for (let col = 0; col < totals.length; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: totalRowIndex, c: col });
     if (!ws[cellAddress]) continue;
-    ws[cellAddress].s = totalStyle;
+    const isNumericTotal = numericColIndices.includes(col);
+    ws[cellAddress].s = isNumericTotal ? { ...totalStyle, numFmt: NUM_FMT_2 } : totalStyle;
 
-    // Применяем числовой формат к числовым колонкам в итогах
-    if (numericColIndices.includes(col)) {
-      ws[cellAddress].z = '# ##0.00';
+    // Числовой формат задан через .s.numFmt (xlsx-js-style игнорирует .z при наличии .s)
+    if (isNumericTotal) {
       if (ws[cellAddress].v !== '' && ws[cellAddress].v !== null && ws[cellAddress].v !== undefined) {
         if (typeof ws[cellAddress].v === 'number') {
           ws[cellAddress].t = 'n';
@@ -275,6 +258,35 @@ export function exportCommerceToExcel(
           }
         }
       }
+    }
+  }
+
+  // ── Excel-формулы в колонках итогов (аудит расчёта в файле) ──
+  // G — Количество (ГП), O — За единицу материалов, P — За единицу работ,
+  // J — Итого материалов, K — Итого работ, L — Коммерческая стоимость (всего).
+  rowsWithMeta.forEach((meta, i) => {
+    const excelRow = i + 2; // 1-based, +1 из-за строки заголовка
+    // При нулевом «Количество (ГП)» цены за единицу равны 0, а суммы могут быть
+    // ненулевыми — формула затёрла бы их, поэтому оставляем литералы.
+    if (meta.gpVolume > 0) {
+      setFormula(ws, i + 1, 9, `G${excelRow}*O${excelRow}`, meta.materialCostTotal);
+      setFormula(ws, i + 1, 10, `G${excelRow}*P${excelRow}`, meta.workCostTotal);
+    }
+    setFormula(ws, i + 1, 11, `J${excelRow}+K${excelRow}`, meta.commercialTotal);
+  });
+
+  if (rows.length > 0) {
+    const lastDataRow = rows.length + 1; // 1-based номер последней строки данных
+    const sums: Array<[number, string, number]> = [
+      [6, 'G', totalGpVolume],
+      [7, 'H', totalClientVolume],
+      [8, 'I', totalBase],
+      [9, 'J', totalMaterials],
+      [10, 'K', totalWorks],
+      [11, 'L', totalCommercial],
+    ];
+    for (const [col, letter, cached] of sums) {
+      setFormula(ws, totalRowIndex, col, `SUM(${letter}2:${letter}${lastDataRow})`, cached);
     }
   }
 
@@ -301,18 +313,19 @@ export function exportCommerceToExcel(
   // Установить высоту строки заголовка (для переноса текста)
   ws['!rows'] = [{ hpt: 40 }];
 
-  // Заморозить первую строку (заголовки)
-  ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+  // Заморозка первой строки делается пост-обработкой (injectFreezePane) —
+  // xlsx-js-style 1.2.0 не поддерживает panes на запись.
 
   // Создаем книгу Excel
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Коммерческие стоимости');
+  const sheetName = 'Коммерческие стоимости';
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
   // Сохраняем файл
   const fileName = selectedTender
     ? `Коммерческие стоимости_${selectedTender.title} (v${selectedTender.version}).xlsx`
     : 'Коммерческие стоимости.xlsx';
-  XLSX.writeFile(wb, fileName);
+  writeSheetWithFrozenHeader(wb, sheetName, fileName);
 
   message.success(`Данные экспортированы в файл ${fileName}`);
 }

@@ -9,6 +9,8 @@
 
 import * as XLSX from 'xlsx-js-style';
 import type { PreparedRow } from '../../../services/redistributionPipeline';
+import { cellBorderStyle, headerStyle, NUM_FMT_2 } from '../../../utils/excel/styles';
+import { setFormula, writeSheetWithFrozenHeader } from '../../../utils/excel/sheetWriter';
 
 interface ExportData {
   rows: PreparedRow[];
@@ -75,12 +77,21 @@ export function exportRedistributionToExcel(data: ExportData): void {
       isLeaf: resultRow.isLeaf,
       isZeroCost,
       isSectionItemNo: /^\d+\.?$/.test((resultRow.item_no || '').trim()),
+      // Нужны для выбора ссылки на количество в Excel-формулах: делитель на
+      // странице — quantity = manual_volume || client_volume || 1
+      // (buildResultRows.ts). Формула должна ссылаться на ту же колонку.
+      manualVolume: resultRow.manual_volume ?? 0,
+      clientVolume: resultRow.client_volume ?? 0,
+      totalMaterials,
+      totalWorksAfter,
     };
   };
 
   const rows = orderedRows.map(createRow);
 
   // Рассчитываем итоги
+  const totalMaterialsSum = rows.reduce((sum, row) => sum + row.totalMaterials, 0);
+  const totalWorksSum = rows.reduce((sum, row) => sum + row.totalWorksAfter, 0);
   const totals = [
     '',
     'ИТОГО:',
@@ -89,8 +100,8 @@ export function exportRedistributionToExcel(data: ExportData): void {
     '',
     '',
     '',
-    rows.reduce((sum, row) => sum + (row.data[7] as number), 0),
-    rows.reduce((sum, row) => sum + (row.data[8] as number), 0),
+    totalMaterialsSum,
+    totalWorksSum,
     '',
   ];
 
@@ -104,23 +115,6 @@ export function exportRedistributionToExcel(data: ExportData): void {
   // Создаем worksheet
   const ws = XLSX.utils.aoa_to_sheet(sheetData);
 
-  // Стили для заголовка таблицы
-  const headerStyle = {
-    font: { bold: true },
-    fill: { fgColor: { rgb: 'E0E0E0' } },
-    alignment: {
-      horizontal: 'center',
-      vertical: 'center',
-      wrapText: true,
-    },
-    border: {
-      top: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      bottom: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      left: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      right: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    },
-  };
-
   // Стили для строки итогов
   const totalStyle = {
     font: { bold: true },
@@ -131,23 +125,15 @@ export function exportRedistributionToExcel(data: ExportData): void {
       wrapText: true,
     },
     border: {
+      ...cellBorderStyle,
       top: { style: 'medium', color: { rgb: '000000' } },
       bottom: { style: 'medium', color: { rgb: '000000' } },
-      left: { style: 'thin', color: { rgb: 'D3D3D3' } },
-      right: { style: 'thin', color: { rgb: 'D3D3D3' } },
     },
   };
 
-  // Стиль границ для ячеек данных
-  const cellBorderStyle = {
-    top: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    bottom: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    left: { style: 'thin', color: { rgb: 'D3D3D3' } },
-    right: { style: 'thin', color: { rgb: 'D3D3D3' } },
-  };
-
   // Индексы числовых колонок (для числового формата)
-  const numericColIndices = [5, 6, 7, 8]; // Цена за ед мат-ал, Цена за ед раб, Итого материалы, Итого работы
+  // Кол-во заказчика, Кол-во ГП, Цена за ед мат-ал, Цена за ед раб, Итого материалы, Итого работы
+  const numericColIndices = [2, 3, 5, 6, 7, 8];
   const nameColIndex = 1; // Колонка "Наименование"
 
   // Применяем стили к заголовку (строка 0)
@@ -162,11 +148,11 @@ export function exportRedistributionToExcel(data: ExportData): void {
   for (let col = 0; col < totals.length; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: totalRowIndex, c: col });
     if (!ws[cellAddress]) continue;
-    ws[cellAddress].s = totalStyle;
+    const isNumericTotal = numericColIndices.includes(col);
+    ws[cellAddress].s = isNumericTotal ? { ...totalStyle, numFmt: NUM_FMT_2 } : totalStyle;
 
-    // Применяем числовой формат к числовым колонкам в итогах
-    if (numericColIndices.includes(col)) {
-      ws[cellAddress].z = '# ##0.00';
+    // Числовой формат задан через .s.numFmt (xlsx-js-style игнорирует .z при наличии .s)
+    if (isNumericTotal) {
       if (ws[cellAddress].v !== '' && ws[cellAddress].v !== null && ws[cellAddress].v !== undefined) {
         if (typeof ws[cellAddress].v === 'number') {
           ws[cellAddress].t = 'n';
@@ -200,6 +186,7 @@ export function exportRedistributionToExcel(data: ExportData): void {
           vertical: 'center',
           horizontal: col === nameColIndex ? 'left' : 'center',
         },
+        ...(isNumeric && { numFmt: NUM_FMT_2 }),
       };
 
       // Добавляем бледно-красный фон для листовых строк с нулевой стоимостью
@@ -214,10 +201,8 @@ export function exportRedistributionToExcel(data: ExportData): void {
 
       ws[cellAddress].s = baseStyle;
 
-      // Установить числовой формат для числовых колонок
+      // Числовой формат задан через .s.numFmt выше — здесь только гарантируем тип 'n'
       if (isNumeric) {
-        ws[cellAddress].z = '# ##0.00';
-
         // Если ячейка не пустая, убедиться что это число
         if (ws[cellAddress].v !== '' && ws[cellAddress].v !== null && ws[cellAddress].v !== undefined) {
           if (typeof ws[cellAddress].v === 'number') {
@@ -232,6 +217,23 @@ export function exportRedistributionToExcel(data: ExportData): void {
         }
       }
     }
+  }
+
+  // ── Excel-формулы в колонках итогов (аудит расчёта в файле) ──
+  // Итог = количество × цена за единицу. Ссылка на количество выбирается так же,
+  // как делитель на странице: quantity = manual_volume || client_volume || 1.
+  rows.forEach((row, i) => {
+    const excelRow = i + 2; // 1-based, +1 из-за строки заголовка
+    const qtyRef =
+      row.manualVolume > 0 ? `D${excelRow}` : row.clientVolume > 0 ? `C${excelRow}` : '1';
+    setFormula(ws, i + 1, 7, `${qtyRef}*F${excelRow}`, row.totalMaterials);
+    setFormula(ws, i + 1, 8, `${qtyRef}*G${excelRow}`, row.totalWorksAfter);
+  });
+
+  if (rows.length > 0) {
+    const lastDataRow = rows.length + 1; // 1-based номер последней строки данных
+    setFormula(ws, totalRowIndex, 7, `SUM(H2:H${lastDataRow})`, totalMaterialsSum);
+    setFormula(ws, totalRowIndex, 8, `SUM(I2:I${lastDataRow})`, totalWorksSum);
   }
 
   // Устанавливаем ширину колонок
@@ -251,16 +253,17 @@ export function exportRedistributionToExcel(data: ExportData): void {
   // Установить высоту строки заголовка (для переноса текста)
   ws['!rows'] = [{ hpt: 40 }];
 
-  // Заморозить первую строку (заголовки)
-  ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+  // Заморозка первой строки делается пост-обработкой (injectFreezePane) —
+  // xlsx-js-style 1.2.0 не поддерживает panes на запись.
 
   // Создаем workbook
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Результаты');
+  const sheetName = 'Результаты';
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
   // Генерируем имя файла
   const fileName = `Форма КП_${tenderTitle}.xlsx`;
 
   // Экспортируем
-  XLSX.writeFile(wb, fileName);
+  writeSheetWithFrozenHeader(wb, sheetName, fileName);
 }
