@@ -40,13 +40,36 @@ function Set-DatabaseSSLRootCert {
   return "$DatabaseURL$separator" + "sslrootcert=$SSLRootCert"
 }
 
+function Resolve-GoExecutable {
+  $fromPath = Get-Command go.exe -ErrorAction SilentlyContinue
+  if ($fromPath) {
+    return $fromPath.Source
+  }
+
+  $candidates = @(@(
+    (Join-Path ${env:ProgramFiles} 'Go\bin\go.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Go\bin\go.exe'),
+    'C:\Go\bin\go.exe'
+  ) | Where-Object { $_ -and (Test-Path $_) })
+
+  if ($candidates.Count -gt 0) {
+    $goBin = Split-Path -Parent $candidates[0]
+    $env:Path = "$goBin;$env:Path"
+    return $candidates[0]
+  }
+
+  return $null
+}
+
 function Start-GoBackend {
+  param([Parameter(Mandatory = $true)][string]$GoExe)
+
   Write-Host "[dev-backend] Starting Go BFF on http://$($env:BIND_HOST):$($env:PORT)"
   Write-Host '[dev-backend] Press Ctrl+C to stop.'
 
   Push-Location (Join-Path $RepoRoot 'backend')
   try {
-    & go.exe run ./cmd/server
+    & $GoExe run ./cmd/server
     exit $LASTEXITCODE
   } finally {
     Pop-Location
@@ -156,9 +179,9 @@ $env:SENTRY_ENVIRONMENT = 'development'
 $env:BIND_HOST = '127.0.0.1'
 $env:PORT = if ($env:DEV_BACKEND_PORT) { $env:DEV_BACKEND_PORT } else { '3005' }
 
-$go = Get-Command go.exe -ErrorAction SilentlyContinue
+$go = Resolve-GoExecutable
 if ($go) {
-  Start-GoBackend
+  Start-GoBackend -GoExe $go
 } else {
   Start-DockerBackend
 }
