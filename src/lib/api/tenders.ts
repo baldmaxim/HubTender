@@ -91,9 +91,15 @@ export type AdminTenderPatch = Partial<CreateTenderInput> & {
 };
 
 export async function adminPatchTender(id: string, patch: AdminTenderPatch): Promise<void> {
+  // Смена курса валют или тактики наценок пересчитывает ВЕСЬ тендер (BOQ →
+  // позиции → коммерческие → grand total) в одной транзакции; на крупных
+  // тендерах это заведомо дольше дефолтных 10 c, и обрыв по таймауту откатывал
+  // бы всю правку. Потолок — 5 мин: столько же держат chi.Timeout и
+  // http.Server.WriteTimeout на бэке, дальше ответа всё равно не будет.
   await apiFetch<undefined>(`/api/v1/tenders/${encodeURIComponent(id)}/admin-fields`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
+    timeoutMs: 300_000,
   });
 }
 

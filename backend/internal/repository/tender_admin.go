@@ -123,23 +123,46 @@ func (r *TenderRepo) AdminPatchTender(ctx context.Context, id string, p AdminTen
 	args = append(args, id)
 	q := fmt.Sprintf(`UPDATE public.tenders SET %s WHERE id = $%d`, setClauses, len(args))
 
-	ratesChanged := p.USDRate != nil || p.EURRate != nil || p.CNYRate != nil
-	// markup_tactic_id changes the commercial config → financial input
-	// (category A: stale + async recalc; the service enqueues after commit).
-	tacticChanged := p.MarkupTacticID != nil
-	if !ratesChanged && !tacticChanged {
+	// The admin modal re-submits EVERY form field on every save, so the mere
+	// presence of usd_rate/eur_rate/cny_rate says nothing about whether they
+	// moved. Financial relevance is therefore decided by VALUE, inside the tx
+	// (see diffFinancialInputsTx) — a presence-based check made an ordinary
+	// title edit run the full reprice pipeline and revoke the approval.
+	if p.USDRate == nil && p.EURRate == nil && p.CNYRate == nil && p.MarkupTacticID == nil {
 		if _, err := r.pool.Exec(ctx, q, args...); err != nil {
 			return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
 		}
 		return nil
 	}
 
-	// Financial change → one tx: revision bump first, then the patch.
+	// Financial fields submitted → one tx: diff under a row lock, and only on a
+	// genuine change bump the revision first, then apply the patch.
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("tenderRepo.AdminPatchTender: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// markup_tactic_id changes the commercial config → financial input
+	// (category A: stale + async recalc; the service enqueues after commit).
+	diff, err := diffFinancialInputsTx(ctx, tx, id, p.USDRate, p.EURRate, p.CNYRate, p.MarkupTacticID)
+	if err != nil {
+		return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
+	}
+	ratesChanged := diff.RatesChanged
+	tacticChanged := diff.TacticChanged
+	if !ratesChanged && !tacticChanged {
+		// Submitted rates/tactic equal the stored ones → this is a plain field
+		// update. It must not bump the revision, must not revoke the financial
+		// approval and must not reprice: no calculation input moved.
+		if _, err := tx.Exec(ctx, q, args...); err != nil {
+			return fmt.Errorf("tenderRepo.AdminPatchTender: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("tenderRepo.AdminPatchTender: commit: %w", err)
+		}
+		return nil
+	}
 
 	revision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, id, "admin_tender_patch")
 	if err != nil {

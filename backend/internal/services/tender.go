@@ -214,6 +214,11 @@ func (s *TenderService) AdminPatchTender(
 	}
 	s.cache.Delete("tender:overview:" + id)
 	s.cache.DeleteByPrefix(tenderListKeyPrefix)
+	// Deliberately presence-based, unlike the repo's value-based reprice gate:
+	// this is the idempotent REPAIR pass, not the mechanism that makes the
+	// numbers right (the repo transaction is). Over-invalidating a cache and
+	// enqueueing a recalc that diff-writes nothing are both cheap and safe,
+	// whereas under-invalidating would serve stale money.
 	if p.USDRate != nil || p.EURRate != nil || p.CNYRate != nil || p.MarkupTacticID != nil {
 		s.cache.Delete("positions:with_costs:" + id)
 		if s.recalc != nil {

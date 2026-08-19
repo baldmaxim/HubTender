@@ -121,6 +121,16 @@ function read(rel) {
     if (!/ratesChanged\s*:?=/.test(code)) {
       violations.push(`${rel} — missing the ratesChanged gate (pipeline may be skipped or always-on)`);
     }
+    // The gate must be decided by VALUE under a row lock, not by the mere
+    // presence of a rate field in the patch. Presence-based gating made every
+    // admin-modal save (the modal re-submits the whole form) run the full
+    // reprice and revoke the financial approval.
+    if (!code.includes('diffFinancialInputsTx')) {
+      violations.push(`${rel} — ratesChanged must come from diffFinancialInputsTx (value-based, FOR UPDATE), not from a nil-check on the patch`);
+    }
+    if (/ratesChanged\s*:?=\s*[^\n]*(USDRate|EURRate|CNYRate)\s*!=\s*nil/.test(code)) {
+      violations.push(`${rel} — presence-based ratesChanged gate is back (in.USDRate != nil …): re-sending an unchanged rate would reprice the whole tender`);
+    }
   }
 }
 
@@ -179,7 +189,7 @@ if (violations.length > 0) {
 }
 console.log('  ok — import INSERT carries no client total_amount / commercial fields; calc pipeline in-tx');
 console.log('  ok — reprice pipeline complete (BOQ → positions → commercial → grand total)');
-console.log('  ok — both regular and admin rate updates run the pipeline (ratesChanged gate present)');
+console.log('  ok — both regular and admin rate updates run the pipeline (value-based ratesChanged gate)');
 console.log('  ok — no FX fallback=1 on the import path; kernel keeps MissingFXRateError');
 console.log('  ok — frontend mass-import payload sends inputs only');
 console.log('\nserverAuthoritativeImportFx.check: passed');

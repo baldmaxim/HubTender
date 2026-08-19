@@ -165,8 +165,10 @@ func (r *TenderRepo) UpdateTender(ctx context.Context, id string, in UpdateTende
 	q := fmt.Sprintf("UPDATE public.tenders SET %s WHERE id = $%d RETURNING "+tenderScanCols,
 		setClauses, argN)
 
-	ratesChanged := in.USDRate != nil || in.EURRate != nil || in.CNYRate != nil
-	if !ratesChanged {
+	// A rate field being PRESENT in the patch does not mean it moved — callers
+	// routinely re-send the whole form. The expensive, approval-revoking path
+	// is entered only on a genuine value change (see diffFinancialInputsTx).
+	if in.USDRate == nil && in.EURRate == nil && in.CNYRate == nil {
 		t, err := scanTenderRow(r.pool.QueryRow(ctx, q, args...))
 		if err != nil {
 			return nil, fmt.Errorf("tenderRepo.UpdateTender: scan: %w", err)
@@ -181,6 +183,24 @@ func (r *TenderRepo) UpdateTender(ctx context.Context, id string, in UpdateTende
 		return nil, fmt.Errorf("tenderRepo.UpdateTender: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+
+	diff, err := diffFinancialInputsTx(ctx, tx, id, in.USDRate, in.EURRate, in.CNYRate, nil)
+	if err != nil {
+		return nil, fmt.Errorf("tenderRepo.UpdateTender: %w", err)
+	}
+	ratesChanged := diff.RatesChanged
+	if !ratesChanged {
+		// Rates re-sent unchanged → a plain field update: no revision bump, no
+		// approval revocation, no reprice.
+		t, err := scanTenderRow(tx.QueryRow(ctx, q, args...))
+		if err != nil {
+			return nil, fmt.Errorf("tenderRepo.UpdateTender: scan: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("tenderRepo.UpdateTender: commit: %w", err)
+		}
+		return t, nil
+	}
 
 	revision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, id, "tender_rate_update")
 	if err != nil {

@@ -80,11 +80,37 @@ export async function apiFetch<T>(
 
   const cached = cacheKey ? etagCache.get(cacheKey) : undefined;
 
+  const method = (rest.method ?? 'GET').toUpperCase();
+
+  // Обрыв по таймауту — не HTTP-ошибка, поэтому ниже по коду он не попадает в
+  // ветку `!res.ok` и остаётся невидимым в Sentry. Ловим здесь: «нет issue» не
+  // должно означать «эндпоинт здоров». Аборты по caller-signal не репортим —
+  // это штатная отмена (смена страницы, новый запрос поверх старого).
+  const doFetch = async (h: Record<string, string>, s: AbortSignal | undefined) => {
+    try {
+      // cache: 'no-store' — не даём браузеру отдавать устаревший ответ из
+      // HTTP-кэша (renderJSON ставит Cache-Control: private, max-age=60).
+      // Свежесть условных запросов обеспечивает собственный etagCache.
+      return await fetch(`${API_BASE_URL}${path}`, { ...rest, headers: h, signal: s, cache: 'no-store' });
+    } catch (err) {
+      const name = (err as { name?: unknown } | null | undefined)?.name;
+      const abortedByCaller = callerSignal?.aborted === true;
+      if ((name === 'TimeoutError' || name === 'AbortError') && !abortedByCaller) {
+        Sentry.captureException(err, {
+          tags: {
+            api_status: 'client_timeout',
+            api_path: path.split('?')[0],
+            api_method: method,
+          },
+          extra: { path, timeoutMs: timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS },
+        });
+      }
+      throw err;
+    }
+  };
+
   let { headers, signal } = buildRequest(token);
-  // cache: 'no-store' — не даём браузеру отдавать устаревший ответ из HTTP-кэша
-  // (renderJSON ставит Cache-Control: private, max-age=60). Свежесть условных
-  // запросов обеспечивает собственный etagCache (If-None-Match → 304).
-  let res = await fetch(`${API_BASE_URL}${path}`, { ...rest, headers, signal, cache: 'no-store' });
+  let res = await doFetch(headers, signal);
 
   // 401 retry: try ONE refresh+retry before giving up. The refreshSession()
   // helper coalesces concurrent callers, so multiple parallel apiFetch calls
@@ -93,7 +119,7 @@ export async function apiFetch<T>(
     const refreshed = await appAuthRefreshSession();
     if (refreshed) {
       ({ headers, signal } = buildRequest(refreshed.access_token));
-      res = await fetch(`${API_BASE_URL}${path}`, { ...rest, headers, signal, cache: 'no-store' });
+      res = await doFetch(headers, signal);
     }
     // If refresh failed, refreshSession already emitted SIGNED_OUT — the
     // AuthContext will navigate to /login. Returning the 401 below lets the
@@ -120,7 +146,7 @@ export async function apiFetch<T>(
         tags: {
           api_status: String(res.status),
           api_path: path.split('?')[0],
-          api_method: (rest.method ?? 'GET').toUpperCase(),
+          api_method: method,
         },
         extra: { body, path },
       });

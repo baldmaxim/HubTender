@@ -33,6 +33,7 @@ interface TenderModalProps {
   onCancel: () => void;
   isEditMode?: boolean;
   ratesLoading?: boolean;
+  saving?: boolean;
 }
 
 const TenderModal: React.FC<TenderModalProps> = ({
@@ -41,7 +42,8 @@ const TenderModal: React.FC<TenderModalProps> = ({
   onOk,
   onCancel,
   isEditMode = false,
-  ratesLoading = false
+  ratesLoading = false,
+  saving = false
 }) => {
   const { theme: currentTheme } = useTheme();
   const { token } = theme.useToken();
@@ -55,6 +57,11 @@ const TenderModal: React.FC<TenderModalProps> = ({
       width={900}
       okText={isEditMode ? "Сохранить" : "Создать"}
       cancelText="Отмена"
+      confirmLoading={saving}
+      maskClosable={!saving}
+      closable={!saving}
+      keyboard={!saving}
+      cancelButtonProps={{ disabled: saving }}
       okButtonProps={{
         style: {
           background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',

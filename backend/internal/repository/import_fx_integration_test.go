@@ -442,7 +442,14 @@ func TestRateChangeIntegration_FailureRollsBackEverything(t *testing.T) {
 	f, usdItem, _ := seedRateChangeFixture(t, pool, "FXE")
 	repo := NewTenderRepo(pool)
 
-	// Establish a consistent baseline at rate 80 first.
+	// Establish a consistent baseline at rate 80 first. The reprice gate is
+	// value-based, so the baseline patch has to be a REAL rate change: park the
+	// stored rate at 79 (raw UPDATE — no reprice) so patching it to 80 actually
+	// runs the pipeline and replaces the fixture's marked totals.
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE public.tenders SET usd_rate = 79 WHERE id = $1::uuid`, f.tenderID); err != nil {
+		t.Fatalf("park baseline rate: %v", err)
+	}
 	if err := repo.AdminPatchTender(context.Background(), f.tenderID,
 		AdminTenderPatch{USDRate: fptr(80)}); err != nil {
 		t.Fatalf("baseline: %v", err)

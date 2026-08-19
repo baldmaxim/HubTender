@@ -16,12 +16,49 @@ import {
 import dayjs from 'dayjs';
 import type { TenderRecord } from './useTendersData';
 
+/** Курс из формы/БД к числу; пустое значение → null. */
+const toRate = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Убрать из патча курсы, которые пользователь не менял.
+ *
+ * Курс в теле запроса — это «финансовый вход»: бэкенд инвалидирует кэш и ставит
+ * тендер в очередь фонового пересчёта по самому факту его присутствия. Модалка
+ * же отправляет форму целиком, поэтому без этой фильтрации любая правка ссылки
+ * дёргала полный пересчёт тендера.
+ */
+const stripUnchangedRates = <T extends Record<string, unknown>>(
+  patch: T,
+  current: Tender
+): T => {
+  const out = { ...patch };
+  (['usd_rate', 'eur_rate', 'cny_rate'] as const).forEach((key) => {
+    if (toRate(out[key]) === toRate(current[key])) delete out[key];
+  });
+  return out;
+};
+
+/**
+ * Обрыв запроса по таймауту/abort, а не отказ сервера. AbortSignal.timeout()
+ * реджектит DOMException'ом с name === 'TimeoutError'; проверяем по имени, а не
+ * по типу, — так работает и там, где это обычный Error.
+ */
+const isAbortLike = (err: unknown): boolean => {
+  const name = (err as { name?: unknown } | null | undefined)?.name;
+  return name === 'TimeoutError' || name === 'AbortError';
+};
+
 export const useTenderActions = (onRefresh: () => void) => {
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingTender, setEditingTender] = useState<Tender | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [ratesLoading, setRatesLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Подтянуть курсы ЦБ РФ на сегодня и заполнить поля формы. При сбое поля
   // остаются пустыми (их уже очистил resetFields) + предупреждение.
@@ -146,6 +183,7 @@ export const useTenderActions = (onRefresh: () => void) => {
   };
 
   const handleModalOk = async () => {
+    if (saving) return; // защита от двойного сабмита на долгом сохранении
     try {
       const values = await form.validateFields();
 
@@ -171,8 +209,18 @@ export const useTenderActions = (onRefresh: () => void) => {
       };
 
       if (isEditMode && editingTender) {
+        setSaving(true);
+        // Смена курса запускает полный пересчёт тендера — предупреждаем, что
+        // сохранение может быть долгим, вместо «зависшей» кнопки.
+        const patch = stripUnchangedRates(tenderData, editingTender);
+        const ratesTouched =
+          'usd_rate' in patch || 'eur_rate' in patch || 'cny_rate' in patch;
+        const hide = ratesTouched
+          ? message.loading('Курс изменён — пересчитываем тендер…', 0)
+          : null;
         try {
-          await adminPatchTender(editingTender.id, tenderData);
+          await adminPatchTender(editingTender.id, patch);
+          hide?.();
           message.success(`Тендер "${values.title}" успешно обновлен`);
           form.resetFields();
           setIsModalVisible(false);
@@ -180,10 +228,25 @@ export const useTenderActions = (onRefresh: () => void) => {
           setEditingTender(null);
           await onRefresh();
         } catch (err) {
+          hide?.();
           console.error('Ошибка обновления тендера:', err);
-          message.error('Ошибка при обновлении тендера');
+          if (isAbortLike(err)) {
+            // Сервер обрывает транзакцию вместе с запросом → правка НЕ применена.
+            message.error(
+              'Сохранение не уложилось в отведённое время — изменения не применены. Обновите страницу и повторите.'
+            );
+          } else {
+            message.error(
+              err instanceof Error && err.message
+                ? `Ошибка при обновлении тендера: ${err.message}`
+                : 'Ошибка при обновлении тендера'
+            );
+          }
+        } finally {
+          setSaving(false);
         }
       } else {
+        setSaving(true);
         try {
           const data = await createTender(tenderData);
           try {
@@ -211,6 +274,8 @@ export const useTenderActions = (onRefresh: () => void) => {
         } catch (err) {
           console.error('Ошибка сохранения тендера:', err);
           message.error('Ошибка при создании тендера');
+        } finally {
+          setSaving(false);
         }
       }
     } catch (error) {
@@ -219,6 +284,7 @@ export const useTenderActions = (onRefresh: () => void) => {
   };
 
   const handleModalCancel = () => {
+    if (saving) return; // не закрываем модалку поверх летящего запроса
     form.resetFields();
     setIsModalVisible(false);
     setIsEditMode(false);
@@ -230,6 +296,7 @@ export const useTenderActions = (onRefresh: () => void) => {
     isModalVisible,
     isEditMode,
     ratesLoading,
+    saving,
     handleEdit,
     handleDelete,
     handleArchive,
