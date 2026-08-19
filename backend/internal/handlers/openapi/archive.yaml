@@ -1,0 +1,473 @@
+openapi: 3.1.0
+info:
+  title: TenderHUB — Архив смет
+  version: 1.0.0
+  description: |
+    Машинный API к архиву смет: поиск исторических позиций заказчика,
+    подбор аналогов и сборка новых позиций целевого тендера на их основе.
+
+    Авторизация — тот же RS256 JWT, что и у остального портала:
+    `POST /api/v1/auth/login` → `Authorization: Bearer <access_token>`.
+
+    Ошибки — RFC 7807 (`application/problem+json`) с машинным полем `code`.
+servers:
+  - url: https://tender.su10.ru
+    description: production
+  - url: http://localhost:3005
+    description: локальный запуск Go BFF
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: archive
+    description: Архив смет
+
+paths:
+  /api/v1/archive/positions/search:
+    get:
+      tags: [archive]
+      summary: Поиск похожих исторических позиций заказчика
+      description: |
+        Грубый SQL-префильтр по значащим токенам названия, затем взвешенная
+        оценка в Go (название 50, item_no 30, единица 10, объём 10).
+        Неприменимые компоненты исключаются из нормировки.
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string }, description: Название искомой позиции }
+        - { name: unit_code, in: query, schema: { type: string }, description: Фильтр по единице измерения }
+        - { name: item_no, in: query, schema: { type: string } }
+        - { name: volume, in: query, schema: { type: number } }
+        - { name: exclude_tender_id, in: query, schema: { type: string, format: uuid }, description: Обычно текущий тендер }
+        - { name: only_latest_version, in: query, schema: { type: boolean, default: true } }
+        - { name: approved_only, in: query, schema: { type: boolean, default: false } }
+        - { name: period_months, in: query, schema: { type: integer, default: 0 }, description: Окно по дате создания тендера, 0 — без окна }
+        - { name: with_boq_only, in: query, schema: { type: boolean, default: true } }
+        - { name: min_score, in: query, schema: { type: number, default: 0.35 } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 200 } }
+        - { name: candidate_limit, in: query, schema: { type: integer, default: 500, maximum: 4000 }, description: Потолок SQL-префильтра }
+      responses:
+        '200':
+          description: Найденные позиции по убыванию score
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ArchiveSearchHit' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /api/v1/archive/positions/suggest:
+    post:
+      tags: [archive]
+      summary: Батч-подбор аналогов
+      description: Кандидаты грузятся одним SQL-запросом на весь батч и переиспользуются для каждого запроса.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SuggestRequest' }
+      responses:
+        '200':
+          description: По списку совпадений на каждый запрос
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/SuggestResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /api/v1/archive/positions/{id}:
+    get:
+      tags: [archive]
+      summary: Историческая позиция целиком
+      description: Позиция + контекст тендера-источника (включая курсы) + все строки BOQ. Один round-trip.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Позиция, тендер и строки BOQ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/ArchivePositionDetail' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /api/v1/archive/compose:
+    post:
+      tags: [archive]
+      summary: Собрать позиции целевого тендера из исторических
+      description: |
+        Одна транзакция: создаёт позиции (при необходимости), копирует class-A
+        входы строк BOQ из исторических позиций ЛЮБЫХ тендеров, восстанавливает
+        связи материал → работа и авторитетно пересчитывает суммы по
+        конфигурации и курсам ЦЕЛЕВОГО тендера.
+
+        Одна группа = одна целевая позиция: FK `boq_items_parent_scope_fkey`
+        не даёт связи материал → работа пересекать позицию.
+
+        `dry_run: true` выполняет ту же транзакцию и откатывает её. Ничего не
+        записывается, realtime-события не рассылаются, id новых строк не
+        отдаются (только `index` / `parent_index`), но суммы в ответе настоящие.
+
+        Производные колонки (`total_amount`, `commercial_*`) никогда не
+        копируются; `unit_rate` и `currency_type` переносятся без конвертации —
+        курс применяется целевой. Нет нужного курса → 400 `MISSING_FX_RATE` и
+        полный откат.
+      parameters:
+        - { name: verbose, in: query, schema: { type: boolean, default: false }, description: Добавить построчную детализацию }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ComposeRequest' }
+      responses:
+        '200':
+          description: Результат сборки
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/ComposeResult' }
+        '400':
+          description: |
+            ARCHIVE_TARGET_SPEC_INVALID, ARCHIVE_NOTHING_TO_COMPOSE,
+            ARCHIVE_SCALE_UNDEFINED, ARCHIVE_SCALE_INVALID,
+            ARCHIVE_QUANTITY_UNDERFLOW, INVALID_BOQ_PARENT, MISSING_FX_RATE
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404':
+          description: TENDER_NOT_FOUND, ARCHIVE_TARGET_POSITION_NOT_FOUND, ARCHIVE_SOURCE_POSITION_NOT_FOUND, ARCHIVE_SOURCE_ITEM_NOT_FOUND
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: ARCHIVE_DUPLICATE_TARGET, ARCHIVE_TARGET_TENDER_MISMATCH, ARCHIVE_CONCURRENT_MODIFICATION
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/v1/archive/openapi.yaml:
+    get:
+      tags: [archive]
+      summary: Эта спецификация
+      responses:
+        '200':
+          description: OpenAPI-документ
+          content:
+            application/yaml:
+              schema: { type: string }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Problem:
+      description: RFC 7807
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string, description: Машинный код ошибки }
+      required: [status, title]
+
+    ScoreBreakdown:
+      type: object
+      description: Вклад компонентов, 0..1. Неприменимые компоненты отсутствуют.
+      properties:
+        name: { type: number }
+        item_no: { type: number }
+        unit: { type: number }
+        volume: { type: number }
+      required: [name]
+
+    ArchivePosition:
+      type: object
+      properties:
+        position_id: { type: string, format: uuid }
+        tender_id: { type: string, format: uuid }
+        tender_number: { type: string }
+        tender_version: { type: integer }
+        tender_title: { type: string }
+        client_name: { type: string }
+        tender_created_at: { type: string, format: date-time }
+        financial_approved: { type: [boolean, 'null'] }
+        is_archived: { type: boolean }
+        item_no: { type: [string, 'null'] }
+        section_number: { type: [string, 'null'] }
+        work_name: { type: string }
+        unit_code: { type: [string, 'null'] }
+        volume: { type: [number, 'null'] }
+        manual_volume: { type: [number, 'null'] }
+        total_material: { type: [number, 'null'] }
+        total_works: { type: [number, 'null'] }
+        material_cost_per_unit: { type: [number, 'null'] }
+        work_cost_per_unit: { type: [number, 'null'] }
+        total_commercial_material: { type: [number, 'null'] }
+        total_commercial_work: { type: [number, 'null'] }
+        items_count: { type: integer }
+
+    ArchiveSearchHit:
+      allOf:
+        - $ref: '#/components/schemas/ArchivePosition'
+        - type: object
+          properties:
+            score: { type: number }
+            score_breakdown: { $ref: '#/components/schemas/ScoreBreakdown' }
+            matched_tokens: { type: array, items: { type: string } }
+            unmatched_significant_tokens: { type: array, items: { type: string } }
+            unit_compatibility: { type: string, enum: [exact, unknown, conflict] }
+            significant_token_conflict: { type: boolean }
+
+    SuggestRequest:
+      type: object
+      required: [queries]
+      properties:
+        queries:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required: [work_name]
+            properties:
+              ref: { type: string, description: Возвращается в ответе как есть }
+              work_name: { type: string }
+              unit_code: { type: string }
+              item_no: { type: string }
+              volume: { type: number }
+        limit_per_query: { type: integer, default: 5, maximum: 200 }
+        min_score: { type: number, default: 0.35 }
+        exclude_tender_id: { type: string, format: uuid }
+        only_latest_version: { type: boolean, default: true }
+        approved_only: { type: boolean, default: false }
+        period_months: { type: integer, default: 0 }
+        with_boq_only: { type: boolean, default: true }
+
+    SuggestResult:
+      type: object
+      properties:
+        ref: { type: string }
+        matches:
+          type: array
+          items: { $ref: '#/components/schemas/ArchiveSearchHit' }
+
+    BoqItem:
+      type: object
+      description: Строка BOQ исторической позиции со связанными справочниками.
+      properties:
+        id: { type: string, format: uuid }
+        tender_id: { type: string, format: uuid }
+        client_position_id: { type: string, format: uuid }
+        sort_number: { type: [integer, 'null'] }
+        boq_item_type:
+          type: string
+          enum: ['мат', 'суб-мат', 'мат-комп.', 'раб', 'суб-раб', 'раб-комп.']
+        material_type: { type: [string, 'null'], enum: ['основн.', 'вспомогат.', null] }
+        material_name_id: { type: [string, 'null'] }
+        work_name_id: { type: [string, 'null'] }
+        unit_code: { type: [string, 'null'] }
+        quantity: { type: [number, 'null'] }
+        base_quantity: { type: [number, 'null'] }
+        consumption_coefficient: { type: [number, 'null'] }
+        conversion_coefficient: { type: [number, 'null'] }
+        delivery_price_type: { type: [string, 'null'], enum: ['в цене', 'не в цене', 'суммой', null] }
+        delivery_amount: { type: [number, 'null'] }
+        currency_type: { type: [string, 'null'], enum: [RUB, USD, EUR, CNY, null] }
+        total_amount: { type: [number, 'null'] }
+        detail_cost_category_id: { type: [string, 'null'] }
+        quote_link: { type: [string, 'null'] }
+        parent_work_item_id: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        unit_rate: { type: [number, 'null'] }
+
+    ArchivePositionDetail:
+      type: object
+      properties:
+        position:
+          type: object
+          description: Все колонки client_positions исторической позиции.
+        tender:
+          type: object
+          description: |
+            Контекст тендера-источника. Курсы отдаются как справка: при сборке
+            применяются курсы ЦЕЛЕВОГО тендера.
+          properties:
+            id: { type: string, format: uuid }
+            tender_number: { type: string }
+            version: { type: integer }
+            title: { type: string }
+            client_name: { type: string }
+            created_at: { type: string, format: date-time }
+            usd_rate: { type: [number, 'null'] }
+            eur_rate: { type: [number, 'null'] }
+            cny_rate: { type: [number, 'null'] }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/BoqItem' }
+
+    ComposeScale:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [none, factor, volume_ratio]
+          default: none
+        factor: { type: number, description: 'mode=factor: множитель количеств' }
+        source_volume: { type: number, description: 'mode=volume_ratio; по умолчанию COALESCE(manual_volume, volume) источника' }
+        target_volume: { type: number, description: 'mode=volume_ratio; по умолчанию то же у цели' }
+
+    ComposeRequest:
+      type: object
+      required: [target_tender_id, groups]
+      properties:
+        target_tender_id: { type: string, format: uuid }
+        dry_run: { type: boolean, default: false }
+        options:
+          type: object
+          properties:
+            on_missing_source: { type: string, enum: [fail, skip], default: fail }
+            copy_quote_dates:
+              type: boolean
+              default: false
+              description: Даты источника цены. По умолчанию не копируются — старые даты искажают аналитику свежести.
+            copy_detail_cost_category: { type: boolean, default: true }
+            quantity_decimals: { type: integer, minimum: 0, maximum: 9, description: Округление масштабированных количеств }
+        groups:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required: [temp_id, target, sources]
+            properties:
+              temp_id: { type: string, description: Возвращается в ответе; должен быть уникален }
+              target:
+                type: object
+                description: Ровно один из ключей.
+                properties:
+                  position_id: { type: string, format: uuid }
+                  new_position:
+                    type: object
+                    required: [work_name]
+                    properties:
+                      position_number: { type: number, description: 'По умолчанию FLOOR(MAX)+1 по тендеру' }
+                      item_no: { type: string }
+                      section_number: { type: string }
+                      position_name: { type: string }
+                      work_name: { type: string }
+                      unit_code: { type: string }
+                      volume: { type: number }
+                      manual_volume: { type: number }
+                      client_note: { type: string }
+                      manual_note: { type: string }
+                      hierarchy_level: { type: integer }
+                      is_additional: { type: boolean }
+                      parent_position_id: { type: string, format: uuid }
+              sources:
+                type: array
+                minItems: 1
+                maxItems: 50
+                items:
+                  type: object
+                  required: [source_position_id]
+                  properties:
+                    source_position_id: { type: string, format: uuid }
+                    source_item_ids:
+                      type: array
+                      items: { type: string, format: uuid }
+                      description: Подмножество строк; пусто — все. Исключение родительской работы даёт 400 INVALID_BOQ_PARENT.
+                    scale: { $ref: '#/components/schemas/ComposeScale' }
+
+    ComposeResult:
+      type: object
+      properties:
+        dry_run: { type: boolean }
+        target_tender_id: { type: string, format: uuid }
+        financial_input_revision: { type: integer }
+        cached_grand_total: { type: string, description: Каноническая десятичная строка }
+        totals:
+          type: object
+          properties:
+            positions_created: { type: integer }
+            positions_targeted: { type: integer }
+            items_created: { type: integer }
+            works_count: { type: integer }
+            materials_count: { type: integer }
+            parent_links_restored: { type: integer }
+        groups:
+          type: array
+          items:
+            type: object
+            properties:
+              temp_id: { type: string }
+              target_position_id: { type: string, description: Отсутствует для созданной в dry_run позиции }
+              position_created: { type: boolean }
+              position_number: { type: number }
+              items_created: { type: integer }
+              total_material: { type: number }
+              total_works: { type: number }
+              sources:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    source_position_id: { type: string, format: uuid }
+                    source_tender_id: { type: string, format: uuid }
+                    scale_mode: { type: string }
+                    scale_factor: { type: number }
+                    items_copied: { type: integer }
+                    skipped: { type: boolean }
+              items:
+                type: array
+                description: Только при verbose=1.
+                items:
+                  type: object
+                  properties:
+                    index: { type: integer }
+                    source_item_id: { type: string, format: uuid }
+                    source_tender_id: { type: string, format: uuid }
+                    new_item_id: { type: string, description: Отсутствует в dry_run }
+                    boq_item_type: { type: string }
+                    quantity: { type: [number, 'null'] }
+                    unit_rate: { type: [number, 'null'] }
+                    currency_type: { type: [string, 'null'] }
+                    total_amount: { type: number }
+                    parent_index: { type: integer }
+        warnings:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+                enum: [LINKED_QUANTITY_REDERIVED, SOURCE_POSITION_SKIPPED]
+              group_temp_id: { type: string }
+              source_position_id: { type: string }
+              source_item_id: { type: string }
+              stored: { type: number }
+              rederived: { type: number }

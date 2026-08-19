@@ -307,6 +307,65 @@ float64 на этом пути не авторитетен. Классифика
 Защита от регресса: `scripts/checks/noDerivedCopy.check.mjs` (падает, если copy/transfer
 снова начнут селектить/вставлять derived-колонки, заведут свою формулу или FX-фолбэк 1).
 
+## 7b-bis. Архив смет — composition из чужих тендеров
+
+`POST /api/v1/archive/compose` (`archive_compose*.go`) собирает позиции целевого тендера
+из исторических позиций **других** тендеров. Инварианты те же, что в §7b, плюс специфика
+кросс-тендерного переноса и масштабирования:
+
+1. **Class A only.** Копируются те же исходные поля, что в §7b. Дополнительно **не**
+   копируются: `import_session_id` (FK на чужую сессию импорта — `ON DELETE SET NULL`
+   чужой сессии иначе мутировал бы этот тендер) и по умолчанию `quote_price_date` /
+   `quote_valid_until` (даты источника цены многолетней давности искажают аналитику
+   свежести; opt-in `options.copy_quote_dates`, копируются обе или ни одной из-за CHECK
+   `quote_valid_until >= quote_price_date`). `sort_number` перенумеровывается: в одну
+   целевую позицию можно слить N источников, исходные номера столкнулись бы.
+2. **Валюта не конвертируется.** `unit_rate` и `currency_type` переносятся как есть,
+   курс применяется целевой (`RecomputeBoqTotalAmountsTx`). Конвертация `unit_rate`
+   переместила бы конфигурационное значение во входную колонку: `tender_reprice.go`
+   пересчитывает все строки при смене курса и умножил бы такую строку второй раз, а
+   подмена `currency_type` на `RUB` уничтожила бы провенанс цены для `price_benchmark`
+   и `price_source_quality`. Нет курса у цели → 400 `MISSING_FX_RATE` и полный откат —
+   это правильное fail-closed поведение, а не дефект. `delivery_amount` при `'суммой'`
+   не масштабируется и не конвертируется: это per-unit рублёвая величина.
+3. **Масштабирование количеств.** Работы и самостоятельные материалы: `quantity * k`
+   (`k` = `factor` либо `target_volume / source_volume`, объёмы по умолчанию
+   `COALESCE(manual_volume, volume)`). Привязанный к работе материал **пере-выводится**
+   из уже масштабированного родителя: `parentQty * conversion * consumption` — формула
+   `RecomputeLinkedMaterialsForWork`. Умножать хранимое количество ребёнка на `k` нельзя:
+   `calc` принудительно считает `consumption = 1` при наличии родителя, потому что расход
+   уже зашит в `quantity`. Пере-вывод даёт идемпотентность — последующий
+   `recompute-linked-materials` не меняет ничего. Расхождение с `quantity * k` даёт
+   предупреждение `LINKED_QUANTITY_REDERIVED` (источник был рассогласован).
+   `base_quantity` привязанной строки принудительно NULL.
+4. **`quantity > 0` — жёсткий CHECK.** Если после масштабирования и округления
+   (`options.quantity_decimals`) количество становится нулевым — 400
+   `ARCHIVE_QUANTITY_UNDERFLOW` до любой записи. Молчаливый кламп к минимуму запрещён.
+5. **Одна группа = одна целевая позиция.** Диктуется FK `boq_items_parent_scope_fkey`:
+   связь материал → работа не может пересекать позицию, поэтому и ремап родителей
+   возможен только внутри одной позиции. Родители валидируются существующим
+   `ResolveCopiedParents` в пределах каждого источника; исключение родительской работы
+   через `source_item_ids` даёт 400 `INVALID_BOQ_PARENT`.
+6. **Порядок в транзакции** совпадает с §7b: `SET LOCAL statement_timeout = '0'` →
+   `setAuditUser` → `skipBoqAuditTrigger` → `MarkTenderFinancialInputsChangedTx`
+   (**одна** ревизия на команду) → план (read-only) → INSERT позиций → INSERT строк без
+   derived-колонок → bulk-remap родителей → `RecomputeBoqTotalAmountsTx` →
+   `RecomputePositionTotalsForTenderTx` → аудит → `MaterializeCommercialForTenderTx` →
+   `RecalculateTenderGrandTotalTx` (ровно один раз) → `MarkTenderCalculationSucceededTx`
+   → commit. Тендеры-источники не изменяются и ревизию не получают.
+7. **`dry_run` — та же транзакция с Rollback.** Отдельного «симулятора» нет намеренно:
+   CHECK-констрейнты срабатывают только на реальном INSERT, а `RecomputeBoqTotalAmountsTx`
+   специально перечитывает записанные строки — считать «как было бы» без вставки значило
+   бы развести расчётный путь надвое. Откат не оставляет аудита и ревизии и не рассылает
+   realtime (NOTIFY транзакционный). Id новых строк в `dry_run` наружу не отдаются.
+8. **Async queue — не источник корректности.** Кэш инвалидируется только после успешного
+   commit и только при `dry_run = false`; `enqueueRecalc` не нужен — авторитетный пересчёт
+   уже прошёл в той же транзакции.
+
+Защита от регресса: те же `scripts/checks/noDerivedCopy.check.mjs` и
+`scripts/checks/financialRevisionSafety.check.mjs` — файлы `archive_compose*.go` внесены
+в их списки.
+
 ## 7c. Audit rollback — авторитетный пересчёт (этап 0.1.2.2b)
 
 `boq_audit_rollback.go` больше не реинсертит весь `old_data` через

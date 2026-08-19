@@ -179,6 +179,14 @@ func newRouter(
 		// public.clone_tender_as_new_version, ported into Yandex schema).
 		r.Post("/api/v1/tenders/{id}/versions/clone", d.cloneH.Clone)
 
+		// Архив смет: чтение исторических позиций заказчика и сборка новых
+		// позиций целевого тендера на их основе (машинный API, без UI).
+		r.Get("/api/v1/archive/positions/search", d.archiveH.SearchPositions)
+		r.Post("/api/v1/archive/positions/suggest", d.archiveH.SuggestPositions)
+		r.Get("/api/v1/archive/positions/{id}", d.archiveH.GetPosition)
+		r.Post("/api/v1/archive/compose", d.archiveH.Compose)
+		r.Get("/api/v1/archive/openapi.yaml", d.archiveH.OpenAPI)
+
 		// Phase 5: tender notes (per-user; privileged roles see all).
 		r.Get("/api/v1/tenders/{id}/notes", d.tenderNotesH.List)
 		r.Put("/api/v1/tenders/{id}/notes", d.tenderNotesH.Save)

@@ -48,6 +48,7 @@ type deps struct {
 	subcontractH      *handlers.SubcontractHandler
 	transferH         *handlers.TenderTransferHandler
 	cloneH            *handlers.TenderCloneHandler
+	archiveH          *handlers.ArchiveHandler
 	tenderNotesH      *handlers.TenderNotesHandler
 	boqAuditRollbackH *handlers.BoqAuditRollbackHandler
 	tasksH            *handlers.TasksHandler
@@ -136,6 +137,7 @@ func buildDeps(
 	reviewPackRepo := repository.NewReviewPackRepo(pool)
 	importAnalysisRepo := repository.NewImportAnalysisRepo(pool)
 	importMemoryRepo := repository.NewImportMemoryRepo(pool)
+	archiveRepo := repository.NewArchiveRepo(pool)
 
 	// Commercial-cost auto-recalc — replaces the manual «Пересчитать» button.
 	// Mutation services Enqueue(tenderID) after changing a pricing input (BOQ
@@ -203,6 +205,7 @@ func buildDeps(
 	actionPlanSvc := services.NewActionPlanService(actionPlanRepo)
 	changeImpactSvc := services.NewChangeImpactService(changeImpactRepo)
 	reviewPackSvc := services.NewReviewPackService(reviewPackRepo)
+	archiveSvc := services.NewArchiveService(archiveRepo, inMemCache)
 	// Этап 2.2: AI-подбор номенклатуры. Одобренного provider в проекте нет —
 	// по умолчанию DisabledProvider; config-contract (владелец проекта):
 	//   AI_NOMENCLATURE_ENABLED, AI_NOMENCLATURE_PROVIDER, AI_NOMENCLATURE_MODEL,
@@ -383,6 +386,7 @@ func buildDeps(
 		subcontractH:      handlers.NewSubcontractHandler(subcontractSvc),
 		transferH:         handlers.NewTenderTransferHandler(transferSvc),
 		cloneH:            handlers.NewTenderCloneHandler(cloneSvc),
+		archiveH:          handlers.NewArchiveHandler(archiveSvc),
 		tenderNotesH:      handlers.NewTenderNotesHandler(tenderNotesSvc),
 		boqAuditRollbackH: handlers.NewBoqAuditRollbackHandler(boqAuditRollbackSvc),
 		tasksH:            handlers.NewTasksHandler(tasksSvc),
