@@ -158,14 +158,45 @@ function read(rel) {
 
 // ─── 7. redistribution snapshot revision marker ──────────────────────────────
 {
+  const marker = read('backend/internal/repository/redistribution_rebuild.go');
+  if (marker != null && !stripComments(marker).includes('stampRulesInputRevision')) {
+    violations.push(`backend/internal/repository/redistribution_rebuild.go — the snapshot engine no longer stamps the input revision`);
+  }
   const rel = 'backend/internal/repository/redistribution.go';
   const raw = read(rel);
   if (raw != null) {
     const code = stripComments(raw);
-    for (const needle of ['stampRulesInputRevision', 'INPUT_REVISION_CHANGED', 'FinancialInputRevision']) {
+    for (const needle of ['INPUT_REVISION_CHANGED', 'FinancialInputRevision']) {
       if (!code.includes(needle)) {
         violations.push(`${rel} — redistribution snapshot lost the ${needle} revision marker wiring`);
       }
+    }
+  }
+}
+
+// ─── 7b. the recalc re-applies the SAVED redistribution rules ────────────────
+// Without this the snapshot keeps the OLD revision marker after every markup /
+// FX / BOQ edit, so LoadResults degrades it to INPUT_REVISION_CHANGED forever
+// and Commerce / ФП / final exports stay blocked until a human re-saves from
+// the «Перераспределение» page. That was the reported regression.
+{
+  const rel = 'backend/internal/repository/commercial_recalc_authoritative.go';
+  const raw = read(rel);
+  if (raw != null && !stripComments(raw).includes('RefreshRedistributionSnapshotTx')) {
+    violations.push(`${rel} — recalc no longer refreshes the redistribution snapshot (снимок навсегда останется requires_recalculation после правки наценок)`);
+  }
+  const refresh = 'backend/internal/repository/redistribution_refresh.go';
+  const rawRefresh = read(refresh);
+  if (rawRefresh != null) {
+    const code = stripComments(rawRefresh);
+    // Fail-SOFT: unusable saved rules must not abort the commercial recalc, so
+    // the rebuild has to run inside a savepoint that is rolled back on error.
+    if (!code.includes('sp.Rollback(ctx)') || !code.includes('tx.Begin(ctx)')) {
+      violations.push(`${refresh} — the snapshot rebuild must run in a SAVEPOINT (иначе неприменимые правила уронят весь коммерческий пересчёт)`);
+    }
+    // The single engine: no second calculation path may appear here.
+    if (!code.includes('rebuildRedistributionSnapshotTx')) {
+      violations.push(`${refresh} — background refresh must go through the shared snapshot engine, not a second implementation`);
     }
   }
 }

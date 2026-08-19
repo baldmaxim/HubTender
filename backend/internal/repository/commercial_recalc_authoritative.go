@@ -151,6 +151,15 @@ func recalcTenderCommercialTx(
 		return "", calculatedRevision, err
 	}
 
+	// Re-apply the tender's SAVED redistribution rules to the values just
+	// materialized, so the snapshot is stamped with this revision instead of
+	// staying requires_recalculation until a human re-saves from the page.
+	// Fail-soft inside: rules that no longer validate leave the old snapshot
+	// untouched and never abort the commercial recalc.
+	if _, err := RefreshRedistributionSnapshotTx(ctx, tx, tenderID, calculatedRevision); err != nil {
+		return "", calculatedRevision, err
+	}
+
 	// CAS: succeed ONLY if the inputs did not move on. A concurrent input
 	// change surfaces either as RowsAffected==0 (StaleCalculationResultError)
 	// or as SQLSTATE 40001 on this UPDATE under REPEATABLE READ — both roll

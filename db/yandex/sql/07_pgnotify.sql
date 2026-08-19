@@ -32,6 +32,10 @@
 --     tender_registry→tenders (reuses the tenders list topic)
 --   bulk reference (statement-level → references): materials_library,
 --     works_library, material_names, work_names, units
+--   bulk tender-scoped (statement-level → tender:<tender_id>):
+--     cost_redistribution_results — снимок переписывается целиком (строка на
+--     каждый boq_item), построчные уведомления давали тысячи NOTIFY на один
+--     пересчёт; см. notify_redistribution_change в конце файла
 --
 -- tender_iterations has no tender_id column — it is resolved via its group_id
 -- → tender_groups.tender_id so the broker can route the event to tender:<id>
@@ -128,9 +132,8 @@ CREATE TRIGGER trg_notify_row_change_client_positions
     AFTER INSERT OR UPDATE OR DELETE ON public.client_positions
     FOR EACH ROW EXECUTE FUNCTION public.notify_row_change();
 
-CREATE TRIGGER trg_notify_row_change_cost_redistribution_results
-    AFTER INSERT OR UPDATE OR DELETE ON public.cost_redistribution_results
-    FOR EACH ROW EXECUTE FUNCTION public.notify_row_change();
+-- cost_redistribution_results — STATEMENT-level (см. ниже notify_redistribution_change).
+-- Построчный триггер здесь намеренно НЕ создаётся.
 
 CREATE TRIGGER trg_notify_row_change_construction_cost_volumes
     AFTER INSERT OR UPDATE OR DELETE ON public.construction_cost_volumes
@@ -292,3 +295,63 @@ CREATE TRIGGER trg_notify_table_change_work_names
 CREATE TRIGGER trg_notify_table_change_units
     AFTER INSERT OR UPDATE OR DELETE ON public.units
     FOR EACH STATEMENT EXECUTE FUNCTION public.notify_table_change();
+
+-- =============================================================================
+-- cost_redistribution_results — STATEMENT-level уведомления.
+--
+-- Полная замена снимка перераспределения (DELETE + INSERT) переписывает по
+-- строке на каждый boq_item тендера — 6 686 на крупнейшем проде. С построчным
+-- триггером это ~13 400 pg_notify на один пересчёт, при том что брокер всё
+-- равно схлопывает их в ОДИН publish на топик tender:<id> (дебаунс 200 мс).
+-- Statement-level триггер с transition table даёт 2 уведомления на пару
+-- DELETE+INSERT.
+--
+-- Payload-контракт не меняется: брокер маршрутизирует по table + tender_id
+-- (backend/internal/realtime/broker.go). Поле `id` у statement-события не
+-- относится к одной строке и передаётся пустой строкой.
+--
+-- Источник: db/yandex/incremental/2026_08_redistribution_statement_notify.sql
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION public.notify_redistribution_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    r record;
+BEGIN
+    FOR r IN
+        SELECT DISTINCT tender_id FROM changed_rows WHERE tender_id IS NOT NULL
+    LOOP
+        PERFORM pg_notify('rowchange', jsonb_build_object(
+            'table',     TG_TABLE_NAME,
+            'op',        TG_OP,
+            'id',        '',
+            'tender_id', r.tender_id,
+            'user_id',   NULL
+        )::text);
+    END LOOP;
+    RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_notify_stmt_crr_insert ON public.cost_redistribution_results;
+DROP TRIGGER IF EXISTS trg_notify_stmt_crr_update ON public.cost_redistribution_results;
+DROP TRIGGER IF EXISTS trg_notify_stmt_crr_delete ON public.cost_redistribution_results;
+
+CREATE TRIGGER trg_notify_stmt_crr_insert
+    AFTER INSERT ON public.cost_redistribution_results
+    REFERENCING NEW TABLE AS changed_rows
+    FOR EACH STATEMENT EXECUTE FUNCTION public.notify_redistribution_change();
+
+CREATE TRIGGER trg_notify_stmt_crr_update
+    AFTER UPDATE ON public.cost_redistribution_results
+    REFERENCING NEW TABLE AS changed_rows
+    FOR EACH STATEMENT EXECUTE FUNCTION public.notify_redistribution_change();
+
+CREATE TRIGGER trg_notify_stmt_crr_delete
+    AFTER DELETE ON public.cost_redistribution_results
+    REFERENCING OLD TABLE AS changed_rows
+    FOR EACH STATEMENT EXECUTE FUNCTION public.notify_redistribution_change();

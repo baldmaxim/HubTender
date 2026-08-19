@@ -152,53 +152,6 @@ func (r *RedistributionRepo) SaveAuthoritative(
 		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: %w", err)
 	}
 
-	// ── reference data for validation (DB-confirmed, canonical names) ──
-	knownCategories, err := loadNameMap(ctx, tx,
-		`SELECT id::text, name FROM public.cost_categories`)
-	if err != nil {
-		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: categories: %w", err)
-	}
-	knownDetails := map[string]string{}
-	detailToCategory := map[string]string{}
-	{
-		rows, err := tx.Query(ctx,
-			`SELECT id::text, name, cost_category_id::text FROM public.detail_cost_categories`)
-		if err != nil {
-			return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: details: %w", err)
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id, name, catID string
-			if err := rows.Scan(&id, &name, &catID); err != nil {
-				return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: details scan: %w", err)
-			}
-			knownDetails[id] = name
-			detailToCategory[id] = catID
-		}
-		if err := rows.Err(); err != nil {
-			return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: details rows: %w", err)
-		}
-	}
-	knownPositions := map[string]bool{}
-	{
-		rows, err := tx.Query(ctx,
-			`SELECT id::text FROM public.client_positions WHERE tender_id = $1::uuid`, tenderID)
-		if err != nil {
-			return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: positions: %w", err)
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: positions scan: %w", err)
-			}
-			knownPositions[id] = true
-		}
-		if err := rows.Err(); err != nil {
-			return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: positions rows: %w", err)
-		}
-	}
-
 	// ── authoritative commercial base, in THIS transaction ──
 	// The grand total is recomputed exactly once below (stage 0.1.2.4a:
 	// no per-row SQL triggers).
@@ -208,111 +161,11 @@ func (r *RedistributionRepo) SaveAuthoritative(
 		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: %w", err)
 	}
 
-	// ── the FULL current BOQ set, deterministic order ──
-	items, err := loadRedistributionBoq(ctx, tx, tenderID)
-	if err != nil {
-		return nil, err
-	}
-	if len(items) == 0 {
-		return nil, &calc.RedistributionNoBoqItemsError{TenderID: tenderID}
-	}
-
-	// ── typed rules validation on effective BOQ scopes ──
-	norm, err := calc.ValidateAndNormalizeRedistributionRules(rules, calc.RedistributionValidationContext{
-		KnownCategories:  knownCategories,
-		KnownDetails:     knownDetails,
-		DetailToCategory: detailToCategory,
-		BoqItems:         items,
-	})
+	// ── the ONE snapshot engine: validation → calculation → invariants →
+	// prepared projection → atomic persist, stamped with this revision ──
+	built, err := rebuildRedistributionSnapshotTx(ctx, tx, tenderID, tacticID, rules, createdBy, revision)
 	if err != nil {
 		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: %w", err)
-	}
-
-	// ── the authoritative category-level calculation + invariants ──
-	out := calc.CalculateRedistribution(items, norm.Sources, norm.Targets, detailToCategory)
-	if err := calc.ValidateRedistributionCalculation(items, out); err != nil {
-		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: %w", err)
-	}
-
-	// ── position rules on the server-generated base ──
-	base := calc.PositionWorksAfterRedistribution(items, out.Results)
-	adjIssues, positionDeltas := calc.ValidatePositionAdjustments(norm.PositionAdjustments, base, knownPositions)
-	if len(adjIssues) > 0 {
-		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: %w",
-			&calc.InvalidRedistributionRulesError{Issues: adjIssues})
-	}
-
-	// Stage 0.1.2.3b: the FULL prepared projection (position adjustments +
-	// insurance + rounding + final rows + summary) is built and validated by the
-	// same calc boundary the GET uses — BEFORE anything is persisted. A prepared
-	// failure rolls the whole save back.
-	prepared, err := buildPreparedTx(ctx, tx, tenderID, items, out.Results, norm.PositionAdjustments)
-	if err != nil {
-		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: prepared: %w", err)
-	}
-
-	canonicalJSON, err := json.Marshal(norm.Canonical)
-	if err != nil {
-		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: canonical rules: %w", err)
-	}
-	// 0-F2 §7: stamp the snapshot with the input revision it was built for —
-	// repo-level metadata enrichment (the calc canonical shape is unchanged).
-	// The marker is written ONLY here, i.e. only with a real server calculation.
-	canonicalJSON, err = stampRulesInputRevision(canonicalJSON, revision)
-	if err != nil {
-		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: revision marker: %w", err)
-	}
-
-	// ── atomic batched replace of the COMPLETE server-generated set ──
-	if _, err := tx.Exec(ctx, `
-		DELETE FROM public.cost_redistribution_results
-		WHERE tender_id = $1::uuid AND markup_tactic_id = $2::uuid
-	`, tenderID, tacticID); err != nil {
-		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: delete old set: %w", err)
-	}
-
-	ids := make([]string, len(out.Results))
-	originals := make([]float64, len(out.Results))
-	deducted := make([]float64, len(out.Results))
-	added := make([]float64, len(out.Results))
-	finals := make([]float64, len(out.Results))
-	for i, res := range out.Results {
-		ids[i] = res.BoqItemID
-		originals[i] = res.OriginalWorkCost
-		deducted[i] = res.DeductedAmount
-		added[i] = res.AddedAmount
-		finals[i] = res.FinalWorkCost
-	}
-	// Deterministic holder for the rules JSONB: items are ordered by id ASC, so
-	// results[0] is the smallest boq_item_id.
-	holderID := ids[0]
-	var createdByArg any
-	if createdBy != "" {
-		createdByArg = createdBy
-	}
-	tag, err := tx.Exec(ctx, `
-		INSERT INTO public.cost_redistribution_results (
-			tender_id, markup_tactic_id, boq_item_id,
-			original_work_cost, deducted_amount, added_amount, final_work_cost,
-			redistribution_rules, created_by
-		)
-		SELECT $1::uuid, $2::uuid, u.id,
-		       u.original, u.deducted, u.added, u.final,
-		       CASE WHEN u.id = $3::uuid THEN $4::jsonb ELSE NULL END,
-		       $5
-		FROM UNNEST($6::uuid[], $7::numeric[], $8::numeric[], $9::numeric[], $10::numeric[])
-		     AS u(id, original, deducted, added, final)
-	`, tenderID, tacticID, holderID, canonicalJSON, createdByArg,
-		ids, originals, deducted, added, finals)
-	if err != nil {
-		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: insert set: %w", err)
-	}
-	if int(tag.RowsAffected()) != len(out.Results) {
-		return nil, fmt.Errorf("redistributionRepo.SaveAuthoritative: %w",
-			&calc.InvalidRedistributionCalculationResultError{
-				Field:  "persist",
-				Reason: fmt.Sprintf("persisted %d rows, calculated %d (exact-set mismatch)", tag.RowsAffected(), len(out.Results)),
-			})
 	}
 
 	// ── grand total exactly once (commercial values may have changed above) ──
@@ -329,17 +182,17 @@ func (r *RedistributionRepo) SaveAuthoritative(
 	}
 
 	resp := &RedistributionSaveOutput{
-		SavedCount:     len(out.Results),
-		Results:        make([]RedistributionRecord, len(out.Results)),
-		TotalDeducted:  out.TotalDeducted,
-		TotalAdded:     out.TotalAdded,
-		IsBalanced:     out.IsBalanced,
-		CanonicalRules: canonicalJSON,
-		PositionDeltas: positionDeltas,
-		Prepared:       prepared,
+		SavedCount:     len(built.Results),
+		Results:        make([]RedistributionRecord, len(built.Results)),
+		TotalDeducted:  built.TotalDeducted,
+		TotalAdded:     built.TotalAdded,
+		IsBalanced:     built.IsBalanced,
+		CanonicalRules: built.CanonicalJSON,
+		PositionDeltas: built.PositionDeltas,
+		Prepared:       built.Prepared,
 		TenderID:       tenderID,
 	}
-	for i, res := range out.Results {
+	for i, res := range built.Results {
 		resp.Results[i] = RedistributionRecord{
 			BoqItemID:        res.BoqItemID,
 			OriginalWorkCost: res.OriginalWorkCost,

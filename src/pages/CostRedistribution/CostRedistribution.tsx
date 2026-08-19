@@ -19,6 +19,7 @@ import {
   useDistributionCalculator,
   useSaveResults,
   usePositionAdjustment,
+  useRedistributionAutosave,
 } from './hooks';
 import { buildResultRows } from './utils/buildResultRows';
 // UI preview only: applyRedistributionPipeline здесь используется исключительно
@@ -35,7 +36,6 @@ import type {
   RedistributionSnapshotStatus,
 } from '../../lib/api/redistributions';
 
-const AUTOSAVE_DEBOUNCE_MS = 800;
 const SAVED_TAG_DURATION_MS = 2000;
 
 const CostRedistribution: React.FC = () => {
@@ -58,10 +58,7 @@ const CostRedistribution: React.FC = () => {
   // разнесение страхования (server prepared учитывает его сам; preview — здесь).
   const [distributeToRows, setDistributeToRows] = useState(true);
   const [savedRecently, setSavedRecently] = useState(false);
-  const [autosaveNonce, setAutosaveNonce] = useState(0);
   const [hydrationTick, setHydrationTick] = useState(0);
-  const isSavingRef = useRef(false);
-  const pendingSaveRef = useRef(false);
   // Слепок правил, который сервер уже подтвердил (после load или успешного
   // save). Автосохранение молчит, пока текущие правила ему равны.
   const serverKnownRulesRef = useRef<string | null>(null);
@@ -459,69 +456,16 @@ const CostRedistribution: React.FC = () => {
     setResults,
   ]);
 
-  // Сохранение position-level правил с дебаунсом и mutex'ом.
-  // - Debounce: даём пользователю ~800 мс «замереть» перед записью.
-  // - Mutex (isSavingRef): если save уже в полёте — ставим pendingSaveRef
-  //   и после завершения бампаем nonce, чтобы effect перезапустил таймер
-  //   со свежим состоянием. Без этого rapid-fire правки приводили бы к гонке
-  //   delete+insert и риску «частичных» записей в cost_redistribution_results.
-  useEffect(() => {
-    if (!selectedTenderId || !selectedTacticId) return;
-    if (calculationState.results.length === 0 && boqItems.length === 0) return;
-
-    // Здоровый снимок + неизменные правила = сохранять нечего. Без этой
-    // проверки открытие тендера само по себе выпускало save (идентичность
-    // handleSavePositionAdjustment меняется после гидрации), а каждый такой
-    // save инкрементит financial_input_revision и снимает подтверждение
-    // финансов с тендера.
-    //
-    // Для requires_recalculation / not_configured пересохранение НЕ подавляем:
-    // сервер не отдаёт годного prepared, поэтому первый автосейв после
-    // загрузки — это и есть тот «выполните пересчёт», о котором говорит алерт.
-    if (
-      snapshotState?.status === 'calculated' &&
-      currentRulesSignature === serverKnownRulesRef.current
-    ) {
-      return;
-    }
-
-    let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      if (cancelled) return;
-      if (isSavingRef.current) {
-        pendingSaveRef.current = true;
-        return;
-      }
-      isSavingRef.current = true;
-      try {
-        await handleSavePositionAdjustment();
-      } finally {
-        isSavingRef.current = false;
-        if (pendingSaveRef.current) {
-          pendingSaveRef.current = false;
-          setAutosaveNonce((n) => n + 1);
-        }
-      }
-    }, AUTOSAVE_DEBOUNCE_MS);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-    // Intentionally exclude boqItems.length / calculationState.results.length:
-    // those are already represented by selectedTenderId/selectedTacticId + the
-    // state that handleSavePositionAdjustment reads. Including them would cause
-    // an extra save on initial load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    adjustment.appliedRules,
-    selectedTenderId,
-    selectedTacticId,
-    autosaveNonce,
+  // Автосохранение правил (дебаунс + mutex) вынесено в хук: там же собраны все
+  // условия «когда странице позволено самой выпустить save».
+  useRedistributionAutosave({
+    enabled: Boolean(selectedTenderId && selectedTacticId),
+    boqItemsCount: boqItems.length,
+    snapshotStatus: snapshotState?.status,
     currentRulesSignature,
-    snapshotState?.status,
-    handleSavePositionAdjustment,
-  ]);
+    serverKnownRulesRef,
+    save: handleSavePositionAdjustment,
+  });
 
   // «Сохранено» бейдж гаснет через 2 сек после завершения сохранения.
   useEffect(() => {
