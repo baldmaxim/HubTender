@@ -46,7 +46,7 @@ function read(rel) {
 }
 
 const AI_DIR = 'backend/internal/ai/nomenclature';
-const AI_FILES = ['provider.go', 'retrieval.go', 'suggest.go', 'confidence.go', 'mock.go']
+const AI_FILES = ['provider.go', 'retrieval.go', 'suggest.go', 'confidence.go', 'mock.go', 'export.go']
   .map((f) => `${AI_DIR}/${f}`);
 
 // ─── 1/17: ai-пакет без сети и без БД ────────────────────────────────────────

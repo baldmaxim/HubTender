@@ -33,6 +33,9 @@ const FILES = [
   'backend/internal/repository/tender_transfer.go',
   'backend/internal/repository/tender_transfer_additional.go',
   'backend/internal/repository/boq_derived.go',
+  'backend/internal/repository/archive_compose.go',
+  'backend/internal/repository/archive_compose_plan.go',
+  'backend/internal/repository/archive_compose_write.go',
 ];
 
 const DERIVED = [

@@ -65,6 +65,7 @@ function read(rel) {
     'backend/internal/repository/subcontract.go',         // exclusion toggle
     'backend/internal/repository/insurance.go',           // insurance upsert
     'backend/internal/repository/redistribution.go',      // redistribution save
+    'backend/internal/repository/archive_compose.go',     // сборка сметы из архива
   ];
   for (const rel of mutationPaths) {
     const raw = read(rel);
