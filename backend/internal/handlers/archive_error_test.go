@@ -53,7 +53,7 @@ const composeBody = `{
 
 func composeRequest(t *testing.T, svc archiveServicer) *httptest.ResponseRecorder {
 	t.Helper()
-	h := NewArchiveHandler(svc)
+	h := NewArchiveHandler(svc, nil)
 	r := chi.NewRouter()
 	r.Post("/api/v1/archive/compose", h.Compose)
 
@@ -184,7 +184,7 @@ func TestComposeUnknownErrorIs500(t *testing.T) {
 }
 
 func TestComposeWithoutAuthIs401(t *testing.T) {
-	h := NewArchiveHandler(&stubArchiveSvc{})
+	h := NewArchiveHandler(&stubArchiveSvc{}, nil)
 	r := chi.NewRouter()
 	r.Post("/api/v1/archive/compose", h.Compose)
 
@@ -198,7 +198,7 @@ func TestComposeWithoutAuthIs401(t *testing.T) {
 }
 
 func TestComposeRejectsMalformedBody(t *testing.T) {
-	h := NewArchiveHandler(&stubArchiveSvc{})
+	h := NewArchiveHandler(&stubArchiveSvc{}, nil)
 	r := chi.NewRouter()
 	r.Post("/api/v1/archive/compose", h.Compose)
 
@@ -216,7 +216,7 @@ func TestComposeRejectsMalformedBody(t *testing.T) {
 }
 
 func TestGetArchivePositionNotFound(t *testing.T) {
-	h := NewArchiveHandler(&stubArchiveSvc{})
+	h := NewArchiveHandler(&stubArchiveSvc{}, nil)
 	r := chi.NewRouter()
 	r.Get("/api/v1/archive/positions/{id}", h.GetPosition)
 
@@ -234,7 +234,7 @@ func TestGetArchivePositionNotFound(t *testing.T) {
 }
 
 func TestSearchRequiresQuery(t *testing.T) {
-	h := NewArchiveHandler(&stubArchiveSvc{})
+	h := NewArchiveHandler(&stubArchiveSvc{}, nil)
 	r := chi.NewRouter()
 	r.Get("/api/v1/archive/positions/search", h.SearchPositions)
 

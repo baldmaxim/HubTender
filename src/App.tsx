@@ -53,6 +53,7 @@ const ActionPlan = lazy(() => import('./pages/ActionPlan/ActionPlan'));
 const ChangeImpact = lazy(() => import('./pages/ChangeImpact/ChangeImpact'));
 const ReviewPack = lazy(() => import('./pages/ReviewPack/ReviewPack'));
 const AdminAiSettings = lazy(() => import('./pages/AdminAiSettings/AdminAiSettings'));
+const AdminApiAccess = lazy(() => import('./pages/AdminApiAccess/AdminApiAccess'));
 
 function AppContent() {
   const { theme: currentTheme } = useTheme();
@@ -121,6 +122,7 @@ function AppContent() {
               <Route path="import-log" element={<ImportLog />} />
               <Route path="insurance" element={<Insurance />} />
               <Route path="ai-settings" element={<AdminAiSettings />} />
+              <Route path="api-access" element={<AdminApiAccess />} />
             </Route>
             <Route path="costs" element={<ConstructionCostNew />} />
             <Route path="financial-indicators" element={<FinancialIndicators />} />

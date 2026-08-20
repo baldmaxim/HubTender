@@ -24,6 +24,7 @@ import {
   SafetyCertificateOutlined,
   SafetyOutlined,
   RobotOutlined,
+  ApiOutlined,
 } from '@ant-design/icons';
 
 /** Статическое дерево бокового меню. Фильтрация по правам/устройству — в MainLayout. */
@@ -219,6 +220,11 @@ export const menuItems: NonNullable<MenuProps['items']> = [
         icon: <SafetyCertificateOutlined />,
         label: 'Страхование от судимостей',
       },
+      {
+        key: '/admin/api-access',
+        icon: <ApiOutlined />,
+        label: 'Доступ к API',
+      },
     ],
   },
 ];
@@ -242,4 +248,5 @@ export const MOBILE_HIDDEN_KEYS = new Set<string>([
   // Настройки
   '/admin/import-log',
   '/admin/insurance',
+  '/admin/api-access',
 ]);

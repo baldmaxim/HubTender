@@ -557,3 +557,48 @@ CREATE UNIQUE INDEX IF NOT EXISTS quality_acknowledgements_unique_idx
     ON public.quality_acknowledgements (tender_id, rule_code, entity_id);
 CREATE INDEX IF NOT EXISTS quality_acknowledgements_tender_idx
     ON public.quality_acknowledgements (tender_id);
+
+-- ─── Машинный доступ к API ──────────────────────────────────────────────────
+ALTER TABLE public.api_keys
+    ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);
+ALTER TABLE public.api_keys
+    ADD CONSTRAINT api_keys_key_hash_uniq UNIQUE (key_hash);
+ALTER TABLE public.api_keys
+    ADD CONSTRAINT api_keys_name_chk CHECK (length(btrim(name)) BETWEEN 1 AND 120);
+-- Ключ без прав только создаёт иллюзию доступа.
+ALTER TABLE public.api_keys
+    ADD CONSTRAINT api_keys_scopes_chk
+    CHECK (cardinality(scopes) > 0
+           AND scopes <@ ARRAY['archive:read', 'archive:write']::text[]);
+ALTER TABLE public.api_keys
+    ADD CONSTRAINT api_keys_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+ALTER TABLE public.api_keys
+    ADD CONSTRAINT api_keys_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES public.users(id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_created_at ON public.api_keys (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_keys_created_by ON public.api_keys (created_by);
+
+ALTER TABLE public.api_access_settings
+    ADD CONSTRAINT api_access_settings_pkey PRIMARY KEY (id);
+ALTER TABLE public.api_access_settings
+    ADD CONSTRAINT api_access_settings_singleton_chk CHECK (id);
+ALTER TABLE public.api_access_settings
+    ADD CONSTRAINT api_access_settings_limits_chk
+    CHECK (max_search_limit BETWEEN 1 AND 1000
+       AND max_candidate_limit BETWEEN 50 AND 20000
+       AND max_suggest_queries BETWEEN 1 AND 500
+       AND rate_limit_per_minute BETWEEN 0 AND 100000
+       AND call_log_retention_days BETWEEN 1 AND 365);
+ALTER TABLE public.api_access_settings
+    ADD CONSTRAINT api_access_settings_updated_by_fkey
+    FOREIGN KEY (updated_by) REFERENCES public.users(id);
+
+ALTER TABLE public.api_call_log
+    ADD CONSTRAINT api_call_log_pkey PRIMARY KEY (id);
+ALTER TABLE public.api_call_log
+    ADD CONSTRAINT api_call_log_api_key_fkey
+    FOREIGN KEY (api_key_id) REFERENCES public.api_keys(id) ON DELETE SET NULL;
+ALTER TABLE public.api_call_log
+    ADD CONSTRAINT api_call_log_user_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_api_call_log_called_at ON public.api_call_log (called_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_call_log_api_key ON public.api_call_log (api_key_id, called_at DESC);

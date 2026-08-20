@@ -6,8 +6,17 @@ info:
     Машинный API к архиву смет: поиск исторических позиций заказчика,
     подбор аналогов и сборка новых позиций целевого тендера на их основе.
 
-    Авторизация — тот же RS256 JWT, что и у остального портала:
-    `POST /api/v1/auth/login` → `Authorization: Bearer <access_token>`.
+    Два способа авторизации:
+
+    * `X-API-Key: thk_…` — машинный ключ, выпускается в UI («Настройки →
+      Доступ к API»). Действует от имени выпустившего пользователя, ограничен
+      областями `archive:read` / `archive:write` и, опционально, списком
+      тендеров. Ключ вне выданной области получает 403, сверх лимита — 429.
+    * `Authorization: Bearer <access_token>` — обычный RS256 JWT портала
+      (`POST /api/v1/auth/login`). Ограничения областей к нему не применяются.
+
+    Заголовок ключа имеет приоритет: если он есть, JWT не рассматривается.
+    Эндпоинты можно выключить целиком в тех же настройках — тогда ответ 503.
 
     Ошибки — RFC 7807 (`application/problem+json`) с машинным полем `code`.
 servers:
@@ -17,6 +26,7 @@ servers:
     description: локальный запуск Go BFF
 
 security:
+  - apiKeyAuth: []
   - bearerAuth: []
 
 tags:
@@ -58,6 +68,9 @@ paths:
                     items: { $ref: '#/components/schemas/ArchiveSearchHit' }
         '400': { $ref: '#/components/responses/Problem' }
         '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Disabled' }
 
   /api/v1/archive/positions/suggest:
     post:
@@ -82,6 +95,9 @@ paths:
                     items: { $ref: '#/components/schemas/SuggestResult' }
         '400': { $ref: '#/components/responses/Problem' }
         '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Disabled' }
 
   /api/v1/archive/positions/{id}:
     get:
@@ -100,7 +116,10 @@ paths:
                 properties:
                   data: { $ref: '#/components/schemas/ArchivePositionDetail' }
         '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Disabled' }
 
   /api/v1/archive/compose:
     post:
@@ -172,6 +191,11 @@ paths:
 
 components:
   securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Ключ машинного доступа, выпущенный в «Настройки → Доступ к API».
     bearerAuth:
       type: http
       scheme: bearer
@@ -180,6 +204,21 @@ components:
   responses:
     Problem:
       description: RFC 7807
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Ключу не выдана нужная область или запрошен тендер вне его списка.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RateLimited:
+      description: Превышен лимит запросов в минуту для ключа.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Disabled:
+      description: Эндпоинт выключен администратором в «Настройки → Доступ к API».
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }

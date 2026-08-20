@@ -30,25 +30,28 @@ type deps struct {
 	recalcRecovery *services.FinancialCalculationRecoveryService
 	recalcHealthH  *handlers.RecalcHealthHandler
 
-	healthH           *handlers.HealthHandler
-	meH               *handlers.MeHandler
-	refH              *handlers.ReferenceHandler
-	tenderH           *handlers.TenderHandler
-	tenderWH          *handlers.TenderWriteHandler
-	cbrH              *handlers.CBRHandler
-	positionH         *handlers.PositionHandler
-	positionWH        *handlers.PositionWriteHandler
-	positionCostsH    *handlers.PositionCostsHandler
-	boqH              *handlers.BoqHandler
-	boqWH             *handlers.BoqWriteHandler
-	bulkBoqH          *handlers.BulkBoqHandler
-	importBoqH        *handlers.ImportBoqHandler
-	timelineH         *handlers.TimelineHandler
-	userRegH          *handlers.UserRegisterHandler
-	subcontractH      *handlers.SubcontractHandler
-	transferH         *handlers.TenderTransferHandler
-	cloneH            *handlers.TenderCloneHandler
-	archiveH          *handlers.ArchiveHandler
+	healthH        *handlers.HealthHandler
+	meH            *handlers.MeHandler
+	refH           *handlers.ReferenceHandler
+	tenderH        *handlers.TenderHandler
+	tenderWH       *handlers.TenderWriteHandler
+	cbrH           *handlers.CBRHandler
+	positionH      *handlers.PositionHandler
+	positionWH     *handlers.PositionWriteHandler
+	positionCostsH *handlers.PositionCostsHandler
+	boqH           *handlers.BoqHandler
+	boqWH          *handlers.BoqWriteHandler
+	bulkBoqH       *handlers.BulkBoqHandler
+	importBoqH     *handlers.ImportBoqHandler
+	timelineH      *handlers.TimelineHandler
+	userRegH       *handlers.UserRegisterHandler
+	subcontractH   *handlers.SubcontractHandler
+	transferH      *handlers.TenderTransferHandler
+	cloneH         *handlers.TenderCloneHandler
+	archiveH       *handlers.ArchiveHandler
+	apiAccessH     *handlers.ApiAccessHandler
+	// apiAccessSvc нужен маршрутам напрямую: он же проверяет ключи и пишет журнал.
+	apiAccessSvc      *services.ApiAccessService
 	tenderNotesH      *handlers.TenderNotesHandler
 	boqAuditRollbackH *handlers.BoqAuditRollbackHandler
 	tasksH            *handlers.TasksHandler
@@ -138,6 +141,7 @@ func buildDeps(
 	importAnalysisRepo := repository.NewImportAnalysisRepo(pool)
 	importMemoryRepo := repository.NewImportMemoryRepo(pool)
 	archiveRepo := repository.NewArchiveRepo(pool)
+	apiAccessRepo := repository.NewApiAccessRepo(pool)
 
 	// Commercial-cost auto-recalc — replaces the manual «Пересчитать» button.
 	// Mutation services Enqueue(tenderID) after changing a pricing input (BOQ
@@ -206,6 +210,7 @@ func buildDeps(
 	changeImpactSvc := services.NewChangeImpactService(changeImpactRepo)
 	reviewPackSvc := services.NewReviewPackService(reviewPackRepo)
 	archiveSvc := services.NewArchiveService(archiveRepo, inMemCache)
+	apiAccessSvc := services.NewApiAccessService(rootCtx, apiAccessRepo)
 	// Этап 2.2: AI-подбор номенклатуры. Одобренного provider в проекте нет —
 	// по умолчанию DisabledProvider; config-contract (владелец проекта):
 	//   AI_NOMENCLATURE_ENABLED, AI_NOMENCLATURE_PROVIDER, AI_NOMENCLATURE_MODEL,
@@ -386,7 +391,9 @@ func buildDeps(
 		subcontractH:      handlers.NewSubcontractHandler(subcontractSvc),
 		transferH:         handlers.NewTenderTransferHandler(transferSvc),
 		cloneH:            handlers.NewTenderCloneHandler(cloneSvc),
-		archiveH:          handlers.NewArchiveHandler(archiveSvc),
+		archiveH:          handlers.NewArchiveHandler(archiveSvc, apiAccessSvc),
+		apiAccessH:        handlers.NewApiAccessHandler(apiAccessSvc),
+		apiAccessSvc:      apiAccessSvc,
 		tenderNotesH:      handlers.NewTenderNotesHandler(tenderNotesSvc),
 		boqAuditRollbackH: handlers.NewBoqAuditRollbackHandler(boqAuditRollbackSvc),
 		tasksH:            handlers.NewTasksHandler(tasksSvc),

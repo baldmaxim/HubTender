@@ -11,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	ea "github.com/su10/hubtender/backend/internal/analytics/estimatearchive"
+	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/internal/services"
 	"github.com/su10/hubtender/backend/pkg/apierr"
@@ -27,16 +28,22 @@ type archiveServicer interface {
 // ArchiveHandler обслуживает /api/v1/archive/*.
 type ArchiveHandler struct {
 	svc      archiveServicer
+	gate     apiAccessGate
 	validate *validator.Validate
 }
 
-// NewArchiveHandler creates an ArchiveHandler.
-func NewArchiveHandler(svc archiveServicer) *ArchiveHandler {
-	return &ArchiveHandler{svc: svc, validate: validator.New()}
+// NewArchiveHandler creates an ArchiveHandler. gate может быть nil — тогда
+// тумблеры и потолки из «Настройки → Доступ к API» не применяются
+// (используется в тестах хендлеров).
+func NewArchiveHandler(svc archiveServicer, gate apiAccessGate) *ArchiveHandler {
+	return &ArchiveHandler{svc: svc, gate: gate, validate: validator.New()}
 }
 
 // SearchPositions handles GET /api/v1/archive/positions/search.
 func (h *ArchiveHandler) SearchPositions(w http.ResponseWriter, r *http.Request) {
+	if !h.allow(w, r, endpointArchiveSearch, scopeRead) {
+		return
+	}
 	q := r.URL.Query()
 	workName := q.Get("q")
 	if workName == "" {
@@ -59,6 +66,10 @@ func (h *ArchiveHandler) SearchPositions(w http.ResponseWriter, r *http.Request)
 		score = *minScore
 	}
 
+	maxSearch, maxCandidates, _ := h.limits(r.Context())
+	filter := archiveFilterFromQuery(q)
+	filter.CandidateLimit = clampPositive(filter.CandidateLimit, maxCandidates)
+
 	req := services.ArchiveSearchRequest{
 		Query: ea.Query{
 			WorkName: workName,
@@ -66,9 +77,9 @@ func (h *ArchiveHandler) SearchPositions(w http.ResponseWriter, r *http.Request)
 			ItemNo:   q.Get("item_no"),
 			Volume:   volume,
 		},
-		Filter:   archiveFilterFromQuery(q),
+		Filter:   filter,
 		MinScore: score,
-		Limit:    intParam(q.Get("limit"), 0),
+		Limit:    clampPositive(intParam(q.Get("limit"), 0), maxSearch),
 	}
 
 	hits, err := h.svc.Search(r.Context(), req)
@@ -76,11 +87,15 @@ func (h *ArchiveHandler) SearchPositions(w http.ResponseWriter, r *http.Request)
 		apierr.InternalFromErr(w, r, err, "не удалось выполнить поиск по архиву смет")
 		return
 	}
+	middleware.SetCallItems(r.Context(), len(hits), false)
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: hits})
 }
 
 // GetPosition handles GET /api/v1/archive/positions/{id}.
 func (h *ArchiveHandler) GetPosition(w http.ResponseWriter, r *http.Request) {
+	if !h.allow(w, r, endpointArchiveRead, scopeRead) {
+		return
+	}
 	positionID := chi.URLParam(r, "id")
 	if positionID == "" {
 		apierr.BadRequest("missing position id").Render(w)
@@ -89,6 +104,7 @@ func (h *ArchiveHandler) GetPosition(w http.ResponseWriter, r *http.Request) {
 	d, err := h.svc.GetPosition(r.Context(), positionID)
 	if err != nil {
 		if errors.Is(err, repository.ErrArchivePositionNotFound) {
+			setCallError(r.Context(), "ARCHIVE_SOURCE_POSITION_NOT_FOUND")
 			apierr.ArchiveSourceNotFound(
 				"ARCHIVE_SOURCE_POSITION_NOT_FOUND", positionID, "",
 			).Render(w)
@@ -97,6 +113,10 @@ func (h *ArchiveHandler) GetPosition(w http.ResponseWriter, r *http.Request) {
 		apierr.InternalFromErr(w, r, err, "не удалось загрузить историческую позицию")
 		return
 	}
+	if d != nil && !h.allowTender(w, r, d.Position.TenderID) {
+		return
+	}
+	middleware.SetCallItems(r.Context(), len(d.Items), false)
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: d})
 }
 
@@ -123,6 +143,9 @@ type suggestReq struct {
 
 // SuggestPositions handles POST /api/v1/archive/positions/suggest.
 func (h *ArchiveHandler) SuggestPositions(w http.ResponseWriter, r *http.Request) {
+	if !h.allow(w, r, endpointArchiveSuggest, scopeRead) {
+		return
+	}
 	var req suggestReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apierr.BadRequest("invalid JSON body").Render(w)
@@ -132,9 +155,10 @@ func (h *ArchiveHandler) SuggestPositions(w http.ResponseWriter, r *http.Request
 		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
 		return
 	}
-	if len(req.Queries) > services.MaxSuggestQueries {
+	maxSearch, maxCandidates, maxQueries := h.limits(r.Context())
+	if len(req.Queries) > maxQueries {
 		apierr.BadRequest("запросов в батче больше допустимых " +
-			strconv.Itoa(services.MaxSuggestQueries)).Render(w)
+			strconv.Itoa(maxQueries)).Render(w)
 		return
 	}
 
@@ -163,14 +187,20 @@ func (h *ArchiveHandler) SuggestPositions(w http.ResponseWriter, r *http.Request
 			ApprovedOnly:      req.ApprovedOnly,
 			PeriodMonths:      req.PeriodMonths,
 			WithBoqOnly:       boolOrDefault(req.WithBoqOnly, true),
+			CandidateLimit:    maxCandidates,
 		},
 		MinScore:     score,
-		LimitPerItem: req.LimitPerQuery,
+		LimitPerItem: clampPositive(req.LimitPerQuery, maxSearch),
 	})
 	if err != nil {
 		apierr.InternalFromErr(w, r, err, "не удалось подобрать аналоги в архиве смет")
 		return
 	}
+	matches := 0
+	for _, one := range res {
+		matches += len(one.Matches)
+	}
+	middleware.SetCallItems(r.Context(), matches, false)
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: res})
 }
 

@@ -78,6 +78,9 @@ type composeReq struct {
 // тендеров — одной транзакцией. `?verbose=1` добавляет построчную детализацию.
 // При dry_run та же транзакция откатывается: ничего не записано, realtime молчит.
 func (h *ArchiveHandler) Compose(w http.ResponseWriter, r *http.Request) {
+	if !h.allow(w, r, endpointArchiveCompose, scopeWrite) {
+		return
+	}
 	authUser := middleware.UserFromContext(r.Context())
 	if authUser == nil {
 		apierr.Unauthorized("missing auth context").Render(w)
@@ -91,6 +94,10 @@ func (h *ArchiveHandler) Compose(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.validate.Struct(req); err != nil {
 		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+
+	if !h.allowTender(w, r, req.TargetTenderID) {
 		return
 	}
 
@@ -108,6 +115,7 @@ func (h *ArchiveHandler) Compose(w http.ResponseWriter, r *http.Request) {
 		renderComposeError(w, r, req.TargetTenderID, err)
 		return
 	}
+	middleware.SetCallItems(r.Context(), res.Totals.ItemsCreated, res.DryRun)
 	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: res})
 }
 
@@ -180,6 +188,13 @@ func composeGroupsFromReq(groups []composeGroupReq) []repository.ComposeGroup {
 // Все 4xx поднимаются ДО коммита и откатывают транзакцию целиком: частичной
 // сборки не бывает.
 func renderComposeError(w http.ResponseWriter, r *http.Request, tenderID string, err error) {
+	// Код ошибки уходит в журнал вызовов: по нему видно, обо что спотыкается
+	// внешний потребитель, без чтения тел запросов.
+	var coder interface{ Code() string }
+	if errors.As(err, &coder) {
+		setCallError(r.Context(), coder.Code())
+	}
+
 	// Общие для копирования/переноса ошибки — теми же рендерерами.
 	if renderMissingFXRate(w, err) {
 		return

@@ -61,6 +61,16 @@ func Conflict(detail string) *Problem {
 	return New(http.StatusConflict, "Conflict", detail)
 }
 
+// TooManyRequests returns a 429 Problem (rate limit).
+func TooManyRequests(detail string) *Problem {
+	return New(http.StatusTooManyRequests, "Too Many Requests", detail)
+}
+
+// ServiceUnavailable returns a 503 Problem (эндпоинт отключён администратором).
+func ServiceUnavailable(detail string) *Problem {
+	return New(http.StatusServiceUnavailable, "Service Unavailable", detail)
+}
+
 // PreconditionFailed returns a 412 Problem with optional extra fields merged
 // into the JSON body. Pass nil extras for a plain response.
 func PreconditionFailed(detail string, extras map[string]any) *ProblemExtra {
@@ -411,6 +421,10 @@ func problemTypeURI(status int) string {
 		return "https://httpstatuses.io/412"
 	case http.StatusPreconditionRequired:
 		return "https://httpstatuses.io/428"
+	case http.StatusTooManyRequests:
+		return "https://httpstatuses.io/429"
+	case http.StatusServiceUnavailable:
+		return "https://httpstatuses.io/503"
 	case http.StatusInternalServerError:
 		return "https://httpstatuses.io/500"
 	default:

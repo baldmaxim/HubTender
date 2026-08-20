@@ -873,3 +873,48 @@ CREATE TABLE IF NOT EXISTS public.quality_acknowledgements (
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
+
+-- Машинный доступ к API (страница «Настройки → Доступ к API»).
+-- Секрет ключа в БД не хранится: только SHA-256 хеш и префикс для опознания.
+CREATE TABLE IF NOT EXISTS public.api_keys (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    name text NOT NULL,
+    key_prefix text NOT NULL,
+    key_hash text NOT NULL,
+    scopes text[] NOT NULL DEFAULT '{}',
+    allowed_tender_ids uuid[],
+    expires_at timestamp with time zone,
+    revoked_at timestamp with time zone,
+    revoked_by uuid,
+    last_used_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    created_by uuid NOT NULL
+);
+CREATE TABLE IF NOT EXISTS public.api_access_settings (
+    id boolean NOT NULL DEFAULT true,
+    archive_search_enabled boolean NOT NULL DEFAULT true,
+    archive_read_enabled boolean NOT NULL DEFAULT true,
+    archive_suggest_enabled boolean NOT NULL DEFAULT true,
+    archive_compose_enabled boolean NOT NULL DEFAULT true,
+    max_search_limit integer NOT NULL DEFAULT 200,
+    max_candidate_limit integer NOT NULL DEFAULT 4000,
+    max_suggest_queries integer NOT NULL DEFAULT 100,
+    rate_limit_per_minute integer NOT NULL DEFAULT 120,
+    call_log_retention_days integer NOT NULL DEFAULT 30,
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_by uuid
+);
+CREATE TABLE IF NOT EXISTS public.api_call_log (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    api_key_id uuid,
+    user_id uuid,
+    method text NOT NULL,
+    path text NOT NULL,
+    status integer NOT NULL,
+    duration_ms integer NOT NULL DEFAULT 0,
+    error_code text,
+    items_affected integer,
+    dry_run boolean,
+    called_at timestamp with time zone NOT NULL DEFAULT now()
+);

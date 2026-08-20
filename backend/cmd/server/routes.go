@@ -61,6 +61,22 @@ func newRouter(
 	// Authenticated API routes — app-issued JWT only (see VerifyConfig).
 	authMW := middleware.JWTAuth(verifyCfg)
 
+	// Архив смет — единственный домен с МАШИННЫМ доступом: пускает либо по
+	// заголовку X-API-Key, либо по обычному JWT. Каждый вызов пишется в журнал
+	// «Настройки → Доступ к API»; сами эндпоинты гейтятся тумблерами и
+	// областями ключа внутри хендлеров.
+	archiveMW := middleware.JWTOrAPIKey(verifyCfg, d.apiAccessSvc)
+	r.Group(func(r chi.Router) {
+		r.Use(archiveMW)
+		r.Use(middleware.APICallLogger(d.apiAccessSvc))
+
+		r.Get("/api/v1/archive/positions/search", d.archiveH.SearchPositions)
+		r.Post("/api/v1/archive/positions/suggest", d.archiveH.SuggestPositions)
+		r.Get("/api/v1/archive/positions/{id}", d.archiveH.GetPosition)
+		r.Post("/api/v1/archive/compose", d.archiveH.Compose)
+		r.Get("/api/v1/archive/openapi.yaml", d.archiveH.OpenAPI)
+	})
+
 	r.Group(func(r chi.Router) {
 		r.Use(authMW)
 
@@ -179,13 +195,19 @@ func newRouter(
 		// public.clone_tender_as_new_version, ported into Yandex schema).
 		r.Post("/api/v1/tenders/{id}/versions/clone", d.cloneH.Clone)
 
-		// Архив смет: чтение исторических позиций заказчика и сборка новых
-		// позиций целевого тендера на их основе (машинный API, без UI).
-		r.Get("/api/v1/archive/positions/search", d.archiveH.SearchPositions)
-		r.Post("/api/v1/archive/positions/suggest", d.archiveH.SuggestPositions)
-		r.Get("/api/v1/archive/positions/{id}", d.archiveH.GetPosition)
-		r.Post("/api/v1/archive/compose", d.archiveH.Compose)
-		r.Get("/api/v1/archive/openapi.yaml", d.archiveH.OpenAPI)
+		// Управление выдачей API («Настройки → Доступ к API»). Ключ открывает
+		// машинный доступ ко всем сметам, поэтому гейт ролевой и серверный.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireRoles(handlers.ApiAccessAdminRoles))
+
+			r.Get("/api/v1/admin/api-access/keys", d.apiAccessH.ListKeys)
+			r.Post("/api/v1/admin/api-access/keys", d.apiAccessH.CreateKey)
+			r.Post("/api/v1/admin/api-access/keys/{id}/revoke", d.apiAccessH.RevokeKey)
+			r.Delete("/api/v1/admin/api-access/keys/{id}", d.apiAccessH.DeleteKey)
+			r.Get("/api/v1/admin/api-access/settings", d.apiAccessH.GetSettings)
+			r.Put("/api/v1/admin/api-access/settings", d.apiAccessH.UpdateSettings)
+			r.Get("/api/v1/admin/api-access/calls", d.apiAccessH.ListCallLog)
+		})
 
 		// Phase 5: tender notes (per-user; privileged roles see all).
 		r.Get("/api/v1/tenders/{id}/notes", d.tenderNotesH.List)
