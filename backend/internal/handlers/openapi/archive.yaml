@@ -208,7 +208,9 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
     Forbidden:
-      description: Ключу не выдана нужная область или запрошен тендер вне его списка.
+      description: |
+        `API_KEY_SCOPE_DENIED` — ключу не выдана нужная область;
+        `API_KEY_TENDER_DENIED` — запрошенный тендер вне списка ключа.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -218,7 +220,7 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
     Disabled:
-      description: Эндпоинт выключен администратором в «Настройки → Доступ к API».
+      description: '`ENDPOINT_DISABLED` — эндпоинт выключен администратором в «Настройки → Доступ к API».' 
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }

@@ -8,6 +8,7 @@
   она же отдаётся живым сервисом по `GET /api/v1/archive/openapi.yaml`.
   Клиент генерируется любым `openapi-generator` — это и заменяет автодоки FastAPI.
 - Инварианты расчёта: [`CALCULATION_SOURCE_OF_TRUTH.md`](CALCULATION_SOURCE_OF_TRUTH.md), §7b-bis.
+- Подключение из Cursor: [`ESTIMATE_ARCHIVE_CURSOR.md`](ESTIMATE_ARCHIVE_CURSOR.md).
 
 ## Почему не отдельный Python-сервис
 
@@ -234,5 +235,6 @@ GIN-индекс `client_positions USING gin (work_name gin_trgm_ops)` и зам
 | Ошибки | `backend/pkg/apierr/archive.go` |
 | Ключи, настройки, журнал | `backend/internal/apikey/`, `backend/internal/repository/api_access*.go`, `backend/internal/services/api_access.go`, `backend/internal/handlers/api_access.go`, `backend/internal/middleware/apikey.go` |
 | UI управления доступом | `src/pages/AdminApiAccess/`, `src/lib/api/apiAccess.ts` |
+| CLI и правило для Cursor | `scripts/archive-api.mjs`, `.cursor/rules/estimate-archive-api.mdc` |
 | Схема | `db/yandex/incremental/2026_08_api_access_control.sql` |
 | Маршруты | `backend/cmd/server/routes.go` |

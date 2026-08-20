@@ -33,7 +33,9 @@ func (h *ArchiveHandler) allow(w http.ResponseWriter, r *http.Request, endpoint,
 		if err := h.gate.EnsureEndpointEnabled(r.Context(), endpoint); err != nil {
 			if errors.Is(err, services.ErrEndpointDisabled) {
 				setCallError(r.Context(), "ENDPOINT_DISABLED")
-				apierr.ServiceUnavailable("эндпоинт отключён администратором").Render(w)
+				apierr.ArchiveProblem(http.StatusServiceUnavailable, "ENDPOINT_DISABLED",
+					"Эндпоинт отключён администратором в «Настройки → Доступ к API».",
+					map[string]any{"endpoint": endpoint}).Render(w)
 				return false
 			}
 			// Настройки не прочитались — это отказ инфраструктуры, а не отказ
@@ -47,7 +49,9 @@ func (h *ArchiveHandler) allow(w http.ResponseWriter, r *http.Request, endpoint,
 	// JWT прав ровно столько, сколько даёт его роль и список страниц.
 	if p := middleware.APIKeyFromContext(r.Context()); p != nil && !p.HasScope(scope) {
 		setCallError(r.Context(), "API_KEY_SCOPE_DENIED")
-		apierr.Forbidden("ключу не выдана область " + scope).Render(w)
+		apierr.ArchiveProblem(http.StatusForbidden, "API_KEY_SCOPE_DENIED",
+			"Ключу не выдана требуемая область доступа.",
+			map[string]any{"requiredScope": scope}).Render(w)
 		return false
 	}
 	return true
@@ -60,7 +64,9 @@ func (h *ArchiveHandler) allowTender(w http.ResponseWriter, r *http.Request, ten
 		return true
 	}
 	setCallError(r.Context(), "API_KEY_TENDER_DENIED")
-	apierr.Forbidden("ключу не разрешён этот тендер").Render(w)
+	apierr.ArchiveProblem(http.StatusForbidden, "API_KEY_TENDER_DENIED",
+		"Ключ ограничен списком тендеров, и запрошенный в него не входит.",
+		map[string]any{"tenderId": tenderID}).Render(w)
 	return false
 }
 
