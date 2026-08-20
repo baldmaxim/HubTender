@@ -2,7 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // ApiAccessSettings — тумблеры выдачи API и потолки. Строка ровно одна
@@ -20,6 +23,27 @@ type ApiAccessSettings struct {
 	UpdatedAt             string  `json:"updated_at"`
 	UpdatedBy             *string `json:"updated_by"`
 	UpdatedByName         *string `json:"updated_by_name"`
+}
+
+// DefaultApiAccessSettings — значения по умолчанию, дословно совпадающие с
+// DEFAULT-ами в db/yandex/incremental/2026_08_api_access_control.sql.
+//
+// Нужны, потому что baseline-схема (db/yandex/sql) принципиально не содержит
+// INSERT'ов: на свежей установке строка-синглтон появляется только после
+// инкрементальной миграции. Отсутствие строки — состояние провижининга, а не
+// сигнал «доступ запрещён», поэтому читатель отдаёт эти значения вместо ошибки.
+func DefaultApiAccessSettings() ApiAccessSettings {
+	return ApiAccessSettings{
+		ArchiveSearchEnabled:  true,
+		ArchiveReadEnabled:    true,
+		ArchiveSuggestEnabled: true,
+		ArchiveComposeEnabled: true,
+		MaxSearchLimit:        200,
+		MaxCandidateLimit:     4000,
+		MaxSuggestQueries:     100,
+		RateLimitPerMinute:    120,
+		CallLogRetentionDays:  30,
+	}
 }
 
 const apiAccessSettingsSelect = `
@@ -45,6 +69,10 @@ func (r *ApiAccessRepo) GetApiAccessSettings(ctx context.Context) (*ApiAccessSet
 		&s.UpdatedAt, &s.UpdatedBy, &s.UpdatedByName,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			def := DefaultApiAccessSettings()
+			return &def, nil
+		}
 		return nil, fmt.Errorf("apiAccessRepo.GetApiAccessSettings: %w", err)
 	}
 	return &s, nil
@@ -55,20 +83,28 @@ func (r *ApiAccessRepo) GetApiAccessSettings(ctx context.Context) (*ApiAccessSet
 func (r *ApiAccessRepo) UpdateApiAccessSettings(
 	ctx context.Context, s ApiAccessSettings, updatedBy string,
 ) (*ApiAccessSettings, error) {
+	// UPSERT, а не UPDATE: на свежей установке строки-синглтона может ещё не
+	// быть (см. DefaultApiAccessSettings), и первое же сохранение из UI обязано
+	// её создать, а не молча ничего не изменить.
 	_, err := r.pool.Exec(ctx, `
-		UPDATE public.api_access_settings
-		SET archive_search_enabled  = $1,
-		    archive_read_enabled    = $2,
-		    archive_suggest_enabled = $3,
-		    archive_compose_enabled = $4,
-		    max_search_limit        = $5,
-		    max_candidate_limit     = $6,
-		    max_suggest_queries     = $7,
-		    rate_limit_per_minute   = $8,
-		    call_log_retention_days = $9,
+		INSERT INTO public.api_access_settings (
+		    id, archive_search_enabled, archive_read_enabled,
+		    archive_suggest_enabled, archive_compose_enabled,
+		    max_search_limit, max_candidate_limit, max_suggest_queries,
+		    rate_limit_per_minute, call_log_retention_days, updated_at, updated_by
+		) VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10::uuid)
+		ON CONFLICT (id) DO UPDATE
+		SET archive_search_enabled  = EXCLUDED.archive_search_enabled,
+		    archive_read_enabled    = EXCLUDED.archive_read_enabled,
+		    archive_suggest_enabled = EXCLUDED.archive_suggest_enabled,
+		    archive_compose_enabled = EXCLUDED.archive_compose_enabled,
+		    max_search_limit        = EXCLUDED.max_search_limit,
+		    max_candidate_limit     = EXCLUDED.max_candidate_limit,
+		    max_suggest_queries     = EXCLUDED.max_suggest_queries,
+		    rate_limit_per_minute   = EXCLUDED.rate_limit_per_minute,
+		    call_log_retention_days = EXCLUDED.call_log_retention_days,
 		    updated_at              = NOW(),
-		    updated_by              = $10::uuid
-		WHERE id = true
+		    updated_by              = EXCLUDED.updated_by
 	`,
 		s.ArchiveSearchEnabled, s.ArchiveReadEnabled,
 		s.ArchiveSuggestEnabled, s.ArchiveComposeEnabled,

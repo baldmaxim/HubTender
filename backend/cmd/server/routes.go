@@ -483,7 +483,7 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 					w.Header().Set("Access-Control-Allow-Credentials", "true")
 					w.Header().Set(
 						"Access-Control-Allow-Headers",
-						"Authorization, Content-Type, X-Request-ID, If-Match, If-None-Match, Cache-Control",
+						"Authorization, Content-Type, X-Request-ID, If-Match, If-None-Match, Cache-Control, X-API-Key",
 					)
 					// Preflight cache: Chrome default is only 5s, so every
 					// realtime refetch would otherwise re-issue OPTIONS.
