@@ -257,6 +257,8 @@ CREATE TRIGGER trg_ai_pilot_users_updated_at
 DROP TRIGGER IF EXISTS trg_ai_circuit_state_updated_at ON public.ai_circuit_state;
 CREATE TRIGGER trg_ai_circuit_state_updated_at
   BEFORE UPDATE ON public.ai_circuit_state
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
 -- ----- quality_acknowledgements ---------------------------------------------
 DROP TRIGGER IF EXISTS quality_acknowledgements_updated_at ON public.quality_acknowledgements;
 CREATE TRIGGER quality_acknowledgements_updated_at

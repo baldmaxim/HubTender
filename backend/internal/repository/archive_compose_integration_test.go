@@ -24,6 +24,10 @@ type archiveFixture struct {
 	srcPosID    string
 	tgtTenderID string
 	tgtPosID    string
+	// nextSort — явная нумерация строк источника. Без неё все строки получают
+	// sort_number = 0, и порядок чтения решает случайный uuid: тест становится
+	// флаки, хотя копирование работает верно.
+	nextSort int
 }
 
 // seedArchiveFixture создаёт ДВА тендера: источник (архив) и цель.
@@ -81,19 +85,21 @@ func (f *archiveFixture) addArchiveItem(
 	} else {
 		matRef = &matNameID
 	}
+	f.nextSort++
 	var id string
 	if err := pool.QueryRow(context.Background(), `
 		INSERT INTO public.boq_items
-		  (client_position_id, tender_id, boq_item_type, quantity, unit_rate, currency_type,
+		  (client_position_id, tender_id, sort_number, boq_item_type, quantity,
+		   unit_rate, currency_type,
 		   delivery_price_type, conversion_coefficient, consumption_coefficient,
 		   parent_work_item_id, work_name_id, material_name_id,
 		   total_amount, commercial_markup,
 		   total_commercial_material_cost, total_commercial_work_cost)
-		VALUES ($1::uuid,$2::uuid,$3::boq_item_type,$4,$5,$6::currency_type,
-		        'в цене',$7,$8,$9::uuid,$10::uuid,$11::uuid,
+		VALUES ($1::uuid,$2::uuid,$3,$4::boq_item_type,$5,$6,$7::currency_type,
+		        'в цене',$8,$9,$10::uuid,$11::uuid,$12::uuid,
 		        999999, 777, 888888, 999999)
 		RETURNING id::text`,
-		f.srcPosID, f.srcTenderID, itemType, qty, rate, currency, conv, cons,
+		f.srcPosID, f.srcTenderID, f.nextSort, itemType, qty, rate, currency, conv, cons,
 		parentID, workRef, matRef,
 	).Scan(&id); err != nil {
 		t.Fatalf("add archive item: %v", err)
@@ -207,6 +213,13 @@ func TestArchiveComposeIntegration_MissingTargetFXRateFailsClosed(t *testing.T) 
 	}
 }
 
+// archiveRow — строка целевой позиции для проверок масштабирования.
+type archiveRow struct {
+	id, itemType string
+	qty          *float64
+	parent       *string
+}
+
 // ─── C. Масштабирование: привязанный материал пере-выводится и идемпотентен ──
 
 func TestArchiveComposeIntegration_ScalingRederivesLinkedMaterial(t *testing.T) {
@@ -236,16 +249,11 @@ func TestArchiveComposeIntegration_ScalingRederivesLinkedMaterial(t *testing.T) 
 	if err != nil {
 		t.Fatalf("read target: %v", err)
 	}
-	type row struct {
-		id, itemType string
-		qty          *float64
-		parent       *string
-	}
-	var got []row
+	var got []archiveRow
 	func() {
 		defer rows.Close()
 		for rows.Next() {
-			var r row
+			var r archiveRow
 			if err := rows.Scan(&r.id, &r.itemType, &r.qty, &r.parent); err != nil {
 				t.Fatalf("scan: %v", err)
 			}
@@ -255,26 +263,42 @@ func TestArchiveComposeIntegration_ScalingRederivesLinkedMaterial(t *testing.T) 
 	if len(got) != 2 {
 		t.Fatalf("целевых строк %d, want 2", len(got))
 	}
-	if got[0].qty == nil || *got[0].qty != 20 {
-		t.Fatalf("работа: 10*2 = 20, получили %v", got[0].qty)
+
+	// Ищем по типу, а не по позиции в срезе: порядок — деталь реализации.
+	var workRow, matRow *archiveRow
+	for i := range got {
+		if calc.IsWorkBoqType(got[i].itemType) {
+			workRow = &got[i]
+		} else {
+			matRow = &got[i]
+		}
+	}
+	if workRow == nil || matRow == nil {
+		t.Fatalf("ожидали одну работу и один материал, получили %+v", got)
+	}
+	if workRow.qty == nil || *workRow.qty != 20 {
+		t.Fatalf("работа: 10*2 = 20, получили %v", workRow.qty)
 	}
 	// Пере-вывод из масштабированного родителя: 20*2*0.5 = 20.
-	if got[1].qty == nil || *got[1].qty != 20 {
-		t.Fatalf("привязанный материал: 20*2*0.5 = 20, получили %v", got[1].qty)
+	if matRow.qty == nil || *matRow.qty != 20 {
+		t.Fatalf("привязанный материал: 20*2*0.5 = 20, получили %v", matRow.qty)
 	}
-	if got[1].parent == nil || *got[1].parent != got[0].id {
-		t.Fatalf("связь материал→работа не переехала на целевые uuid: %v", got[1].parent)
+	if matRow.parent == nil || *matRow.parent != workRow.id {
+		t.Fatalf("связь материал→работа не переехала на целевые uuid: %v", matRow.parent)
+	}
+	if workRow.parent != nil {
+		t.Fatalf("у работы не может быть родителя, получили %v", workRow.parent)
 	}
 
 	// Идемпотентность: штатный пересчёт связанных материалов ничего не меняет.
 	if _, err := boqRepo.RecomputeLinkedMaterialsForWork(
-		context.Background(), got[0].id, archiveTestUser,
+		context.Background(), workRow.id, archiveTestUser,
 	); err != nil {
 		t.Fatalf("recompute linked materials: %v", err)
 	}
 	var after float64
 	if err := pool.QueryRow(context.Background(),
-		`SELECT quantity FROM public.boq_items WHERE id = $1::uuid`, got[1].id).Scan(&after); err != nil {
+		`SELECT quantity FROM public.boq_items WHERE id = $1::uuid`, matRow.id).Scan(&after); err != nil {
 		t.Fatalf("read child: %v", err)
 	}
 	if after != 20 {
