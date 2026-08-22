@@ -164,6 +164,51 @@ func TestApiAccessIntegration_KeyWithTenderScopeAndExpiry(t *testing.T) {
 	}
 }
 
+func TestApiAccessIntegration_TendersReadScopeAccepted(t *testing.T) {
+	// CHECK api_keys_scopes_chk перечисляет области явно: без миграции
+	// 2026_08_api_scope_tenders_read ключ с этой областью не вставится,
+	// каким бы ни был Go-валидатор.
+	pool := newTestPool(t)
+	cleanupApiAccess(t, pool)
+	repo := NewApiAccessRepo(pool)
+
+	gen, _ := apikey.Generate()
+	created, err := repo.CreateApiKey(context.Background(), CreateApiKeyInput{
+		Name:      "itest-tenders-read",
+		KeyPrefix: gen.Prefix,
+		KeyHash:   gen.Hash,
+		Scopes:    []string{apikey.ScopeArchiveWrite, apikey.ScopeTendersRead},
+		CreatedBy: apiAccessTestUser,
+	})
+	if err != nil {
+		t.Fatalf("CreateApiKey с tenders:read: %v", err)
+	}
+	if len(created.Scopes) != 2 {
+		t.Fatalf("области = %v", created.Scopes)
+	}
+
+	verified, err := repo.VerifyApiKeyHash(context.Background(), gen.Hash)
+	if err != nil {
+		t.Fatalf("VerifyApiKeyHash: %v", err)
+	}
+	if !apikey.HasScope(verified.Scopes, apikey.ScopeTendersRead) {
+		t.Fatalf("область не доехала до рантайма: %v", verified.Scopes)
+	}
+}
+
+func TestApiAccessIntegration_UnknownScopeRejectedByDB(t *testing.T) {
+	pool := newTestPool(t)
+	cleanupApiAccess(t, pool)
+
+	_, err := pool.Exec(context.Background(), `
+		INSERT INTO public.api_keys (name, key_prefix, key_hash, scopes, created_by)
+		VALUES ('itest-bad-scope','thk_x','hash-bad', ARRAY['tenders:write']::text[], $1::uuid)
+	`, apiAccessTestUser)
+	if err == nil {
+		t.Fatal("БД обязана отклонить область вне списка")
+	}
+}
+
 func TestApiAccessIntegration_Settings(t *testing.T) {
 	pool := newTestPool(t)
 	repo := NewApiAccessRepo(pool)

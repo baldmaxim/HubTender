@@ -10,6 +10,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
 
+	"github.com/su10/hubtender/backend/internal/apikey"
 	"github.com/su10/hubtender/backend/internal/auth"
 	"github.com/su10/hubtender/backend/internal/config"
 	"github.com/su10/hubtender/backend/internal/handlers"
@@ -75,6 +76,15 @@ func newRouter(
 		r.Get("/api/v1/archive/positions/{id}", d.archiveH.GetPosition)
 		r.Post("/api/v1/archive/compose", d.archiveH.Compose)
 		r.Get("/api/v1/archive/openapi.yaml", d.archiveH.OpenAPI)
+
+		// Список позиций тендера — единственный маршрут вне домена архива,
+		// открытый машинному доступу: без него внешний код не может сопоставить
+		// свои строки с id существующих позиций перед сборкой сметы.
+		//
+		// Хендлер общий с UI и про области не знает, поэтому область и
+		// ограничение по тендерам проверяет маршрутный гейт. Только чтение.
+		r.With(middleware.RequireAPIKeyScope(apikey.ScopeTendersRead, "id")).
+			Get("/api/v1/tenders/{id}/positions", d.positionH.GetPositions)
 	})
 
 	r.Group(func(r chi.Router) {
@@ -113,7 +123,6 @@ func newRouter(
 		r.Get("/api/v1/tenders/{id}/change-impact", d.changeImpactH.TenderChangeImpact)
 		r.Get("/api/v1/tenders/{id}/review-report", d.reviewPackH.TenderReviewReport)
 		r.Get("/api/v1/tenders/{id}/review-report.xlsx", d.reviewPackH.TenderReviewReportXLSX)
-		r.Get("/api/v1/tenders/{id}/positions", d.positionH.GetPositions)
 		r.Get("/api/v1/positions/boq-preview", d.positionH.GetBoqPreview)
 		r.Post("/api/v1/positions/boq-preview", d.positionH.PostBoqPreview)
 		r.Get("/api/v1/positions/{id}/with-tender", d.positionH.GetPositionWithTender)

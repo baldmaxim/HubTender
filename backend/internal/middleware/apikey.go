@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 
 	"github.com/su10/hubtender/backend/pkg/apierr"
@@ -186,5 +187,52 @@ func APICallLogger(sink CallSink) func(http.Handler) http.Handler {
 			}
 			sink.RecordAPICall(rec)
 		})
+	}
+}
+
+// RequireAPIKeyScope — маршрутный гейт для эндпоинтов ВНЕ домена архива,
+// открытых машинному доступу.
+//
+// Нужен потому, что такие хендлеры (например список позиций тендера) написаны
+// для человека с JWT и про области не знают: без гейта перенос маршрута под
+// JWTOrAPIKey открыл бы его ЛЮБОМУ валидному ключу, включая чисто архивный.
+//
+// Человек с JWT проходит без ограничений — у него права от роли и списка
+// страниц. Для ключа проверяется область и, если задано имя URL-параметра с id
+// тендера, принадлежность этого тендера списку разрешённых для ключа.
+func RequireAPIKeyScope(scope, tenderURLParam string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p := APIKeyFromContext(r.Context())
+			if p == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if !p.HasScope(scope) {
+				markCallError(r.Context(), "API_KEY_SCOPE_DENIED")
+				apierr.ArchiveProblem(http.StatusForbidden, "API_KEY_SCOPE_DENIED",
+					"Ключу не выдана требуемая область доступа.",
+					map[string]any{"requiredScope": scope}).Render(w)
+				return
+			}
+			if tenderURLParam != "" {
+				tenderID := chi.URLParam(r, tenderURLParam)
+				if tenderID != "" && !p.AllowsTender(tenderID) {
+					markCallError(r.Context(), "API_KEY_TENDER_DENIED")
+					apierr.ArchiveProblem(http.StatusForbidden, "API_KEY_TENDER_DENIED",
+						"Ключ ограничен списком тендеров, и запрошенный в него не входит.",
+						map[string]any{"tenderId": tenderID}).Render(w)
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// markCallError помечает код отказа для журнала вызовов.
+func markCallError(ctx context.Context, code string) {
+	if s := CallStatFromContext(ctx); s != nil {
+		s.ErrorCode = code
 	}
 }

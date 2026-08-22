@@ -27,11 +27,27 @@ const secretBytes = 32
 // показывается в списке, чтобы отличать ключи друг от друга.
 const DisplayPrefixLen = 12
 
-// Области доступа.
+// Области доступа. Список закрытый: он продублирован в CHECK
+// api_keys_scopes_chk и в валидаторе выпуска ключа — расширять надо все три.
 const (
 	ScopeArchiveRead  = "archive:read"
 	ScopeArchiveWrite = "archive:write"
+	// ScopeTendersRead — чтение списка позиций тендера. Только чтение: записи в
+	// тендер эта область не открывает.
+	ScopeTendersRead = "tenders:read"
 )
+
+// KnownScopes — все допустимые области.
+var KnownScopes = []string{ScopeArchiveRead, ScopeArchiveWrite, ScopeTendersRead}
+
+func isKnownScope(s string) bool {
+	for _, k := range KnownScopes {
+		if k == s {
+			return true
+		}
+	}
+	return false
+}
 
 // ErrUnknownScope — область вне известного списка.
 var ErrUnknownScope = errors.New("unknown api key scope")
@@ -98,7 +114,7 @@ func NormalizeScopes(scopes []string) ([]string, error) {
 		if s == "" {
 			continue
 		}
-		if s != ScopeArchiveRead && s != ScopeArchiveWrite {
+		if !isKnownScope(s) {
 			return nil, fmt.Errorf("%w: %q", ErrUnknownScope, s)
 		}
 		if seen[s] {

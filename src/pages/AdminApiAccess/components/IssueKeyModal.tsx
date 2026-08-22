@@ -123,12 +123,13 @@ export const IssueKeyModal: FC<IIssueKeyModalProps> = ({
           name="scopes"
           label="Права"
           rules={[{ required: true, message: 'Выберите хотя бы одно право' }]}
-          extra="Сборка смет означает запись в тендер: строки создаются от имени владельца ключа."
+          extra="Сборка смет означает запись в тендер: строки создаются от имени владельца ключа. Чтение позиций нужно, чтобы сопоставить свои строки с существующими позициями."
         >
           <Checkbox.Group
             options={[
               { label: 'Чтение архива смет', value: 'archive:read' },
               { label: 'Сборка смет (запись)', value: 'archive:write' },
+              { label: 'Чтение позиций тендера', value: 'tenders:read' },
             ]}
           />
         </Form.Item>

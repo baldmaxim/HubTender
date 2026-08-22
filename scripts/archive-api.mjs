@@ -11,6 +11,7 @@
  * Примеры:
  *   node scripts/archive-api.mjs search "устройство стяжки" --unit=м2 --limit=5
  *   node scripts/archive-api.mjs position <uuid>
+ *   node scripts/archive-api.mjs positions <tender_id>
  *   node scripts/archive-api.mjs suggest "кладка стен" "монтаж дверей"
  *   node scripts/archive-api.mjs compose ./compose.json --dry-run
  */
@@ -122,6 +123,15 @@ switch (command) {
     break;
   }
 
+  case 'positions': {
+    // Список позиций тендера: нужен, чтобы сопоставить свои строки с id
+    // существующих позиций перед сборкой. Требует области tenders:read.
+    const tenderId = positional[0];
+    if (!tenderId) throw new Error('Укажите id тендера');
+    console.log(JSON.stringify(await call('GET', `/api/v1/tenders/${tenderId}/positions`), null, 2));
+    break;
+  }
+
   case 'spec': {
     const res = await request('GET', '/api/v1/archive/openapi.yaml');
     console.log(await res.text());
@@ -129,9 +139,10 @@ switch (command) {
   }
 
   default:
-    console.error(`Команды: search | position | suggest | compose | spec
+    console.error(`Команды: search | position | positions | suggest | compose | spec
   node scripts/archive-api.mjs search "устройство стяжки" --unit=м2 --limit=5
   node scripts/archive-api.mjs position <uuid>
+  node scripts/archive-api.mjs positions <tender_id>   # позиции тендера (tenders:read)
   node scripts/archive-api.mjs suggest "кладка стен" "монтаж дверей"
   node scripts/archive-api.mjs compose ./compose.json            # проба (dry_run)
   node scripts/archive-api.mjs compose ./compose.json --no-dry-run --verbose`);

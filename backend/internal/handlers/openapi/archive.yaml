@@ -10,8 +10,9 @@ info:
 
     * `X-API-Key: thk_…` — машинный ключ, выпускается в UI («Настройки →
       Доступ к API»). Действует от имени выпустившего пользователя, ограничен
-      областями `archive:read` / `archive:write` и, опционально, списком
-      тендеров. Ключ вне выданной области получает 403, сверх лимита — 429.
+      областями `archive:read` / `archive:write` / `tenders:read` и,
+      опционально, списком тендеров. Ключ вне выданной области получает 403,
+      сверх лимита — 429.
     * `Authorization: Bearer <access_token>` — обычный RS256 JWT портала
       (`POST /api/v1/auth/login`). Ограничения областей к нему не применяются.
 
@@ -178,6 +179,35 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  /api/v1/tenders/{id}/positions:
+    get:
+      tags: [archive]
+      summary: Список позиций тендера
+      description: |
+        Единственный маршрут вне домена архива, открытый машинному доступу, и
+        только на чтение. Нужен, чтобы сопоставить свои строки с id существующих
+        позиций перед `compose`.
+
+        Требует области `tenders:read`. Ограничение ключа по списку тендеров
+        действует и здесь. Человек с JWT ходит сюда как обычно, без областей.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Позиции тендера
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      description: Строка client_positions.
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /api/v1/archive/openapi.yaml:
     get:
       tags: [archive]
@@ -195,7 +225,9 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: Ключ машинного доступа, выпущенный в «Настройки → Доступ к API».
+      description: |
+        Ключ машинного доступа, выпущенный в «Настройки → Доступ к API».
+        Области: `archive:read`, `archive:write`, `tenders:read`.
     bearerAuth:
       type: http
       scheme: bearer
