@@ -42,6 +42,10 @@ export async function getTenderInsuranceFI(tenderId: string): Promise<TenderInsu
 export async function listAllBoqItemsForTender(tenderId: string): Promise<BoqItemWithPosition[]> {
   const res = await apiFetch<{ data: BoqItemWithPosition[] }>(
     `/api/v1/tenders/${encodeURIComponent(tenderId)}/boq-items-flat`,
+    // Все boq_items тендера — тело растёт линейно (до 7-8 тыс. строк). Дефолтные
+    // 10 с рвали загрузку «Позиций заказчика» на крупных тендерах, см.
+    // fetchPositionsWithCosts. Потолок — 5 мин, как chi.Timeout на бэке.
+    { timeoutMs: 300_000 },
   );
   return res.data ?? [];
 }

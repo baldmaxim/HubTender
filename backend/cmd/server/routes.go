@@ -17,6 +17,20 @@ import (
 	"github.com/su10/hubtender/backend/internal/middleware"
 )
 
+// apiCompressMiddleware returns the gzip middleware for JSON API groups.
+//
+// Агрегатные чтения крупных тендеров отдают мегабайты (positions/with-costs на
+// 11 тыс. позиций — ~10 МБ), а прод-nginx сжатие не включает: на ~1 МБ/с такой
+// ответ не укладывался в 10-секундный таймаут apiFetch, и «Позиции заказчика»
+// рисовали пустую таблицу при полностью залитых данных.
+//
+// Вешается на группы API, а НЕ глобально: /api/v1/ws хайджекает соединение.
+// 304 не задевает — renderJSON не ставит Content-Type на этой ветке, а chi
+// сжимает только по Content-Type ответа.
+func apiCompressMiddleware() func(http.Handler) http.Handler {
+	return chimiddleware.Compress(5)
+}
+
 // newRouter builds the chi router with global middleware, public routes and
 // the authenticated API group. Extracted from main() verbatim (section 9).
 func newRouter(
@@ -62,12 +76,15 @@ func newRouter(
 	// Authenticated API routes — app-issued JWT only (see VerifyConfig).
 	authMW := middleware.JWTAuth(verifyCfg)
 
+	compressMW := apiCompressMiddleware()
+
 	// Архив смет — единственный домен с МАШИННЫМ доступом: пускает либо по
 	// заголовку X-API-Key, либо по обычному JWT. Каждый вызов пишется в журнал
 	// «Настройки → Доступ к API»; сами эндпоинты гейтятся тумблерами и
 	// областями ключа внутри хендлеров.
 	archiveMW := middleware.JWTOrAPIKey(verifyCfg, d.apiAccessSvc)
 	r.Group(func(r chi.Router) {
+		r.Use(compressMW)
 		r.Use(archiveMW)
 		r.Use(middleware.APICallLogger(d.apiAccessSvc))
 
@@ -88,6 +105,7 @@ func newRouter(
 	})
 
 	r.Group(func(r chi.Router) {
+		r.Use(compressMW)
 		r.Use(authMW)
 
 		r.Get("/api/v1/me", d.meH.GetMe)

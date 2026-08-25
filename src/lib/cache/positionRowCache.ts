@@ -87,11 +87,22 @@ export function setRow(row: ClientPosition): void {
   }
 }
 
+/**
+ * Потолок массового сида. Строка позиции — ~1 КБ, квота localStorage — ~5 МБ на
+ * origin и делится с сессией авторизации. Крупный ВОР (5-11 тыс. позиций) без
+ * потолка гарантированно упирается в квоту на середине цикла, после чего
+ * invalidateAll() сносит весь namespace: кэш всё равно пуст, но каждая загрузка
+ * страницы платит тысячами синхронных setItem + полным сканом хранилища.
+ * Сид первых строк — те, что видны без скролла; остальные штампует setRow перед
+ * переходом (см. handleRowClick), а промах даёт скелетон, а не поломку.
+ */
+const MAX_SEEDED_ROWS = 1000;
+
 export function setRows(rows: ClientPosition[]): void {
   const now = Date.now();
   // Evict stale entries first so the cache can't grow without bound.
   pruneExpired(now);
-  for (const row of rows) {
+  for (const row of rows.slice(0, MAX_SEEDED_ROWS)) {
     try {
       localStorage.setItem(key(row.id), JSON.stringify({ row, ts: now }));
     } catch {

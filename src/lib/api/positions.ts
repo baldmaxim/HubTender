@@ -51,6 +51,11 @@ export async function fetchPositionsWithCosts(
     `/api/v1/tenders/${encodeURIComponent(tenderId)}/positions/with-costs`,
     {
       cacheKey: `positions:${tenderId}`,
+      // Тело растёт линейно по числу позиций (11 тыс. строк ≈ 10 МБ). Дефолтные
+      // 10 с обрывали загрузку крупных ВОР, и страница рисовала пустую таблицу
+      // при полностью залитых данных. Потолок — 5 мин: столько же держат
+      // chi.Timeout и http.Server.WriteTimeout на бэке.
+      timeoutMs: 300_000,
       // На realtime-рефетче минуем серверный 30-сек кэш, чтобы примечание ГП
       // было таким же свежим, как сумма/строки (boq-items-flat не кэшируется).
       ...(opts?.fresh ? { headers: { 'Cache-Control': 'no-cache' } } : {}),
