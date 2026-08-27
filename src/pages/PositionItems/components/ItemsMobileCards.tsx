@@ -3,7 +3,7 @@ import { Card, Space, Tag, Typography, Empty, Skeleton } from 'antd';
 import { LinkOutlined } from '@ant-design/icons';
 import type { BoqItemFull } from '../../../lib/types';
 import { currencySymbols, getBoqTypeTagStyle, isMaterialType } from './boqColors';
-import { formatRu } from '../../../utils/format/currency';
+import { formatRu, formatRu2 } from '../../../utils/format/currency';
 import { useIncrementalRender } from '../../../hooks/useIncrementalRender';
 
 const { Text } = Typography;
@@ -123,7 +123,7 @@ const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({
               {item.quantity?.toFixed(5) || '-'} {item.unit_code || ''}
             </Field>
             <Field label="Цена за ед.">
-              {item.unit_rate ? `${formatRu(item.unit_rate)} ${symbol}` : '-'}
+              {item.unit_rate ? `${formatRu2(item.unit_rate)} ${symbol}` : '-'}
             </Field>
             <Field label="Итого">
               <span style={{ color: '#10b981' }}>{total > 0 ? formatRu(total) : '-'}</span>

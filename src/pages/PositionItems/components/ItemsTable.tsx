@@ -315,7 +315,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       render: (_: unknown, record: BoqItemFull) => {
         const symbol = currencySymbols[record.currency_type || 'RUB'];
         return record.unit_rate
-          ? `${formatRu(record.unit_rate)} ${symbol}`
+          ? `${formatRu2(record.unit_rate)} ${symbol}`
           : '-';
       },
     },

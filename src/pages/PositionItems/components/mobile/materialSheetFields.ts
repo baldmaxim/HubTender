@@ -1,5 +1,5 @@
 import { currencySymbols } from '../boqColors';
-import { formatRu } from '../../../../utils/format/currency';
+import { formatRu, formatRu2 } from '../../../../utils/format/currency';
 import { isLinked } from '../../utils/boqFieldPatch';
 import type { NameOptionDraft } from '../../utils/boqFieldPatch';
 import type { SheetCtx, SheetField } from './sheetFieldTypes';
@@ -133,7 +133,7 @@ export const MATERIAL_SHEET_FIELDS: SheetField[] = [
     rowKeyLandscape: 'price4',
     render: (ctx) =>
       ctx.item.unit_rate != null
-        ? `${formatRu(ctx.item.unit_rate)} ${currencySymbols[ctx.item.currency_type || 'RUB']}`
+        ? `${formatRu2(ctx.item.unit_rate)} ${currencySymbols[ctx.item.currency_type || 'RUB']}`
         : DASH,
     toDraft: (ctx) => ctx.item.unit_rate ?? null,
     control: { kind: 'number', precision: 2 },

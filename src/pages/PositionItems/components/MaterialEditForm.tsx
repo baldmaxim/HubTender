@@ -4,6 +4,7 @@ import type { BoqItemFull, MaterialName } from '../../../lib/types';
 import { useMaterialEditForm } from '../hooks/useMaterialEditForm';
 import { FieldLabel, type CostCategoryOption } from './editFormShared';
 import { getBorderColor, getWorkTypeColor } from './editFormColors';
+import { formatPriceInput } from '../utils/formatPriceInput';
 
 interface MaterialEditFormProps {
   record: BoqItemFull;
@@ -247,7 +248,7 @@ const MaterialEditForm: React.FC<MaterialEditFormProps> = ({
             precision={2}
             style={{ width: '100%' }}
             size="small"
-            formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace('.', ',')}
+            formatter={formatPriceInput}
             parser={(value) => parseFloat(value!.replace(/\s/g, '').replace(/,/g, '.'))}
           />
         </div>

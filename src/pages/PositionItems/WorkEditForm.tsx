@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Select, AutoComplete, InputNumber, Input, message } from 'antd';
 import { CloseOutlined, SaveOutlined } from '@ant-design/icons';
 import type { BoqItemFull, CurrencyType, WorkName, BoqItemType } from '../../lib/types';
+import { formatPriceInput } from './utils/formatPriceInput';
 
 interface CostCategoryOption {
   value: string;
@@ -258,7 +259,7 @@ const WorkEditForm: React.FC<WorkEditFormProps> = ({
             precision={2}
             style={{ width: '100%' }}
             size="small"
-            formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace('.', ',')}
+            formatter={formatPriceInput}
             parser={(value) => parseFloat(value!.replace(/\s/g, '').replace(/,/g, '.'))}
           />
         </div>
