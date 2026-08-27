@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Card, Tabs, Table, Button, Form, AutoComplete, message } from 'antd';
-import { UserOutlined } from '@ant-design/icons';
+import React, { useMemo, useRef, useState } from 'react';
+import { Card, Tabs, Table, Button, Form, AutoComplete, Input, message } from 'antd';
+import { UserOutlined, SearchOutlined } from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -16,6 +16,7 @@ import {
 import { getErrorMessage } from '../../utils/errors';
 import TenderAccessTab from './components/TenderAccessTab';
 import { useUserAdmin } from './hooks/useUserAdmin';
+import { useFitPageSize } from './hooks/useFitPageSize';
 import { buildPendingColumns } from './components/columns/pendingColumns';
 import { buildUsersColumns } from './components/columns/usersColumns';
 import { buildRolesColumns } from './components/columns/rolesColumns';
@@ -63,6 +64,17 @@ const Users: React.FC = () => {
   const [editingRole, setEditingRole] = useState<RoleRecord | null>(null);
   const [isCreateRoleModalVisible, setIsCreateRoleModalVisible] = useState(false);
   const [tenderSearchText, setTenderSearchText] = useState('');
+  const [userSearchText, setUserSearchText] = useState('');
+  const usersTableRef = useRef<HTMLDivElement>(null);
+  const usersPageSize = useFitPageSize(usersTableRef, activeTab === 'all' && !isPhoneDevice);
+
+  const filteredUsers = useMemo(() => {
+    const q = userSearchText.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(u =>
+      [u.full_name, u.email, u.role_name].some(v => (v ?? '').toLowerCase().includes(q)),
+    );
+  }, [users, userSearchText]);
 
   const openEditModal = (user: UserRecord) => {
     setEditingUser(user);
@@ -241,10 +253,35 @@ const Users: React.FC = () => {
     {
       key: 'all',
       label: 'Все пользователи',
-      children: isPhoneDevice ? (
-        <UsersCards data={users} />
-      ) : (
-        <Table dataSource={users} columns={usersColumns} rowKey="id" loading={loading} pagination={{ pageSize: 10 }} scroll={{ x: 1200 }} />
+      children: (
+        <>
+          <div style={{ margin: isPhoneDevice ? '0 0 12px' : '0 24px 16px' }}>
+            <Input
+              style={{ width: isPhoneDevice ? '100%' : 450, maxWidth: '100%' }}
+              value={userSearchText}
+              onChange={e => setUserSearchText(e.target.value)}
+              placeholder="Поиск по сотруднику (ФИО, email, роль)"
+              prefix={<SearchOutlined />}
+              allowClear
+            />
+          </div>
+          {isPhoneDevice ? (
+            <UsersCards data={filteredUsers} />
+          ) : (
+            <div ref={usersTableRef}>
+              <Table
+                dataSource={filteredUsers}
+                columns={usersColumns}
+                rowKey="id"
+                loading={loading}
+                pagination={{ pageSize: usersPageSize, showSizeChanger: false }}
+                scroll={{ x: 1200 }}
+                showSorterTooltip={false}
+                locale={{ emptyText: userSearchText ? 'Ничего не найдено' : 'Нет пользователей' }}
+              />
+            </div>
+          )}
+        </>
       ),
     },
     {

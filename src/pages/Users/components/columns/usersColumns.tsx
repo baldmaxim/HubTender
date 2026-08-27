@@ -21,6 +21,8 @@ export function buildUsersColumns({
 }: BuildArgs): ColumnsType<UserRecord> {
   const tooltipColor = currentTheme === 'dark' ? '#1f1f1f' : '#fff';
   const tooltipInner = { color: currentTheme === 'dark' ? '#fff' : '#000' };
+  const byText = (pick: (u: UserRecord) => string | undefined | null) => (a: UserRecord, b: UserRecord) =>
+    (pick(a) ?? '').localeCompare(pick(b) ?? '', 'ru', { sensitivity: 'base' });
 
   return [
     {
@@ -29,6 +31,7 @@ export function buildUsersColumns({
       key: 'full_name',
       width: 310,
       align: 'center',
+      sorter: byText(u => u.full_name),
       render: (text: string) => <div style={{ textAlign: 'left' }}>{text}</div>,
     },
     {
@@ -37,6 +40,7 @@ export function buildUsersColumns({
       key: 'role_name',
       width: 140,
       align: 'center',
+      sorter: byText(u => u.role_name || u.role_code),
       render: (_: string, record: UserRecord) => <Tag color={record.role_color || 'default'}>{record.role_name}</Tag>,
     },
     {
@@ -45,6 +49,7 @@ export function buildUsersColumns({
       key: 'email',
       width: 200,
       align: 'center',
+      sorter: byText(u => u.email),
     },
     {
       title: 'Дата регистрации',
@@ -52,6 +57,7 @@ export function buildUsersColumns({
       key: 'registration_date',
       width: 130,
       align: 'center',
+      sorter: (a, b) => dayjs(a.registration_date).valueOf() - dayjs(b.registration_date).valueOf(),
       render: (date: string) => dayjs(date).format('DD.MM.YYYY'),
     },
     {
@@ -60,6 +66,7 @@ export function buildUsersColumns({
       key: 'access_enabled',
       width: 120,
       align: 'center',
+      sorter: (a, b) => Number(a.access_enabled) - Number(b.access_enabled),
       render: (access_enabled: boolean, record: UserRecord) => (
         <Radio.Group
           value={access_enabled ? 'open' : 'closed'}
