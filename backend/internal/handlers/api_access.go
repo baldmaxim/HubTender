@@ -59,7 +59,7 @@ func (h *ApiAccessHandler) ListKeys(w http.ResponseWriter, r *http.Request) {
 
 type createKeyReq struct {
 	Name             string   `json:"name"               validate:"required,min=1,max=120"`
-	Scopes           []string `json:"scopes"             validate:"required,min=1,dive,oneof=archive:read archive:write tenders:read"`
+	Scopes           []string `json:"scopes"             validate:"required,min=1,dive,oneof=archive:read archive:write tenders:read tenders:write"`
 	AllowedTenderIDs []string `json:"allowed_tender_ids" validate:"omitempty,dive,uuid"`
 	ExpiresAt        *string  `json:"expires_at"`
 }

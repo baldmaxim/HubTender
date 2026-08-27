@@ -40,6 +40,7 @@ curl -s "$BASE/api/v1/archive/positions/search?q=стяжка" -H "X-API-Key: th
 | Область `archive:read` — поиск, подбор, чтение позиции архива | 403 |
 | Область `archive:write` — `compose` | 403 |
 | Область `tenders:read` — список позиций тендера | 403 |
+| Область `tenders:write` — запись строк BOQ в позиции тендера | 403 |
 | Список разрешённых тендеров (пусто = все) | 403 при чужом тендере |
 | Срок действия, отзыв | 401 (просроченный и отозванный не находятся вовсе) |
 | Лимит запросов в минуту | 429 |
@@ -89,7 +90,12 @@ curl -s "$BASE/api/v1/archive/positions/search?q=..." -H "Authorization: Bearer 
 | GET | `/api/v1/archive/positions/{id}` | историческая позиция + тендер + строки BOQ |
 | POST | `/api/v1/archive/compose` | сборка позиций целевого тендера из исторических |
 | GET | `/api/v1/archive/openapi.yaml` | спецификация |
-| GET | `/api/v1/tenders/{id}/positions` | список позиций тендера — сопоставить свои строки с id существующих позиций (область `tenders:read`) |
+| GET | `/api/v1/tenders/brief` | узкий список тендеров для выбора цели: id, номер, название, заказчик, версия, архив (область `tenders:read`; ключ с ограничением видит только свои тендеры) |
+| GET | `/api/v1/tenders/{id}/positions` | список позиций тендера — сопоставить свои строки с id существующих позиций, отобрать раздел (область `tenders:read`) |
+| GET | `/api/v1/tenders/{id}/positions/{posId}/items` | строки позиции — проверить, что уже записано, перед повторной выгрузкой (область `tenders:read`) |
+| POST | `/api/v1/tenders/{id}/positions/{posId}/items` | создать работу/материал с `unit_rate` (область `tenders:write`) |
+| PATCH | `/api/v1/items/{id}` | обновить строку; требует `If-Match` с ETag строки (область `tenders:write`) |
+| POST | `/api/v1/positions/{id}/recompute-totals` | пересчитать итоги позиции после записи (область `tenders:write`) |
 
 ### Как считается похожесть
 
@@ -177,12 +183,31 @@ curl -s "$BASE/api/v1/tenders/$TARGET_TENDER/overview" -H "Authorization: Bearer
 
 ## Что нужно знать перед записью
 
+- **Сначала тендер, потом позиции.** `GET /api/v1/tenders/brief` (область
+  `tenders:read`) отдаёт id, номер, название, заказчика, версию, `is_archived`,
+  `housing_class`, `construction_scope`; фильтры `search`, `is_archived`. Ключ с
+  ограничением по тендерам видит только их.
 - **Чтобы писать в существующие позиции, нужны их id.** Их даёт
-  `GET /api/v1/tenders/{id}/positions` — единственный маршрут вне домена архива,
-  открытый ключу, и только на чтение. Требует области `tenders:read`; ограничение
-  ключа по списку тендеров действует и здесь. Если целевых позиций ещё нет,
+  `GET /api/v1/tenders/{id}/positions` (область `tenders:read`); ограничение
+  ключа по списку тендеров действует и здесь. В строке: `id`, `item_no`,
+  `work_name`, `client_note`, `unit_code`, `volume`, `hierarchy_level`,
+  `parent_position_id`, `is_additional`, `section_number` и два производных
+  признака: `is_section` (заголовок раздела, а не исполняемая позиция) и
+  `cost_category_name` (раздел сметы по строкам позиции — «МОНОЛИТНЫЕ РАБОТЫ»
+  и т.п.; `null`, пока позиция не расценена). Список постраничный
+  (`limit` ≤ 200, `cursor`/`next_cursor`), порядок `updated_at DESC` — для
+  иерархии сортируйте по `position_number` у себя. Если целевых позиций ещё нет,
   создавайте их прямо в `compose` через `new_position` — отдельный доступ на запись
   в тендер для этого не нужен.
+- **Прямая запись строк без архива** — область `tenders:write`:
+  `POST /api/v1/tenders/{id}/positions/{posId}/items` создаёт работу/материал
+  с `unit_rate`, `PATCH /api/v1/items/{id}` обновляет (обязателен `If-Match`
+  с ETag строки — его отдаёт заголовок `ETag` ответа на создание/чтение),
+  `POST /api/v1/positions/{id}/recompute-totals` пересчитывает итоги позиции.
+  Идемпотентности нет: перед повторной выгрузкой читайте
+  `GET /api/v1/tenders/{id}/positions/{posId}/items` и не создавайте то, что уже
+  записано. Ограничение ключа по тендерам действует; для `PATCH /items/{id}` и
+  `recompute-totals` тендер определяется по строке/позиции в базе.
 - **Одна группа = одна целевая позиция.** Это требование БД: FK `boq_items_parent_scope_fkey`
   не даёт связи материал → работа пересекать позицию. Слить N исторических позиций в одну
   целевую можно — перечислите их в `sources`.

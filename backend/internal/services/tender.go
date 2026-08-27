@@ -23,6 +23,7 @@ const (
 // tenderRepoer is the interface TenderService depends on.
 type tenderRepoer interface {
 	ListTenders(ctx context.Context, p repository.TenderListParams) ([]repository.TenderRow, error)
+	ListTendersBrief(ctx context.Context, p repository.TenderBriefParams) ([]repository.TenderBriefRow, error)
 	GetTenderOverview(ctx context.Context, tenderID string) (*repository.TenderOverviewRow, error)
 	GetTenderByID(ctx context.Context, id string) (*repository.TenderRow, error)
 	CreateTender(ctx context.Context, in repository.CreateTenderInput) (*repository.TenderRow, error)
@@ -80,6 +81,20 @@ func (s *TenderService) ListTenders(
 	}
 
 	s.cache.Set(key, rows, tenderListCacheTTL)
+	return rows, nil
+}
+
+// ListTendersBrief — узкий список для машинного доступа (GET /api/v1/tenders/brief).
+// Без кэша: ответ зависит от ограничения ключа по тендерам, ключей много, а
+// запрос дешёвый.
+func (s *TenderService) ListTendersBrief(
+	ctx context.Context,
+	p repository.TenderBriefParams,
+) ([]repository.TenderBriefRow, error) {
+	rows, err := s.repo.ListTendersBrief(ctx, p)
+	if err != nil {
+		return nil, fmt.Errorf("tenderService.ListTendersBrief: %w", err)
+	}
 	return rows, nil
 }
 

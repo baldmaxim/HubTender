@@ -32,13 +32,17 @@ const DisplayPrefixLen = 12
 const (
 	ScopeArchiveRead  = "archive:read"
 	ScopeArchiveWrite = "archive:write"
-	// ScopeTendersRead — чтение списка позиций тендера. Только чтение: записи в
-	// тендер эта область не открывает.
+	// ScopeTendersRead — чтение тендера: узкий список тендеров, позиции и их
+	// строки. Только чтение: записи в тендер эта область не открывает.
 	ScopeTendersRead = "tenders:read"
+	// ScopeTendersWrite — запись строк BOQ в позиции тендера: создание и
+	// обновление работ/материалов, пересчёт итогов позиции. Ограничение ключа
+	// по списку тендеров действует и здесь.
+	ScopeTendersWrite = "tenders:write"
 )
 
 // KnownScopes — все допустимые области.
-var KnownScopes = []string{ScopeArchiveRead, ScopeArchiveWrite, ScopeTendersRead}
+var KnownScopes = []string{ScopeArchiveRead, ScopeArchiveWrite, ScopeTendersRead, ScopeTendersWrite}
 
 func isKnownScope(s string) bool {
 	for _, k := range KnownScopes {

@@ -111,3 +111,56 @@ func TestRequireAPIKeyScope_WritesCallLogCode(t *testing.T) {
 		t.Fatalf("в журнал ушёл код %q", stat.ErrorCode)
 	}
 }
+
+// Маршрут без id тендера в URL (узкий список тендеров): гейт проверяет только
+// область и не должен резать ключ, ограниченный списком тендеров, — фильтр по
+// списку применяет хендлер.
+
+func briefRouter() *chi.Mux {
+	r := chi.NewRouter()
+	r.With(RequireAPIKeyScope("tenders:read", "")).
+		Get("/api/v1/tenders/brief", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":[]}`))
+		})
+	return r
+}
+
+func doBrief(t *testing.T, principal *APIKeyPrincipal) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest("GET", "/api/v1/tenders/brief", nil)
+	if principal != nil {
+		req = req.WithContext(context.WithValue(req.Context(), CtxAPIKey, principal))
+	}
+	w := httptest.NewRecorder()
+	briefRouter().ServeHTTP(w, req)
+	return w
+}
+
+func TestRequireAPIKeyScope_NoTenderParam_AllowsReadKey(t *testing.T) {
+	w := doBrief(t, &APIKeyPrincipal{ID: "k1", Scopes: []string{"tenders:read"}})
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200 (body %s)", w.Code, w.Body.String())
+	}
+}
+
+func TestRequireAPIKeyScope_NoTenderParam_RejectsArchiveOnlyKey(t *testing.T) {
+	w := doBrief(t, &APIKeyPrincipal{ID: "k1", Scopes: []string{"archive:read", "archive:write"}})
+	if w.Code != 403 {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+	if got := problemCode(t, w); got != "API_KEY_SCOPE_DENIED" {
+		t.Fatalf("code = %q, want API_KEY_SCOPE_DENIED", got)
+	}
+}
+
+func TestRequireAPIKeyScope_NoTenderParam_RestrictedKeyPasses(t *testing.T) {
+	// Ограниченный ключ проходит гейт: сужать выборку до своих тендеров —
+	// задача хендлера, а не гейта, у которого нет id тендера.
+	w := doBrief(t, &APIKeyPrincipal{
+		ID: "k1", Scopes: []string{"tenders:read"}, AllowedTenderIDs: []string{"t-1"},
+	})
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200 (body %s)", w.Code, w.Body.String())
+	}
+}

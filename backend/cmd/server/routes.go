@@ -94,14 +94,33 @@ func newRouter(
 		r.Post("/api/v1/archive/compose", d.archiveH.Compose)
 		r.Get("/api/v1/archive/openapi.yaml", d.archiveH.OpenAPI)
 
-		// Список позиций тендера — единственный маршрут вне домена архива,
-		// открытый машинному доступу: без него внешний код не может сопоставить
-		// свои строки с id существующих позиций перед сборкой сметы.
+		// Чтение тендера машинным ключом — область tenders:read. Хендлеры
+		// общие с UI и про области не знают, поэтому область и ограничение по
+		// тендерам проверяет маршрутный гейт.
 		//
-		// Хендлер общий с UI и про области не знает, поэтому область и
-		// ограничение по тендерам проверяет маршрутный гейт. Только чтение.
+		// Узкий список тендеров для выбора цели (TenderConnector): без id
+		// тендера в URL гейт проверяет только область, ограничение ключа по
+		// тендерам применяет сам хендлер как фильтр выборки.
+		r.With(middleware.RequireAPIKeyScope(apikey.ScopeTendersRead, "")).
+			Get("/api/v1/tenders/brief", d.tenderBriefH.List)
+		// Список позиций тендера: без него внешний код не может сопоставить
+		// свои строки с id существующих позиций перед сборкой сметы.
 		r.With(middleware.RequireAPIKeyScope(apikey.ScopeTendersRead, "id")).
 			Get("/api/v1/tenders/{id}/positions", d.positionH.GetPositions)
+		// Строки позиции — чтобы повторная выгрузка видела, что уже записано,
+		// и не задваивала: идемпотентности у записи нет.
+		r.With(middleware.RequireAPIKeyScope(apikey.ScopeTendersRead, "id")).
+			Get("/api/v1/tenders/{id}/positions/{posId}/items", d.boqH.GetBoqItems)
+
+		// Запись строк BOQ по ключу — область tenders:write. Хендлеры общие с
+		// UI; ключ действует от имени выпустившего пользователя. Там, где id
+		// тендера в URL нет, его резолвит гейт по строке/позиции в БД.
+		r.With(middleware.RequireAPIKeyScope(apikey.ScopeTendersWrite, "id")).
+			Post("/api/v1/tenders/{id}/positions/{posId}/items", d.boqWH.CreateBoqItem)
+		r.With(middleware.RequireAPIKeyScopeResolved(apikey.ScopeTendersWrite, d.tenderOfItem)).
+			Patch("/api/v1/items/{id}", d.boqWH.UpdateBoqItem)
+		r.With(middleware.RequireAPIKeyScopeResolved(apikey.ScopeTendersWrite, d.tenderOfPosition)).
+			Post("/api/v1/positions/{id}/recompute-totals", d.positionWH.RecomputePositionTotals)
 	})
 
 	r.Group(func(r chi.Router) {
@@ -154,7 +173,6 @@ func newRouter(
 		r.Get("/api/v1/quality/rules", d.qualityH.GetRules)
 		r.Get("/api/v1/quality/export", d.qualityH.GetExport)
 		r.Post("/api/v1/construction-cost-volumes", d.ccvH.Upsert)
-		r.Get("/api/v1/tenders/{id}/positions/{posId}/items", d.boqH.GetBoqItems)
 
 		// Slice 2: writes with optimistic concurrency.
 		r.Post("/api/v1/tenders", d.tenderWH.CreateTender)
@@ -170,14 +188,11 @@ func newRouter(
 		r.Patch("/api/v1/positions/note", d.positionWH.UpdatePositionsNote)
 		r.Post("/api/v1/positions/clear-boq", d.positionWH.ClearPositionsBoq)
 		r.Patch("/api/v1/positions/level", d.positionWH.ShiftPositionsLevel)
-		r.Post("/api/v1/positions/{id}/recompute-totals", d.positionWH.RecomputePositionTotals)
 		r.Patch("/api/v1/positions/{id}/fields", d.positionWH.UpdatePositionFields)
 		r.Post("/api/v1/items/{id}/recompute-linked-materials", d.boqWH.RecomputeLinkedMaterials)
 		r.Post("/api/v1/positions/{id}/copy-from", d.boqWH.CopyPositionItems)
 		r.Patch("/api/v1/positions/{id}", d.positionWH.UpdatePosition)
 
-		r.Post("/api/v1/tenders/{id}/positions/{posId}/items", d.boqWH.CreateBoqItem)
-		r.Patch("/api/v1/items/{id}", d.boqWH.UpdateBoqItem)
 		r.Delete("/api/v1/items/{id}", d.boqWH.DeleteBoqItem)
 		r.Get("/api/v1/items/{id}", d.boqH.GetBoqItem)
 		r.Post("/api/v1/templates/{templateId}/insert-into-position", d.boqWH.InsertTemplate)

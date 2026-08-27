@@ -11,6 +11,7 @@
  * Примеры:
  *   node scripts/archive-api.mjs search "устройство стяжки" --unit=м2 --limit=5
  *   node scripts/archive-api.mjs position <uuid>
+ *   node scripts/archive-api.mjs tenders --search=ЖК --archived=false
  *   node scripts/archive-api.mjs positions <tender_id>
  *   node scripts/archive-api.mjs suggest "кладка стен" "монтаж дверей"
  *   node scripts/archive-api.mjs compose ./compose.json --dry-run
@@ -123,12 +124,42 @@ switch (command) {
     break;
   }
 
+  case 'tenders': {
+    // Узкий список тендеров — выбрать цель по номеру/названию. Требует области
+    // tenders:read; ключ с ограничением по тендерам видит только свои.
+    const params = new URLSearchParams();
+    if (flags.get('search')) params.set('search', flags.get('search'));
+    if (flags.has('archived')) params.set('is_archived', flags.get('archived'));
+    const qs = params.toString();
+    console.log(JSON.stringify(await call('GET', `/api/v1/tenders/brief${qs ? `?${qs}` : ''}`), null, 2));
+    break;
+  }
+
   case 'positions': {
-    // Список позиций тендера: нужен, чтобы сопоставить свои строки с id
-    // существующих позиций перед сборкой. Требует области tenders:read.
+    // Все позиции тендера (страницы склеиваются): сопоставить свои строки с id
+    // существующих позиций, отобрать раздел по cost_category_name. Область
+    // tenders:read. Порядок API — updated_at DESC, поэтому сортируем по номеру.
     const tenderId = positional[0];
     if (!tenderId) throw new Error('Укажите id тендера');
-    console.log(JSON.stringify(await call('GET', `/api/v1/tenders/${tenderId}/positions`), null, 2));
+    const rows = [];
+    let cursor = '';
+    do {
+      const res = await request('GET',
+        `/api/v1/tenders/${tenderId}/positions?limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+      const page = await res.json();
+      if (!res.ok) {
+        console.error(`HTTP ${res.status}${page.code ? ` [${page.code}]` : ''}: ${page.detail ?? page.title}`);
+        process.exit(1);
+      }
+      rows.push(...page.data);
+      cursor = page.next_cursor ?? '';
+    } while (cursor);
+    rows.sort((a, b) => a.position_number - b.position_number || a.id.localeCompare(b.id));
+    const section = flags.get('section');
+    console.log(JSON.stringify(
+      section ? rows.filter((r) => (r.cost_category_name ?? '').toLowerCase().includes(section.toLowerCase())) : rows,
+      null, 2,
+    ));
     break;
   }
 
@@ -139,10 +170,11 @@ switch (command) {
   }
 
   default:
-    console.error(`Команды: search | position | positions | suggest | compose | spec
+    console.error(`Команды: search | position | tenders | positions | suggest | compose | spec
   node scripts/archive-api.mjs search "устройство стяжки" --unit=м2 --limit=5
   node scripts/archive-api.mjs position <uuid>
-  node scripts/archive-api.mjs positions <tender_id>   # позиции тендера (tenders:read)
+  node scripts/archive-api.mjs tenders --search=ЖК --archived=false   # список тендеров (tenders:read)
+  node scripts/archive-api.mjs positions <tender_id> --section=монолит # позиции тендера (tenders:read)
   node scripts/archive-api.mjs suggest "кладка стен" "монтаж дверей"
   node scripts/archive-api.mjs compose ./compose.json            # проба (dry_run)
   node scripts/archive-api.mjs compose ./compose.json --no-dry-run --verbose`);

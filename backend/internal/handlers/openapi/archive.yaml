@@ -10,9 +10,9 @@ info:
 
     * `X-API-Key: thk_…` — машинный ключ, выпускается в UI («Настройки →
       Доступ к API»). Действует от имени выпустившего пользователя, ограничен
-      областями `archive:read` / `archive:write` / `tenders:read` и,
-      опционально, списком тендеров. Ключ вне выданной области получает 403,
-      сверх лимита — 429.
+      областями `archive:read` / `archive:write` / `tenders:read` /
+      `tenders:write` и, опционально, списком тендеров. Ключ вне выданной
+      области получает 403, сверх лимита — 429.
     * `Authorization: Bearer <access_token>` — обычный RS256 JWT портала
       (`POST /api/v1/auth/login`). Ограничения областей к нему не применяются.
 
@@ -179,19 +179,58 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  /api/v1/tenders/brief:
+    get:
+      tags: [archive]
+      summary: Узкий список тендеров
+      description: |
+        Для выбора целевого тендера (выпадающий список): идентификация и
+        статус, без финансовых итогов, курсов и ссылок на папки.
+
+        Требует области `tenders:read`. Ключ, ограниченный списком тендеров,
+        видит только их. Курсора нет: до 1000 строк, порядок — по номеру
+        тендера, свежая версия первой.
+      parameters:
+        - { name: is_archived, in: query, schema: { type: boolean } }
+        - name: search
+          in: query
+          schema: { type: string }
+          description: Подстрока без учёта регистра по названию, заказчику и номеру тендера.
+      responses:
+        '200':
+          description: Тендеры
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/TenderBrief' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /api/v1/tenders/{id}/positions:
     get:
       tags: [archive]
       summary: Список позиций тендера
       description: |
-        Единственный маршрут вне домена архива, открытый машинному доступу, и
-        только на чтение. Нужен, чтобы сопоставить свои строки с id существующих
-        позиций перед `compose`.
+        Позиции заказчика с полями для сопоставления и признаками раздела.
+        Нужен, чтобы сопоставить свои строки с id существующих позиций перед
+        `compose`/записью и отобрать позиции нужного раздела
+        (`cost_category_name`, например «МОНОЛИТНЫЕ РАБОТЫ»).
 
         Требует области `tenders:read`. Ограничение ключа по списку тендеров
         действует и здесь. Человек с JWT ходит сюда как обычно, без областей.
+
+        Страницы: `limit` (1–200, по умолчанию 50) и `cursor` из `next_cursor`
+        предыдущего ответа. Порядок — `updated_at DESC, id DESC`, не по номеру
+        позиции: для иерархии заберите все страницы и отсортируйте по
+        `position_number` у себя.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string } }
       responses:
         '200':
           description: Позиции тендера
@@ -202,10 +241,77 @@ paths:
                 properties:
                   data:
                     type: array
-                    items:
-                      type: object
-                      description: Строка client_positions.
+                    items: { $ref: '#/components/schemas/TenderPosition' }
+                  next_cursor:
+                    type: string
+                    description: Курсор следующей страницы; на последней отсутствует.
         '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/tenders/{id}/positions/{posId}/items:
+    get:
+      tags: [archive]
+      summary: Строки позиции тендера
+      description: |
+        Что уже записано в позицию. Читайте перед повторной выгрузкой:
+        идемпотентности у записи нет. Область `tenders:read`; ограничение ключа
+        по списку тендеров действует.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: posId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Строки boq_items позиции
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [archive]
+      summary: Создать работу/материал в позиции
+      description: |
+        Область `tenders:write`. Обязательно `boq_item_type` (`раб`, `мат`, …);
+        обычно передают также `description`, `unit_code`, `quantity`,
+        `unit_rate`, `currency_type`. Ответ 201 со строкой в `data` и заголовком
+        `ETag` (нужен для PATCH). Сумму и коммерческие стоимости считает сервер.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: posId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Создано
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/items/{id}:
+    patch:
+      tags: [archive]
+      summary: Обновить строку BOQ
+      description: |
+        Область `tenders:write`. Обязателен заголовок `If-Match` с ETag строки —
+        при расхождении 412 с актуальной строкой в `current`. Тендер для
+        ограничения ключа определяется по строке в базе.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Обновлено
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '412':
+          description: Строка изменилась — перечитать и повторить
+
+  /api/v1/positions/{id}/recompute-totals:
+    post:
+      tags: [archive]
+      summary: Пересчитать итоги позиции
+      description: |
+        Область `tenders:write`. Вызывать после серии записей в позицию.
+        Тендер для ограничения ключа определяется по позиции в базе.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: Пересчитано
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /api/v1/archive/openapi.yaml:
@@ -227,7 +333,7 @@ components:
       name: X-API-Key
       description: |
         Ключ машинного доступа, выпущенный в «Настройки → Доступ к API».
-        Области: `archive:read`, `archive:write`, `tenders:read`.
+        Области: `archive:read`, `archive:write`, `tenders:read`, `tenders:write`.
     bearerAuth:
       type: http
       scheme: bearer
@@ -267,6 +373,65 @@ components:
         detail: { type: string }
         code: { type: string, description: Машинный код ошибки }
       required: [status, title]
+
+    TenderBrief:
+      type: object
+      description: Узкая карточка тендера (GET /api/v1/tenders/brief).
+      properties:
+        id: { type: string, format: uuid }
+        tender_number: { type: string }
+        title: { type: string }
+        client_name: { type: string }
+        version: { type: [integer, 'null'] }
+        is_archived: { type: boolean }
+        housing_class: { type: [string, 'null'] }
+        construction_scope:
+          type: [string, 'null']
+          description: Объём строительства тендера (`генподряд` | `коробка` | `монолит`) — не раздел позиции.
+        submission_deadline:
+          type: [string, 'null']
+          description: Текстовая форма timestamptz Postgres, напр. `2026-03-01 12:00:00+03`.
+        updated_at: { type: string, format: date-time }
+
+    TenderPosition:
+      type: object
+      description: Строка client_positions плюс производные поля раздела.
+      properties:
+        id: { type: string, format: uuid, description: id позиции — `posId` для строк и записи }
+        tender_id: { type: string, format: uuid }
+        position_number:
+          type: number
+          description: Порядковый номер в ВОР; бывает дробным (иерархическая нотация).
+        item_no: { type: [string, 'null'], description: Номер п/п заказчика }
+        work_name: { type: string }
+        client_note: { type: [string, 'null'], description: Примечание заказчика }
+        unit_code: { type: [string, 'null'] }
+        volume: { type: [number, 'null'] }
+        manual_volume: { type: [number, 'null'] }
+        manual_note: { type: [string, 'null'] }
+        section_number: { type: [string, 'null'] }
+        position_name: { type: [string, 'null'] }
+        hierarchy_level: { type: [integer, 'null'] }
+        parent_position_id: { type: [string, 'null'], format: uuid }
+        is_additional: { type: [boolean, 'null'], description: Дополнительная (ДОП) позиция }
+        is_section:
+          type: boolean
+          description: |
+            Заголовок раздела, а не исполняемая позиция: следующая
+            не-дополнительная позиция по номеру лежит глубже по `hierarchy_level`
+            (то же правило, что подсветка разделов в UI).
+        cost_category_id: { type: [string, 'null'], format: uuid }
+        cost_category_name:
+          type: [string, 'null']
+          description: |
+            Раздел сметы по строкам позиции — самая частая категория затрат
+            (`cost_categories.name`, напр. «МОНОЛИТНЫЕ РАБОТЫ»). `null`, пока
+            позиция не расценена. Именно по нему отбирают «монолит», а не по
+            `hierarchy_level`.
+        total_material: { type: [number, 'null'] }
+        total_works: { type: [number, 'null'] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
     ScoreBreakdown:
       type: object

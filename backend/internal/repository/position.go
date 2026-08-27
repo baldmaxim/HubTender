@@ -55,28 +55,28 @@ type UpdatePositionInput struct {
 // to integer) on every tender that contained such positions. See
 // docs/yandex-migration/40_TENDER_POSITIONS_OVERVIEW_FIX_RESULT.md.
 type PositionRow struct {
-	ID               string    `json:"id"`
-	TenderID         string    `json:"tender_id"`
-	PositionNumber   float64   `json:"position_number"`
-	WorkName         string    `json:"work_name"`
-	UnitCode         *string   `json:"unit_code"`
-	Volume           *float64  `json:"volume"`
-	HierarchyLevel   *int      `json:"hierarchy_level"`
-	ParentPositionID *string   `json:"parent_position_id"`
-	IsAdditional     *bool     `json:"is_additional"`
-	ItemNo           *string   `json:"item_no"`
-	TotalMaterial    *float64  `json:"total_material"`
-	TotalWorks       *float64  `json:"total_works"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-}
-
-// PositionListParams holds pagination parameters for ListPositions.
-type PositionListParams struct {
-	TenderID        string
-	CursorUpdatedAt *time.Time
-	CursorID        *string
-	Limit           int
+	ID               string   `json:"id"`
+	TenderID         string   `json:"tender_id"`
+	PositionNumber   float64  `json:"position_number"`
+	WorkName         string   `json:"work_name"`
+	UnitCode         *string  `json:"unit_code"`
+	Volume           *float64 `json:"volume"`
+	HierarchyLevel   *int     `json:"hierarchy_level"`
+	ParentPositionID *string  `json:"parent_position_id"`
+	IsAdditional     *bool    `json:"is_additional"`
+	ItemNo           *string  `json:"item_no"`
+	TotalMaterial    *float64 `json:"total_material"`
+	TotalWorks       *float64 `json:"total_works"`
+	// Поля заказчика/ручного ввода — нужны машинному доступу (TenderConnector):
+	// примечание заказчика идёт в промпт, section_number/position_name — для
+	// сопоставления с ВОР. Все nullable.
+	ClientNote    *string   `json:"client_note"`
+	SectionNumber *string   `json:"section_number"`
+	PositionName  *string   `json:"position_name"`
+	ManualVolume  *float64  `json:"manual_volume"`
+	ManualNote    *string   `json:"manual_note"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // ---------------------------------------------------------------------------
@@ -93,88 +93,34 @@ func NewPositionRepo(pool *pgxpool.Pool) *PositionRepo {
 	return &PositionRepo{pool: pool}
 }
 
-// ListPositions returns a page of client_positions for the given tender,
-// ordered by (updated_at DESC, id DESC). No BOQ items are embedded.
-func (r *PositionRepo) ListPositions(ctx context.Context, p PositionListParams) ([]PositionRow, error) {
-	args := []any{p.TenderID}
-	argN := 2
-
-	cursor := ""
-	if p.CursorUpdatedAt != nil && p.CursorID != nil {
-		cursor = fmt.Sprintf(
-			"AND (updated_at, id) < ($%d, $%d)",
-			argN, argN+1,
-		)
-		args = append(args, *p.CursorUpdatedAt, *p.CursorID)
-		argN += 2
-	}
-
-	limit := p.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	args = append(args, limit)
-
-	q := fmt.Sprintf(`
-		SELECT id::text, tender_id::text, position_number, work_name,
-		       unit_code, volume, hierarchy_level,
-		       parent_position_id::text, is_additional, item_no,
-		       total_material, total_works,
-		       COALESCE(created_at, NOW()), COALESCE(updated_at, NOW())
-		FROM public.client_positions
-		WHERE tender_id = $1
-		%s
-		ORDER BY updated_at DESC, id DESC
-		LIMIT $%d
-	`, cursor, argN)
-
-	rows, err := r.pool.Query(ctx, q, args...)
-	if err != nil {
-		return nil, fmt.Errorf("positionRepo.ListPositions: query: %w", err)
-	}
-	defer rows.Close()
-
-	var result []PositionRow
-	for rows.Next() {
-		var row PositionRow
-		if err := rows.Scan(
-			&row.ID, &row.TenderID, &row.PositionNumber, &row.WorkName,
-			&row.UnitCode, &row.Volume, &row.HierarchyLevel,
-			&row.ParentPositionID, &row.IsAdditional, &row.ItemNo,
-			&row.TotalMaterial, &row.TotalWorks,
-			&row.CreatedAt, &row.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("positionRepo.ListPositions: scan: %w", err)
-		}
-		result = append(result, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("positionRepo.ListPositions: rows: %w", err)
-	}
-	return result, nil
-}
-
 // positionScanCols is the common SELECT column list for PositionRow scans.
+// Список не квалифицирован по таблице: он же идёт в RETURNING и в проекцию
+// ListPositions поверх подзапроса (position_list.go) — там имена латеральных
+// колонок подобраны так, чтобы не конфликтовать.
 const positionScanCols = `
 	id::text, tender_id::text, position_number, work_name,
 	unit_code, volume, hierarchy_level,
 	parent_position_id::text, is_additional, item_no,
 	total_material, total_works,
+	client_note, section_number, position_name, manual_volume, manual_note,
 	COALESCE(created_at, NOW()), COALESCE(updated_at, NOW())
 `
 
-func scanPositionRow(row interface{ Scan(...any) error }) (*PositionRow, error) {
-	var p PositionRow
-	if err := row.Scan(
+// positionScanTargets — адресаты Scan в порядке positionScanCols.
+func positionScanTargets(p *PositionRow) []any {
+	return []any{
 		&p.ID, &p.TenderID, &p.PositionNumber, &p.WorkName,
 		&p.UnitCode, &p.Volume, &p.HierarchyLevel,
 		&p.ParentPositionID, &p.IsAdditional, &p.ItemNo,
 		&p.TotalMaterial, &p.TotalWorks,
+		&p.ClientNote, &p.SectionNumber, &p.PositionName, &p.ManualVolume, &p.ManualNote,
 		&p.CreatedAt, &p.UpdatedAt,
-	); err != nil {
+	}
+}
+
+func scanPositionRow(row interface{ Scan(...any) error }) (*PositionRow, error) {
+	var p PositionRow
+	if err := row.Scan(positionScanTargets(&p)...); err != nil {
 		return nil, err
 	}
 	return &p, nil

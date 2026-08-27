@@ -130,6 +130,7 @@ export const IssueKeyModal: FC<IIssueKeyModalProps> = ({
               { label: 'Чтение архива смет', value: 'archive:read' },
               { label: 'Сборка смет (запись)', value: 'archive:write' },
               { label: 'Чтение позиций тендера', value: 'tenders:read' },
+              { label: 'Запись строк тендера', value: 'tenders:write' },
             ]}
           />
         </Form.Item>

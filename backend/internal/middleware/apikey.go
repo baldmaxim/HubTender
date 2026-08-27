@@ -201,6 +201,26 @@ func APICallLogger(sink CallSink) func(http.Handler) http.Handler {
 // страниц. Для ключа проверяется область и, если задано имя URL-параметра с id
 // тендера, принадлежность этого тендера списку разрешённых для ключа.
 func RequireAPIKeyScope(scope, tenderURLParam string) func(http.Handler) http.Handler {
+	return RequireAPIKeyScopeResolved(scope, func(r *http.Request) (string, error) {
+		if tenderURLParam == "" {
+			return "", nil
+		}
+		return chi.URLParam(r, tenderURLParam), nil
+	})
+}
+
+// TenderResolver достаёт id тендера для запроса, у которого его нет в URL
+// (например PATCH /items/{id} — тендер известен только по строке в БД).
+// Пустая строка = ограничение по тендерам не проверять. Ошибка резолвера
+// (в т.ч. «не найдено») превращается в отказ: ключ, ограниченный тендерами,
+// не должен писать в строку, чью принадлежность подтвердить нельзя.
+type TenderResolver func(r *http.Request) (string, error)
+
+// RequireAPIKeyScopeResolved — то же, что RequireAPIKeyScope, но id тендера
+// для проверки ограничения ключа вычисляет resolve. Резолвер вызывается
+// только для ключа, ограниченного списком тендеров: остальным лишний поход
+// в БД не нужен.
+func RequireAPIKeyScopeResolved(scope string, resolve TenderResolver) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			p := APIKeyFromContext(r.Context())
@@ -215,8 +235,15 @@ func RequireAPIKeyScope(scope, tenderURLParam string) func(http.Handler) http.Ha
 					map[string]any{"requiredScope": scope}).Render(w)
 				return
 			}
-			if tenderURLParam != "" {
-				tenderID := chi.URLParam(r, tenderURLParam)
+			if resolve != nil && len(p.AllowedTenderIDs) > 0 {
+				tenderID, err := resolve(r)
+				if err != nil {
+					markCallError(r.Context(), "API_KEY_TENDER_DENIED")
+					apierr.ArchiveProblem(http.StatusForbidden, "API_KEY_TENDER_DENIED",
+						"Ключ ограничен списком тендеров, а принадлежность запрошенного объекта тендеру подтвердить не удалось.",
+						nil).Render(w)
+					return
+				}
 				if tenderID != "" && !p.AllowsTender(tenderID) {
 					markCallError(r.Context(), "API_KEY_TENDER_DENIED")
 					apierr.ArchiveProblem(http.StatusForbidden, "API_KEY_TENDER_DENIED",

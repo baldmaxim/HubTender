@@ -24,9 +24,13 @@ node scripts/archive-api.mjs suggest "кладка стен" "монтаж дв�
 # состав конкретной исторической позиции: строки BOQ, цены, валюты, курсы источника
 node scripts/archive-api.mjs position <position_id>
 
+# выбрать целевой тендер: id, номер, название, заказчик, версия (область tenders:read)
+node scripts/archive-api.mjs tenders --search=ЖК --archived=false
+
 # позиции ЦЕЛЕВОГО тендера — чтобы сопоставить свои строки с id существующих
-# позиций перед сборкой (нужна область tenders:read)
-node scripts/archive-api.mjs positions <tender_id>
+# позиций перед сборкой (область tenders:read); --section фильтрует по разделу
+# сметы (cost_category_name — «монолит», «кровля»…), is_section помечает заголовки
+node scripts/archive-api.mjs positions <tender_id> --section=монолит
 
 # сборка новой сметы из выбранных исторических позиций
 node scripts/archive-api.mjs compose ./compose.json               # проба, ничего не пишет
@@ -61,6 +65,7 @@ node scripts/archive-api.mjs compose ./compose.json --no-dry-run  # запись
 | 403 `API_KEY_SCOPE_DENIED` | Ключу не выдана нужная область (чтение/запись) |
 | 403 `API_KEY_TENDER_DENIED` | Ключ ограничен списком тендеров, этот в него не входит |
 | 403 при `positions` | Ключу не выдана область `tenders:read` — попросить перевыпуск, не обходить |
+| 403 при записи строк (`POST …/items`, `PATCH /items/{id}`, `recompute-totals`) | Нужна область `tenders:write`; перед повтором прочитать `GET …/positions/{posId}/items`, чтобы не задвоить |
 | 429 | Упёрлись в лимит запросов в минуту — снизить темп |
 | 503 `ENDPOINT_DISABLED` | Администратор выключил эндпоинт; не обходить |
 | 400 `ARCHIVE_*` | Ошибка в теле запроса, подробности в `detail` |

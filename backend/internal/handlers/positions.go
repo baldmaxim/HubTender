@@ -16,7 +16,7 @@ import (
 
 // positionServicer is the interface PositionHandler depends on.
 type positionServicer interface {
-	ListPositions(ctx context.Context, p repository.PositionListParams) ([]repository.PositionRow, error)
+	ListPositions(ctx context.Context, p repository.PositionListParams) ([]repository.PositionListRow, error)
 	ListBoqPreviewByPositions(ctx context.Context, positionIDs []string) ([]repository.BoqPreviewRow, error)
 	GetPositionWithTender(ctx context.Context, id string) (*repository.PositionWithTenderRow, error)
 	ListBoqItemsFullByPosition(ctx context.Context, positionID string) ([]repository.BoqItemFullRow, error)
@@ -35,8 +35,8 @@ func NewPositionHandler(svc positionServicer) *PositionHandler {
 
 // positionListEnvelope is {"data": [...], "next_cursor": "..."}.
 type positionListEnvelope struct {
-	Data       []repository.PositionRow `json:"data"`
-	NextCursor string                   `json:"next_cursor,omitempty"`
+	Data       []repository.PositionListRow `json:"data"`
+	NextCursor string                       `json:"next_cursor,omitempty"`
 }
 
 // GetPositions handles GET /api/v1/tenders/:id/positions.
@@ -71,7 +71,7 @@ func (h *PositionHandler) GetPositions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if rows == nil {
-		rows = []repository.PositionRow{}
+		rows = []repository.PositionListRow{}
 	}
 
 	env := positionListEnvelope{Data: rows}

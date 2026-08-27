@@ -23,6 +23,9 @@ type fakeTenderRepo struct {
 func (f *fakeTenderRepo) ListTenders(context.Context, repository.TenderListParams) ([]repository.TenderRow, error) {
 	panic("not used")
 }
+func (f *fakeTenderRepo) ListTendersBrief(context.Context, repository.TenderBriefParams) ([]repository.TenderBriefRow, error) {
+	panic("not used")
+}
 func (f *fakeTenderRepo) GetTenderOverview(context.Context, string) (*repository.TenderOverviewRow, error) {
 	panic("not used")
 }

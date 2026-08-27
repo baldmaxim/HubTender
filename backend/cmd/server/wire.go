@@ -35,6 +35,7 @@ type deps struct {
 	refH           *handlers.ReferenceHandler
 	tenderH        *handlers.TenderHandler
 	tenderWH       *handlers.TenderWriteHandler
+	tenderBriefH   *handlers.TenderBriefHandler
 	cbrH           *handlers.CBRHandler
 	positionH      *handlers.PositionHandler
 	positionWH     *handlers.PositionWriteHandler
@@ -51,7 +52,11 @@ type deps struct {
 	archiveH       *handlers.ArchiveHandler
 	apiAccessH     *handlers.ApiAccessHandler
 	// apiAccessSvc нужен маршрутам напрямую: он же проверяет ключи и пишет журнал.
-	apiAccessSvc      *services.ApiAccessService
+	apiAccessSvc *services.ApiAccessService
+	// positionSvc/boqSvc нужны гейту машинного доступа: резолвить тендер по
+	// id позиции/строки для маршрутов без {id} тендера в URL.
+	positionSvc       *services.PositionService
+	boqSvc            *services.BoqService
 	tenderNotesH      *handlers.TenderNotesHandler
 	boqAuditRollbackH *handlers.BoqAuditRollbackHandler
 	tasksH            *handlers.TasksHandler
@@ -377,6 +382,7 @@ func buildDeps(
 		refH:              handlers.NewReferenceHandler(refSvc),
 		tenderH:           handlers.NewTenderHandler(tenderSvc),
 		tenderWH:          handlers.NewTenderWriteHandler(tenderSvc),
+		tenderBriefH:      handlers.NewTenderBriefHandler(tenderSvc),
 		cbrH:              handlers.NewCBRHandler(cbrClient),
 		positionH:         handlers.NewPositionHandler(positionSvc),
 		positionWH:        handlers.NewPositionWriteHandler(positionSvc),
@@ -394,6 +400,8 @@ func buildDeps(
 		archiveH:          handlers.NewArchiveHandler(archiveSvc, apiAccessSvc),
 		apiAccessH:        handlers.NewApiAccessHandler(apiAccessSvc),
 		apiAccessSvc:      apiAccessSvc,
+		positionSvc:       positionSvc,
+		boqSvc:            boqSvc,
 		tenderNotesH:      handlers.NewTenderNotesHandler(tenderNotesSvc),
 		boqAuditRollbackH: handlers.NewBoqAuditRollbackHandler(boqAuditRollbackSvc),
 		tasksH:            handlers.NewTasksHandler(tasksSvc),

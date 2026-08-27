@@ -202,7 +202,7 @@ func TestApiAccessIntegration_UnknownScopeRejectedByDB(t *testing.T) {
 
 	_, err := pool.Exec(context.Background(), `
 		INSERT INTO public.api_keys (name, key_prefix, key_hash, scopes, created_by)
-		VALUES ('itest-bad-scope','thk_x','hash-bad', ARRAY['tenders:write']::text[], $1::uuid)
+		VALUES ('itest-bad-scope','thk_x','hash-bad', ARRAY['tenders:admin']::text[], $1::uuid)
 	`, apiAccessTestUser)
 	if err == nil {
 		t.Fatal("БД обязана отклонить область вне списка")

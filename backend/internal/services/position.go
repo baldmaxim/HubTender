@@ -10,7 +10,7 @@ import (
 
 // positionRepoer is the interface PositionService depends on.
 type positionRepoer interface {
-	ListPositions(ctx context.Context, p repository.PositionListParams) ([]repository.PositionRow, error)
+	ListPositions(ctx context.Context, p repository.PositionListParams) ([]repository.PositionListRow, error)
 	GetPositionByID(ctx context.Context, id string) (*repository.PositionRow, error)
 	CreatePosition(ctx context.Context, in repository.CreatePositionInput) (*repository.PositionRow, error)
 	UpdatePosition(ctx context.Context, id string, in repository.UpdatePositionInput) (*repository.PositionRow, error)
@@ -45,7 +45,7 @@ func NewPositionService(repo *repository.PositionRepo, c *cache.InMem) *Position
 func (s *PositionService) ListPositions(
 	ctx context.Context,
 	p repository.PositionListParams,
-) ([]repository.PositionRow, error) {
+) ([]repository.PositionListRow, error) {
 	rows, err := s.repo.ListPositions(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("positionService.ListPositions: %w", err)
