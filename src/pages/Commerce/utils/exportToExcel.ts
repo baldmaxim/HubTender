@@ -8,6 +8,7 @@ import type { Tender } from '../../../lib/types';
 import type { PositionWithCommercialCost } from '../types';
 import { cellBorderStyle, headerStyle, NUM_FMT_2 } from '../../../utils/excel/styles';
 import { setFormula, writeSheetWithFrozenHeader } from '../../../utils/excel/sheetWriter';
+import { computeSectionRanges, sumExcludingSections } from '../../../utils/excel/sectionSubtotals';
 
 export function exportCommerceToExcel(
   positions: PositionWithCommercialCost[],
@@ -107,6 +108,9 @@ export function exportCommerceToExcel(
       isZeroCost,
       volumesMatch,
       isSectionItemNo: /^\d+\.?$/.test(itemNo),
+      isLeaf,
+      isAdditional: !!pos.is_additional,
+      hierarchyLevel: pos.hierarchy_level || 0,
       // Нужны для Excel-формул: при gpVolume = 0 цены за единицу тоже 0,
       // поэтому формулу «кол-во × цена» ставить нельзя — она обнулит суммы.
       gpVolume,
@@ -275,18 +279,50 @@ export function exportCommerceToExcel(
     setFormula(ws, i + 1, 11, `J${excelRow}+K${excelRow}`, meta.commercialTotal);
   });
 
+  // ── Промежуточные итоги по разделам (J/K/L = SUBTOTAL(9, потомки)) ──
+  const subtotalCols: Array<[number, string, (m: (typeof rowsWithMeta)[number]) => number]> = [
+    [9, 'J', (m) => m.materialCostTotal],
+    [10, 'K', (m) => m.workCostTotal],
+    [11, 'L', (m) => m.commercialTotal],
+  ];
+  const sectionRanges = computeSectionRanges(
+    rowsWithMeta,
+    (i) => subtotalCols.some(([, , pick]) => pick(rowsWithMeta[i]) !== 0),
+  );
+  const sectionRowSet = new Set(sectionRanges.map((r) => r.rowIndex));
+  for (const [col, letter, pick] of subtotalCols) {
+    const values = rowsWithMeta.map(pick);
+    for (const { rowIndex, startIdx, endIdx } of sectionRanges) {
+      setFormula(
+        ws,
+        rowIndex + 1,
+        col,
+        `SUBTOTAL(9,${letter}${startIdx + 2}:${letter}${endIdx + 2})`,
+        sumExcludingSections(values, sectionRowSet, startIdx, endIdx),
+      );
+    }
+  }
+
   if (rows.length > 0) {
     const lastDataRow = rows.length + 1; // 1-based номер последней строки данных
     const sums: Array<[number, string, number]> = [
       [6, 'G', totalGpVolume],
       [7, 'H', totalClientVolume],
       [8, 'I', totalBase],
-      [9, 'J', totalMaterials],
-      [10, 'K', totalWorks],
-      [11, 'L', totalCommercial],
     ];
     for (const [col, letter, cached] of sums) {
       setFormula(ws, totalRowIndex, col, `SUM(${letter}2:${letter}${lastDataRow})`, cached);
+    }
+    // Итог по J/K/L — SUBTOTAL(9): строки-разделы с SUBTOTAL не удваиваются.
+    for (const [col, letter, pick] of subtotalCols) {
+      const values = rowsWithMeta.map(pick);
+      setFormula(
+        ws,
+        totalRowIndex,
+        col,
+        `SUBTOTAL(9,${letter}2:${letter}${lastDataRow})`,
+        sumExcludingSections(values, sectionRowSet, 0, rowsWithMeta.length - 1),
+      );
     }
   }
 

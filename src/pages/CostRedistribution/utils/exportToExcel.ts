@@ -11,14 +11,17 @@ import * as XLSX from 'xlsx-js-style';
 import type { PreparedRow } from '../../../services/redistributionPipeline';
 import { cellBorderStyle, headerStyle, NUM_FMT_2 } from '../../../utils/excel/styles';
 import { setFormula, writeSheetWithFrozenHeader } from '../../../utils/excel/sheetWriter';
+import { computeSectionRanges, sumExcludingSections } from '../../../utils/excel/sectionSubtotals';
 
 interface ExportData {
   rows: PreparedRow[];
   tenderTitle: string;
+  // position_id → hierarchy_level (в серверных строках уровня нет).
+  hierarchyLevels?: Map<string, number>;
 }
 
 export function exportRedistributionToExcel(data: ExportData): void {
-  const { rows: preparedRows, tenderTitle } = data;
+  const { rows: preparedRows, tenderTitle, hierarchyLevels } = data;
 
   // Заголовок
   const header = [
@@ -75,6 +78,8 @@ export function exportRedistributionToExcel(data: ExportData): void {
         resultRow.manual_note || '',
       ],
       isLeaf: resultRow.isLeaf,
+      isAdditional: resultRow.is_additional,
+      hierarchyLevel: hierarchyLevels?.get(resultRow.position_id) ?? 0,
       isZeroCost,
       isSectionItemNo: /^\d+\.?$/.test((resultRow.item_no || '').trim()),
       // Нужны для выбора ссылки на количество в Excel-формулах: делитель на
@@ -230,10 +235,44 @@ export function exportRedistributionToExcel(data: ExportData): void {
     setFormula(ws, i + 1, 8, `${qtyRef}*G${excelRow}`, row.totalWorksAfter);
   });
 
+  // ── Промежуточные итоги по разделам (H/I = SUBTOTAL(9, потомки)) ──
+  // ДОП-строки идут в конце листа — диапазоны считаем только по обычным.
+  const regularCount = rows.filter((r) => !r.isAdditional).length;
+  const subtotalCols: Array<[number, string, (r: (typeof rows)[number]) => number]> = [
+    [7, 'H', (r) => r.totalMaterials],
+    [8, 'I', (r) => r.totalWorksAfter],
+  ];
+  const sectionRanges = computeSectionRanges(
+    rows.slice(0, regularCount),
+    (i) => subtotalCols.some(([, , pick]) => pick(rows[i]) !== 0),
+  );
+  const sectionRowSet = new Set(sectionRanges.map((r) => r.rowIndex));
+  for (const [col, letter, pick] of subtotalCols) {
+    const values = rows.map(pick);
+    for (const { rowIndex, startIdx, endIdx } of sectionRanges) {
+      setFormula(
+        ws,
+        rowIndex + 1,
+        col,
+        `SUBTOTAL(9,${letter}${startIdx + 2}:${letter}${endIdx + 2})`,
+        sumExcludingSections(values, sectionRowSet, startIdx, endIdx),
+      );
+    }
+  }
+
   if (rows.length > 0) {
     const lastDataRow = rows.length + 1; // 1-based номер последней строки данных
-    setFormula(ws, totalRowIndex, 7, `SUM(H2:H${lastDataRow})`, totalMaterialsSum);
-    setFormula(ws, totalRowIndex, 8, `SUM(I2:I${lastDataRow})`, totalWorksSum);
+    // Итог — SUBTOTAL(9): строки-разделы с SUBTOTAL не удваиваются.
+    for (const [col, letter, pick] of subtotalCols) {
+      const values = rows.map(pick);
+      setFormula(
+        ws,
+        totalRowIndex,
+        col,
+        `SUBTOTAL(9,${letter}2:${letter}${lastDataRow})`,
+        sumExcludingSections(values, sectionRowSet, 0, rows.length - 1),
+      );
+    }
   }
 
   // Устанавливаем ширину колонок

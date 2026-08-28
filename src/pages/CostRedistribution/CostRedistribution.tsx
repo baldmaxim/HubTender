@@ -402,9 +402,10 @@ const CostRedistribution: React.FC = () => {
       exportRedistributionToExcel({
         rows: preparedResults.rows,
         tenderTitle: `${selectedTender.title} (v${selectedTender.version})`,
+        hierarchyLevels: new Map(clientPositions.map((p) => [p.id, p.hierarchy_level || 0])),
       });
     });
-  }, [selectedTenderId, tenders, preparedResults, exportBlockedMessage, fxMissing]);
+  }, [selectedTenderId, tenders, preparedResults, exportBlockedMessage, fxMissing, clientPositions]);
 
   // Слепок ровно того набора, который уходит в save (правила, не деньги).
   const currentRulesSignature = useMemo(
