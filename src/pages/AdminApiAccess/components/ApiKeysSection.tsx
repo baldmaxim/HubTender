@@ -26,7 +26,7 @@ const STATUS_TAG: Record<ApiKey['status'], { color: string; label: string }> = {
 const SCOPE_LABEL: Record<string, string> = {
   'archive:read': 'Чтение архива',
   'archive:write': 'Сборка смет',
-  'tenders:read': 'Позиции тендера',
+  'tenders:read': 'Чтение тендеров и смет',
   'tenders:write': 'Запись строк тендера',
 };
 
@@ -56,7 +56,7 @@ export const ApiKeysSection: FC<IApiKeysSectionProps> = ({
       render: (scopes: string[]) => (
         <Space size={4} wrap>
           {scopes.map((s) => (
-            <Tag key={s} color={s === 'archive:write' ? 'orange' : 'blue'}>
+            <Tag key={s} color={s.endsWith(':write') ? 'orange' : 'blue'}>
               {SCOPE_LABEL[s] ?? s}
             </Tag>
           ))}

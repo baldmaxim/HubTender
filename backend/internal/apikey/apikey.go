@@ -32,8 +32,9 @@ const DisplayPrefixLen = 12
 const (
 	ScopeArchiveRead  = "archive:read"
 	ScopeArchiveWrite = "archive:write"
-	// ScopeTendersRead — чтение тендера: узкий список тендеров, позиции и их
-	// строки. Только чтение: записи в тендер эта область не открывает.
+	// ScopeTendersRead — чтение тендеров и смет: список тендеров, шапка,
+	// позиции с итогами, строки BOQ. Только чтение: записи в тендер эта
+	// область не открывает.
 	ScopeTendersRead = "tenders:read"
 	// ScopeTendersWrite — запись строк BOQ в позиции тендера: создание и
 	// обновление работ/материалов, пересчёт итогов позиции. Ограничение ключа

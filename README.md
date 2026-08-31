@@ -75,6 +75,8 @@ curl http://localhost:3005/health      # liveness
 curl http://localhost:3005/health/db   # readiness + DB ping
 ```
 
+Машинный доступ по ключу `thk_…` (Cursor, Codex, свои скрипты) — [`api/README.md`](api/README.md).
+
 ### База данных
 
 Yandex Managed PostgreSQL (Supabase удалён). Схема и миграции — в `db/yandex/`.

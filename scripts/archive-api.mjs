@@ -12,7 +12,10 @@
  *   node scripts/archive-api.mjs search "устройство стяжки" --unit=м2 --limit=5
  *   node scripts/archive-api.mjs position <uuid>
  *   node scripts/archive-api.mjs tenders --search=ЖК --archived=false
+ *   node scripts/archive-api.mjs tender <tender_id>
  *   node scripts/archive-api.mjs positions <tender_id>
+ *   node scripts/archive-api.mjs costs <tender_id>
+ *   node scripts/archive-api.mjs estimate <tender_id> [--position=<position_id>]
  *   node scripts/archive-api.mjs suggest "кладка стен" "монтаж дверей"
  *   node scripts/archive-api.mjs compose ./compose.json --dry-run
  */
@@ -135,6 +138,37 @@ switch (command) {
     break;
   }
 
+  case 'tender': {
+    // Шапка тендера: номер, заказчик, курсы, итог КП, число позиций и строк.
+    const tenderId = positional[0];
+    if (!tenderId) throw new Error('Укажите id тендера');
+    console.log(JSON.stringify(await call('GET', `/api/v1/tenders/${tenderId}/overview`), null, 2));
+    break;
+  }
+
+  case 'costs': {
+    // Позиции с итогами: база, КП, наценка, число строк — всё, что видит
+    // инженер на странице «Позиции заказчика». Один ответ на весь тендер.
+    const tenderId = positional[0];
+    if (!tenderId) throw new Error('Укажите id тендера');
+    console.log(JSON.stringify(await call('GET', `/api/v1/tenders/${tenderId}/positions/with-costs`), null, 2));
+    break;
+  }
+
+  case 'estimate': {
+    // Строки сметы с названиями работ/материалов, категориями затрат, ценами
+    // и КП. Весь тендер одним ответом (крупные — десятки МБ) либо одна
+    // позиция через --position=<id>.
+    const tenderId = positional[0];
+    const positionId = flags.get('position');
+    if (!tenderId && !positionId) throw new Error('Укажите id тендера или --position=<id>');
+    const path = positionId
+      ? `/api/v1/positions/${positionId}/boq-items-full`
+      : `/api/v1/tenders/${tenderId}/boq-items-full`;
+    console.log(JSON.stringify(await call('GET', path), null, 2));
+    break;
+  }
+
   case 'positions': {
     // Все позиции тендера (страницы склеиваются): сопоставить свои строки с id
     // существующих позиций, отобрать раздел по cost_category_name. Область
@@ -170,11 +204,15 @@ switch (command) {
   }
 
   default:
-    console.error(`Команды: search | position | tenders | positions | suggest | compose | spec
+    console.error(`Команды: search | position | suggest | compose | tenders | tender | positions | costs | estimate | spec
   node scripts/archive-api.mjs search "устройство стяжки" --unit=м2 --limit=5
   node scripts/archive-api.mjs position <uuid>
   node scripts/archive-api.mjs tenders --search=ЖК --archived=false   # список тендеров (tenders:read)
-  node scripts/archive-api.mjs positions <tender_id> --section=монолит # позиции тендера (tenders:read)
+  node scripts/archive-api.mjs tender <tender_id>                     # шапка тендера
+  node scripts/archive-api.mjs positions <tender_id> --section=монолит # позиции (раздел, заголовки)
+  node scripts/archive-api.mjs costs <tender_id>                      # позиции с итогами и КП
+  node scripts/archive-api.mjs estimate <tender_id>                   # строки сметы с названиями и ценами
+  node scripts/archive-api.mjs estimate x --position=<position_id>    # строки одной позиции
   node scripts/archive-api.mjs suggest "кладка стен" "монтаж дверей"
   node scripts/archive-api.mjs compose ./compose.json            # проба (dry_run)
   node scripts/archive-api.mjs compose ./compose.json --no-dry-run --verbose`);

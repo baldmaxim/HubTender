@@ -9,6 +9,7 @@
   Клиент генерируется любым `openapi-generator` — это и заменяет автодоки FastAPI.
 - Инварианты расчёта: [`CALCULATION_SOURCE_OF_TRUTH.md`](CALCULATION_SOURCE_OF_TRUTH.md), §7b-bis.
 - Подключение из Cursor: [`ESTIMATE_ARCHIVE_CURSOR.md`](ESTIMATE_ARCHIVE_CURSOR.md).
+- Просмотр тендеров и смет любым помощником (Cursor, Codex, Claude Code, curl): [`api/README.md`](../api/README.md).
 
 ## Почему не отдельный Python-сервис
 
@@ -39,7 +40,7 @@ curl -s "$BASE/api/v1/archive/positions/search?q=стяжка" -H "X-API-Key: th
 |---|---|
 | Область `archive:read` — поиск, подбор, чтение позиции архива | 403 |
 | Область `archive:write` — `compose` | 403 |
-| Область `tenders:read` — список позиций тендера | 403 |
+| Область `tenders:read` — список тендеров, шапка, позиции с итогами, строки сметы | 403 |
 | Область `tenders:write` — запись строк BOQ в позиции тендера | 403 |
 | Список разрешённых тендеров (пусто = все) | 403 при чужом тендере |
 | Срок действия, отзыв | 401 (просроченный и отозванный не находятся вовсе) |
@@ -91,7 +92,11 @@ curl -s "$BASE/api/v1/archive/positions/search?q=..." -H "Authorization: Bearer 
 | POST | `/api/v1/archive/compose` | сборка позиций целевого тендера из исторических |
 | GET | `/api/v1/archive/openapi.yaml` | спецификация |
 | GET | `/api/v1/tenders/brief` | узкий список тендеров для выбора цели: id, номер, название, заказчик, версия, архив (область `tenders:read`; ключ с ограничением видит только свои тендеры) |
+| GET | `/api/v1/tenders/{id}/overview` | шапка тендера: курсы, итог КП, число позиций и строк (область `tenders:read`) |
+| GET | `/api/v1/tenders/{id}/positions/with-costs` | позиции с итогами: себестоимость, КП, наценка (область `tenders:read`) |
 | GET | `/api/v1/tenders/{id}/positions` | список позиций тендера — сопоставить свои строки с id существующих позиций, отобрать раздел (область `tenders:read`) |
+| GET | `/api/v1/tenders/{id}/boq-items-full`, `/api/v1/positions/{id}/boq-items-full` | строки сметы с названиями, категориями затрат и КП — весь тендер или одна позиция (область `tenders:read`) |
+| GET | `/api/v1/items/{id}` | одна строка BOQ с `ETag` (область `tenders:read`) |
 | GET | `/api/v1/tenders/{id}/positions/{posId}/items` | строки позиции — проверить, что уже записано, перед повторной выгрузкой (область `tenders:read`) |
 | POST | `/api/v1/tenders/{id}/positions/{posId}/items` | создать работу/материал с `unit_rate` (область `tenders:write`) |
 | PATCH | `/api/v1/items/{id}` | обновить строку; требует `If-Match` с ETag строки (область `tenders:write`) |

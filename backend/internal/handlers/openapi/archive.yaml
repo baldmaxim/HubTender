@@ -248,6 +248,72 @@ paths:
         '401': { $ref: '#/components/responses/Problem' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /api/v1/tenders/{id}/overview:
+    get:
+      tags: [archive]
+      summary: Шапка тендера
+      description: |
+        Область `tenders:read`. `data`: `id, tender_number, title, client_name,
+        housing_class, construction_scope, is_archived, cached_grand_total`
+        (итог КП), `usd_rate, eur_rate, cny_rate, position_count,
+        boq_item_count, created_at, updated_at`.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Шапка тендера }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /api/v1/tenders/{id}/positions/with-costs:
+    get:
+      tags: [archive]
+      summary: Позиции с итогами и КП
+      description: |
+        Область `tenders:read`. Весь тендер одним массивом (без страниц; на
+        11 тыс. позиций ~10 МБ, ответ сжат gzip), порядок — `position_number`.
+        В строке — поля позиции (`item_no, work_name, client_note, unit_code,
+        volume, hierarchy_level, is_additional, …`) и агрегаты по строкам:
+        `base_total` (себестоимость), `commercial_total` (КП),
+        `material_cost_total, work_cost_total, markup_percentage, items_count`.
+        Кэш 30 с; заголовок `Cache-Control: no-cache` сбрасывает.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Позиции с итогами }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/tenders/{id}/boq-items-full:
+    get:
+      tags: [archive]
+      summary: Все строки сметы тендера
+      description: |
+        Область `tenders:read`. Самый тяжёлый маршрут: все `boq_items` тендера
+        без страниц и кэша, порядок `sort_number`. В строке — количество, цена,
+        валюта, `total_amount`, коммерческие `commercial_markup,
+        total_commercial_material_cost, total_commercial_work_cost` и вложенные
+        справочники: `work_names{name,unit}`, `material_names{name,unit}`,
+        `parent_work{work_names{name}}`, `detail_cost_categories{name, location,
+        cost_categories{name}}`. Для одной позиции —
+        `/api/v1/positions/{id}/boq-items-full`.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Строки сметы }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/positions/{id}/boq-items-full:
+    get:
+      tags: [archive]
+      summary: Строки сметы одной позиции
+      description: |
+        Область `tenders:read`; тот же формат, что у тендерного варианта.
+        Тендер для ограничения ключа определяется по позиции в базе.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Строки позиции }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /api/v1/tenders/{id}/positions/{posId}/items:
     get:
       tags: [archive]
@@ -283,6 +349,19 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /api/v1/items/{id}:
+    get:
+      tags: [archive]
+      summary: Одна строка BOQ
+      description: |
+        Область `tenders:read`. Сырая строка `boq_items` (без вложенных имён)
+        и заголовок `ETag` — он же нужен в `If-Match` для PATCH. Тендер для
+        ограничения ключа определяется по строке в базе.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Строка }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/Problem' }
     patch:
       tags: [archive]
       summary: Обновить строку BOQ

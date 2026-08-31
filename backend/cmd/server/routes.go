@@ -111,6 +111,21 @@ func newRouter(
 		// и не задваивала: идемпотентности у записи нет.
 		r.With(middleware.RequireAPIKeyScope(apikey.ScopeTendersRead, "id")).
 			Get("/api/v1/tenders/{id}/positions/{posId}/items", d.boqH.GetBoqItems)
+		// Смета тендера целиком — то, что видит инженер на странице позиций:
+		// шапка, позиции с итогами и КП, строки с названиями/ценами. Маршруты
+		// сняты с JWT-группы (chi не ругается на дубль, а побеждает поздняя
+		// регистрация — ключ остался бы за дверью). Только чтение.
+		r.With(middleware.RequireAPIKeyScope(apikey.ScopeTendersRead, "id")).
+			Get("/api/v1/tenders/{id}/overview", d.tenderH.GetTenderOverview)
+		r.With(middleware.RequireAPIKeyScope(apikey.ScopeTendersRead, "id")).
+			Get("/api/v1/tenders/{id}/positions/with-costs", d.positionCostsH.GetPositionsWithCosts)
+		r.With(middleware.RequireAPIKeyScope(apikey.ScopeTendersRead, "id")).
+			Get("/api/v1/tenders/{id}/boq-items-full", d.positionH.ListBoqItemsFullByTender)
+		r.With(middleware.RequireAPIKeyScopeResolved(apikey.ScopeTendersRead, d.tenderOfPosition)).
+			Get("/api/v1/positions/{id}/boq-items-full", d.positionH.ListBoqItemsFullByPosition)
+		// Одна строка с ETag — нужен для If-Match при PATCH.
+		r.With(middleware.RequireAPIKeyScopeResolved(apikey.ScopeTendersRead, d.tenderOfItem)).
+			Get("/api/v1/items/{id}", d.boqH.GetBoqItem)
 
 		// Запись строк BOQ по ключу — область tenders:write. Хендлеры общие с
 		// UI; ключ действует от имени выпустившего пользователя. Там, где id
@@ -149,7 +164,6 @@ func newRouter(
 		// Slice 1: reads.
 		r.Get("/api/v1/tenders", d.tenderH.GetTenders)
 		r.Get("/api/v1/exchange-rates", d.cbrH.GetExchangeRates)
-		r.Get("/api/v1/tenders/{id}/overview", d.tenderH.GetTenderOverview)
 		// Этап 2.1 (аналитика качества расчёта). Путь /quality занят страницей
 		// «Проверка данных» (main, прод-контракт) — аналитика живёт отдельно.
 		r.Get("/api/v1/tenders/{id}/quality-analytics", d.qualityAnalyticsH.TenderQuality)
@@ -163,8 +177,6 @@ func newRouter(
 		r.Get("/api/v1/positions/boq-preview", d.positionH.GetBoqPreview)
 		r.Post("/api/v1/positions/boq-preview", d.positionH.PostBoqPreview)
 		r.Get("/api/v1/positions/{id}/with-tender", d.positionH.GetPositionWithTender)
-		r.Get("/api/v1/positions/{id}/boq-items-full", d.positionH.ListBoqItemsFullByPosition)
-		r.Get("/api/v1/tenders/{id}/boq-items-full", d.positionH.ListBoqItemsFullByTender)
 		r.Get("/api/v1/tenders/{id}/construction-cost-volumes", d.ccvH.ListByTender)
 
 		// Проверка данных: находки правил, вердикт инженера, выгрузка для замера.
@@ -194,11 +206,9 @@ func newRouter(
 		r.Patch("/api/v1/positions/{id}", d.positionWH.UpdatePosition)
 
 		r.Delete("/api/v1/items/{id}", d.boqWH.DeleteBoqItem)
-		r.Get("/api/v1/items/{id}", d.boqH.GetBoqItem)
 		r.Post("/api/v1/templates/{templateId}/insert-into-position", d.boqWH.InsertTemplate)
 
 		// Slice 3a: ported RPCs.
-		r.Get("/api/v1/tenders/{id}/positions/with-costs", d.positionCostsH.GetPositionsWithCosts)
 		// RETIRED (stage 0.1.2.2): commercial costs are calculation results and are
 		// never accepted from a client. Kept registered as an explicit tombstone —
 		// always 410 COMMERCIAL_COST_WRITE_RETIRED, never a mutation, never a 404.
