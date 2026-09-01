@@ -333,7 +333,17 @@ function buildHierarchy(
             locRow.tenders[idx].materials += g.tenders[idx].materials;
             locRow.tenders[idx].works += g.tenders[idx].works;
             locRow.tenders[idx].total += g.tenders[idx].total;
-            locRow.tenders[idx].volume += g.tenders[idx].volume;
+          }
+        }
+        // Объём локализации — собственное значение группы из
+        // construction_cost_volumes (group_key совпадает с ключом строки на
+        // «Затратах на строительство»), а НЕ сумма объёмов детализаций: у
+        // деталей одной локации объём обычно один и тот же (площадь ЛК,
+        // кладовок, автостоянки), и суммирование занижало ₽/ед. в разы.
+        if (volumeMapsAll) {
+          const groupKey = `location-${mainCat}-${location}`;
+          for (let idx = 0; idx < numTenders; idx++) {
+            locRow.tenders[idx].volume = volumeMapsAll[idx]?.groupMap.get(groupKey) || 0;
           }
         }
         calcPerUnit(locRow);
