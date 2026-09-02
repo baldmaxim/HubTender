@@ -8,6 +8,9 @@ import dayjs from 'dayjs';
 import { message } from 'antd';
 import type { ComparisonRow, CostType } from '../types';
 import { getErrorMessage } from '../../../../utils/errors';
+import { applyRowOutline, writeSheetWithOutline } from '../../../../utils/excel/outline';
+
+const SHEET_NAME = 'Сравнение';
 
 interface ExportParams {
   comparisonData: ComparisonRow[];
@@ -21,32 +24,33 @@ type RowType = 'header' | 'subheader' | 'supergroup' | 'category' | 'location' |
 // «локализация» появляется только для whitelist-категорий (отделочные, двери)
 // с ≥2 разными локализациями — поэтому не у всех ветвей три уровня. Над-группа
 // «ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ» — верхний уровень над категориями.
-function flattenRows(data: ComparisonRow[]): { row: ComparisonRow; type: RowType }[] {
-  const result: { row: ComparisonRow; type: RowType }[] = [];
-  const emitCategory = (mainRow: ComparisonRow) => {
-    result.push({ row: mainRow, type: 'category' });
+// `level` — глубина в дереве страницы, из неё строится группировка строк Excel.
+function flattenRows(data: ComparisonRow[]): { row: ComparisonRow; type: RowType; level: number }[] {
+  const result: { row: ComparisonRow; type: RowType; level: number }[] = [];
+  const emitCategory = (mainRow: ComparisonRow, level: number) => {
+    result.push({ row: mainRow, type: 'category', level });
     if (!mainRow.children) return;
     for (const child of mainRow.children) {
       if (child.is_location) {
-        result.push({ row: child, type: 'location' });
+        result.push({ row: child, type: 'location', level: level + 1 });
         if (child.children) {
           for (const grand of child.children) {
-            result.push({ row: grand, type: 'detail' });
+            result.push({ row: grand, type: 'detail', level: level + 2 });
           }
         }
       } else {
-        result.push({ row: child, type: 'detail' });
+        result.push({ row: child, type: 'detail', level: level + 1 });
       }
     }
   };
   for (const topRow of data) {
     if (topRow.is_super_group) {
-      result.push({ row: topRow, type: 'supergroup' });
+      result.push({ row: topRow, type: 'supergroup', level: 0 });
       for (const cat of topRow.children || []) {
-        emitCategory(cat);
+        emitCategory(cat, 1);
       }
     } else {
-      emitCategory(topRow);
+      emitCategory(topRow, 0);
     }
   }
   return result;
@@ -68,11 +72,12 @@ function buildTotalRow(data: ComparisonRow[]): ComparisonRow {
   return { key: 'total', category: 'ИТОГО', is_main_category: true, tenders: totals };
 }
 
-function buildExportData(params: ExportParams): { data: (string | number)[][]; rowTypes: RowType[]; numTenders: number } {
+function buildExportData(params: ExportParams): { data: (string | number)[][]; rowTypes: RowType[]; levels: number[]; numTenders: number } {
   const { comparisonData, tenderLabels } = params;
   const numTenders = tenderLabels.length;
   const exportData: (string | number)[][] = [];
   const rowTypes: RowType[] = [];
+  const levels: number[] = [];
   const hasDiff = numTenders === 2;
 
   // Row 1: group headers
@@ -84,6 +89,7 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
   headerRow.push('Примечание');
   exportData.push(headerRow);
   rowTypes.push('header');
+  levels.push(0);
 
   // Row 2: sub-headers
   const subCols = ['Материалы', 'Работы', 'Итого', 'Мат/ед.', 'Раб/ед.', 'Итого/ед.'];
@@ -93,10 +99,11 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
   subHeaderRow.push('');
   exportData.push(subHeaderRow);
   rowTypes.push('subheader');
+  levels.push(0);
 
   // Data rows
   const flat = flattenRows(comparisonData);
-  for (const { row, type } of flat) {
+  for (const { row, type, level } of flat) {
     const categoryLabel =
       type === 'supergroup' || type === 'category'
         ? row.category.toUpperCase()
@@ -123,6 +130,7 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
     dataRow.push(row.note || '');
     exportData.push(dataRow);
     rowTypes.push(type);
+    levels.push(level);
   }
 
   // Total row
@@ -140,8 +148,9 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
   totalDataRow.push('');
   exportData.push(totalDataRow);
   rowTypes.push('total');
+  levels.push(0);
 
-  return { data: exportData, rowTypes, numTenders };
+  return { data: exportData, rowTypes, levels, numTenders };
 }
 
 function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders: number): void {
@@ -268,11 +277,14 @@ export function exportComparisonToExcel(params: ExportParams): void {
   }
 
   try {
-    const { data: exportData, rowTypes, numTenders } = buildExportData(params);
+    const { data: exportData, rowTypes, levels, numTenders } = buildExportData(params);
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(exportData);
     configureWorksheet(ws, rowTypes, numTenders);
-    XLSX.utils.book_append_sheet(wb, ws, 'Сравнение');
+    // Группировка строк как дерево на странице: над-группа → категория →
+    // локализация → детализация, свёрнуто до верхнего уровня.
+    const collapsedRows = applyRowOutline(ws, levels);
+    XLSX.utils.book_append_sheet(wb, ws, SHEET_NAME);
 
     const costLabel = params.costType === 'base' ? 'Прямые' : 'Коммерческие';
     const labelsStr = params.tenderLabels.length > 3
@@ -280,7 +292,7 @@ export function exportComparisonToExcel(params: ExportParams): void {
       : params.tenderLabels.join('_vs_').replace(/[/\\?*[\]:]/g, '_');
     const fileName = `Сравнение_${labelsStr}_${costLabel}_${dayjs().format('DD-MM-YYYY')}.xlsx`;
 
-    XLSX.writeFile(wb, fileName);
+    writeSheetWithOutline(wb, SHEET_NAME, fileName, collapsedRows);
     message.success('Файл успешно экспортирован');
   } catch (error) {
     console.error('Ошибка экспорта:', error);

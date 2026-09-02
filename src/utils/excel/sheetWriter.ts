@@ -19,7 +19,10 @@ export function triggerDownload(data: Uint8Array, fileName: string): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Отзывать blob-URL синхронно нельзя: скачивание стартует уже следующей
+  // задачей, и WebKit/Safari успевает получить отозванный URL (файл не
+  // сохраняется). SheetJS (write_dl) и FileSaver.js ждут по той же причине.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 /**

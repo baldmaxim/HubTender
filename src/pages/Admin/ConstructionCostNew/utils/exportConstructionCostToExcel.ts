@@ -10,9 +10,12 @@ import * as XLSX from 'xlsx-js-style';
 import dayjs from 'dayjs';
 import { message } from 'antd';
 import { getErrorMessage } from '../../../../utils/errors';
+import { applyRowOutline, writeSheetWithOutline } from '../../../../utils/excel/outline';
 import type { CostRow } from '../hooks/useCostData';
 import { fetchOppositeCosts } from './fetchOppositeCosts';
 import { buildExportData, type RowType } from './buildExportRows';
+
+const SHEET_NAME = 'Затраты';
 
 interface ExportParams {
   selectedTenderId: string;
@@ -167,7 +170,7 @@ export async function exportConstructionCostToExcel(
     const oppositeCostMap = await fetchOppositeCosts(selectedTenderId, costType);
 
     // Формируем данные для экспорта
-    const { data: exportData, rowTypes } = buildExportData(
+    const { data: exportData, rowTypes, levels } = buildExportData(
       filteredData,
       oppositeCostMap,
       areaSp,
@@ -181,15 +184,19 @@ export async function exportConstructionCostToExcel(
     // Настраиваем стили и структуру
     configureWorksheet(ws, rowTypes);
 
+    // Группировка строк как дерево на странице: над-группа → категория →
+    // локализация → детализация, свёрнуто до верхнего уровня.
+    const collapsedRows = applyRowOutline(ws, levels);
+
     // Добавляем лист в книгу
-    XLSX.utils.book_append_sheet(wb, ws, 'Затраты');
+    XLSX.utils.book_append_sheet(wb, ws, SHEET_NAME);
 
     // Формируем имя файла
     const costTypeLabel = costType === 'base' ? 'Прямые' : 'Коммерческие';
     const fileName = `Затраты_${selectedTenderTitle}_v${selectedVersion || 1}_${costTypeLabel}_${dayjs().format('DD-MM-YYYY')}.xlsx`;
 
     // Экспортируем файл
-    XLSX.writeFile(wb, fileName);
+    writeSheetWithOutline(wb, SHEET_NAME, fileName, collapsedRows);
     message.success('Файл успешно экспортирован');
   } catch (error) {
     console.error('Ошибка экспорта:', error);

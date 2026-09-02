@@ -10,7 +10,7 @@
 import { unzipSync, zipSync, strToU8, strFromU8, type Zippable } from 'fflate';
 import type { StrikeRun } from '../../lib/types/types/boq';
 
-type ZipMap = Record<string, Uint8Array>;
+export type ZipMap = Record<string, Uint8Array>;
 
 export interface StrikeCell {
   ref: string; // адрес ячейки, напр. "G5"
@@ -34,7 +34,7 @@ function xmlEscape(s: string): string {
 }
 
 // Путь главного (первого нужного) листа по имени — как в ganttChartExport.ts.
-function resolveSheetPath(files: ZipMap, sheetName: string): string {
+export function resolveSheetPath(files: ZipMap, sheetName: string): string {
   const wbXml = strFromU8(files['xl/workbook.xml']);
   const relsXml = strFromU8(files['xl/_rels/workbook.xml.rels']);
 

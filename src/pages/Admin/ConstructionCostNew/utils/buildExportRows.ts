@@ -7,6 +7,8 @@ export type RowType = 'header' | 'subheader' | 'supergroup' | 'category' | 'loca
 export interface ExportDataWithTypes {
   data: (string | number)[][];
   rowTypes: RowType[];
+  /** Уровень группировки строки Excel (0 — верхний), повторяет дерево страницы. */
+  levels: number[];
 }
 
 const emptySums = (): CostSums => ({
@@ -90,6 +92,7 @@ export function buildExportData(
 ): ExportDataWithTypes {
   const exportData: (string | number)[][] = [];
   const rowTypes: RowType[] = [];
+  const levels: number[] = [];
 
   // Заголовки
   exportData.push([
@@ -124,6 +127,7 @@ export function buildExportData(
     '',
   ]);
   rowTypes.push('header');
+  levels.push(0);
 
   exportData.push([
     '',
@@ -157,6 +161,7 @@ export function buildExportData(
     'Итого за единицу общей площади',
   ]);
   rowTypes.push('subheader');
+  levels.push(0);
 
   // Опп. затраты по всему поддереву строки: у категорий с несколькими
   // локализациями прямые children — строки локализаций без
@@ -190,7 +195,8 @@ export function buildExportData(
     unit: string,
     row: CostRow,
     volume: number,
-    type: RowType
+    type: RowType,
+    level: number
   ): void => {
     const { direct, commercial } = splitBlocks(row);
     const zeroBlank = type === 'location' || type === 'detail';
@@ -206,27 +212,29 @@ export function buildExportData(
       areaSp && commTotal ? commTotal / areaSp : '',
     ]);
     rowTypes.push(type);
+    levels.push(level);
   };
 
   // Разворачиваем над-группу «ВНУТРЕННИЕ ИНЖЕНЕРНЫЕ СИСТЕМЫ» в плоский список:
   // строка над-группы + её дочерние категории (нумерация категорий сквозная).
-  const emitList: { type: 'supergroup' | 'category'; row: CostRow }[] = [];
+  // `level` — глубина в дереве страницы, из неё строится группировка строк Excel.
+  const emitList: { type: 'supergroup' | 'category'; row: CostRow; level: number }[] = [];
   filteredData.forEach((topRow) => {
     if (topRow.is_super_group && topRow.total_cost > 0) {
-      emitList.push({ type: 'supergroup', row: topRow });
+      emitList.push({ type: 'supergroup', row: topRow, level: 0 });
       (topRow.children || []).forEach((child) => {
         if (child.is_category && child.total_cost > 0) {
-          emitList.push({ type: 'category', row: child });
+          emitList.push({ type: 'category', row: child, level: 1 });
         }
       });
     } else if (topRow.is_category && !topRow.is_super_group && topRow.total_cost > 0) {
-      emitList.push({ type: 'category', row: topRow });
+      emitList.push({ type: 'category', row: topRow, level: 0 });
     }
   });
 
   let categoryIndex = 1;
 
-  emitList.forEach(({ type, row }) => {
+  emitList.forEach(({ type, row, level }) => {
     if (type === 'supergroup') {
       const superVolume = row.volume || 0;
       emitRow(
@@ -236,7 +244,8 @@ export function buildExportData(
         'м2',
         row,
         superVolume,
-        'supergroup'
+        'supergroup',
+        level
       );
       return;
     }
@@ -254,7 +263,8 @@ export function buildExportData(
       category.children?.[0]?.unit || 'м2',
       category,
       categoryTotalVolume,
-      'category'
+      'category',
+      level
     );
 
     // Строки деталей (с учетом локализаций)
@@ -266,7 +276,7 @@ export function buildExportData(
     sortedChildren.forEach((child) => {
       if (child.is_location && child.total_cost > 0) {
         const locationNum = `${catNum}.${String(detailIndex).padStart(2, '0')}.`;
-        emitRow(`${locationNum} ${child.location_name}`, '', '', '', child, 0, 'location');
+        emitRow(`${locationNum} ${child.location_name}`, '', '', '', child, 0, 'location', level + 1);
 
         // Детали внутри локализации
         let locationDetailIndex = 1;
@@ -283,7 +293,8 @@ export function buildExportData(
               detail.unit || '',
               detail,
               detail.volume || 0,
-              'detail'
+              'detail',
+              level + 2
             );
             locationDetailIndex++;
           }
@@ -300,7 +311,8 @@ export function buildExportData(
           child.unit || '',
           child,
           child.volume || 0,
-          'detail'
+          'detail',
+          level + 1
         );
         detailIndex++;
       }
@@ -309,5 +321,5 @@ export function buildExportData(
     categoryIndex++;
   });
 
-  return { data: exportData, rowTypes };
+  return { data: exportData, rowTypes, levels };
 }
