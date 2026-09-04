@@ -112,6 +112,10 @@ const ObjectComparison: React.FC = () => {
         );
       }
       children.push({ title: <div style={{ textAlign: 'center' }}>Итого/ед.</div>, key: `t${i}_tpu`, align: 'center' as const, width: 110, render: (_: unknown, r: ComparisonRow) => <Text strong style={{ color: '#0891b2' }}>{formatPerUnit(r.tenders[i]?.total_per_unit ?? 0)}</Text> });
+      // Второй удельный показатель: знаменатель один на весь тендер (площадь по
+      // СП), поэтому строки сопоставимы между категориями с разными единицами
+      // объёма — и между объектами.
+      children.push({ title: <div style={{ textAlign: 'center' }}>Итого/м² СП</div>, key: `t${i}_tsp`, align: 'center' as const, width: 120, render: (_: unknown, r: ComparisonRow) => <Text strong style={{ color: '#0891b2' }}>{formatPerUnit(r.tenders[i]?.total_per_sp ?? 0)}</Text> });
 
       return { title: <div style={{ textAlign: 'center' }}>{label}</div>, children };
     });
@@ -135,6 +139,7 @@ const ObjectComparison: React.FC = () => {
         );
       }
       diffChildren.push({ title: <div style={{ textAlign: 'center' }}>Итого/ед.</div>, key: 'diff_tpu', align: 'center' as const, width: 110, render: (_: unknown, r: ComparisonRow) => <DiffPerUnitCell value={getDiff(r, 'total_per_unit').value} /> });
+      diffChildren.push({ title: <div style={{ textAlign: 'center' }}>Итого/м² СП</div>, key: 'diff_tsp', align: 'center' as const, width: 120, render: (_: unknown, r: ComparisonRow) => <DiffPerUnitCell value={getDiff(r, 'total_per_sp').value} /> });
 
       result.push({ title: <div style={{ textAlign: 'center' }}>Разница</div>, children: diffChildren });
 

@@ -6,11 +6,24 @@ import * as XLSX from 'xlsx-js-style';
 import type { ColInfo, Range } from 'xlsx-js-style';
 import dayjs from 'dayjs';
 import { message } from 'antd';
-import type { ComparisonRow, CostType } from '../types';
+import type { ComparisonRow, CostType, TenderCosts } from '../types';
 import { getErrorMessage } from '../../../../utils/errors';
 import { applyRowOutline, writeSheetWithOutline } from '../../../../utils/excel/outline';
 
 const SHEET_NAME = 'Сравнение';
+
+/**
+ * Сколько столбцов занимает один тендер. Число участвует в расчёте позиции
+ * блока «Разница», колонки примечания, объединений и ширин — держим его
+ * константой, чтобы добавление показателя правилось в одном месте.
+ */
+const COLS_PER_TENDER = 7;
+
+const EMPTY_COSTS: TenderCosts = {
+  materials: 0, works: 0, total: 0,
+  mat_per_unit: 0, work_per_unit: 0, total_per_unit: 0,
+  volume: 0, total_per_sp: 0,
+};
 
 interface ExportParams {
   comparisonData: ComparisonRow[];
@@ -59,9 +72,7 @@ function flattenRows(data: ComparisonRow[]): { row: ComparisonRow; type: RowType
 function buildTotalRow(data: ComparisonRow[]): ComparisonRow {
   if (data.length === 0) return { key: 'total', category: 'ИТОГО', tenders: [] };
   const numTenders = data[0].tenders.length;
-  const totals = Array.from({ length: numTenders }, () => ({
-    materials: 0, works: 0, total: 0, mat_per_unit: 0, work_per_unit: 0, total_per_unit: 0, volume: 0,
-  }));
+  const totals = Array.from({ length: numTenders }, () => ({ ...EMPTY_COSTS }));
   for (const row of data) {
     for (let i = 0; i < numTenders; i++) {
       totals[i].materials += row.tenders[i]?.materials || 0;
@@ -72,7 +83,13 @@ function buildTotalRow(data: ComparisonRow[]): ComparisonRow {
   return { key: 'total', category: 'ИТОГО', is_main_category: true, tenders: totals };
 }
 
-function buildExportData(params: ExportParams): { data: (string | number)[][]; rowTypes: RowType[]; levels: number[]; numTenders: number } {
+/**
+ * Сборка листа. Экспортируется ради проверки геометрии столбцов
+ * (scripts/checks/comparisonExport.check.mjs): ширина блока тендера участвует в
+ * позиции блока «Разница», колонки примечания, объединений и ширин, и разъезд
+ * заметен только на готовом файле.
+ */
+export function buildExportData(params: ExportParams): { data: (string | number)[][]; rowTypes: RowType[]; levels: number[]; numTenders: number } {
   const { comparisonData, tenderLabels } = params;
   const numTenders = tenderLabels.length;
   const exportData: (string | number)[][] = [];
@@ -81,18 +98,21 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
   const hasDiff = numTenders === 2;
 
   // Row 1: group headers
+  const spacer = Array.from({ length: COLS_PER_TENDER - 1 }, () => '');
   const headerRow: (string | number)[] = ['Категория затрат'];
   for (const label of tenderLabels) {
-    headerRow.push(label, '', '', '', '', '');
+    headerRow.push(label, ...spacer);
   }
-  if (hasDiff) headerRow.push('Разница', '', '', '', '', '');
+  if (hasDiff) headerRow.push('Разница', ...spacer);
   headerRow.push('Примечание');
   exportData.push(headerRow);
   rowTypes.push('header');
   levels.push(0);
 
-  // Row 2: sub-headers
-  const subCols = ['Материалы', 'Работы', 'Итого', 'Мат/ед.', 'Раб/ед.', 'Итого/ед.'];
+  // Row 2: sub-headers. «Итого/м² СП» — второй удельный показатель: знаменатель
+  // один на весь тендер (площадь по СП), поэтому строки сопоставимы между
+  // категориями с разными единицами объёма.
+  const subCols = ['Материалы', 'Работы', 'Итого', 'Мат/ед.', 'Раб/ед.', 'Итого/ед.', 'Итого/м² СП'];
   const subHeaderRow: (string | number)[] = [''];
   for (let i = 0; i < numTenders; i++) subHeaderRow.push(...subCols);
   if (hasDiff) subHeaderRow.push(...subCols);
@@ -112,12 +132,16 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
           : `      ${row.category}`;
     const dataRow: (string | number)[] = [categoryLabel];
     for (let i = 0; i < numTenders; i++) {
-      const t = row.tenders[i] || { materials: 0, works: 0, total: 0, mat_per_unit: 0, work_per_unit: 0, total_per_unit: 0, volume: 0 };
-      dataRow.push(t.materials, t.works, t.total, t.mat_per_unit || '', t.work_per_unit || '', t.total_per_unit || '');
+      const t = row.tenders[i] || EMPTY_COSTS;
+      dataRow.push(
+        t.materials, t.works, t.total,
+        t.mat_per_unit || '', t.work_per_unit || '', t.total_per_unit || '',
+        t.total_per_sp || '',
+      );
     }
     if (hasDiff) {
-      const t0 = row.tenders[0];
-      const t1 = row.tenders[1];
+      const t0 = row.tenders[0] || EMPTY_COSTS;
+      const t1 = row.tenders[1] || EMPTY_COSTS;
       dataRow.push(
         t1.materials - t0.materials,
         t1.works - t0.works,
@@ -125,6 +149,7 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
         (t1.mat_per_unit - t0.mat_per_unit) || '',
         (t1.work_per_unit - t0.work_per_unit) || '',
         (t1.total_per_unit - t0.total_per_unit) || '',
+        (t1.total_per_sp - t0.total_per_sp) || '',
       );
     }
     dataRow.push(row.note || '');
@@ -136,14 +161,23 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
   // Total row
   const totalRow = buildTotalRow(comparisonData);
   const totalDataRow: (string | number)[] = ['ИТОГО'];
+  // Удельные показатели в строке ИТОГО не выводятся: суммировать ₽/ед. по
+  // категориям с разными единицами объёма бессмысленно.
+  const perUnitBlanks = Array.from({ length: COLS_PER_TENDER - 3 }, () => '');
   for (let i = 0; i < numTenders; i++) {
-    const t = totalRow.tenders[i] || { materials: 0, works: 0, total: 0, mat_per_unit: 0, work_per_unit: 0, total_per_unit: 0, volume: 0 };
-    totalDataRow.push(t.materials, t.works, t.total, '', '', '');
+    const t = totalRow.tenders[i] || EMPTY_COSTS;
+    totalDataRow.push(t.materials, t.works, t.total, ...perUnitBlanks);
   }
   if (hasDiff) {
-    const t0 = totalRow.tenders[0];
-    const t1 = totalRow.tenders[1];
-    totalDataRow.push(t1.materials - t0.materials, t1.works - t0.works, t1.total - t0.total, '', '', '');
+    // Пустое сравнение даёт строку ИТОГО без тендеров: UI до этого не доводит
+    // (экспорт отказывается на пустых данных), но геометрию листа это ломало бы
+    // молча — блок «Разница» просто не дописывался.
+    const t0 = totalRow.tenders[0] || EMPTY_COSTS;
+    const t1 = totalRow.tenders[1] || EMPTY_COSTS;
+    totalDataRow.push(
+      t1.materials - t0.materials, t1.works - t0.works, t1.total - t0.total,
+      ...perUnitBlanks,
+    );
   }
   totalDataRow.push('');
   exportData.push(totalDataRow);
@@ -155,15 +189,16 @@ function buildExportData(params: ExportParams): { data: (string | number)[][]; r
 
 function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders: number): void {
   const hasDiff = numTenders === 2;
-  const noteColIdx = 1 + numTenders * 6 + (hasDiff ? 6 : 0);
-  const diffStartCol = hasDiff ? 1 + numTenders * 6 : -1;
+  const noteColIdx = 1 + numTenders * COLS_PER_TENDER + (hasDiff ? COLS_PER_TENDER : 0);
+  const diffStartCol = hasDiff ? 1 + numTenders * COLS_PER_TENDER : -1;
 
-  // Column widths
+  // Column widths: три денежных столбца шире, удельные — уже.
+  const tenderWidths: ColInfo[] = [
+    { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+  ];
   const cols: ColInfo[] = [{ wch: 45 }];
-  for (let i = 0; i < numTenders; i++) {
-    cols.push({ wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 });
-  }
-  if (hasDiff) cols.push({ wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 });
+  for (let i = 0; i < numTenders; i++) cols.push(...tenderWidths);
+  if (hasDiff) cols.push(...tenderWidths);
   cols.push({ wch: 30 });
   ws['!cols'] = cols;
 
@@ -172,26 +207,22 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
     { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
   ];
   for (let i = 0; i < numTenders; i++) {
-    const start = 1 + i * 6;
-    merges.push({ s: { r: 0, c: start }, e: { r: 0, c: start + 5 } });
+    const start = 1 + i * COLS_PER_TENDER;
+    merges.push({ s: { r: 0, c: start }, e: { r: 0, c: start + COLS_PER_TENDER - 1 } });
   }
-  if (hasDiff) merges.push({ s: { r: 0, c: diffStartCol }, e: { r: 0, c: diffStartCol + 5 } });
+  if (hasDiff) {
+    merges.push({ s: { r: 0, c: diffStartCol }, e: { r: 0, c: diffStartCol + COLS_PER_TENDER - 1 } });
+  }
   merges.push({ s: { r: 0, c: noteColIdx }, e: { r: 1, c: noteColIdx } });
   ws['!merges'] = merges;
 
-  // Per-unit column indices (for blue color)
+  // Удельные столбцы блока (синий цвет) — всё, что после трёх денежных.
   const perUnitCols = new Set<number>();
-  for (let i = 0; i < numTenders; i++) {
-    const start = 1 + i * 6;
-    perUnitCols.add(start + 3);
-    perUnitCols.add(start + 4);
-    perUnitCols.add(start + 5);
-  }
-  if (hasDiff) {
-    perUnitCols.add(diffStartCol + 3);
-    perUnitCols.add(diffStartCol + 4);
-    perUnitCols.add(diffStartCol + 5);
-  }
+  const addPerUnit = (start: number) => {
+    for (let c = start + 3; c < start + COLS_PER_TENDER; c++) perUnitCols.add(c);
+  };
+  for (let i = 0; i < numTenders; i++) addPerUnit(1 + i * COLS_PER_TENDER);
+  if (hasDiff) addPerUnit(diffStartCol);
 
   const beigeHeaderFill = { fgColor: { rgb: 'F5F5DC' } };
   const yellowCategoryFill = { fgColor: { rgb: 'FFFFE0' } };
@@ -252,7 +283,7 @@ function configureWorksheet(ws: XLSX.WorkSheet, rowTypes: RowType[], numTenders:
       if (perUnitCols.has(C) && rowType !== 'header' && rowType !== 'subheader') {
         font.color = { rgb: '0891B2' };
       }
-      if (diffStartCol >= 0 && C >= diffStartCol && C < diffStartCol + 6 && rowType !== 'header' && rowType !== 'subheader') {
+      if (diffStartCol >= 0 && C >= diffStartCol && C < diffStartCol + COLS_PER_TENDER && rowType !== 'header' && rowType !== 'subheader') {
         const cellVal = ws[cellAddress].v;
         if (typeof cellVal === 'number') {
           font.color = { rgb: cellVal >= 0 ? '52C41A' : 'FF4D4F' };
