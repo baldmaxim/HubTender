@@ -182,6 +182,10 @@ func buildDeps(
 	positionSvc := services.NewPositionService(positionRepo, inMemCache)
 	positionCostsSvc := services.NewPositionCostsService(positionCostsRepo, inMemCache)
 	qualitySvc := services.NewQualityService(qualityRepo, inMemCache)
+	// Кэш находок «Проверки данных» держится 10 минут и до сих пор сбрасывался
+	// только при сохранении вердикта. Привязываем его к очереди пересчёта: она
+	// уже дёргается со всех финансовых путей записи.
+	recalcQueue.SetInvalidator(qualitySvc)
 	boqSvc := services.NewBoqService(boqRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	bulkBoqSvc := services.NewBulkBoqService(bulkBoqRepo, inMemCache)
 	importBoqSvc := services.NewImportBoqService(importBoqRepo, inMemCache).WithRecalcQueue(recalcQueue)

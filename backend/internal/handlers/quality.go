@@ -18,6 +18,8 @@ type qualityServicer interface {
 	Report(ctx context.Context, tenderID string, refresh bool) (*repository.QualityReport, error)
 	SetVerdict(ctx context.Context, tenderID, ruleCode, entityID, fingerprint, verdict string,
 		note *string, changedBy *string) error
+	SetVerdicts(ctx context.Context, tenderID string, in []repository.VerdictInput,
+		changedBy *string) error
 	Export(ctx context.Context) ([]repository.ExportRow, error)
 }
 
@@ -110,6 +112,73 @@ func (h *QualityHandler) PostVerdict(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		apierr.InternalFromErr(w, r, err, "quality verdict failed",
 			"tender_id", tenderID, "rule_code", req.RuleCode)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// maxBulkVerdicts ограничивает размер пачки. Правило Q даёт больше пяти тысяч
+// находок, поэтому «принять всю группу» клиент режет на части — так один
+// сорвавшийся запрос не отменяет всю работу инженера.
+const maxBulkVerdicts = 5000
+
+type verdictsRequest struct {
+	Items []verdictRequest `json:"items"`
+}
+
+// PostVerdicts handles POST /api/v1/tenders/:id/quality/verdicts — пачка решений
+// за один запрос («принять всю группу»).
+func (h *QualityHandler) PostVerdicts(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+
+	tenderID := chi.URLParam(r, "id")
+	if tenderID == "" {
+		apierr.BadRequest("missing tender id").Render(w)
+		return
+	}
+
+	var req verdictsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid json body").Render(w)
+		return
+	}
+	if len(req.Items) == 0 {
+		apierr.BadRequest("items must not be empty").Render(w)
+		return
+	}
+	if len(req.Items) > maxBulkVerdicts {
+		apierr.BadRequest("too many items in one request").Render(w)
+		return
+	}
+
+	in := make([]repository.VerdictInput, 0, len(req.Items))
+	for i := range req.Items {
+		it := req.Items[i]
+		if it.RuleCode == "" || it.EntityID == "" || it.Fingerprint == "" {
+			apierr.BadRequest("rule_code, entity_id and fingerprint are required").Render(w)
+			return
+		}
+		if it.Verdict != "accepted" && it.Verdict != "error" {
+			apierr.BadRequest("verdict must be 'accepted' or 'error'").Render(w)
+			return
+		}
+		in = append(in, repository.VerdictInput{
+			RuleCode:    it.RuleCode,
+			EntityID:    it.EntityID,
+			Fingerprint: it.Fingerprint,
+			Verdict:     it.Verdict,
+			Note:        it.Note,
+		})
+	}
+
+	if err := h.svc.SetVerdicts(r.Context(), tenderID, in, &authUser.ID); err != nil {
+		apierr.InternalFromErr(w, r, err, "quality bulk verdict failed",
+			"tender_id", tenderID, "count", len(in))
 		return
 	}
 

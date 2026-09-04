@@ -1,9 +1,10 @@
 import React from 'react';
-import { Card, Select, Button, Space, Typography, Tag, Collapse, Empty, Spin, Switch, Alert } from 'antd';
-import { ReloadOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { Card, Select, Button, Space, Typography, Tag, Collapse, Empty, Spin, Switch, Alert, Popconfirm } from 'antd';
+import { ReloadOutlined, SafetyCertificateOutlined, CheckOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useQualityReport } from './hooks/useQualityReport';
 import { FindingsTable } from './components/FindingsTable';
+import { ProposalReadinessCard } from './components/ProposalReadinessCard';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -20,6 +21,7 @@ const DataQuality: React.FC = () => {
     selectedTenderId,
     setSelectedTenderId,
     report,
+    rules,
     groups,
     counts,
     loading,
@@ -27,6 +29,7 @@ const DataQuality: React.FC = () => {
     setShowAccepted,
     recheck,
     submitVerdict,
+    submitGroupVerdict,
   } = useQualityReport();
 
   return (
@@ -100,6 +103,12 @@ const DataQuality: React.FC = () => {
               </Space>
             </Card>
 
+            <ProposalReadinessCard
+              findings={report.findings}
+              rules={rules}
+              isPhone={isPhone}
+            />
+
             {report.errors.length > 0 && (
               <Alert
                 type="warning"
@@ -146,6 +155,23 @@ const DataQuality: React.FC = () => {
                       >
                         {g.summary}
                       </Paragraph>
+                      {(() => {
+                        const pending = g.findings.filter((f) => f.verdict !== 'accepted').length;
+                        if (pending === 0) return null;
+                        return (
+                          <Popconfirm
+                            title="Принять всю группу как норму?"
+                            description={`Будет отмечено находок: ${pending}. Каждую можно переоткрыть по отдельности.`}
+                            okText="Принять"
+                            cancelText="Отмена"
+                            onConfirm={() => void submitGroupVerdict(g.findings, 'accepted')}
+                          >
+                            <Button size="small" icon={<CheckOutlined />}>
+                              Принять всю группу как норму ({pending})
+                            </Button>
+                          </Popconfirm>
+                        );
+                      })()}
                       <FindingsTable
                         findings={g.findings}
                         isPhone={isPhone}

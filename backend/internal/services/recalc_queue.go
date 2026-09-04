@@ -20,6 +20,21 @@ type Enqueuer interface {
 	Enqueue(tenderID string)
 }
 
+// TenderCacheInvalidator сбрасывает производные кэши тендера. Реализуется
+// QualityService.
+//
+// Кэш находок «Проверки данных» живёт 10 минут, а сбрасывался только при
+// сохранении вердикта: ни одна правка BOQ его не трогала. На странице это не
+// замечали, потому что фронт при realtime-событии перечитывает с refresh=1, но
+// любой серверный или машинный потребитель (внешний агент по ключу) получал
+// устаревшие находки до истечения TTL.
+//
+// Точка врезки выбрана здесь: Enqueue уже вызывается со всех финансовых путей
+// записи, поэтому одна привязка закрывает их все.
+type TenderCacheInvalidator interface {
+	Invalidate(tenderID string)
+}
+
 // RecalcQueue coalesces recalc requests per tender behind a debounce timer and
 // runs them on a bounded worker pool. Mutation services call Enqueue after they
 // change a commercial-cost input (BOQ items, markup config, currency rates);
@@ -37,6 +52,7 @@ type RecalcQueue struct {
 	mu     sync.Mutex
 	timers map[string]*time.Timer
 	closed bool
+	inval  TenderCacheInvalidator
 
 	sem chan struct{}  // bounds concurrent recalcs
 	wg  sync.WaitGroup // tracks in-flight recalcs for graceful Close
@@ -59,12 +75,33 @@ func NewRecalcQueue(ctx context.Context, rec Recalculator, debounce time.Duratio
 	}
 }
 
+// SetInvalidator привязывает сброс производных кэшей тендера. Необязателен:
+// без него очередь работает как раньше. Вызывать один раз при сборке, до старта
+// приёма запросов.
+func (q *RecalcQueue) SetInvalidator(inval TenderCacheInvalidator) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.inval = inval
+}
+
+func (q *RecalcQueue) invalidate(tenderID string) {
+	q.mu.Lock()
+	inval := q.inval
+	q.mu.Unlock()
+	if inval != nil {
+		inval.Invalidate(tenderID)
+	}
+}
+
 // Enqueue schedules a recalc for tenderID after the debounce window. Repeated
 // calls within the window reset the timer (last-writer-wins coalescing).
 func (q *RecalcQueue) Enqueue(tenderID string) {
 	if tenderID == "" {
 		return
 	}
+	// Данные уже изменились — производные кэши устарели, не дожидаясь пересчёта.
+	q.invalidate(tenderID)
+
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.closed {
@@ -102,6 +139,9 @@ func (q *RecalcQueue) fire(tenderID string) {
 		if err := q.rec.RecalcTender(q.ctx, tenderID); err != nil {
 			q.logger.Error().Err(err).Str("tender_id", tenderID).Msg("commercial recalc failed")
 		}
+		// Пересчёт переписал производные суммы — сбрасываем кэш и после него, а не
+		// только на входе: правила I и J сравнивают хранимые итоги с пересчётом.
+		q.invalidate(tenderID)
 	}()
 }
 

@@ -1,8 +1,10 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Table, Button, Space, Tag, Typography, Card, Tooltip } from 'antd';
 import { CheckOutlined, WarningOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { QualityFinding, QualityVerdict } from '../../../lib/api/quality';
+import { findingLink } from '../../../lib/quality/findingsPolicy';
 
 const { Text } = Typography;
 
@@ -18,6 +20,22 @@ const money = (v: number | null): string =>
 const positionLabel = (f: QualityFinding): string => {
   const num = f.position_number === null ? '—' : String(Math.round(f.position_number));
   return f.item_no ? `${num} · ${f.item_no}` : num;
+};
+
+/**
+ * Номер позиции со ссылкой на её строки, если правило вообще указывает на
+ * позицию. Для находок по строке или по номенклатуре маршрута нет — тогда
+ * остаётся обычный текст.
+ */
+const PositionCell: React.FC<{ f: QualityFinding }> = ({ f }) => {
+  const to = findingLink(f);
+  const label = positionLabel(f);
+  if (!to) return <Text strong>{label}</Text>;
+  return (
+    <Tooltip title="Открыть работы и материалы позиции">
+      <Link to={to}>{label}</Link>
+    </Tooltip>
+  );
 };
 
 /** Кнопки вердикта: «норма» гасит находку, «ошибка» помечает к исправлению. */
@@ -65,7 +83,9 @@ export const FindingsTable: React.FC<Props> = ({ findings, isPhone, onVerdict })
           >
             <Space direction="vertical" size={6} style={{ width: '100%' }}>
               <Space size={6} wrap>
-                <Tag>{positionLabel(f)}</Tag>
+                <Tag>
+                  <PositionCell f={f} />
+                </Tag>
                 {f.money_delta !== null && <Tag color="volcano">{money(f.money_delta)}</Tag>}
                 {f.verdict === 'accepted' && <Tag color="green">принято</Tag>}
                 {f.verdict === 'error' && <Tag color="red">ошибка</Tag>}
@@ -89,7 +109,7 @@ export const FindingsTable: React.FC<Props> = ({ findings, isPhone, onVerdict })
       title: '№ позиции',
       key: 'position',
       width: 130,
-      render: (_, f) => <Text strong>{positionLabel(f)}</Text>,
+      render: (_, f) => <PositionCell f={f} />,
     },
     {
       title: 'Что не так',

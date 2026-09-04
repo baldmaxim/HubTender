@@ -95,6 +95,40 @@ export async function setQualityVerdict(
   });
 }
 
+/** Один вердикт в пачке. */
+export interface QualityVerdictInput {
+  rule_code: string;
+  entity_id: string;
+  fingerprint: string;
+  verdict: QualityVerdict;
+  note?: string | null;
+}
+
+/**
+ * Размер части при массовой отправке. Правило Q даёт больше пяти тысяч находок,
+ * поэтому «принять всю группу» режется на части: сорвавшийся запрос не отменяет
+ * всю работу, а сервер не получает мегабайтное тело.
+ */
+export const VERDICT_CHUNK_SIZE = 1000;
+
+/**
+ * Пачка вердиктов. Отправляется частями последовательно: параллель здесь ничего
+ * не ускоряет (запись в одну таблицу), а порядок помогает при разборе сбоя.
+ */
+export async function setQualityVerdicts(
+  tenderId: string,
+  items: QualityVerdictInput[],
+): Promise<void> {
+  for (let i = 0; i < items.length; i += VERDICT_CHUNK_SIZE) {
+    const chunk = items.slice(i, i + VERDICT_CHUNK_SIZE);
+    await apiFetch<void>(`/api/v1/tenders/${tenderId}/quality/verdicts`, {
+      method: 'POST',
+      body: JSON.stringify({ items: chunk }),
+      timeoutMs: 60_000,
+    });
+  }
+}
+
 /** Каталог правил целиком, включая черновики. */
 export async function fetchQualityRules(): Promise<QualityRule[]> {
   const res = await apiFetch<{ data: QualityRule[] }>('/api/v1/quality/rules');

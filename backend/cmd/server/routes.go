@@ -182,6 +182,7 @@ func newRouter(
 		// Проверка данных: находки правил, вердикт инженера, выгрузка для замера.
 		r.Get("/api/v1/tenders/{id}/quality", d.qualityH.GetReport)
 		r.Post("/api/v1/tenders/{id}/quality/verdict", d.qualityH.PostVerdict)
+		r.Post("/api/v1/tenders/{id}/quality/verdicts", d.qualityH.PostVerdicts)
 		r.Get("/api/v1/quality/rules", d.qualityH.GetRules)
 		r.Get("/api/v1/quality/export", d.qualityH.GetExport)
 		r.Post("/api/v1/construction-cost-volumes", d.ccvH.Upsert)

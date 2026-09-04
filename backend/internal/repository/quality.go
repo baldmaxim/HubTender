@@ -179,6 +179,87 @@ func (r *QualityRepo) SetVerdict(
 	return nil
 }
 
+// VerdictInput — один вердикт массовой операции.
+type VerdictInput struct {
+	RuleCode    string
+	EntityID    string
+	Fingerprint string
+	Verdict     string
+	Note        *string
+}
+
+// SetVerdicts сохраняет пачку вердиктов одним запросом.
+//
+// Поштучный вердикт непригоден на реальных объёмах: правило Q даёт больше пяти
+// тысяч находок, G — девять тысяч, и «принять всю группу» вылилось бы в тысячи
+// HTTP-запросов. Здесь один INSERT ... ON CONFLICT поверх unnest.
+//
+// Вход дедуплицируется по (rule_code, entity_id): Postgres не даёт ON CONFLICT
+// DO UPDATE тронуть одну строку дважды в пределах команды. Побеждает последний
+// вердикт по ключу — так же, как если бы их отправили по одному.
+func (r *QualityRepo) SetVerdicts(
+	ctx context.Context,
+	tenderID string,
+	in []VerdictInput,
+	changedBy *string,
+) error {
+	if len(in) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]int, len(in))
+	order := make([]int, 0, len(in))
+	for i := range in {
+		if in[i].RuleCode == "" || in[i].EntityID == "" || in[i].Fingerprint == "" {
+			return fmt.Errorf("qualityRepo.SetVerdicts: пустой rule_code, entity_id или fingerprint")
+		}
+		if in[i].Verdict != "accepted" && in[i].Verdict != "error" {
+			return fmt.Errorf("qualityRepo.SetVerdicts: verdict %q: допустимы accepted, error", in[i].Verdict)
+		}
+		if _, ok := quality.ByCode(in[i].RuleCode); !ok {
+			return fmt.Errorf("qualityRepo.SetVerdicts: неизвестное правило %q", in[i].RuleCode)
+		}
+		key := ackKey(in[i].RuleCode, in[i].EntityID)
+		if prev, dup := seen[key]; dup {
+			order[prev] = i
+			continue
+		}
+		seen[key] = len(order)
+		order = append(order, i)
+	}
+
+	codes := make([]string, len(order))
+	entities := make([]string, len(order))
+	prints := make([]string, len(order))
+	verdicts := make([]string, len(order))
+	notes := make([]*string, len(order))
+	for i, idx := range order {
+		codes[i] = in[idx].RuleCode
+		entities[i] = in[idx].EntityID
+		prints[i] = in[idx].Fingerprint
+		verdicts[i] = in[idx].Verdict
+		notes[i] = in[idx].Note
+	}
+
+	const q = `
+		INSERT INTO public.quality_acknowledgements
+			(tender_id, rule_code, entity_id, fingerprint, verdict, note, created_by)
+		SELECT $1, x.rule_code, x.entity_id, x.fingerprint, x.verdict, x.note, $7
+		FROM unnest($2::text[], $3::uuid[], $4::text[], $5::text[], $6::text[])
+			AS x(rule_code, entity_id, fingerprint, verdict, note)
+		ON CONFLICT (tender_id, rule_code, entity_id) DO UPDATE
+		SET fingerprint = EXCLUDED.fingerprint,
+		    verdict     = EXCLUDED.verdict,
+		    note        = EXCLUDED.note,
+		    created_by  = EXCLUDED.created_by,
+		    updated_at  = now()`
+
+	if _, err := r.pool.Exec(ctx, q, tenderID, codes, entities, prints, verdicts, notes, changedBy); err != nil {
+		return fmt.Errorf("qualityRepo.SetVerdicts: %w", err)
+	}
+	return nil
+}
+
 // ExportRow — строка выгрузки вердиктов для наращивания каталога в Cursor.
 type ExportRow struct {
 	TenderTitle   string    `json:"tender_title"`

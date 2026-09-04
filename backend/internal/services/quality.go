@@ -14,6 +14,8 @@ type qualityRepoer interface {
 	Run(ctx context.Context, tenderID string) (*repository.QualityReport, error)
 	SetVerdict(ctx context.Context, tenderID, ruleCode, entityID, fingerprint, verdict string,
 		note *string, changedBy *string) error
+	SetVerdicts(ctx context.Context, tenderID string, in []repository.VerdictInput,
+		changedBy *string) error
 	Export(ctx context.Context) ([]repository.ExportRow, error)
 }
 
@@ -73,6 +75,21 @@ func (s *QualityService) SetVerdict(
 	changedBy *string,
 ) error {
 	if err := s.repo.SetVerdict(ctx, tenderID, ruleCode, entityID, fingerprint, verdict, note, changedBy); err != nil {
+		return err
+	}
+	s.Invalidate(tenderID)
+	return nil
+}
+
+// SetVerdicts сохраняет пачку решений инженера («принять всю группу») и один раз
+// сбрасывает кэш.
+func (s *QualityService) SetVerdicts(
+	ctx context.Context,
+	tenderID string,
+	in []repository.VerdictInput,
+	changedBy *string,
+) error {
+	if err := s.repo.SetVerdicts(ctx, tenderID, in, changedBy); err != nil {
 		return err
 	}
 	s.Invalidate(tenderID)
