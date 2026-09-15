@@ -952,6 +952,25 @@ CREATE TABLE IF NOT EXISTS public.verification_section_events (
     actor_user_id uuid,
     created_at timestamp with time zone NOT NULL DEFAULT now()
 );
+-- Эталонные диапазоны удельных показателей по классу жилья
+-- (см. 2026_09_benchmark_ranges.sql).
+CREATE TABLE IF NOT EXISTS public.benchmark_ranges (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    metric_kind text NOT NULL,
+    level text NOT NULL,
+    cost_category_id uuid,
+    detail_cost_category_id uuid,
+    housing_class public.housing_class_type,
+    construction_scope public.construction_scope_type,
+    min_value numeric,
+    max_value numeric,
+    note text,
+    is_active boolean NOT NULL DEFAULT true,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
 
 -- Машинный доступ к API (страница «Настройки → Доступ к API»).
 -- Секрет ключа в БД не хранится: только SHA-256 хеш и префикс для опознания.

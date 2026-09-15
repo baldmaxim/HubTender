@@ -189,6 +189,17 @@ func newRouter(
 		r.Get("/api/v1/tenders/{id}/verification/sections", d.verifSectionsH.GetSections)
 		r.Post("/api/v1/tenders/{id}/verification/sections/mark", d.verifSectionsH.PostMark)
 		r.Post("/api/v1/tenders/{id}/verification/sections/unmark", d.verifSectionsH.PostUnmark)
+
+		// Конвейер проверки: эталоны удельных показателей. Справочник диапазонов
+		// видят все, правят — только роли из BenchmarkRangeEditorRoles.
+		r.Get("/api/v1/tenders/{id}/cost-benchmarks", d.costBenchmarkH.GetReport)
+		r.Get("/api/v1/benchmark-ranges", d.costBenchmarkH.GetRanges)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireRoles(handlers.BenchmarkRangeEditorRoles))
+			r.Post("/api/v1/benchmark-ranges", d.costBenchmarkH.PostRange)
+			r.Put("/api/v1/benchmark-ranges/{rangeId}", d.costBenchmarkH.PutRange)
+			r.Delete("/api/v1/benchmark-ranges/{rangeId}", d.costBenchmarkH.DeleteRange)
+		})
 		r.Get("/api/v1/quality/rules", d.qualityH.GetRules)
 		r.Get("/api/v1/quality/export", d.qualityH.GetExport)
 		r.Post("/api/v1/construction-cost-volumes", d.ccvH.Upsert)

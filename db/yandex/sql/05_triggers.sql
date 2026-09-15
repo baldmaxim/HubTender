@@ -276,3 +276,9 @@ DROP TRIGGER IF EXISTS verification_section_states_updated_at ON public.verifica
 CREATE TRIGGER verification_section_states_updated_at
   BEFORE UPDATE ON public.verification_section_states
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- ----- benchmark_ranges -----------------------------------------------------
+DROP TRIGGER IF EXISTS benchmark_ranges_updated_at ON public.benchmark_ranges;
+CREATE TRIGGER benchmark_ranges_updated_at
+  BEFORE UPDATE ON public.benchmark_ranges
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

@@ -648,6 +648,44 @@ ALTER TABLE public.verification_section_events
 CREATE INDEX IF NOT EXISTS verification_section_events_tender_idx
     ON public.verification_section_events (tender_id, section_key, created_at DESC);
 
+-- ----- benchmark_ranges -----------------------------------------------------
+-- Ручные эталонные диапазоны; при сравнении важнее исторической статистики.
+ALTER TABLE public.benchmark_ranges
+    ADD CONSTRAINT benchmark_ranges_pkey PRIMARY KEY (id);
+ALTER TABLE public.benchmark_ranges
+    ADD CONSTRAINT benchmark_ranges_metric_check
+    CHECK (metric_kind IN ('per_volume_unit', 'per_area_sp'));
+ALTER TABLE public.benchmark_ranges
+    ADD CONSTRAINT benchmark_ranges_level_check
+    CHECK (level IN ('total', 'category', 'detail'));
+ALTER TABLE public.benchmark_ranges
+    ADD CONSTRAINT benchmark_ranges_target_check CHECK (
+        (level = 'total' AND cost_category_id IS NULL AND detail_cost_category_id IS NULL
+            AND metric_kind = 'per_area_sp')
+        OR (level = 'category' AND cost_category_id IS NOT NULL AND detail_cost_category_id IS NULL)
+        OR (level = 'detail' AND detail_cost_category_id IS NOT NULL AND cost_category_id IS NULL));
+ALTER TABLE public.benchmark_ranges
+    ADD CONSTRAINT benchmark_ranges_bounds_check CHECK (
+        (min_value IS NOT NULL OR max_value IS NOT NULL)
+        AND (min_value IS NULL OR min_value >= 0)
+        AND (max_value IS NULL OR max_value >= 0)
+        AND (min_value IS NULL OR max_value IS NULL OR min_value <= max_value));
+ALTER TABLE public.benchmark_ranges
+    ADD CONSTRAINT benchmark_ranges_category_fkey
+    FOREIGN KEY (cost_category_id) REFERENCES public.cost_categories(id) ON DELETE CASCADE;
+ALTER TABLE public.benchmark_ranges
+    ADD CONSTRAINT benchmark_ranges_detail_fkey
+    FOREIGN KEY (detail_cost_category_id) REFERENCES public.detail_cost_categories(id) ON DELETE CASCADE;
+-- NULLS NOT DISTINCT (PostgreSQL 15+): NULL в классе или объёме означает «любой»,
+-- и два диапазона «для любого класса» на одну цель — дубль. Выражения вида
+-- housing_class::text в индексе недопустимы (приведение enum не IMMUTABLE).
+CREATE UNIQUE INDEX IF NOT EXISTS benchmark_ranges_active_unique_idx
+    ON public.benchmark_ranges (
+        metric_kind, level, cost_category_id, detail_cost_category_id,
+        housing_class, construction_scope)
+    NULLS NOT DISTINCT
+    WHERE is_active;
+
 -- ─── Машинный доступ к API ──────────────────────────────────────────────────
 ALTER TABLE public.api_keys
     ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);

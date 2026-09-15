@@ -90,6 +90,7 @@ type deps struct {
 	wsH               *handlers.WsHandler
 	qualityH          *handlers.QualityHandler
 	verifSectionsH    *handlers.VerificationSectionsHandler
+	costBenchmarkH    *handlers.CostBenchmarkHandler
 }
 
 // buildDeps wires repositories → cache → services → handlers. Extracted from
@@ -112,6 +113,7 @@ func buildDeps(
 	positionCostsRepo := repository.NewPositionCostsRepo(pool)
 	qualityRepo := repository.NewQualityRepo(pool)
 	verifSectionsRepo := repository.NewVerificationSectionsRepo(pool)
+	costBenchmarkRepo := repository.NewCostBenchmarkRepo(pool)
 	boqRepo := repository.NewBoqRepo(pool)
 	bulkBoqRepo := repository.NewBulkBoqRepo(pool)
 	importBoqRepo := repository.NewImportRepo(pool)
@@ -185,6 +187,7 @@ func buildDeps(
 	positionCostsSvc := services.NewPositionCostsService(positionCostsRepo, inMemCache)
 	qualitySvc := services.NewQualityService(qualityRepo, inMemCache)
 	verifSectionsSvc := services.NewVerificationSectionsService(verifSectionsRepo)
+	costBenchmarkSvc := services.NewCostBenchmarkService(costBenchmarkRepo, inMemCache)
 	// Кэш находок «Проверки данных» держится 10 минут и до сих пор сбрасывался
 	// только при сохранении вердикта. Привязываем его к очереди пересчёта: она
 	// уже дёргается со всех финансовых путей записи.
@@ -396,6 +399,7 @@ func buildDeps(
 		positionCostsH:    handlers.NewPositionCostsHandler(positionCostsSvc),
 		qualityH:          handlers.NewQualityHandler(qualitySvc),
 		verifSectionsH:    handlers.NewVerificationSectionsHandler(verifSectionsSvc),
+		costBenchmarkH:    handlers.NewCostBenchmarkHandler(costBenchmarkSvc),
 		boqH:              handlers.NewBoqHandler(boqSvc),
 		boqWH:             handlers.NewBoqWriteHandler(boqSvc),
 		bulkBoqH:          handlers.NewBulkBoqHandler(bulkBoqSvc),
