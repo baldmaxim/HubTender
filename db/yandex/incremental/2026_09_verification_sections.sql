@@ -13,9 +13,10 @@
 -- 'h:<id позиции-заголовка верхнего уровня>', 'none' — позиции до первого
 -- заголовка, 'additional' — дополнительные позиции.
 --
--- stage: 'pricing' — инженер отметил раздел расценённым; 'review' — проверяющий
--- отметил раздел проверенным. Отметки независимы: инженер может снять свою, не
--- трогая отметку проверяющего.
+-- stage: 'review' — проверяющий отметил раздел проверенным. «Расценено» вручную
+-- не отмечается: оно вычисляется при чтении по заполненности позиций (расценена
+-- с Кол-вом ГП либо с обоснованием в «Примечании ГП»). Колонка stage оставлена
+-- под будущие ручные этапы.
 --
 -- hash_version — версия алгоритма хеша. Смена алгоритма = осознанное массовое
 -- «изменён после отметки», поэтому версия хранится рядом с хешем.
@@ -43,7 +44,7 @@ CREATE TABLE IF NOT EXISTS public.verification_section_states (
     updated_at    timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT verification_section_states_pkey PRIMARY KEY (id),
     CONSTRAINT verification_section_states_stage_check
-        CHECK (stage IN ('pricing', 'review')),
+        CHECK (stage IN ('review')),
     CONSTRAINT verification_section_states_tender_fkey
         FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE
 );
@@ -69,7 +70,7 @@ CREATE TABLE IF NOT EXISTS public.verification_section_events (
     created_at    timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT verification_section_events_pkey PRIMARY KEY (id),
     CONSTRAINT verification_section_events_stage_check
-        CHECK (stage IN ('pricing', 'review')),
+        CHECK (stage IN ('review')),
     CONSTRAINT verification_section_events_action_check
         CHECK (action IN ('marked', 'unmarked')),
     CONSTRAINT verification_section_events_tender_fkey

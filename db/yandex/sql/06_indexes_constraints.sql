@@ -627,7 +627,7 @@ ALTER TABLE public.verification_section_states
     ADD CONSTRAINT verification_section_states_pkey PRIMARY KEY (id);
 ALTER TABLE public.verification_section_states
     ADD CONSTRAINT verification_section_states_stage_check
-    CHECK (stage IN ('pricing', 'review'));
+    CHECK (stage IN ('review'));
 ALTER TABLE public.verification_section_states
     ADD CONSTRAINT verification_section_states_tender_fkey
     FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
@@ -638,7 +638,7 @@ ALTER TABLE public.verification_section_events
     ADD CONSTRAINT verification_section_events_pkey PRIMARY KEY (id);
 ALTER TABLE public.verification_section_events
     ADD CONSTRAINT verification_section_events_stage_check
-    CHECK (stage IN ('pricing', 'review'));
+    CHECK (stage IN ('review'));
 ALTER TABLE public.verification_section_events
     ADD CONSTRAINT verification_section_events_action_check
     CHECK (action IN ('marked', 'unmarked'));

@@ -6,41 +6,52 @@ export interface SectionsSummary {
   total: number;
   priced: number;
   reviewed: number;
-  /** Отметка есть, но раздел изменился после неё — хоть один из этапов. */
+  /** Отметка «проверено» есть, но раздел изменился после неё. */
   changed: number;
   /** Разделы, где нет конечных позиций (одни заголовки) — в готовность не входят. */
   empty: number;
 }
 
 /**
- * Сводка готовности. Раздел без конечных позиций не учитывается: отмечать там
- * нечего, и он только занижал бы долю готовых.
+ * Сводка готовности. Раздел, где нечего расценивать (одни заголовки и текстовые
+ * строки), не учитывается — он только занижал бы долю готовых.
  */
 export function summarizeSections(sections: TenderSection[]): SectionsSummary {
   const summary: SectionsSummary = { total: 0, priced: 0, reviewed: 0, changed: 0, empty: 0 };
   for (const s of sections) {
-    if (s.positions === 0) {
+    if (s.pricing_status === 'not_required') {
       summary.empty += 1;
       continue;
     }
     summary.total += 1;
-    if (s.pricing.status === 'marked') summary.priced += 1;
+    if (s.pricing_status === 'complete') summary.priced += 1;
     if (s.review.status === 'marked') summary.reviewed += 1;
-    if (s.pricing.status === 'changed' || s.review.status === 'changed') summary.changed += 1;
+    if (s.review.status === 'changed') summary.changed += 1;
   }
   return summary;
 }
 
+/** Подпись статуса расценки раздела. */
+export function pricingStatusLabel(s: TenderSection): { text: string; color: string } {
+  switch (s.pricing_status) {
+    case 'complete':
+      return { text: 'расценено', color: 'green' };
+    case 'in_progress':
+      return { text: `заполнено ${s.complete} из ${s.required}`, color: 'blue' };
+    case 'not_started':
+      return { text: `не начато (0 из ${s.required})`, color: 'default' };
+    default:
+      return { text: 'нечего расценивать', color: 'default' };
+  }
+}
+
 /**
- * Что мешает честно отметить раздел расценённым — те же пункты, что проверяющий
- * смотрит глазами. Не блокирует отметку (процесс цикличный), но показывается
- * рядом с кнопкой.
+ * Что в разделе ещё не заполнено — показывается при отметке «проверено». Не
+ * блокирует отметку (процесс цикличный), но проверяющий видит, что заверяет.
  */
 export function pricingBlockers(s: TenderSection): string[] {
   const out: string[] = [];
-  const unpriced = s.positions - s.priced;
-  if (unpriced > 0) out.push(`не расценено позиций: ${unpriced}`);
-  if (s.unpriced_no_reason > 0) out.push(`без обоснования: ${s.unpriced_no_reason}`);
+  if (s.unpriced_no_reason > 0) out.push(`не расценено без обоснования: ${s.unpriced_no_reason}`);
   if (s.priced_no_gp > 0) out.push(`без Кол-ва ГП: ${s.priced_no_gp}`);
   if (s.open_errors > 0) out.push(`ошибок проверки: ${s.open_errors}`);
   return out;

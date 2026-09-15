@@ -86,7 +86,8 @@ func sectionByKey(s *TenderSections, key string) *TenderSection {
 	return nil
 }
 
-func TestVerificationSectionsIntegration_StructureAndMarks(t *testing.T) {
+// Разделы из иерархии и автоматическая «расценено» по заполненности позиций.
+func TestVerificationSectionsIntegration_StructureAndAutoPricing(t *testing.T) {
 	pool := newTestPool(t)
 	ctx := context.Background()
 	repo := NewVerificationSectionsRepo(pool)
@@ -94,10 +95,22 @@ func TestVerificationSectionsIntegration_StructureAndMarks(t *testing.T) {
 	tid := f.vr.tenderID
 	actives := []string{"H", "Q"}
 
-	res, err := repo.Load(ctx, tid, actives)
-	if err != nil {
-		t.Fatal(err)
+	load := func() *TenderSections {
+		t.Helper()
+		res, err := repo.Load(ctx, tid, actives)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
 	}
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	res := load()
 	if len(res.Sections) != 4 {
 		t.Fatalf("ожидалось 4 раздела (none, Общестрой, Фасады, additional), получено %d: %+v", len(res.Sections), res.Sections)
 	}
@@ -109,48 +122,94 @@ func TestVerificationSectionsIntegration_StructureAndMarks(t *testing.T) {
 	if s1.Title != "1 Общестрой" {
 		t.Errorf("заголовок раздела = %q", s1.Title)
 	}
-	// Подраздел 1.1 — заголовок, не конечная позиция: в раздел «Общестрой»
-	// входят две конечные позиции.
-	if s1.Positions != 2 || s1.Priced != 1 || s1.UnpricedNoReason != 1 || s1.PricedNoGP != 0 {
-		t.Errorf("Общестрой: positions=%d priced=%d unpriced_no_reason=%d priced_no_gp=%d",
-			s1.Positions, s1.Priced, s1.UnpricedNoReason, s1.PricedNoGP)
+	// Подраздел 1.1 — заголовок, не конечная позиция: в «Общестрой» входят две
+	// конечные позиции — расценённая с ГП (заполнена) и пустая без обоснования.
+	if s1.Positions != 2 || s1.Required != 2 || s1.Complete != 1 || s1.UnpricedNoReason != 1 ||
+		s1.PricedNoGP != 0 || s1.PricingStatus != PricingInProgress {
+		t.Errorf("Общестрой: %+v", s1)
 	}
-	if s2.Positions != 1 || s2.PricedNoGP != 1 || s2.TotalAmount != 1000 {
-		t.Errorf("Фасады: positions=%d priced_no_gp=%d total=%v", s2.Positions, s2.PricedNoGP, s2.TotalAmount)
+	// «Фасады»: расценена, но без Кол-ва ГП — не заполнена.
+	if s2.Required != 1 || s2.Complete != 0 || s2.PricedNoGP != 1 || s2.TotalAmount != 1000 ||
+		s2.PricingStatus != PricingNotStarted {
+		t.Errorf("Фасады: %+v", s2)
 	}
 	if none.Positions != 1 || add.Positions != 1 {
 		t.Errorf("none=%d additional=%d", none.Positions, add.Positions)
 	}
-	if s1.Pricing.Status != SectionStatusNone {
-		t.Fatalf("без отметки статус = %q", s1.Pricing.Status)
+
+	// Инженер вносит обоснование для пустой позиции — «Общестрой» расценён.
+	exec(`UPDATE public.client_positions SET manual_note = 'не наш объём' WHERE id = $1`, f.l4)
+	// Проставляет Кол-во ГП — «Фасады» расценены.
+	exec(`UPDATE public.client_positions SET manual_volume = 20 WHERE id = $1`, f.l6)
+	// Текстовая строка ВОР без объёма и без строк расценки не требует.
+	vsPosition(t, pool, tid, 7.5, "2.2", "Примечание к разделу", 1, 0, 0, nil, false)
+
+	res = load()
+	s1, s2 = sectionByKey(res, s1.Key), sectionByKey(res, s2.Key)
+	if s1.PricingStatus != PricingComplete || s1.Complete != 2 {
+		t.Fatalf("Общестрой после обоснования: %+v", s1)
+	}
+	if s2.PricingStatus != PricingComplete || s2.Required != 1 || s2.Positions != 2 {
+		t.Fatalf("Фасады после ГП и текстовой строки: %+v", s2)
 	}
 
-	// Отметка с устаревшим хешем отклоняется, с неизвестным ключом — тоже.
-	if err := repo.Mark(ctx, tid, s1.Key, SectionStagePricing, "stale", nil, nil); !errors.Is(err, ErrSectionChanged) {
+	// Строка обнулилась — позиция снова не заполнена, пока нет обоснования.
+	exec(`UPDATE public.boq_items SET unit_rate = 0, total_amount = 0 WHERE client_position_id = $1`, f.l6)
+	if got := sectionByKey(load(), s2.Key); got.PricingStatus != PricingNotStarted || got.UnpricedNoReason != 1 {
+		t.Fatalf("Фасады с нулевой расценкой: %+v", got)
+	}
+	exec(`UPDATE public.client_positions SET manual_note = 'давальческий материал' WHERE id = $1`, f.l6)
+	if got := sectionByKey(load(), s2.Key); got.PricingStatus != PricingComplete {
+		t.Fatalf("Фасады с обоснованием нулевой расценки: %+v", got)
+	}
+
+	// Этап расценки вручную не отмечается.
+	if err := repo.Mark(ctx, tid, s1.Key, "pricing", s1.ContentHash, nil, nil); err == nil {
+		t.Fatal("ручная отметка «расценено» должна быть отклонена")
+	}
+}
+
+// Отметка «проверено»: хеш содержимого, «изменён после отметки», снятие.
+func TestVerificationSectionsIntegration_ReviewMarks(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := NewVerificationSectionsRepo(pool)
+	f := newVSFixture(t, pool)
+	tid := f.vr.tenderID
+	actives := []string{"H", "Q"}
+
+	load := func() *TenderSections {
+		t.Helper()
+		res, err := repo.Load(ctx, tid, actives)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	res := load()
+	s1, s2 := sectionByKey(res, "h:"+f.h1), sectionByKey(res, "h:"+f.h5)
+	if s1.Review.Status != SectionStatusNone {
+		t.Fatalf("без отметки статус = %q", s1.Review.Status)
+	}
+
+	if err := repo.Mark(ctx, tid, s1.Key, SectionStageReview, "stale", nil, nil); !errors.Is(err, ErrSectionChanged) {
 		t.Fatalf("устаревший хеш: %v", err)
 	}
-	if err := repo.Mark(ctx, tid, "h:00000000-0000-0000-0000-000000000000", SectionStagePricing, s1.ContentHash, nil, nil); !errors.Is(err, ErrSectionNotFound) {
+	if err := repo.Mark(ctx, tid, "h:00000000-0000-0000-0000-000000000000", SectionStageReview, s1.ContentHash, nil, nil); !errors.Is(err, ErrSectionNotFound) {
 		t.Fatalf("неизвестный раздел: %v", err)
 	}
 
-	note := "расценено"
-	if err := repo.Mark(ctx, tid, s1.Key, SectionStagePricing, s1.ContentHash, &note, nil); err != nil {
+	note := "проверено"
+	if err := repo.Mark(ctx, tid, s1.Key, SectionStageReview, s1.ContentHash, &note, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Mark(ctx, tid, s2.Key, SectionStageReview, s2.ContentHash, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-
-	res, err = repo.Load(ctx, tid, actives)
-	if err != nil {
-		t.Fatal(err)
-	}
+	res = load()
 	s1, s2 = sectionByKey(res, s1.Key), sectionByKey(res, s2.Key)
-	if s1.Pricing.Status != SectionStatusMarked || s1.Pricing.Note == nil || *s1.Pricing.Note != note {
-		t.Fatalf("Общестрой после отметки: %+v", s1.Pricing)
-	}
-	if s1.Review.Status != SectionStatusNone || s2.Review.Status != SectionStatusMarked {
-		t.Fatal("отметки этапов перепутаны")
+	if s1.Review.Status != SectionStatusMarked || s1.Review.Note == nil || *s1.Review.Note != note {
+		t.Fatalf("Общестрой после отметки: %+v", s1.Review)
 	}
 
 	// Пересчёт коммерческих сумм не правка расчёта: отметка остаётся.
@@ -164,46 +223,31 @@ func TestVerificationSectionsIntegration_StructureAndMarks(t *testing.T) {
 		WHERE id = $1`, f.rowL3); err != nil {
 		t.Fatal(err)
 	}
-
-	res, err = repo.Load(ctx, tid, actives)
-	if err != nil {
-		t.Fatal(err)
-	}
+	res = load()
 	s1, s2 = sectionByKey(res, s1.Key), sectionByKey(res, s2.Key)
 	if s2.Review.Status != SectionStatusMarked {
 		t.Fatalf("пересчёт наценок снял отметку «Фасадов»: %+v", s2.Review)
 	}
-	if s1.Pricing.Status != SectionStatusChanged || s1.Pricing.Changes == nil {
-		t.Fatalf("правка цены не перевела «Общестрой» в changed: %+v", s1.Pricing)
-	}
-	if s1.Pricing.Changes.RowEdits < 1 || s1.Pricing.Changes.LastChangeAt == nil {
-		t.Fatalf("правки после отметки не посчитаны: %+v", s1.Pricing.Changes)
+	if s1.Review.Status != SectionStatusChanged || s1.Review.Changes == nil ||
+		s1.Review.Changes.RowEdits < 1 || s1.Review.Changes.LastChangeAt == nil {
+		t.Fatalf("правка цены не перевела «Общестрой» в changed: %+v %+v", s1.Review, s1.Review.Changes)
 	}
 
 	// Правка поля позиции (примечание ГП) тоже меняет хеш раздела.
 	if _, err := pool.Exec(ctx, `UPDATE public.client_positions SET manual_note = 'не наш объём' WHERE id = $1`, f.l6); err != nil {
 		t.Fatal(err)
 	}
-	res, err = repo.Load(ctx, tid, actives)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sectionByKey(res, s2.Key).Review.Status != SectionStatusChanged {
+	if sectionByKey(load(), s2.Key).Review.Status != SectionStatusChanged {
 		t.Fatal("правка примечания ГП не изменила раздел")
 	}
 
-	// Снятие отметки.
-	if err := repo.Unmark(ctx, tid, s1.Key, SectionStagePricing, nil); err != nil {
-		t.Fatal(err)
+	// Снятие отметки, повторное — безопасно.
+	for i := 0; i < 2; i++ {
+		if err := repo.Unmark(ctx, tid, s1.Key, SectionStageReview, nil); err != nil {
+			t.Fatalf("снятие %d: %v", i, err)
+		}
 	}
-	if err := repo.Unmark(ctx, tid, s1.Key, SectionStagePricing, nil); err != nil {
-		t.Fatalf("повторное снятие должно быть безопасным: %v", err)
-	}
-	res, err = repo.Load(ctx, tid, actives)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sectionByKey(res, s1.Key).Pricing.Status != SectionStatusNone {
+	if sectionByKey(load(), s1.Key).Review.Status != SectionStatusNone {
 		t.Fatal("отметка не снята")
 	}
 

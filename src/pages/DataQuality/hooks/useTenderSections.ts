@@ -56,7 +56,7 @@ export function useTenderSections(tenderId: string | null) {
           stage,
           content_hash: section.content_hash,
         });
-        message.success(stage === 'pricing' ? 'Раздел отмечен расценённым' : 'Раздел отмечен проверенным');
+        message.success('Раздел отмечен проверенным');
       } catch (e) {
         if (isSectionChangedError(e)) {
           message.warning('Раздел изменился, пока вы его смотрели. Данные обновлены — проверьте и отметьте снова.');

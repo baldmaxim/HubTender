@@ -1,10 +1,12 @@
 // Конвейер проверки: готовность по разделам ВОР.
-// Раздел выводится из иерархии позиций на сервере; отметка «расценено» /
-// «проверено» хранит хеш содержимого раздела и превращается в «изменён после
-// отметки», как только раздел правят.
+// Раздел выводится из иерархии позиций на сервере. «Расценено» вычисляется по
+// заполненности позиций; «проверено» ставит проверяющий — отметка хранит хеш
+// содержимого раздела и превращается в «изменён после отметки», если раздел правят.
 import { apiFetch } from './client';
 
-export type SectionStage = 'pricing' | 'review';
+/** Ручной этап — только проверка: «расценено» вычисляется автоматически. */
+export type SectionStage = 'review';
+export type SectionPricingStatus = 'not_required' | 'not_started' | 'in_progress' | 'complete';
 export type SectionStageStatus = 'none' | 'marked' | 'changed';
 
 export interface SectionChanges {
@@ -31,6 +33,12 @@ export interface TenderSection {
   first_position_number: number | null;
   /** Конечные позиции раздела (без заголовков). */
   positions: number;
+  /** Позиций, требующих расценки: есть объём заказчика или занесены строки. */
+  required: number;
+  /** Заполнены: расценены с Кол-вом ГП либо не расценены, но с обоснованием. */
+  complete: number;
+  /** «Расценено» по разделу — вычисляется из required/complete. */
+  pricing_status: SectionPricingStatus;
   priced: number;
   unpriced_no_reason: number;
   priced_no_gp: number;
@@ -38,7 +46,6 @@ export interface TenderSection {
   content_hash: string;
   open_errors: number;
   open_warnings: number;
-  pricing: SectionStageState;
   review: SectionStageState;
 }
 

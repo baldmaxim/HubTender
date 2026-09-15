@@ -64,6 +64,7 @@ heads AS (
 ),
 rows AS (
 	SELECT b.client_position_id AS pid,
+	       count(*) AS row_count,
 	       COALESCE(sum(b.total_amount), 0) AS total,
 	       md5(string_agg(concat_ws('|',
 	           b.id::text, b.boq_item_type::text,
@@ -96,21 +97,35 @@ sec AS (
 	       CASE WHEN g.is_add OR g.grp = 0 THEN NULL ELSE h.head_id END AS head_id,
 	       g.id, g.position_number, g.item_no, g.work_name, g.unit_code, g.volume,
 	       g.manual_volume, g.manual_note, g.lvl, g.is_add, g.is_header,
-	       r.total, r.h
+	       r.total, r.h,
+	       -- Позиция требует расценки, если у заказчика есть объём или в неё уже
+	       -- занесены строки. Позиция без объёма и без строк — текстовая строка ВОР.
+	       (NOT g.is_header AND (COALESCE(g.volume, 0) > 0 OR COALESCE(r.row_count, 0) > 0)) AS required,
+	       (COALESCE(r.total, 0) > 0) AS priced,
+	       (COALESCE(btrim(g.manual_note), '') <> '') AS has_note
 	FROM grouped g
 	LEFT JOIN heads h ON h.grp = g.grp
 	LEFT JOIN rows r ON r.pid = g.id
+),
+filled AS (
+	-- Позиция заполнена инженером: расценена и указано Кол-во ГП, либо не
+	-- расценена, но в «Примечании ГП» есть обоснование.
+	SELECT sec.*,
+	       (required AND ((priced AND COALESCE(manual_volume, 0) > 0)
+	                      OR (NOT priced AND has_note))) AS complete
+	FROM sec
 )
 SELECT section_key,
        min(title) AS title,
        min(head_id::text) AS head_id,
        min(position_number) AS first_position_number,
        count(*) FILTER (WHERE NOT is_header)::int AS positions,
-       count(*) FILTER (WHERE NOT is_header AND COALESCE(total, 0) > 0)::int AS priced,
-       count(*) FILTER (WHERE NOT is_header AND COALESCE(total, 0) = 0
-                          AND COALESCE(volume, 0) > 0
-                          AND COALESCE(btrim(manual_note), '') = '')::int AS unpriced_no_reason,
-       count(*) FILTER (WHERE NOT is_header AND COALESCE(total, 0) > 0
+       count(*) FILTER (WHERE required)::int AS required,
+       count(*) FILTER (WHERE complete)::int AS complete,
+       count(*) FILTER (WHERE required AND priced)::int AS priced,
+       -- Незаполненные позиции делятся ровно на два непересекающихся вида:
+       count(*) FILTER (WHERE required AND NOT priced AND NOT has_note)::int AS unpriced_no_reason,
+       count(*) FILTER (WHERE required AND priced
                           AND COALESCE(manual_volume, 0) = 0)::int AS priced_no_gp,
        COALESCE(sum(total), 0)::float8 AS total_amount,
        md5(string_agg(concat_ws('|',
@@ -121,7 +136,7 @@ SELECT section_key,
            COALESCE(manual_note, '∅'), lvl::text, is_add::text,
            COALESCE(h, '∅')), '~' ORDER BY position_number, id)) AS content_hash,
        array_agg(id::text ORDER BY position_number, id) AS position_ids
-FROM sec
+FROM filled
 GROUP BY section_key
 ORDER BY min(position_number)`
 

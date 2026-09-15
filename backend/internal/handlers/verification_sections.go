@@ -75,8 +75,10 @@ func (h *VerificationSectionsHandler) decode(w http.ResponseWriter, r *http.Requ
 		apierr.BadRequest("section_key is required").Render(w)
 		return "", "", nil, false
 	}
-	if req.Stage != repository.SectionStagePricing && req.Stage != repository.SectionStageReview {
-		apierr.BadRequest("stage must be 'pricing' or 'review'").Render(w)
+	// «Расценено» ставится автоматически по заполненности позиций — вручную
+	// отмечается только проверка.
+	if req.Stage != repository.SectionStageReview {
+		apierr.BadRequest("stage must be 'review'").Render(w)
 		return "", "", nil, false
 	}
 	if needHash && req.ContentHash == "" {

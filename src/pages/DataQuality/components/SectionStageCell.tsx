@@ -16,7 +16,6 @@ interface Props {
 }
 
 const STAGE_LABEL: Record<SectionStage, { action: string; confirm: string }> = {
-  pricing: { action: 'Расценено', confirm: 'Отметить раздел расценённым?' },
   review: { action: 'Проверено', confirm: 'Отметить раздел проверенным?' },
 };
 
@@ -31,7 +30,7 @@ export const SectionStageCell: React.FC<Props> = ({ section, stage, busy, onMark
   const when = st.marked_at ? dayjs(st.marked_at).format('DD.MM.YY HH:mm') : '';
   const who = st.marked_by_name ?? 'неизвестно';
 
-  const blockers = stage === 'pricing' ? pricingBlockers(section) : [];
+  const blockers = pricingBlockers(section);
   const confirmText = blockers.length > 0
     ? `В разделе: ${blockers.join(', ')}. Всё равно отметить?`
     : 'Отметка зафиксирует текущее содержимое раздела.';
@@ -44,7 +43,7 @@ export const SectionStageCell: React.FC<Props> = ({ section, stage, busy, onMark
       cancelText="Отмена"
       onConfirm={() => onMark(section, stage)}
     >
-      <Button size="small" loading={busy} disabled={section.positions === 0}>
+      <Button size="small" loading={busy} disabled={section.pricing_status === 'not_required'}>
         {text}
       </Button>
     </Popconfirm>

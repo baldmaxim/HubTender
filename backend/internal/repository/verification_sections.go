@@ -10,12 +10,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Этапы отметки раздела.
+// SectionStageReview — проверяющий отметил раздел проверенным. Единственный
+// ручной этап: «расценено» вычисляется по заполненности позиций (см. PricingStatus).
+const SectionStageReview = "review"
+
+// Статус расценки раздела — вычисляется из данных, отметка не нужна.
 const (
-	// SectionStagePricing — инженер отметил раздел расценённым.
-	SectionStagePricing = "pricing"
-	// SectionStageReview — проверяющий отметил раздел проверенным.
-	SectionStageReview = "review"
+	PricingNotRequired = "not_required" // в разделе нечего расценивать
+	PricingNotStarted  = "not_started"  // ни одна позиция не заполнена
+	PricingInProgress  = "in_progress"  // заполнена часть позиций
+	PricingComplete    = "complete"     // заполнены все позиции
 )
 
 // Состояние отметки раздела, вычисляемое при чтении.
@@ -53,20 +57,26 @@ type SectionStageState struct {
 
 // TenderSection — раздел ВОР с готовностью.
 type TenderSection struct {
-	Key                 string            `json:"key"`
-	Title               string            `json:"title"`
-	HeaderPositionID    *string           `json:"header_position_id"`
-	FirstPositionNumber *float64          `json:"first_position_number"`
-	Positions           int               `json:"positions"`
-	Priced              int               `json:"priced"`
-	UnpricedNoReason    int               `json:"unpriced_no_reason"`
-	PricedNoGP          int               `json:"priced_no_gp"`
-	TotalAmount         float64           `json:"total_amount"`
-	ContentHash         string            `json:"content_hash"`
-	OpenErrors          int               `json:"open_errors"`
-	OpenWarnings        int               `json:"open_warnings"`
-	Pricing             SectionStageState `json:"pricing"`
-	Review              SectionStageState `json:"review"`
+	Key                 string   `json:"key"`
+	Title               string   `json:"title"`
+	HeaderPositionID    *string  `json:"header_position_id"`
+	FirstPositionNumber *float64 `json:"first_position_number"`
+	Positions           int      `json:"positions"`
+	// Required — позиций, требующих расценки (есть объём заказчика или строки).
+	Required int `json:"required"`
+	// Complete — из них заполнены: расценены с Кол-вом ГП либо не расценены,
+	// но с обоснованием в «Примечании ГП».
+	Complete int `json:"complete"`
+	// PricingStatus — «расценено» по разделу, вычисленное из Required/Complete.
+	PricingStatus    string            `json:"pricing_status"`
+	Priced           int               `json:"priced"`
+	UnpricedNoReason int               `json:"unpriced_no_reason"`
+	PricedNoGP       int               `json:"priced_no_gp"`
+	TotalAmount      float64           `json:"total_amount"`
+	ContentHash      string            `json:"content_hash"`
+	OpenErrors       int               `json:"open_errors"`
+	OpenWarnings     int               `json:"open_warnings"`
+	Review           SectionStageState `json:"review"`
 
 	positionIDs []string
 }
@@ -101,15 +111,30 @@ func loadSectionsTx(ctx context.Context, q rowQuerier, tenderID string) ([]Tende
 	for rows.Next() {
 		var s TenderSection
 		if err := rows.Scan(&s.Key, &s.Title, &s.HeaderPositionID, &s.FirstPositionNumber,
-			&s.Positions, &s.Priced, &s.UnpricedNoReason, &s.PricedNoGP, &s.TotalAmount,
-			&s.ContentHash, &s.positionIDs); err != nil {
+			&s.Positions, &s.Required, &s.Complete, &s.Priced, &s.UnpricedNoReason,
+			&s.PricedNoGP, &s.TotalAmount, &s.ContentHash, &s.positionIDs); err != nil {
 			return nil, fmt.Errorf("разделы scan: %w", err)
 		}
-		s.Pricing.Status = SectionStatusNone
+		s.PricingStatus = PricingStatusOf(s.Required, s.Complete)
 		s.Review.Status = SectionStatusNone
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// PricingStatusOf — статус расценки раздела по числу позиций, требующих
+// расценки, и заполненных из них.
+func PricingStatusOf(required, complete int) string {
+	switch {
+	case required == 0:
+		return PricingNotRequired
+	case complete >= required:
+		return PricingComplete
+	case complete == 0:
+		return PricingNotStarted
+	default:
+		return PricingInProgress
+	}
 }
 
 // Load возвращает разделы тендера с отметками и счётчиками находок. Всё — в
@@ -153,16 +178,15 @@ func (r *VerificationSectionsRepo) Load(ctx context.Context, tenderID string, ac
 	}
 
 	for i := range sections {
-		for _, st := range []*SectionStageState{&sections[i].Pricing, &sections[i].Review} {
-			if st.Status != SectionStatusChanged || st.MarkedAt == nil {
-				continue
-			}
-			ch, err := loadSectionChanges(ctx, tx, sections[i].positionIDs, *st.MarkedAt)
-			if err != nil {
-				return nil, fmt.Errorf("verificationSections.Load: %w", err)
-			}
-			st.Changes = ch
+		st := &sections[i].Review
+		if st.Status != SectionStatusChanged || st.MarkedAt == nil {
+			continue
 		}
+		ch, err := loadSectionChanges(ctx, tx, sections[i].positionIDs, *st.MarkedAt)
+		if err != nil {
+			return nil, fmt.Errorf("verificationSections.Load: %w", err)
+		}
+		st.Changes = ch
 	}
 	return res, nil
 }
@@ -191,10 +215,7 @@ func applySectionStates(ctx context.Context, q rowQuerier, tenderID string, byKe
 		if hash != sec.ContentHash || version != SectionHashVersion {
 			st.Status = SectionStatusChanged
 		}
-		switch stage {
-		case SectionStagePricing:
-			sec.Pricing = st
-		case SectionStageReview:
+		if stage == SectionStageReview {
 			sec.Review = st
 		}
 	}
@@ -252,7 +273,7 @@ func (r *VerificationSectionsRepo) Mark(
 	tenderID, sectionKey, stage, expectedHash string,
 	note, actor *string,
 ) error {
-	if stage != SectionStagePricing && stage != SectionStageReview {
+	if stage != SectionStageReview {
 		return fmt.Errorf("verificationSections.Mark: неизвестный этап %q", stage)
 	}
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
@@ -304,7 +325,7 @@ func (r *VerificationSectionsRepo) Mark(
 
 // Unmark снимает отметку этапа. Отметки не было — не ошибка.
 func (r *VerificationSectionsRepo) Unmark(ctx context.Context, tenderID, sectionKey, stage string, actor *string) error {
-	if stage != SectionStagePricing && stage != SectionStageReview {
+	if stage != SectionStageReview {
 		return fmt.Errorf("verificationSections.Unmark: неизвестный этап %q", stage)
 	}
 	tx, err := r.pool.Begin(ctx)

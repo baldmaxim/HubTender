@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Alert, Card, Empty, Space, Spin, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { SectionStage, TenderSection } from '../../../lib/api/verificationSections';
-import { summarizeSections } from '../../../lib/quality/sectionsPolicy';
+import { pricingStatusLabel, summarizeSections } from '../../../lib/quality/sectionsPolicy';
 import { useTenderSections } from '../hooks/useTenderSections';
 import { SectionStageCell } from './SectionStageCell';
 
@@ -15,13 +15,19 @@ interface Props {
 
 const money = (v: number): string => `${Math.round(v).toLocaleString('ru-RU')} ₽`;
 
-/** Короткая сводка по разделу: расценённость и что мешает. */
+/**
+ * «Расценено» — не отметка, а состояние данных: позиция заполнена, если расценена
+ * и указано Кол-во ГП, либо не расценена, но в «Примечании ГП» есть обоснование.
+ */
+const PricingCell: React.FC<{ s: TenderSection }> = ({ s }) => {
+  const { text, color } = pricingStatusLabel(s);
+  return <Tag color={color}>{text}</Tag>;
+};
+
+/** Что в разделе не заполнено и что нашли правила проверки. */
 const SectionStats: React.FC<{ s: TenderSection; showFindings: boolean }> = ({ s, showFindings }) => (
   <Space size={4} wrap>
-    <Tag color={s.priced === s.positions && s.positions > 0 ? 'green' : 'default'}>
-      расценено {s.priced} из {s.positions}
-    </Tag>
-    {s.unpriced_no_reason > 0 && <Tag color="red">без обоснования: {s.unpriced_no_reason}</Tag>}
+    {s.unpriced_no_reason > 0 && <Tag color="red">не расценено без обоснования: {s.unpriced_no_reason}</Tag>}
     {s.priced_no_gp > 0 && <Tag color="orange">без Кол-ва ГП: {s.priced_no_gp}</Tag>}
     {showFindings && s.open_errors > 0 && <Tag color="red">ошибок: {s.open_errors}</Tag>}
     {showFindings && s.open_warnings > 0 && <Tag color="gold">предупреждений: {s.open_warnings}</Tag>}
@@ -29,8 +35,8 @@ const SectionStats: React.FC<{ s: TenderSection; showFindings: boolean }> = ({ s
 );
 
 /**
- * Готовность по разделам ВОР. Инженер отмечает раздел расценённым, проверяющий —
- * проверенным; отметки независимы и не блокируют работу по другим разделам.
+ * Готовность по разделам ВОР. «Расценено» считается само по заполненности
+ * позиций; «Проверено» отмечает проверяющий. Разделы не блокируют друг друга.
  */
 export const SectionsPanel: React.FC<Props> = ({ tenderId, isPhone }) => {
   const { data, loading, error, busyKey, mark, unmark } = useTenderSections(tenderId);
@@ -79,7 +85,7 @@ export const SectionsPanel: React.FC<Props> = ({ tenderId, isPhone }) => {
               <Space size={12} wrap>
                 <Space direction="vertical" size={2}>
                   <Text type="secondary" style={{ fontSize: 12 }}>Расценено</Text>
-                  {stageCell(s, 'pricing')}
+                  <PricingCell s={s} />
                 </Space>
                 <Space direction="vertical" size={2}>
                   <Text type="secondary" style={{ fontSize: 12 }}>Проверено</Text>
@@ -108,7 +114,7 @@ export const SectionsPanel: React.FC<Props> = ({ tenderId, isPhone }) => {
         key: 'stats',
         render: (_, s) => <SectionStats s={s} showFindings={showFindings} />,
       },
-      { title: 'Расценено', key: 'pricing', width: 200, render: (_, s) => stageCell(s, 'pricing') },
+      { title: 'Расценено', key: 'pricing', width: 180, render: (_, s) => <PricingCell s={s} /> },
       { title: 'Проверено', key: 'review', width: 200, render: (_, s) => stageCell(s, 'review') },
     ];
     body = (
