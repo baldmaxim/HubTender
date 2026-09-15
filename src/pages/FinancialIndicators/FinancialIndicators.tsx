@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, Drawer, Space, Popconfirm, message, Alert } from 'antd';
 import { formatFXUnavailable } from '../../utils/boq/currencyGuard';
-import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined, FallOutlined } from '@ant-design/icons';
+import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined, FallOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getTenderById, approveFinancial } from '../../lib/api/fi';
@@ -32,6 +32,7 @@ import { IndicatorsTable, INDICATORS_TABLE_FIT_WIDTH } from './components/Indica
 import { IndicatorsFilters } from './components/IndicatorsFilters';
 import { DiscountTab } from './discount/components/DiscountTab';
 import { DiscountSummaryCard } from './discount/components/DiscountSummaryCard';
+import { TenderBriefPanel } from './brief/TenderBriefPanel';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 import './FinancialIndicators.css';
 
@@ -81,7 +82,7 @@ const FinancialIndicators: React.FC = () => {
   const [selectedTenderId, setSelectedTenderId] = useState<string | null>(null);
   const [selectedTenderTitle, setSelectedTenderTitle] = useState<string>('');
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'table' | 'charts' | 'discount'>('charts');
+  const [activeTab, setActiveTab] = useState<'table' | 'charts' | 'discount' | 'brief'>('charts');
   const [editingVolumeTitle, setEditingVolumeTitle] = useState(false);
   const [volumeTitle, setVolumeTitle] = useState('Полный объём строительства');
   const [tempVolumeTitle, setTempVolumeTitle] = useState('Полный объём строительства');
@@ -452,7 +453,7 @@ const FinancialIndicators: React.FC = () => {
           <Tabs
             activeKey={activeTab}
             onChange={(key) => {
-              setActiveTab(key as 'table' | 'charts' | 'discount');
+              setActiveTab(key as typeof activeTab);
             }}
             items={[
               {
@@ -514,6 +515,11 @@ const FinancialIndicators: React.FC = () => {
               // Настройка снижения — для всех, кроме генерального директора
               // (телефоны редактируют адаптивно). Данные вкладки грузятся
               // лениво, при первом её открытии.
+              {
+                key: 'brief',
+                label: <span><FileTextOutlined style={{ marginRight: 8 }} />Выжимка</span>,
+                children: <TenderBriefPanel tenderId={selectedTenderId} readOnly={readOnly} isPhone={isPhone} />,
+              },
               ...(canEditDiscount && selectedTenderId
                 ? [{
                     key: 'discount',

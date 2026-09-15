@@ -262,3 +262,37 @@ func TestCostBenchmarkIntegration_RangesCRUD(t *testing.T) {
 }
 
 func fp64(v float64) *float64 { return &v }
+
+func TestCostBenchmarkIntegration_Brief(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := NewCostBenchmarkRepo(pool)
+	f := newCBFixture(t, pool)
+	tid := f.tender(t, pool, "itest-brief-"+f.catID[:8], 1, "бизнес", false, 1000, 10, 100)
+
+	b, err := repo.GetBrief(ctx, tid)
+	if err != nil || b.SummaryText != "" || b.FactCategoryIDs != nil || b.UpdatedAt != nil {
+		t.Fatalf("новая выжимка должна быть пустой: %+v %v", b, err)
+	}
+
+	if err := repo.SaveBrief(ctx, tid, "Монолит 30 тыс. ₽/м³, фасад НВФ", []string{f.catID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	b, err = repo.GetBrief(ctx, tid)
+	if err != nil || b.SummaryText != "Монолит 30 тыс. ₽/м³, фасад НВФ" || len(b.FactCategoryIDs) != 1 ||
+		b.FactCategoryIDs[0] != f.catID || b.UpdatedAt == nil {
+		t.Fatalf("сохранённая выжимка: %+v %v", b, err)
+	}
+
+	// nil — снова автоматический выбор категорий.
+	if err := repo.SaveBrief(ctx, tid, "только текст", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if b, err = repo.GetBrief(ctx, tid); err != nil || b.FactCategoryIDs != nil || b.SummaryText != "только текст" {
+		t.Fatalf("сброс выбора категорий: %+v %v", b, err)
+	}
+
+	if err := repo.SaveBrief(ctx, "00000000-0000-0000-0000-000000000000", "x", nil, nil); !errors.Is(err, ErrRangeInvalid) {
+		t.Fatalf("выжимка несуществующего тендера: %v", err)
+	}
+}

@@ -194,6 +194,10 @@ func newRouter(
 		// видят все, правят — только роли из BenchmarkRangeEditorRoles.
 		r.Get("/api/v1/tenders/{id}/cost-benchmarks", d.costBenchmarkH.GetReport)
 		r.Get("/api/v1/benchmark-ranges", d.costBenchmarkH.GetRanges)
+		// Выжимка для руководства на «Финансовых показателях»: текст и выбор
+		// категорий; цифры считаются из расчёта.
+		r.Get("/api/v1/tenders/{id}/brief", d.costBenchmarkH.GetBrief)
+		r.Put("/api/v1/tenders/{id}/brief", d.costBenchmarkH.PutBrief)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireRoles(handlers.BenchmarkRangeEditorRoles))
 			r.Post("/api/v1/benchmark-ranges", d.costBenchmarkH.PostRange)

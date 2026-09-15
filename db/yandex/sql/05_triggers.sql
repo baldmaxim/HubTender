@@ -282,3 +282,9 @@ DROP TRIGGER IF EXISTS benchmark_ranges_updated_at ON public.benchmark_ranges;
 CREATE TRIGGER benchmark_ranges_updated_at
   BEFORE UPDATE ON public.benchmark_ranges
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- ----- tender_briefs --------------------------------------------------------
+DROP TRIGGER IF EXISTS tender_briefs_updated_at ON public.tender_briefs;
+CREATE TRIGGER tender_briefs_updated_at
+  BEFORE UPDATE ON public.tender_briefs
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

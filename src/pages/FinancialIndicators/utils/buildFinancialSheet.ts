@@ -3,6 +3,7 @@
 // чтобы структуру можно было проверять в node.
 import * as XLSX from 'xlsx-js-style';
 import type { IndicatorRow } from '../types';
+import { buildBriefBlock, type BriefSheetInput } from './briefSheetBlock';
 
 export const MONEY_FMT = '#,##0';
 export const PCT_FMT = '0.##%';
@@ -82,6 +83,8 @@ export interface SheetInput {
   tenderTitle: string;
   discountNote?: string | null;
   volumeTitle?: string;
+  /** Выжимка для руководства — блок под таблицей; null/пусто — блока нет. */
+  brief?: BriefSheetInput | null;
   /** Дата верхней строки (по умолчанию — сегодня). Тесты передают фикс. дату. */
   today?: Date;
 }
@@ -176,10 +179,17 @@ export function buildFinancialSheet(input: SheetInput): XLSX.WorkSheet {
     set(lastRow, 1, { t: 's', v: discountNote, s: { font: { color: { rgb: BLUE } } } });
   }
 
+  const briefBlock = buildBriefBlock(input.brief, lastRow);
+  if (briefBlock) {
+    briefBlock.cells.forEach(({ r, c, cell }) => set(r, c, cell));
+    lastRow = briefBlock.lastRow;
+  }
+
   ws['!ref'] = `A1:F${lastRow + 1}`;
   ws['!merges'] = [
     { s: { r: 0, c: 1 }, e: { r: 0, c: 5 } },
     { s: { r: 1, c: 1 }, e: { r: 1, c: 5 } },
+    ...(briefBlock?.merges ?? []),
   ];
   ws['!cols'] = [{ wch: 11.07 }, { wch: 57.64 }, { wch: 15.5 }, { wch: 20.5 }, { wch: 20.5 }, { wch: 25.5 }];
   ws['!rows'] = [{ hpt: 18.75 }, { hpt: 18.75 }, { hpt: 45 }];

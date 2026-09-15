@@ -34,6 +34,8 @@ type costBenchmarkServicer interface {
 	CreateRange(ctx context.Context, in repository.BenchmarkRangeInput, actor *string) (string, error)
 	UpdateRange(ctx context.Context, id string, in repository.BenchmarkRangeInput, actor *string) error
 	DeactivateRange(ctx context.Context, id string, actor *string) error
+	Brief(ctx context.Context, tenderID string) (*repository.TenderBrief, error)
+	SaveBrief(ctx context.Context, tenderID, summaryText string, factCategoryIDs []string, actor *string) (*repository.TenderBrief, error)
 }
 
 // CostBenchmarkHandler — эталоны удельных показателей и справочник диапазонов.
@@ -208,4 +210,51 @@ func (h *CostBenchmarkHandler) DeleteRange(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// maxBriefLength — выжимка это абзац-другой для руководства, а не документ.
+const maxBriefLength = 20000
+
+// GetBrief handles GET /api/v1/tenders/{id}/brief.
+func (h *CostBenchmarkHandler) GetBrief(w http.ResponseWriter, r *http.Request) {
+	tenderID := chi.URLParam(r, "id")
+	b, err := h.svc.Brief(r.Context(), tenderID)
+	if err != nil {
+		apierr.InternalFromErr(w, r, err, "tender brief failed", "tender_id", tenderID)
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: b})
+}
+
+type tenderBriefRequest struct {
+	SummaryText     string   `json:"summary_text"`
+	FactCategoryIDs []string `json:"fact_category_ids"`
+}
+
+// PutBrief handles PUT /api/v1/tenders/{id}/brief.
+func (h *CostBenchmarkHandler) PutBrief(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	tenderID := chi.URLParam(r, "id")
+	var req tenderBriefRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid json body").Render(w)
+		return
+	}
+	if len([]rune(req.SummaryText)) > maxBriefLength {
+		apierr.BadRequest("выжимка слишком длинная").Render(w)
+		return
+	}
+	b, err := h.svc.SaveBrief(r.Context(), tenderID, req.SummaryText, req.FactCategoryIDs, &authUser.ID)
+	switch {
+	case errors.Is(err, repository.ErrRangeInvalid):
+		apierr.BadRequest("некорректные данные выжимки: тендер или категории не найдены").Render(w)
+	case err != nil:
+		apierr.InternalFromErr(w, r, err, "tender brief save failed", "tender_id", tenderID)
+	default:
+		renderJSON(w, r, http.StatusOK, dataEnvelope{Data: b})
+	}
 }

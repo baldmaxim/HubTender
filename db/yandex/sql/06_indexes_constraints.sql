@@ -686,6 +686,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS benchmark_ranges_active_unique_idx
     NULLS NOT DISTINCT
     WHERE is_active;
 
+-- ----- tender_briefs --------------------------------------------------------
+ALTER TABLE public.tender_briefs
+    ADD CONSTRAINT tender_briefs_pkey PRIMARY KEY (tender_id);
+ALTER TABLE public.tender_briefs
+    ADD CONSTRAINT tender_briefs_tender_fkey
+    FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
+
 -- ─── Машинный доступ к API ──────────────────────────────────────────────────
 ALTER TABLE public.api_keys
     ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);

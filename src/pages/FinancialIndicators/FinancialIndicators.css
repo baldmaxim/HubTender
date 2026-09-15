@@ -104,3 +104,33 @@
     padding: 0;
   }
 }
+
+/* Вкладка «Выжимка» */
+.tender-brief-panel {
+  width: 100%;
+}
+
+.tender-brief-total {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.tender-brief-select {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.tender-brief-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 430px) {
+  .tender-brief-actions .ant-btn {
+    min-height: 44px;
+  }
+}

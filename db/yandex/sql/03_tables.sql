@@ -971,6 +971,15 @@ CREATE TABLE IF NOT EXISTS public.benchmark_ranges (
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
+-- Краткая выжимка по тендеру для руководства (см. 2026_09_tender_briefs.sql).
+CREATE TABLE IF NOT EXISTS public.tender_briefs (
+    tender_id uuid NOT NULL,
+    summary_text text NOT NULL DEFAULT '',
+    fact_category_ids uuid[],
+    updated_by uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
 
 -- Машинный доступ к API (страница «Настройки → Доступ к API»).
 -- Секрет ключа в БД не хранится: только SHA-256 хеш и префикс для опознания.

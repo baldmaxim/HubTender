@@ -69,7 +69,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
       message.error(formatFXUnavailable(fxMissing));
       return;
     }
-    exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion, discountNote, volumeTitle);
+    void exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion, discountNote, volumeTitle, tenderId);
   };
 
   const handleUpdateArea = async (field: 'area_sp' | 'area_client', value: number) => {

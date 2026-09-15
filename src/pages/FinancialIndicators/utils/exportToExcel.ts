@@ -8,8 +8,9 @@ import { message } from 'antd';
 import * as XLSX from 'xlsx-js-style';
 import type { IndicatorRow } from '../hooks/useFinancialData';
 import { buildFinancialSheet } from './buildFinancialSheet';
+import { loadBriefForExport } from './loadBriefForExport';
 
-export function exportFinancialIndicatorsToExcel(
+export async function exportFinancialIndicatorsToExcel(
   data: IndicatorRow[],
   spTotal: number,
   customerTotal: number,
@@ -19,13 +20,16 @@ export function exportFinancialIndicatorsToExcel(
   discountNote?: string | null,
   /** Подзаголовок (объём строительства) в верхней строке — «Генподряд» и т.п. */
   volumeTitle?: string,
+  /** Тендер — для блока «Выжимка для руководства» под таблицей. */
+  tenderId?: string,
 ) {
   if (data.length === 0) {
     message.warning('Нет данных для экспорта');
     return;
   }
 
-  const ws = buildFinancialSheet({ data, spTotal, customerTotal, tenderTitle, discountNote, volumeTitle });
+  const brief = tenderId ? await loadBriefForExport(tenderId) : null;
+  const ws = buildFinancialSheet({ data, spTotal, customerTotal, tenderTitle, discountNote, volumeTitle, brief });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Финансовые показатели');
 

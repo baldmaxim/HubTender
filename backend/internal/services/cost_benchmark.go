@@ -26,6 +26,8 @@ type costBenchmarkRepoer interface {
 	CreateRange(ctx context.Context, in repository.BenchmarkRangeInput, actor *string) (string, error)
 	UpdateRange(ctx context.Context, id string, in repository.BenchmarkRangeInput, actor *string) error
 	DeactivateRange(ctx context.Context, id string, actor *string) error
+	GetBrief(ctx context.Context, tenderID string) (*repository.TenderBrief, error)
+	SaveBrief(ctx context.Context, tenderID, summaryText string, factCategoryIDs []string, actor *string) error
 }
 
 // CostBenchmarkService — эталоны удельных показателей.
@@ -140,4 +142,15 @@ func (s *CostBenchmarkService) UpdateRange(ctx context.Context, id string, in re
 
 func (s *CostBenchmarkService) DeactivateRange(ctx context.Context, id string, actor *string) error {
 	return s.repo.DeactivateRange(ctx, id, actor)
+}
+
+func (s *CostBenchmarkService) Brief(ctx context.Context, tenderID string) (*repository.TenderBrief, error) {
+	return s.repo.GetBrief(ctx, tenderID)
+}
+
+func (s *CostBenchmarkService) SaveBrief(ctx context.Context, tenderID, summaryText string, factCategoryIDs []string, actor *string) (*repository.TenderBrief, error) {
+	if err := s.repo.SaveBrief(ctx, tenderID, summaryText, factCategoryIDs, actor); err != nil {
+		return nil, err
+	}
+	return s.repo.GetBrief(ctx, tenderID)
 }
