@@ -333,3 +333,17 @@
     margin: -10px -8px -10px 2px;
   }
 }
+/* Окно привязки Telegram */
+.telegram-link-modal {
+  width: 100%;
+}
+
+.telegram-link-modal .telegram-link-text {
+  margin-bottom: 0;
+}
+
+@media (max-width: 430px) {
+  .telegram-link-modal .ant-btn {
+    min-height: 44px;
+  }
+}

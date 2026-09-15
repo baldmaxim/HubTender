@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, Select, Button, Space, Typography, Tag, Collapse, Empty, Spin, Switch, Alert, Popconfirm } from 'antd';
-import { ReloadOutlined, SafetyCertificateOutlined, CheckOutlined } from '@ant-design/icons';
+import { ReloadOutlined, SafetyCertificateOutlined, CheckOutlined, SendOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useQualityReport } from './hooks/useQualityReport';
 import { FindingsTable } from './components/FindingsTable';
@@ -8,6 +8,9 @@ import { ProposalReadinessCard } from './components/ProposalReadinessCard';
 import { CheckpointBar } from './components/CheckpointBar';
 import { SectionsPanel } from './components/SectionsPanel';
 import { CostBenchmarkPanel } from './components/CostBenchmarkPanel';
+import { DispatchModal } from './components/DispatchModal';
+import { fetchTelegramStatus } from '../../lib/api/telegram';
+import { dispatchableIds } from '../../lib/quality/dispatchPolicy';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -38,6 +41,16 @@ const DataQuality: React.FC = () => {
     submitVerdict,
     submitGroupVerdict,
   } = useQualityReport();
+
+  // Рассылка в Telegram — только если бот настроен на сервере.
+  const [telegramEnabled, setTelegramEnabled] = useState(false);
+  const [dispatchIds, setDispatchIds] = useState<string[] | null>(null);
+  useEffect(() => {
+    fetchTelegramStatus()
+      .then((s) => setTelegramEnabled(s.enabled))
+      .catch(() => setTelegramEnabled(false));
+  }, []);
+  const allDispatchable = dispatchableIds(groups.flatMap((g) => g.findings));
 
   return (
     <div style={{ padding: isPhone ? 12 : 24 }}>
@@ -73,6 +86,15 @@ const DataQuality: React.FC = () => {
             >
               Перепроверить
             </Button>
+            {telegramEnabled && (
+              <Button
+                icon={<SendOutlined />}
+                onClick={() => setDispatchIds(allDispatchable)}
+                disabled={!selectedTenderId || loading || allDispatchable.length === 0}
+              >
+                Отправить исполнителям ({allDispatchable.length})
+              </Button>
+            )}
             <Space size={8}>
               <Switch checked={showAccepted} onChange={setShowAccepted} size="small" />
               <Text>Показывать принятые</Text>
@@ -196,6 +218,11 @@ const DataQuality: React.FC = () => {
                           </Popconfirm>
                         );
                       })()}
+                      {telegramEnabled && dispatchableIds(g.findings).length > 0 && (
+                        <Button size="small" icon={<SendOutlined />} onClick={() => setDispatchIds(dispatchableIds(g.findings))}>
+                          Отправить группу исполнителям ({dispatchableIds(g.findings).length})
+                        </Button>
+                      )}
                       <FindingsTable
                         findings={g.findings}
                         isPhone={isPhone}
@@ -209,6 +236,14 @@ const DataQuality: React.FC = () => {
           </>
         )}
       </Space>
+      {selectedTenderId && dispatchIds && (
+        <DispatchModal
+          open
+          tenderId={selectedTenderId}
+          findingIds={dispatchIds}
+          onClose={() => setDispatchIds(null)}
+        />
+      )}
     </div>
   );
 };

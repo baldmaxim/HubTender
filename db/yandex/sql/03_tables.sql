@@ -981,6 +981,54 @@ CREATE TABLE IF NOT EXISTS public.tender_briefs (
     updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
+-- Рассылка замечаний проверки в Telegram (см. 2026_09_verification_telegram.sql).
+CREATE TABLE IF NOT EXISTS public.telegram_links (
+    user_id uuid NOT NULL,
+    chat_id bigint NOT NULL,
+    telegram_username text,
+    linked_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.telegram_link_tokens (
+    token_hash text NOT NULL,
+    user_id uuid NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.telegram_bot_state (
+    id smallint NOT NULL DEFAULT 1,
+    update_offset bigint NOT NULL DEFAULT 0,
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.verification_notifications (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tender_id uuid NOT NULL,
+    recipient_user_id uuid NOT NULL,
+    created_by uuid,
+    status text NOT NULL DEFAULT 'pending',
+    attempts integer NOT NULL DEFAULT 0,
+    next_attempt_at timestamp with time zone NOT NULL DEFAULT now(),
+    last_error text,
+    telegram_message_id bigint,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    sent_at timestamp with time zone
+);
+
+CREATE TABLE IF NOT EXISTS public.verification_notification_items (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    notification_id uuid NOT NULL,
+    finding_id uuid NOT NULL,
+    recipient_user_id uuid NOT NULL,
+    fingerprint text NOT NULL,
+    resolver text NOT NULL,
+    dedup_key text,
+    verdict text,
+    verdict_at timestamp with time zone
+);
+
 -- Машинный доступ к API (страница «Настройки → Доступ к API»).
 -- Секрет ключа в БД не хранится: только SHA-256 хеш и префикс для опознания.
 CREATE TABLE IF NOT EXISTS public.api_keys (

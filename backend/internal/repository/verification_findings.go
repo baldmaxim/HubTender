@@ -187,20 +187,25 @@ func (r *QualityRepo) RecordVerdictEvents(
 	codes, entities := make([]string, len(in)), make([]string, len(in))
 	prints, verdicts := make([]string, len(in)), make([]string, len(in))
 	notes := make([]*string, len(in))
+	sources := make([]string, len(in))
 	for i := range in {
 		codes[i], entities[i] = in[i].RuleCode, in[i].EntityID
 		prints[i], verdicts[i], notes[i] = in[i].Fingerprint, in[i].Verdict, in[i].Note
+		sources[i] = in[i].Source
+		if sources[i] == "" {
+			sources[i] = "ui"
+		}
 	}
 	if _, err := r.pool.Exec(ctx, `
 		INSERT INTO public.verification_finding_events
 			(finding_id, event_type, fingerprint, actor_user_id, source, note)
-		SELECT f.id, x.verdict, x.fingerprint, $7::uuid, 'ui', x.note
-		FROM unnest($2::text[], $3::uuid[], $4::text[], $5::text[], $6::text[])
-		     AS x(rule_code, entity_id, fingerprint, verdict, note)
+		SELECT f.id, x.verdict, x.fingerprint, $7::uuid, x.source, x.note
+		FROM unnest($2::text[], $3::uuid[], $4::text[], $5::text[], $6::text[], $8::text[])
+		     AS x(rule_code, entity_id, fingerprint, verdict, note, source)
 		JOIN public.verification_findings f
 		  ON f.tender_id = $1::uuid AND f.source = 'rules'
 		 AND f.rule_code = x.rule_code AND f.entity_id = x.entity_id`,
-		tenderID, codes, entities, prints, verdicts, notes, actor,
+		tenderID, codes, entities, prints, verdicts, notes, actor, sources,
 	); err != nil {
 		return fmt.Errorf("qualityRepo.RecordVerdictEvents: %w", err)
 	}

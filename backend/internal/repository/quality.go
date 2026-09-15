@@ -224,6 +224,8 @@ type VerdictInput struct {
 	Fingerprint string
 	Verdict     string
 	Note        *string
+	// Source — откуда вердикт для истории находки: ui (по умолчанию), telegram, api.
+	Source string
 }
 
 // SetVerdicts сохраняет пачку вердиктов одним запросом.

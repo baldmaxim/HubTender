@@ -6,6 +6,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
+  SendOutlined,
   SunOutlined,
   MoonOutlined,
 } from '@ant-design/icons';
@@ -13,6 +14,7 @@ import { menuItems, MOBILE_HIDDEN_KEYS } from './menuItems';
 import { CalculatorWidget } from './CalculatorWidget';
 import { NotesWidget } from './NotesWidget';
 import { NotificationsBell } from './NotificationsBell';
+import { TelegramLinkModal } from './TelegramLinkModal';
 import WorkspaceKeepAlive from './WorkspaceKeepAlive';
 import HeaderTitleOrTabs from './HeaderTitleOrTabs';
 import { isWorkspacePath } from './workspacePages';
@@ -220,6 +222,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   };
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [telegramOpen, setTelegramOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -522,6 +525,12 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
                     type: 'divider',
                   },
                   {
+                    key: 'telegram',
+                    label: 'Telegram',
+                    icon: <SendOutlined />,
+                    onClick: () => setTelegramOpen(true),
+                  },
+                  {
                     key: 'logout',
                     label: 'Выйти',
                     icon: <LogoutOutlined />,
@@ -570,6 +579,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
           </Suspense>
         </Content>
       </Layout>
+      <TelegramLinkModal open={telegramOpen} onClose={() => setTelegramOpen(false)} />
     </Layout>
   );
 };

@@ -693,6 +693,48 @@ ALTER TABLE public.tender_briefs
     ADD CONSTRAINT tender_briefs_tender_fkey
     FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
 
+-- ----- telegram / verification_notifications -------------------------------
+ALTER TABLE public.telegram_links ADD CONSTRAINT telegram_links_pkey PRIMARY KEY (user_id);
+ALTER TABLE public.telegram_links ADD CONSTRAINT telegram_links_chat_key UNIQUE (chat_id);
+ALTER TABLE public.telegram_links ADD CONSTRAINT telegram_links_user_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE public.telegram_link_tokens ADD CONSTRAINT telegram_link_tokens_pkey PRIMARY KEY (token_hash);
+ALTER TABLE public.telegram_link_tokens ADD CONSTRAINT telegram_link_tokens_user_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS telegram_link_tokens_user_idx ON public.telegram_link_tokens (user_id);
+
+ALTER TABLE public.telegram_bot_state ADD CONSTRAINT telegram_bot_state_pkey PRIMARY KEY (id);
+ALTER TABLE public.telegram_bot_state ADD CONSTRAINT telegram_bot_state_single_check CHECK (id = 1);
+
+ALTER TABLE public.verification_notifications ADD CONSTRAINT verification_notifications_pkey PRIMARY KEY (id);
+ALTER TABLE public.verification_notifications ADD CONSTRAINT verification_notifications_status_check
+    CHECK (status IN ('pending', 'sent', 'failed', 'skipped'));
+ALTER TABLE public.verification_notifications ADD CONSTRAINT verification_notifications_tender_fkey
+    FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
+ALTER TABLE public.verification_notifications ADD CONSTRAINT verification_notifications_recipient_fkey
+    FOREIGN KEY (recipient_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS verification_notifications_pending_idx
+    ON public.verification_notifications (next_attempt_at) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS verification_notifications_tender_idx
+    ON public.verification_notifications (tender_id, created_at DESC);
+
+ALTER TABLE public.verification_notification_items ADD CONSTRAINT verification_notification_items_pkey PRIMARY KEY (id);
+ALTER TABLE public.verification_notification_items ADD CONSTRAINT verification_notification_items_resolver_check
+    CHECK (resolver IN ('item_author', 'position_author', 'sender'));
+ALTER TABLE public.verification_notification_items ADD CONSTRAINT verification_notification_items_verdict_check
+    CHECK (verdict IS NULL OR verdict IN ('accepted', 'error'));
+ALTER TABLE public.verification_notification_items ADD CONSTRAINT verification_notification_items_notification_fkey
+    FOREIGN KEY (notification_id) REFERENCES public.verification_notifications(id) ON DELETE CASCADE;
+ALTER TABLE public.verification_notification_items ADD CONSTRAINT verification_notification_items_finding_fkey
+    FOREIGN KEY (finding_id) REFERENCES public.verification_findings(id) ON DELETE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS verification_notification_items_dedup_idx
+    ON public.verification_notification_items (dedup_key);
+CREATE INDEX IF NOT EXISTS verification_notification_items_notification_idx
+    ON public.verification_notification_items (notification_id);
+CREATE INDEX IF NOT EXISTS verification_notification_items_finding_idx
+    ON public.verification_notification_items (finding_id);
+
 -- ─── Машинный доступ к API ──────────────────────────────────────────────────
 ALTER TABLE public.api_keys
     ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);

@@ -106,12 +106,24 @@ func (s *QualityService) SetVerdict(
 	note *string,
 	changedBy *string,
 ) error {
+	return s.SetVerdictFrom(ctx, "ui", tenderID, ruleCode, entityID, fingerprint, verdict, note, changedBy)
+}
+
+// SetVerdictFrom — то же, что SetVerdict, с источником для истории находки
+// (ui, telegram, api). Вердикт из Telegram ложится в ту же таблицу, что и из
+// интерфейса, и неотличим от него на странице.
+func (s *QualityService) SetVerdictFrom(
+	ctx context.Context,
+	source, tenderID, ruleCode, entityID, fingerprint, verdict string,
+	note *string,
+	changedBy *string,
+) error {
 	if err := s.repo.SetVerdict(ctx, tenderID, ruleCode, entityID, fingerprint, verdict, note, changedBy); err != nil {
 		return err
 	}
 	s.Invalidate(tenderID)
 	s.recordVerdictEvents(ctx, tenderID, []repository.VerdictInput{{
-		RuleCode: ruleCode, EntityID: entityID, Fingerprint: fingerprint, Verdict: verdict, Note: note,
+		RuleCode: ruleCode, EntityID: entityID, Fingerprint: fingerprint, Verdict: verdict, Note: note, Source: source,
 	}}, changedBy)
 	return nil
 }

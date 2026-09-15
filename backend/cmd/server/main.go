@@ -195,6 +195,10 @@ func main() {
 	// один скан сразу после успешного startup, затем периодически.
 	go d.recalcRecovery.Run(rootCtx)
 	go d.verifRetention.Run(rootCtx)
+	if d.telegramBot != nil {
+		go d.telegramBot.RunPoller(rootCtx)
+		go d.telegramBot.RunSender(rootCtx)
+	}
 
 	// Wait for OS signal or server error.
 	quit := make(chan os.Signal, 1)

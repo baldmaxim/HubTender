@@ -52,6 +52,12 @@ Production env-файл живёт на prod-сервере: `/srv/sites/tender.
 | `DB_MAX_CONN_IDLE_TIME` | Go duration string | `5m` |
 | `JWT_CLOCK_SKEW_SECONDS` | leeway для exp/iat | unset (`0`, strict). Включать только для dev/Windows |
 | `SENTRY_DSN` / `SENTRY_ENVIRONMENT` / `SENTRY_RELEASE` | error tracking; пустой DSN → no-op | set in prod |
+| `TELEGRAM_BOT_TOKEN` | **секрет**. Токен бота рассылки замечаний проверки (@BotFather). Пусто → бот не стартует, привязка и рассылка отвечают «не настроен» | unset |
+| `TELEGRAM_BOT_USERNAME` | имя бота без `@` — для ссылки привязки `t.me/<бот>?start=…` | unset |
+| `TELEGRAM_PROXY_URL` | необязательный HTTP(S)-прокси до `api.telegram.org`, если прод-контур его не видит напрямую | unset |
+| `TELEGRAM_API_BASE_URL` | необязательный адрес Bot API (свой relay); по умолчанию `https://api.telegram.org` | unset |
+| `VERIFICATION_AUTO_RUN_ENABLED` | `false` — выключить фоновый прогон проверки данных после пересчёта | unset (включено) |
+| `VERIFICATION_RETENTION_ENABLED` | `false` — не чистить прогоны проверки старше 30 дней | unset (включено) |
 
 ### TLS root CA для Yandex
 

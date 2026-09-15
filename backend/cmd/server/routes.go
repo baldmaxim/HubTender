@@ -144,6 +144,9 @@ func newRouter(
 
 		r.Get("/api/v1/me", d.meH.GetMe)
 		r.Get("/api/v1/me/permissions", d.meH.GetPermissions)
+		r.Get("/api/v1/me/telegram", d.telegramH.GetStatus)
+		r.Post("/api/v1/me/telegram/link", d.telegramH.PostLink)
+		r.Delete("/api/v1/me/telegram", d.telegramH.DeleteLink)
 		r.Get("/api/v1/me/deadline-extensions", d.meH.GetDeadlineExtensions)
 		r.Post("/api/v1/me/reapply-access", d.meH.ReapplyAccess)
 
@@ -184,6 +187,8 @@ func newRouter(
 		r.Post("/api/v1/tenders/{id}/quality/verdict", d.qualityH.PostVerdict)
 		r.Post("/api/v1/tenders/{id}/quality/verdicts", d.qualityH.PostVerdicts)
 		r.Post("/api/v1/tenders/{id}/quality/checkpoint", d.qualityH.PostCheckpoint)
+		r.Post("/api/v1/tenders/{id}/verification/dispatch/preview", d.telegramH.PostPreview)
+		r.Post("/api/v1/tenders/{id}/verification/dispatch", d.telegramH.PostDispatch)
 
 		// Конвейер проверки: готовность по разделам ВОР.
 		r.Get("/api/v1/tenders/{id}/verification/sections", d.verifSectionsH.GetSections)
