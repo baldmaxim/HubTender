@@ -264,3 +264,9 @@ DROP TRIGGER IF EXISTS quality_acknowledgements_updated_at ON public.quality_ack
 CREATE TRIGGER quality_acknowledgements_updated_at
   BEFORE UPDATE ON public.quality_acknowledgements
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- ----- verification_findings ------------------------------------------------
+DROP TRIGGER IF EXISTS verification_findings_updated_at ON public.verification_findings;
+CREATE TRIGGER verification_findings_updated_at
+  BEFORE UPDATE ON public.verification_findings
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

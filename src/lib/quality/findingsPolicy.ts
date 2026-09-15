@@ -6,57 +6,20 @@
 import type { QualityFinding, QualityRule } from '../api/quality';
 
 /**
- * Тип сущности, на которую указывает `entity_id` находки.
- *
- * В контракте правила типа нет — там только uuid, а его пространство зависит от
- * кода правила. Карта восстанавливает тип, не меняя контракт: без неё нельзя ни
- * построить переход к строке, ни сгруппировать находки по разделу.
- *
- * Новое правило обязано попасть сюда, иначе переход к строке для него не работает.
- */
-export type FindingEntityKind = 'position' | 'boq_item' | 'material_name';
-
-export const RULE_ENTITY_KIND: Record<string, FindingEntityKind> = {
-  A: 'boq_item',
-  B: 'position',
-  E: 'boq_item',
-  F: 'boq_item',
-  G: 'boq_item',
-  H: 'position',
-  I: 'boq_item',
-  J: 'position',
-  L: 'boq_item',
-  M: 'boq_item',
-  N: 'boq_item',
-  P: 'material_name',
-  Q: 'boq_item',
-  R: 'boq_item',
-  S: 'boq_item',
-  T: 'boq_item',
-  U: 'position',
-  V: 'position',
-  W: 'position',
-  X: 'position',
-  Y: 'position',
-  Z: 'position',
-  AA: 'position',
-};
-
-export function entityKindForRule(ruleCode: string): FindingEntityKind | null {
-  return RULE_ENTITY_KIND[ruleCode] ?? null;
-}
-
-/**
  * Ссылка на строку расчёта для находки.
  *
- * Открыть можно только позицию: маршрут строк BOQ адресуется id позиции, а не id
- * строки. Для находок по строке ссылки нет — в контракте правила нет
- * `client_position_id`, а по одному id строки маршрут не собрать.
+ * Тип сущности приходит с сервера (фронтматтер правила). Открыть можно только
+ * позицию: маршрут строк BOQ адресуется id позиции, а не id строки.
  */
 export function findingLink(finding: QualityFinding): string | null {
-  return entityKindForRule(finding.rule_code) === 'position'
+  return finding.entity_type === 'client_position'
     ? `/positions/${finding.entity_id}/items`
     : null;
+}
+
+/** Сколько активных (не принятых) находок появилось после отметки проверки. */
+export function countNewActive(findings: QualityFinding[]): number {
+  return findings.filter((f) => f.is_new && f.verdict !== 'accepted').length;
 }
 
 /** Проверка, входящая в готовность формы КП. */

@@ -4,6 +4,7 @@ title: Конечная позиция не расценена и без обо�
 severity: error
 money: no
 status: draft
+entity_type: client_position
 ---
 ## Суть
 

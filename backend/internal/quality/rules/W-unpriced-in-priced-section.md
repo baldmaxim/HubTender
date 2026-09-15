@@ -4,6 +4,7 @@ title: Нерасценённая позиция внутри расценённ
 severity: warning
 money: no
 status: draft
+entity_type: client_position
 ---
 ## Суть
 

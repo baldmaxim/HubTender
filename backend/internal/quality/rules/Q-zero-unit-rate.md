@@ -4,6 +4,7 @@ title: Нулевая цена за единицу
 severity: warning
 money: no
 status: active
+entity_type: boq_item
 ---
 ## Суть
 

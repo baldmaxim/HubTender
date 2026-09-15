@@ -4,6 +4,7 @@ title: Количество работы равно 1 при заметном о
 severity: warning
 money: no
 status: active
+entity_type: boq_item
 ---
 ## Суть
 

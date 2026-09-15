@@ -6,6 +6,7 @@ import { apiFetch } from './client';
 
 export type QualitySeverity = 'error' | 'warning' | 'info';
 export type QualityVerdict = 'accepted' | 'error';
+export type QualityEntityType = 'boq_item' | 'client_position' | 'material_name' | 'tender';
 
 /** Одна находка правила по конкретному тендеру. */
 export interface QualityFinding {
@@ -17,6 +18,8 @@ export interface QualityFinding {
   tender_id: string;
   position_number: number | null;
   item_no: string | null;
+  /** Пространство id в entity_id — из фронтматтера правила. */
+  entity_type: QualityEntityType;
   entity_id: string;
   /** md5 значимых значений; изменились данные — вердикт перестаёт действовать. */
   fingerprint: string;
@@ -25,6 +28,12 @@ export interface QualityFinding {
   /** Вердикт инженера, если он есть И отпечаток совпадает. */
   verdict: QualityVerdict | null;
   note: string | null;
+  /** Сохранённая находка; null, если прогон не удалось сохранить. */
+  finding_id: string | null;
+  /** Когда находка появилась (или открылась заново после исправления/смены данных). */
+  first_seen_at: string | null;
+  /** Появилась после последней отметки «Проверка завершена». */
+  is_new: boolean;
 }
 
 /** Правило, которое не отработало. Остальные находки при этом остаются валидными. */
@@ -38,6 +47,11 @@ export interface QualityReport {
   generated_at: string;
   findings: QualityFinding[];
   errors: QualityRuleError[];
+  run_id: string | null;
+  /** Последняя отметка «Проверка завершена»; от неё считается новизна. */
+  checkpoint_at: string | null;
+  /** false — прогон не сохранён (например, не применена миграция), истории нет. */
+  history_available: boolean;
 }
 
 /** Правило каталога — метаданные для страницы. */
@@ -47,6 +61,7 @@ export interface QualityRule {
   Severity: QualitySeverity;
   Money: boolean;
   Status: 'active' | 'draft';
+  EntityType: QualityEntityType;
   Summary: string;
   SQL: string;
 }
@@ -74,6 +89,18 @@ export async function fetchTenderQuality(
   const res = await apiFetch<{ data: QualityReport }>(
     `/api/v1/tenders/${tenderId}/quality${qs}`,
     { timeoutMs: 60_000 },
+  );
+  return res.data;
+}
+
+/**
+ * «Проверка завершена»: правила прогоняются заново, и всё, что найдено сейчас,
+ * считается просмотренным. Дальше новыми будут только находки, появившиеся после.
+ */
+export async function markQualityCheckpoint(tenderId: string): Promise<QualityReport> {
+  const res = await apiFetch<{ data: QualityReport }>(
+    `/api/v1/tenders/${tenderId}/quality/checkpoint`,
+    { method: 'POST', timeoutMs: 60_000 },
   );
   return res.data;
 }

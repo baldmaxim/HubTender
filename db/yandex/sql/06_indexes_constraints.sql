@@ -558,6 +558,69 @@ CREATE UNIQUE INDEX IF NOT EXISTS quality_acknowledgements_unique_idx
 CREATE INDEX IF NOT EXISTS quality_acknowledgements_tender_idx
     ON public.quality_acknowledgements (tender_id);
 
+-- ----- verification_runs / verification_findings / events -------------------
+-- Прогоны каталога правил и материализованное состояние находок. «Новое» —
+-- то, что появилось после отметки «Проверка завершена» (trigger_source='checkpoint').
+ALTER TABLE public.verification_runs
+    ADD CONSTRAINT verification_runs_pkey PRIMARY KEY (id);
+ALTER TABLE public.verification_runs
+    ADD CONSTRAINT verification_runs_trigger_check
+    CHECK (trigger_source IN ('checkpoint', 'view', 'api'));
+ALTER TABLE public.verification_runs
+    ADD CONSTRAINT verification_runs_tender_fkey
+    FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS verification_runs_tender_started_idx
+    ON public.verification_runs (tender_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS verification_runs_checkpoint_idx
+    ON public.verification_runs (tender_id, started_at DESC)
+    WHERE trigger_source = 'checkpoint';
+
+ALTER TABLE public.verification_findings
+    ADD CONSTRAINT verification_findings_pkey PRIMARY KEY (id);
+ALTER TABLE public.verification_findings
+    ADD CONSTRAINT verification_findings_source_check
+    CHECK (source IN ('rules'));
+ALTER TABLE public.verification_findings
+    ADD CONSTRAINT verification_findings_entity_type_check
+    CHECK (entity_type IN ('boq_item', 'client_position', 'material_name', 'tender'));
+ALTER TABLE public.verification_findings
+    ADD CONSTRAINT verification_findings_severity_check
+    CHECK (severity IN ('error', 'warning', 'info'));
+ALTER TABLE public.verification_findings
+    ADD CONSTRAINT verification_findings_tender_fkey
+    FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
+ALTER TABLE public.verification_findings
+    ADD CONSTRAINT verification_findings_first_run_fkey
+    FOREIGN KEY (first_seen_run_id) REFERENCES public.verification_runs(id) ON DELETE SET NULL;
+ALTER TABLE public.verification_findings
+    ADD CONSTRAINT verification_findings_last_run_fkey
+    FOREIGN KEY (last_seen_run_id) REFERENCES public.verification_runs(id) ON DELETE SET NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS verification_findings_unique_idx
+    ON public.verification_findings (tender_id, source, rule_code, entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS verification_findings_open_idx
+    ON public.verification_findings (tender_id, rule_code)
+    WHERE resolved_at IS NULL;
+CREATE INDEX IF NOT EXISTS verification_findings_position_idx
+    ON public.verification_findings (client_position_id)
+    WHERE client_position_id IS NOT NULL;
+
+ALTER TABLE public.verification_finding_events
+    ADD CONSTRAINT verification_finding_events_pkey PRIMARY KEY (id);
+ALTER TABLE public.verification_finding_events
+    ADD CONSTRAINT verification_finding_events_type_check
+    CHECK (event_type IN ('opened', 'reopened', 'resolved', 'accepted', 'error'));
+ALTER TABLE public.verification_finding_events
+    ADD CONSTRAINT verification_finding_events_source_check
+    CHECK (source IN ('system', 'ui', 'telegram', 'api'));
+ALTER TABLE public.verification_finding_events
+    ADD CONSTRAINT verification_finding_events_finding_fkey
+    FOREIGN KEY (finding_id) REFERENCES public.verification_findings(id) ON DELETE CASCADE;
+ALTER TABLE public.verification_finding_events
+    ADD CONSTRAINT verification_finding_events_run_fkey
+    FOREIGN KEY (run_id) REFERENCES public.verification_runs(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS verification_finding_events_finding_idx
+    ON public.verification_finding_events (finding_id, created_at DESC);
+
 -- ─── Машинный доступ к API ──────────────────────────────────────────────────
 ALTER TABLE public.api_keys
     ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);

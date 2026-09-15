@@ -8,7 +8,9 @@
 package quality
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"sort"
@@ -33,9 +35,20 @@ type Rule struct {
 	Severity string // error | warning | info
 	Money    bool   // считает ли правило денежный эффект
 	Status   string // active | draft (draft не выполняется)
-	Summary  string // текст «Суть» — показывается инженеру вместо LLM-объяснения
-	SQL      string // тело запроса; ровно один параметр $1 = tender_id
+	// EntityType — пространство id в колонке entity_id. В SQL-контракте типа нет,
+	// а без него находку нельзя ни привязать к строке, ни адресовать автору правки.
+	EntityType string // boq_item | client_position | material_name | tender
+	Summary    string // текст «Суть» — показывается инженеру вместо LLM-объяснения
+	SQL        string // тело запроса; ровно один параметр $1 = tender_id
 }
+
+// Допустимые значения Rule.EntityType.
+const (
+	EntityBoqItem        = "boq_item"
+	EntityClientPosition = "client_position"
+	EntityMaterialName   = "material_name"
+	EntityTender         = "tender"
+)
 
 var (
 	frontmatterRe = regexp.MustCompile(`(?s)\A---\r?\n(.*?)\r?\n---\r?\n`)
@@ -72,6 +85,18 @@ func Active() []Rule {
 		}
 	}
 	return out
+}
+
+// CatalogHash — отпечаток набора активных правил (код, severity, тип сущности,
+// SQL). Пишется в каждый прогон: по нему видно, каким каталогом считали, и
+// сравнение находок двух прогонов с разными каталогами можно отличить от
+// изменения данных.
+func CatalogHash() string {
+	h := sha256.New()
+	for _, r := range Active() {
+		h.Write([]byte(r.Code + "\x00" + r.Severity + "\x00" + r.EntityType + "\x00" + r.SQL + "\x00"))
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // ByCode находит правило по коду.
@@ -146,6 +171,8 @@ func parseRule(src string) (Rule, error) {
 			r.Severity = val
 		case "status":
 			r.Status = val
+		case "entity_type":
+			r.EntityType = val
 		case "money":
 			r.Money = val == "yes" || val == "true"
 		}
@@ -171,6 +198,9 @@ func (r Rule) validate() error {
 		return fmt.Errorf("severity %q: допустимы error, warning, info", r.Severity)
 	case r.Status != "active" && r.Status != "draft":
 		return fmt.Errorf("status %q: допустимы active, draft", r.Status)
+	case r.EntityType != EntityBoqItem && r.EntityType != EntityClientPosition &&
+		r.EntityType != EntityMaterialName && r.EntityType != EntityTender:
+		return fmt.Errorf("entity_type %q: допустимы boq_item, client_position, material_name, tender", r.EntityType)
 	}
 
 	// Черновик не выполняется, поэтому SQL для него не обязателен.

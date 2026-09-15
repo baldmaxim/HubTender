@@ -5,6 +5,7 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 import { useQualityReport } from './hooks/useQualityReport';
 import { FindingsTable } from './components/FindingsTable';
 import { ProposalReadinessCard } from './components/ProposalReadinessCard';
+import { CheckpointBar } from './components/CheckpointBar';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -27,6 +28,10 @@ const DataQuality: React.FC = () => {
     loading,
     showAccepted,
     setShowAccepted,
+    showOnlyNew,
+    setShowOnlyNew,
+    checkpointing,
+    markCheckpoint,
     recheck,
     submitVerdict,
     submitGroupVerdict,
@@ -103,6 +108,16 @@ const DataQuality: React.FC = () => {
               </Space>
             </Card>
 
+            <CheckpointBar
+              report={report}
+              newCount={counts.new}
+              showOnlyNew={showOnlyNew}
+              onShowOnlyNewChange={setShowOnlyNew}
+              checkpointing={checkpointing}
+              onCheckpoint={() => void markCheckpoint()}
+              isPhone={isPhone}
+            />
+
             <ProposalReadinessCard
               findings={report.findings}
               rules={rules}
@@ -122,9 +137,11 @@ const DataQuality: React.FC = () => {
               <Card>
                 <Empty
                   description={
-                    showAccepted
-                      ? 'Находок нет'
-                      : 'Активных находок нет — возможно, все отмечены как норма'
+                    showOnlyNew
+                      ? 'Новых находок с последней отметки проверки нет'
+                      : showAccepted
+                        ? 'Находок нет'
+                        : 'Активных находок нет — возможно, все отмечены как норма'
                   }
                 />
               </Card>

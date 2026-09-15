@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/su10/hubtender/backend/internal/quality"
@@ -19,15 +20,26 @@ type Finding struct {
 	TenderID       string   `json:"tender_id"`
 	PositionNumber *float64 `json:"position_number"`
 	ItemNo         *string  `json:"item_no"`
-	EntityID       string   `json:"entity_id"`
-	Fingerprint    string   `json:"fingerprint"`
-	Detail         string   `json:"detail"`
-	MoneyDelta     *float64 `json:"money_delta"`
+	// EntityType — пространство id в EntityID (из фронтматтера правила):
+	// boq_item | client_position | material_name | tender.
+	EntityType  string   `json:"entity_type"`
+	EntityID    string   `json:"entity_id"`
+	Fingerprint string   `json:"fingerprint"`
+	Detail      string   `json:"detail"`
+	MoneyDelta  *float64 `json:"money_delta"`
 
 	// Вердикт инженера, если он есть И отпечаток совпадает. Разошёлся отпечаток —
 	// данные изменились, вердикт больше не действует и находка снова активна.
 	Verdict *string `json:"verdict"`
 	Note    *string `json:"note"`
+
+	// История находки из verification_findings. Пусты, если прогон не удалось
+	// сохранить (например, миграция ещё не применена).
+	FindingID   *string    `json:"finding_id"`
+	FirstSeenAt *time.Time `json:"first_seen_at"`
+	// IsNew — находка появилась (или открылась заново) после последней отметки
+	// «Проверка завершена». Без такой отметки false у всех.
+	IsNew bool `json:"is_new"`
 }
 
 // RuleError — правило не отработало. Одно упавшее правило не должно ронять всю
@@ -43,6 +55,14 @@ type QualityReport struct {
 	GeneratedAt time.Time   `json:"generated_at"`
 	Findings    []Finding   `json:"findings"`
 	Errors      []RuleError `json:"errors"`
+
+	// RunID — сохранённый прогон; nil, если сохранить не удалось.
+	RunID *string `json:"run_id"`
+	// CheckpointAt — момент последней отметки «Проверка завершена», от которого
+	// считается новизна. nil — отметок ещё не было.
+	CheckpointAt *time.Time `json:"checkpoint_at"`
+	// HistoryAvailable — прогон сохранён, поля истории у находок заполнены.
+	HistoryAvailable bool `json:"history_available"`
 }
 
 type QualityRepo struct {
@@ -53,18 +73,26 @@ func NewQualityRepo(pool *pgxpool.Pool) *QualityRepo {
 	return &QualityRepo{pool: pool}
 }
 
+// rowQuerier — общий знаменатель пула и транзакции.
+type rowQuerier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
 type ackRow struct {
 	fingerprint string
 	verdict     string
 	note        *string
 }
 
-// Run выполняет все активные правила каталога по одному тендеру и накладывает
-// вердикты инженера.
-func (r *QualityRepo) Run(ctx context.Context, tenderID string) (*QualityReport, error) {
-	acks, err := r.loadAcks(ctx, tenderID)
+// runCatalogTx выполняет активные правила каталога в транзакции и накладывает
+// вердикты. Каждое правило — в своей точке сохранения: ошибка одного SQL иначе
+// переводит всю транзакцию в aborted, и следующие правила падали бы следом.
+// Возвращает отчёт и коды правил, отработавших без ошибок — только их находки
+// можно закрывать как исчезнувшие.
+func runCatalogTx(ctx context.Context, tx pgx.Tx, tenderID string) (*QualityReport, []string, error) {
+	acks, err := loadAcks(ctx, tx, tenderID)
 	if err != nil {
-		return nil, fmt.Errorf("qualityRepo.Run: вердикты: %w", err)
+		return nil, nil, fmt.Errorf("вердикты: %w", err)
 	}
 
 	report := &QualityReport{
@@ -73,15 +101,23 @@ func (r *QualityRepo) Run(ctx context.Context, tenderID string) (*QualityReport,
 		Findings:    make([]Finding, 0, 64),
 		Errors:      make([]RuleError, 0),
 	}
+	okRules := make([]string, 0, 32)
 
 	for _, rule := range quality.Active() {
-		found, runErr := r.runRule(ctx, rule, tenderID)
+		sp, spErr := tx.Begin(ctx)
+		if spErr != nil {
+			return nil, nil, fmt.Errorf("savepoint %s: %w", rule.Code, spErr)
+		}
+		found, runErr := runRule(ctx, sp, rule, tenderID)
 		if runErr != nil {
-			report.Errors = append(report.Errors, RuleError{
-				RuleCode: rule.Code,
-				Message:  runErr.Error(),
-			})
+			if rbErr := sp.Rollback(ctx); rbErr != nil {
+				return nil, nil, fmt.Errorf("rollback savepoint %s: %w", rule.Code, rbErr)
+			}
+			report.Errors = append(report.Errors, RuleError{RuleCode: rule.Code, Message: runErr.Error()})
 			continue
+		}
+		if cErr := sp.Commit(ctx); cErr != nil {
+			return nil, nil, fmt.Errorf("release savepoint %s: %w", rule.Code, cErr)
 		}
 		for i := range found {
 			if ack, ok := acks[ackKey(rule.Code, found[i].EntityID)]; ok &&
@@ -92,13 +128,14 @@ func (r *QualityRepo) Run(ctx context.Context, tenderID string) (*QualityReport,
 			}
 		}
 		report.Findings = append(report.Findings, found...)
+		okRules = append(okRules, rule.Code)
 	}
 
-	return report, nil
+	return report, okRules, nil
 }
 
-func (r *QualityRepo) runRule(ctx context.Context, rule quality.Rule, tenderID string) ([]Finding, error) {
-	rows, err := r.pool.Query(ctx, rule.SQL, tenderID)
+func runRule(ctx context.Context, q rowQuerier, rule quality.Rule, tenderID string) ([]Finding, error) {
+	rows, err := q.Query(ctx, rule.SQL, tenderID)
 	if err != nil {
 		return nil, err
 	}
@@ -107,10 +144,11 @@ func (r *QualityRepo) runRule(ctx context.Context, rule quality.Rule, tenderID s
 	out := make([]Finding, 0, 16)
 	for rows.Next() {
 		f := Finding{
-			RuleCode:  rule.Code,
-			RuleTitle: rule.Title,
-			Severity:  rule.Severity,
-			Summary:   rule.Summary,
+			RuleCode:   rule.Code,
+			RuleTitle:  rule.Title,
+			Severity:   rule.Severity,
+			Summary:    rule.Summary,
+			EntityType: rule.EntityType,
 		}
 		if scanErr := rows.Scan(
 			&f.TenderID, &f.PositionNumber, &f.ItemNo,
@@ -123,13 +161,13 @@ func (r *QualityRepo) runRule(ctx context.Context, rule quality.Rule, tenderID s
 	return out, rows.Err()
 }
 
-func (r *QualityRepo) loadAcks(ctx context.Context, tenderID string) (map[string]ackRow, error) {
-	const q = `
+func loadAcks(ctx context.Context, q rowQuerier, tenderID string) (map[string]ackRow, error) {
+	const sql = `
 		SELECT rule_code, entity_id::text, fingerprint, verdict, note
 		FROM public.quality_acknowledgements
 		WHERE tender_id = $1`
 
-	rows, err := r.pool.Query(ctx, q, tenderID)
+	rows, err := q.Query(ctx, sql, tenderID)
 	if err != nil {
 		return nil, err
 	}

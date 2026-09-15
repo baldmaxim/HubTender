@@ -4,6 +4,7 @@ title: У позиции есть строки, но не задано Коли�
 severity: warning
 money: no
 status: active
+entity_type: client_position
 ---
 ## Суть
 

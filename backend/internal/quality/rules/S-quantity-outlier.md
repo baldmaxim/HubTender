@@ -4,6 +4,7 @@ title: Количество материала в сотни раз превыш
 severity: warning
 money: no
 status: active
+entity_type: boq_item
 ---
 ## Суть
 

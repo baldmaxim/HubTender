@@ -4,6 +4,7 @@ title: Один и тот же материал заведён в позиции
 severity: warning
 money: yes
 status: active
+entity_type: boq_item
 ---
 ## Суть
 

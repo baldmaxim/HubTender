@@ -4,6 +4,7 @@ title: Количество ГП в точности равно количест
 severity: warning
 money: no
 status: draft
+entity_type: client_position
 ---
 ## Суть
 

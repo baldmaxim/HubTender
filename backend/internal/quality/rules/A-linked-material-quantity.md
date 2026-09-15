@@ -4,6 +4,7 @@ title: Количество привязанного материала не в�
 severity: error
 money: yes
 status: active
+entity_type: boq_item
 ---
 ## Суть
 

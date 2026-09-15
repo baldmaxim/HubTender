@@ -4,6 +4,7 @@ title: В позиции материалы привязаны частично
 severity: warning
 money: no
 status: active
+entity_type: client_position
 ---
 ## Суть
 

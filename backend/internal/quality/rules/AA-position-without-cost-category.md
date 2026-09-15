@@ -4,6 +4,7 @@ title: В позиции ни у одной строки нет категори
 severity: warning
 money: yes
 status: draft
+entity_type: client_position
 ---
 ## Суть
 

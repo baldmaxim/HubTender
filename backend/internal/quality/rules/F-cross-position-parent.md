@@ -4,6 +4,7 @@ title: Материал привязан к работе из другой по�
 severity: error
 money: no
 status: active
+entity_type: boq_item
 ---
 ## Суть
 

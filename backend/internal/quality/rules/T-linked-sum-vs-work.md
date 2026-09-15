@@ -4,6 +4,7 @@ title: Сумма привязанных материалов не сходит�
 severity: warning
 money: yes
 status: draft
+entity_type: boq_item
 ---
 ## Суть
 

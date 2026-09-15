@@ -4,6 +4,7 @@ title: Позиция расценена, но Количество ГП не з
 severity: error
 money: no
 status: draft
+entity_type: client_position
 ---
 ## Суть
 

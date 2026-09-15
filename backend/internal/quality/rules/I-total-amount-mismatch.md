@@ -4,6 +4,7 @@ title: Итоговая сумма строки не совпадает с пе�
 severity: error
 money: yes
 status: active
+entity_type: boq_item
 ---
 ## Суть
 

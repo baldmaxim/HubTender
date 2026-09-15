@@ -10,12 +10,13 @@ import (
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/quality"
 	"github.com/su10/hubtender/backend/internal/repository"
+	"github.com/su10/hubtender/backend/internal/services"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
 
 // qualityServicer is the interface QualityHandler depends on.
 type qualityServicer interface {
-	Report(ctx context.Context, tenderID string, refresh bool) (*repository.QualityReport, error)
+	Report(ctx context.Context, tenderID string, opts services.ReportOptions) (*repository.QualityReport, error)
 	SetVerdict(ctx context.Context, tenderID, ruleCode, entityID, fingerprint, verdict string,
 		note *string, changedBy *string) error
 	SetVerdicts(ctx context.Context, tenderID string, in []repository.VerdictInput,
@@ -54,11 +55,45 @@ func (h *QualityHandler) GetReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	refresh := r.URL.Query().Get("refresh") == "1"
+	opts := services.ReportOptions{
+		Refresh: r.URL.Query().Get("refresh") == "1",
+		Trigger: repository.RunTriggerView,
+	}
+	if u := middleware.UserFromContext(r.Context()); u != nil {
+		opts.UserID = &u.ID
+	}
 
-	rep, err := h.svc.Report(r.Context(), tenderID, refresh)
+	rep, err := h.svc.Report(r.Context(), tenderID, opts)
 	if err != nil {
 		apierr.InternalFromErr(w, r, err, "quality report failed", "tender_id", tenderID)
+		return
+	}
+
+	renderJSON(w, r, http.StatusOK, qualityEnvelope{Data: rep})
+}
+
+// PostCheckpoint handles POST /api/v1/tenders/:id/quality/checkpoint — «Проверка
+// завершена». Правила прогоняются заново, и этот прогон становится точкой, от
+// которой считается новизна: всё, что есть сейчас, считается просмотренным.
+func (h *QualityHandler) PostCheckpoint(w http.ResponseWriter, r *http.Request) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	tenderID := chi.URLParam(r, "id")
+	if tenderID == "" {
+		apierr.BadRequest("missing tender id").Render(w)
+		return
+	}
+
+	rep, err := h.svc.Report(r.Context(), tenderID, services.ReportOptions{
+		Refresh: true,
+		Trigger: repository.RunTriggerCheckpoint,
+		UserID:  &authUser.ID,
+	})
+	if err != nil {
+		apierr.InternalFromErr(w, r, err, "quality checkpoint failed", "tender_id", tenderID)
 		return
 	}
 

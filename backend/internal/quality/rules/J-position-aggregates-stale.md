@@ -4,6 +4,7 @@ title: Агрегаты позиции не совпадают с суммой �
 severity: error
 money: yes
 status: active
+entity_type: client_position
 ---
 ## Суть
 

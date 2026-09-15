@@ -4,6 +4,7 @@ title: Один материал закуплен в тендере по сил�
 severity: warning
 money: no
 status: active
+entity_type: material_name
 ---
 ## Суть
 

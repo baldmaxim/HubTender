@@ -874,6 +874,60 @@ CREATE TABLE IF NOT EXISTS public.quality_acknowledgements (
     updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
+-- Конвейер проверки: прогоны каталога правил и материализованное состояние находок
+-- (см. db/yandex/incremental/2026_09_verification_findings.sql).
+CREATE TABLE IF NOT EXISTS public.verification_runs (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tender_id uuid NOT NULL,
+    trigger_source text NOT NULL,
+    input_revision bigint NOT NULL DEFAULT 0,
+    catalog_hash text NOT NULL,
+    rules_executed integer NOT NULL DEFAULT 0,
+    rule_errors jsonb NOT NULL DEFAULT '[]'::jsonb,
+    findings_total integer NOT NULL DEFAULT 0,
+    opened_count integer NOT NULL DEFAULT 0,
+    reopened_count integer NOT NULL DEFAULT 0,
+    resolved_count integer NOT NULL DEFAULT 0,
+    started_at timestamp with time zone NOT NULL,
+    finished_at timestamp with time zone NOT NULL DEFAULT now(),
+    duration_ms integer NOT NULL DEFAULT 0,
+    triggered_by uuid
+);
+CREATE TABLE IF NOT EXISTS public.verification_findings (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tender_id uuid NOT NULL,
+    source text NOT NULL DEFAULT 'rules',
+    rule_code text NOT NULL,
+    entity_type text NOT NULL,
+    entity_id uuid NOT NULL,
+    client_position_id uuid,
+    position_number numeric,
+    item_no text,
+    severity text NOT NULL,
+    detail text NOT NULL,
+    money_delta numeric,
+    fingerprint text NOT NULL,
+    first_seen_run_id uuid,
+    last_seen_run_id uuid,
+    first_seen_at timestamp with time zone NOT NULL DEFAULT now(),
+    last_seen_at timestamp with time zone NOT NULL DEFAULT now(),
+    resolved_at timestamp with time zone,
+    reopen_count integer NOT NULL DEFAULT 0,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS public.verification_finding_events (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    finding_id uuid NOT NULL,
+    event_type text NOT NULL,
+    fingerprint text,
+    run_id uuid,
+    actor_user_id uuid,
+    source text NOT NULL DEFAULT 'system',
+    note text,
+    created_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
 -- Машинный доступ к API (страница «Настройки → Доступ к API»).
 -- Секрет ключа в БД не хранится: только SHA-256 хеш и префикс для опознания.
 CREATE TABLE IF NOT EXISTS public.api_keys (

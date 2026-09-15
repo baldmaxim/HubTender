@@ -4,6 +4,7 @@ title: Коэффициент перевода не согласуется с е
 severity: warning
 money: no
 status: active
+entity_type: boq_item
 ---
 ## Суть
 

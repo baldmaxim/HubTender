@@ -5,21 +5,26 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/su10/hubtender/backend/internal/cache"
 	"github.com/su10/hubtender/backend/internal/repository"
 )
 
 // qualityRepoer is the interface QualityService depends on.
 type qualityRepoer interface {
-	Run(ctx context.Context, tenderID string) (*repository.QualityReport, error)
+	RunAndPersist(ctx context.Context, tenderID, trigger string, triggeredBy *string) (*repository.QualityReport, error, error)
 	SetVerdict(ctx context.Context, tenderID, ruleCode, entityID, fingerprint, verdict string,
 		note *string, changedBy *string) error
 	SetVerdicts(ctx context.Context, tenderID string, in []repository.VerdictInput,
 		changedBy *string) error
+	RecordVerdictEvents(ctx context.Context, tenderID string, in []repository.VerdictInput,
+		actor *string) error
 	Export(ctx context.Context) ([]repository.ExportRow, error)
 }
 
-// QualityService прогоняет каталог правил по тендеру и кэширует результат.
+// QualityService прогоняет каталог правил по тендеру, сохраняет состояние находок
+// и кэширует результат.
 //
 // Прогон читает весь набор строк тендера, поэтому на крупных тендерах он не бесплатен.
 // Кэш снимает повторную нагрузку при обычной навигации; кнопка «Перепроверить» и любая
@@ -37,11 +42,29 @@ func NewQualityService(repo *repository.QualityRepo, c *cache.InMem) *QualitySer
 
 func qualityCacheKey(tenderID string) string { return "quality:" + tenderID }
 
-// Report возвращает находки по тендеру. refresh=true обходит кэш.
-func (s *QualityService) Report(ctx context.Context, tenderID string, refresh bool) (*repository.QualityReport, error) {
+// ReportOptions — параметры запроса находок.
+type ReportOptions struct {
+	// Refresh обходит кэш — «Перепроверить» и автообновление по realtime.
+	Refresh bool
+	// Trigger — источник прогона (repository.RunTrigger*). Пусто = view.
+	Trigger string
+	// UserID — кто запросил; пишется в прогон.
+	UserID *string
+}
+
+// Report возвращает находки по тендеру.
+//
+// Отметка «Проверка завершена» (Trigger = checkpoint) всегда прогоняет правила
+// заново: иначе базовая точка новизны встала бы на устаревший кэшированный
+// результат.
+func (s *QualityService) Report(ctx context.Context, tenderID string, opts ReportOptions) (*repository.QualityReport, error) {
+	trigger := opts.Trigger
+	if trigger == "" {
+		trigger = repository.RunTriggerView
+	}
 	key := qualityCacheKey(tenderID)
 
-	if !refresh && s.cache != nil {
+	if !opts.Refresh && trigger != repository.RunTriggerCheckpoint && s.cache != nil {
 		if v, ok := s.cache.Get(key); ok {
 			if rep, cast := v.(*repository.QualityReport); cast {
 				return rep, nil
@@ -49,9 +72,18 @@ func (s *QualityService) Report(ctx context.Context, tenderID string, refresh bo
 		}
 	}
 
-	rep, err := s.repo.Run(ctx, tenderID)
+	rep, persistErr, err := s.repo.RunAndPersist(ctx, tenderID, trigger, opts.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("qualityService.Report: %w", err)
+	}
+	if persistErr != nil {
+		// Находки отдаём без истории: страница работает и без неё, а причина видна
+		// в логах (обычно — не применена миграция verification_findings).
+		log.Warn().Err(persistErr).Str("tender_id", tenderID).Str("trigger", trigger).
+			Msg("quality: прогон не сохранён, находки отданы без истории")
+		if trigger == repository.RunTriggerCheckpoint {
+			return nil, fmt.Errorf("qualityService.Report: отметка проверки не сохранена: %w", persistErr)
+		}
 	}
 	if s.cache != nil {
 		s.cache.Set(key, rep, s.ttl)
@@ -78,6 +110,9 @@ func (s *QualityService) SetVerdict(
 		return err
 	}
 	s.Invalidate(tenderID)
+	s.recordVerdictEvents(ctx, tenderID, []repository.VerdictInput{{
+		RuleCode: ruleCode, EntityID: entityID, Fingerprint: fingerprint, Verdict: verdict, Note: note,
+	}}, changedBy)
 	return nil
 }
 
@@ -93,7 +128,22 @@ func (s *QualityService) SetVerdicts(
 		return err
 	}
 	s.Invalidate(tenderID)
+	s.recordVerdictEvents(ctx, tenderID, in, changedBy)
 	return nil
+}
+
+// recordVerdictEvents — история вердиктов, по возможности. Сам вердикт уже
+// сохранён; сбой истории не должен превращать успешное действие в ошибку.
+func (s *QualityService) recordVerdictEvents(
+	ctx context.Context,
+	tenderID string,
+	in []repository.VerdictInput,
+	actor *string,
+) {
+	if err := s.repo.RecordVerdictEvents(ctx, tenderID, in, actor); err != nil {
+		log.Warn().Err(err).Str("tender_id", tenderID).Int("count", len(in)).
+			Msg("quality: вердикт сохранён, но в историю находок не записан")
+	}
 }
 
 // Export отдаёт вердикты по всей базе — вход для замера точности правил.

@@ -63,14 +63,16 @@ func TestSeverityIsKnown(t *testing.T) {
 func TestParseRuleRejectsBrokenInput(t *testing.T) {
 	cases := map[string]string{
 		"без фронтматтера": "## Суть\nтекст\n",
-		"нет SQL":          "---\ncode: X\ntitle: T\nseverity: error\nstatus: active\n---\n## Суть\nтекст\n",
-		"SQL без $1": "---\ncode: X\ntitle: T\nseverity: error\nstatus: active\n---\n" +
+		"нет SQL":          "---\ncode: X\ntitle: T\nseverity: error\nstatus: active\nentity_type: boq_item\n---\n## Суть\nтекст\n",
+		"SQL без $1": "---\ncode: X\ntitle: T\nseverity: error\nstatus: active\nentity_type: boq_item\n---\n" +
 			"## SQL\n```sql\nSELECT tender_id, position_number, item_no, entity_id," +
 			" fingerprint, detail, money_delta FROM t\n```\n",
-		"нет колонки money_delta": "---\ncode: X\ntitle: T\nseverity: error\nstatus: active\n---\n" +
+		"нет колонки money_delta": "---\ncode: X\ntitle: T\nseverity: error\nstatus: active\nentity_type: boq_item\n---\n" +
 			"## SQL\n```sql\nSELECT tender_id, position_number, item_no, entity_id," +
 			" fingerprint, detail FROM t WHERE tender_id = $1\n```\n",
-		"плохой severity": "---\ncode: X\ntitle: T\nseverity: critical\nstatus: active\n---\n",
+		"нет entity_type":    "---\ncode: X\ntitle: T\nseverity: error\nstatus: draft\n---\n",
+		"плохой entity_type": "---\ncode: X\ntitle: T\nseverity: error\nstatus: draft\nentity_type: row\n---\n",
+		"плохой severity":    "---\ncode: X\ntitle: T\nseverity: critical\nstatus: active\nentity_type: boq_item\n---\n",
 	}
 	for name, src := range cases {
 		if _, err := parseRule(src); err == nil {
@@ -81,12 +83,30 @@ func TestParseRuleRejectsBrokenInput(t *testing.T) {
 
 // Черновик не выполняется, поэтому SQL для него не обязателен.
 func TestDraftRuleNeedsNoSQL(t *testing.T) {
-	src := "---\ncode: Z\ntitle: Черновик\nseverity: warning\nstatus: draft\n---\n## Суть\nидея\n"
+	src := "---\ncode: Z\ntitle: Черновик\nseverity: warning\nstatus: draft\nentity_type: boq_item\n---\n## Суть\nидея\n"
 	r, err := parseRule(src)
 	if err != nil {
 		t.Fatalf("черновик без SQL должен разбираться: %v", err)
 	}
 	if r.Status != "draft" {
 		t.Errorf("status = %q, ожидался draft", r.Status)
+	}
+}
+
+// Тип сущности задаёт, куда ведёт находка и кому она адресуется. Позиционные
+// правила обязаны указывать на client_positions — на этом построены переход к
+// строке и группировка по разделам.
+func TestEntityTypeMatchesEntitySource(t *testing.T) {
+	for _, r := range All() {
+		if r.SQL == "" {
+			continue
+		}
+		pos := strings.Contains(r.SQL, "cp.id AS entity_id")
+		if pos && r.EntityType != EntityClientPosition {
+			t.Errorf("%s: entity_id берётся из client_positions, а entity_type = %q", r.Code, r.EntityType)
+		}
+		if !pos && r.EntityType == EntityClientPosition && !strings.Contains(r.SQL, "l.id AS entity_id") {
+			t.Errorf("%s: entity_type = client_position, но entity_id не из позиции", r.Code)
+		}
 	}
 }

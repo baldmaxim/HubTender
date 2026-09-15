@@ -87,6 +87,7 @@ export const FindingsTable: React.FC<Props> = ({ findings, isPhone, onVerdict })
                   <PositionCell f={f} />
                 </Tag>
                 {f.money_delta !== null && <Tag color="volcano">{money(f.money_delta)}</Tag>}
+                {f.is_new && <Tag color="magenta">новое</Tag>}
                 {f.verdict === 'accepted' && <Tag color="green">принято</Tag>}
                 {f.verdict === 'error' && <Tag color="red">ошибка</Tag>}
               </Space>
@@ -109,7 +110,12 @@ export const FindingsTable: React.FC<Props> = ({ findings, isPhone, onVerdict })
       title: '№ позиции',
       key: 'position',
       width: 130,
-      render: (_, f) => <PositionCell f={f} />,
+      render: (_, f) => (
+        <Space direction="vertical" size={2}>
+          <PositionCell f={f} />
+          {f.is_new && <Tag color="magenta">новое</Tag>}
+        </Space>
+      ),
     },
     {
       title: 'Что не так',

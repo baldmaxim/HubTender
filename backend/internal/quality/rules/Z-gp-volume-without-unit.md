@@ -4,6 +4,7 @@ title: Количество ГП задано, а единица измерен�
 severity: warning
 money: no
 status: draft
+entity_type: client_position
 ---
 ## Суть
 
