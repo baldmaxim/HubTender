@@ -272,7 +272,7 @@ func TestVerificationSectionsIntegration_FindingCounts(t *testing.T) {
 	if err != nil || perr != nil {
 		t.Fatalf("прогон: %v / %v", err, perr)
 	}
-	res, err := repo.Load(ctx, tid, []string{"H"})
+	res, err := repo.Load(ctx, tid, []string{"U"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,22 +280,22 @@ func TestVerificationSectionsIntegration_FindingCounts(t *testing.T) {
 		t.Fatal("счётчики находок недоступны")
 	}
 	s2 := sectionByKey(res, "h:"+f.h5)
-	if s2.OpenWarnings != 1 {
-		t.Fatalf("у «Фасадов» ожидалась 1 находка H, получено %d", s2.OpenWarnings)
+	if s2.OpenErrors != 1 {
+		t.Fatalf("у «Фасадов» ожидалась 1 находка U, получено %d", s2.OpenErrors)
 	}
 
-	h := findFinding(rep, "H", f.l6)
-	if h == nil {
-		t.Fatal("нет находки H по позиции 2.1")
+	u := findFinding(rep, "U", f.l6)
+	if u == nil {
+		t.Fatal("нет находки U по позиции 2.1")
 	}
-	if err := quality.SetVerdict(ctx, tid, "H", f.l6, h.Fingerprint, "accepted", nil, nil); err != nil {
+	if err := quality.SetVerdict(ctx, tid, "U", f.l6, u.Fingerprint, "accepted", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	res, err = repo.Load(ctx, tid, []string{"H"})
+	res, err = repo.Load(ctx, tid, []string{"U"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := sectionByKey(res, "h:"+f.h5).OpenWarnings; got != 0 {
+	if got := sectionByKey(res, "h:"+f.h5).OpenErrors; got != 0 {
 		t.Fatalf("принятая находка всё ещё считается: %d", got)
 	}
 }

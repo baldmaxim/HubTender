@@ -40,7 +40,7 @@ func newVRFixture(t *testing.T, pool *pgxpool.Pool) *vrFixture {
 
 	f.p1 = vrPosition(t, pool, f.tenderID, 1, 0)
 	f.p2 = vrPosition(t, pool, f.tenderID, 2, 5)
-	vrRow(t, pool, f, f.p1, 1, 1000)     // правило H: строки есть, Кол-во ГП = 0
+	vrRow(t, pool, f, f.p1, 1, 1000)     // правило U: расценена, Кол-во ГП = 0
 	f.r2 = vrRow(t, pool, f, f.p2, 2, 0) // правило Q: нулевая цена
 	return f
 }
@@ -115,13 +115,13 @@ func TestVerificationRunIntegration_Lifecycle(t *testing.T) {
 
 	// 1. Первый прогон: находки сохранены, отметки проверки нет — новых нет.
 	rep := vrRun(t, repo, f.tenderID, RunTriggerView)
-	h1 := findFinding(rep, "H", f.p1)
+	h1 := findFinding(rep, "U", f.p1)
 	q2 := findFinding(rep, "Q", f.r2)
 	if h1 == nil || q2 == nil {
-		t.Fatalf("ожидались находки H(p1) и Q(r2), получено %d находок", len(rep.Findings))
+		t.Fatalf("ожидались находки U(p1) и Q(r2), получено %d находок", len(rep.Findings))
 	}
 	if h1.FindingID == nil || h1.FirstSeenAt == nil || h1.EntityType != "client_position" {
-		t.Fatalf("H(p1) без истории или с неверным типом: %+v", h1)
+		t.Fatalf("U(p1) без истории или с неверным типом: %+v", h1)
 	}
 	if q2.EntityType != "boq_item" {
 		t.Fatalf("Q(r2) entity_type = %q", q2.EntityType)
@@ -139,7 +139,7 @@ func TestVerificationRunIntegration_Lifecycle(t *testing.T) {
 
 	// 2. Повтор без изменений идемпотентен: те же id, событий не добавилось.
 	rep = vrRun(t, repo, f.tenderID, RunTriggerView)
-	if got := findFinding(rep, "H", f.p1); got == nil || *got.FindingID != hID {
+	if got := findFinding(rep, "U", f.p1); got == nil || *got.FindingID != hID {
 		t.Fatal("повторный прогон сменил id находки")
 	}
 	var opened, reopened, resolved int
@@ -151,7 +151,7 @@ func TestVerificationRunIntegration_Lifecycle(t *testing.T) {
 		t.Fatalf("прогон без изменений дал переходы: %d/%d/%d", opened, reopened, resolved)
 	}
 	if n := eventCount(t, pool, hID, "opened"); n != 1 {
-		t.Fatalf("opened у H(p1) = %d, ожидалось 1", n)
+		t.Fatalf("opened у U(p1) = %d, ожидалось 1", n)
 	}
 
 	// 3. Отметка «Проверка завершена»: всё текущее — просмотрено.
@@ -177,24 +177,24 @@ func TestVerificationRunIntegration_Lifecycle(t *testing.T) {
 	vrRow(t, pool, f, p3, 1, 500)
 
 	rep = vrRun(t, repo, f.tenderID, RunTriggerView)
-	if findFinding(rep, "H", f.p1) != nil {
-		t.Fatal("H(p1) не ушла после проставления ГП")
+	if findFinding(rep, "U", f.p1) != nil {
+		t.Fatal("U(p1) не ушла после проставления ГП")
 	}
 	q2 = findFinding(rep, "Q", f.r2)
 	if q2 == nil || !q2.IsNew || *q2.FindingID != qID {
 		t.Fatalf("Q(r2) со сменой отпечатка должна быть новой и с прежним id: %+v", q2)
 	}
-	if h3 := findFinding(rep, "H", p3); h3 == nil || !h3.IsNew {
-		t.Fatalf("H(p3) должна быть новой: %+v", h3)
+	if h3 := findFinding(rep, "U", p3); h3 == nil || !h3.IsNew {
+		t.Fatalf("U(p3) должна быть новой: %+v", h3)
 	}
 
 	var resolvedAt *string
 	if err := pool.QueryRow(ctx, `SELECT resolved_at::text FROM public.verification_findings WHERE id = $1`,
 		hID).Scan(&resolvedAt); err != nil || resolvedAt == nil {
-		t.Fatalf("H(p1) не закрыта в таблице: %v", err)
+		t.Fatalf("U(p1) не закрыта в таблице: %v", err)
 	}
 	if eventCount(t, pool, hID, "resolved") != 1 || eventCount(t, pool, qID, "reopened") != 1 {
-		t.Fatal("ожидались события resolved у H(p1) и reopened у Q(r2)")
+		t.Fatal("ожидались события resolved у U(p1) и reopened у Q(r2)")
 	}
 
 	// 5. Проблема вернулась: закрытая находка открывается заново и снова новая.
@@ -202,9 +202,9 @@ func TestVerificationRunIntegration_Lifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	rep = vrRun(t, repo, f.tenderID, RunTriggerView)
-	h1 = findFinding(rep, "H", f.p1)
+	h1 = findFinding(rep, "U", f.p1)
 	if h1 == nil || !h1.IsNew || *h1.FindingID != hID {
-		t.Fatalf("вернувшаяся H(p1) должна открыться заново с прежним id: %+v", h1)
+		t.Fatalf("вернувшаяся U(p1) должна открыться заново с прежним id: %+v", h1)
 	}
 	var reopenCount int
 	if err := pool.QueryRow(ctx, `SELECT reopen_count FROM public.verification_findings WHERE id = $1`,
@@ -292,7 +292,7 @@ func TestVerificationRunIntegration_WithoutMigrationStillReports(t *testing.T) {
 	if rep.HistoryAvailable || rep.RunID != nil {
 		t.Fatal("без таблиц история не может быть доступна")
 	}
-	h := findFinding(rep, "H", f.p1)
+	h := findFinding(rep, "U", f.p1)
 	if h == nil || h.FindingID != nil || h.IsNew {
 		t.Fatalf("находка должна прийти без полей истории: %+v", h)
 	}

@@ -1,12 +1,16 @@
 ---
 code: H
-title: У позиции есть строки, но не задано Количество ГП
+title: В позиции есть строки без денег, и не задано Количество ГП
 severity: warning
 money: no
 status: active
 entity_type: client_position
 ---
 ## Суть
+
+С 2026-09-15 правило сужено до позиций, где строки есть, но их сумма нулевая: расценённые
+позиции без Кол-ва ГП ловит правило **U** (error). Вместе H и U покрывают прежнее
+пространство без пересечения.
 
 В позицию уже занесены работы и материалы, а её собственное «Количество ГП»
 (`manual_volume`) осталось нулевым или пустым.
@@ -35,6 +39,7 @@ JOIN public.boq_items b ON b.client_position_id = cp.id
 WHERE cp.tender_id = $1
   AND COALESCE(cp.manual_volume, 0) = 0
 GROUP BY cp.tender_id, cp.position_number, cp.item_no, cp.id, cp.manual_volume, cp.volume
+HAVING COALESCE(SUM(b.total_amount), 0) = 0
 ORDER BY cp.position_number
 ```
 
@@ -45,4 +50,9 @@ ORDER BY cp.position_number
 
 ## Замер (2026-07-24)
 
-929 позиций в 35 тендерах.
+929 позиций в 35 тендерах — до сужения.
+
+## Замер (2026-09-15)
+
+База 104 тендера. До сужения — 1 289 позиций в 52 тендерах; из них 1 203 расценены и
+перешли в правило U. После сужения остаётся **86** позиций.

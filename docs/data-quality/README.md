@@ -183,13 +183,29 @@ entity_type: boq_item | client_position | material_name | tender
 | [L](../../backend/internal/quality/rules/L-delivery-sum-zero.md) | Доставка «суммой» при сумме 0 | error | 34 |
 | [N](../../backend/internal/quality/rules/N-no-cost-category.md) | Строка без категории затрат | info | 43 |
 | [B](../../backend/internal/quality/rules/B-mixed-binding.md) | В позиции и привязанные, и непривязанные материалы | warning | 1 543 |
-| [H](../../backend/internal/quality/rules/H-position-zero-gp.md) | Позиция со строками при Кол-ве ГП = 0 | warning | 929 |
+| [H](../../backend/internal/quality/rules/H-position-zero-gp.md) | Позиция со строками без денег при Кол-ве ГП = 0 (сужено 2026-09-15) | warning | 86 (2026-09-15) |
 | [Q](../../backend/internal/quality/rules/Q-zero-unit-rate.md) | Нулевая цена за единицу | warning | 5 468 |
 | [R](../../backend/internal/quality/rules/R-work-qty-one.md) | Работа кол-во = 1 при объёме позиции > 10 | warning | 1 874 |
 | [M](../../backend/internal/quality/rules/M-conversion-extreme.md) | Коэфф. перевода не согласуется с единицей работы | warning | 158 |
 | [G](../../backend/internal/quality/rules/G-duplicate-materials.md) | Дубли материала в позиции | warning | 9 192 |
 | [S](../../backend/internal/quality/rules/S-quantity-outlier.md) | ГП материала > 100× объёма позиции при той же единице | warning | 104 |
 | [P](../../backend/internal/quality/rules/P-price-divergence.md) | Один материал по ценам, различающимся > 2× | warning | 757 |
+
+### Правила конвейера проверки (включены 2026-09-15)
+
+Заведены под ручные шаги проверки расчёта и включены после замера на базе 104 тендера,
+105 143 позиции, 278 267 строк. SQL каждого проверен и на синтетической фикстуре, и на
+проде; разбор порогов — в разделах «Замер» файлов правил.
+
+| Код | Правило | Severity | Находок (2026-09-15) |
+|---|---|---|--:|
+| [U](../../backend/internal/quality/rules/U-position-priced-no-gp.md) | Позиция расценена, но Кол-во ГП не задано | error | 1 203 в 52 тендерах |
+| [V](../../backend/internal/quality/rules/V-empty-position-no-reason.md) | Не расценена и без обоснования в разделе, расценённом хотя бы наполовину | warning | 1 207 в 72 тендерах |
+| [Y](../../backend/internal/quality/rules/Y-gp-volume-order-mismatch.md) | Кол-во ГП расходится с заказчиком более чем в 10 раз (без объёмов «1») | warning | 251 в 37 тендерах |
+| [AA](../../backend/internal/quality/rules/AA-position-without-cost-category.md) | В позиции ни у одной строки нет категории затрат | warning | 8 в 2 тендерах, 232 708 ₽ |
+
+H и U включены одновременно: вместе они покрывают прежнее пространство H без
+пересечения.
 
 ### Выключенные правила (`status: draft`)
 
@@ -200,32 +216,13 @@ entity_type: boq_item | client_position | material_name | tender
 |---|---|---|
 | [T](../../backend/internal/quality/rules/T-linked-sum-vs-work.md) | Σ привязанных материалов ≠ кол-ву работы | Посылка неверна: под одной работой законно стоит комплект разных материалов, каждый равен количеству работы. 97.6% находок — комплекты, точность после сужения 6%. Нужна семантика наименований |
 
-### Черновики конвейера проверки (ждут замера)
+### Черновики конвейера проверки (замер снят, не включены)
 
-Заведены под ручные шаги проверки расчёта: «количество ГП во всех расценённых
-строках», «обоснование во всех пустых строках», «нерасценённые строки, которые
-упустили». Не выполняются, пока не снят замер на проде.
-
-SQL каждого проверен на схеме из `db/yandex/sql/` и на синтетической фикстуре:
-правило срабатывает ровно на целевой позиции и молчит на соседних, специально
-сконструированных как отрицательный случай. Это не заменяет замер — он показывает
-объём находок и точность, которых на фикстуре не видно.
-
-| Код | Правило | Severity | Что закрывает |
-|---|---|---|---|
-| [U](../../backend/internal/quality/rules/U-position-priced-no-gp.md) | Позиция расценена, но Кол-во ГП не задано | error | ГП во всех расценённых строках |
-| [V](../../backend/internal/quality/rules/V-empty-position-no-reason.md) | Конечная позиция не расценена и без обоснования | error | обоснование во всех пустых строках |
-| [W](../../backend/internal/quality/rules/W-unpriced-in-priced-section.md) | Нерасценённая позиция внутри расценённого раздела | warning | строки, которые упустили |
-| [X](../../backend/internal/quality/rules/X-gp-equals-client-volume.md) | Кол-во ГП в точности равно количеству заказчика | warning | объём не пересчитывали |
-| [Y](../../backend/internal/quality/rules/Y-gp-volume-order-mismatch.md) | Кол-во ГП расходится с заказчиком более чем в 10 раз | warning | опечатка на порядок |
-| [Z](../../backend/internal/quality/rules/Z-gp-volume-without-unit.md) | Кол-во ГП задано, единица измерения пуста | warning | удельные показатели неинтерпретируемы |
-| [AA](../../backend/internal/quality/rules/AA-position-without-cost-category.md) | В позиции ни у одной строки нет категории затрат | warning | позиция невидима в разрезе затрат |
-
-**Порядок активации важен.** Правила **H** и **U** сейчас пересекаются: H ловит
-любую позицию со строками при нулевом ГП, U — только ту, где уже есть деньги.
-Сужать H (`HAVING SUM(total_amount) = 0`) можно **только одновременно** с
-переводом U в `active`, иначе расценённые позиции без ГП на время выпадут из
-проверки вообще. Оба правила после этого перезамеряются.
+| Код | Правило | Находок (2026-09-15) | Почему не включено |
+|---|---|--:|---|
+| [W](../../backend/internal/quality/rules/W-unpriced-in-priced-section.md) | Нерасценённая позиция внутри расценённого раздела | 833 | смысл покрывает V, а W срабатывает и на позиции с обоснованием |
+| [X](../../backend/internal/quality/rules/X-gp-equals-client-volume.md) | Кол-во ГП в точности равно количеству заказчика | 37 943 | треть всех позиций: обычная практика, не признак ошибки |
+| [Z](../../backend/internal/quality/rules/Z-gp-volume-without-unit.md) | Кол-во ГП задано, единица измерения пуста | 5 228 | единица приходит пустой из файла ВОР — вопрос импорта |
 
 ### Стражи регресса
 
