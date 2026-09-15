@@ -184,6 +184,11 @@ func newRouter(
 		r.Post("/api/v1/tenders/{id}/quality/verdict", d.qualityH.PostVerdict)
 		r.Post("/api/v1/tenders/{id}/quality/verdicts", d.qualityH.PostVerdicts)
 		r.Post("/api/v1/tenders/{id}/quality/checkpoint", d.qualityH.PostCheckpoint)
+
+		// Конвейер проверки: готовность по разделам ВОР.
+		r.Get("/api/v1/tenders/{id}/verification/sections", d.verifSectionsH.GetSections)
+		r.Post("/api/v1/tenders/{id}/verification/sections/mark", d.verifSectionsH.PostMark)
+		r.Post("/api/v1/tenders/{id}/verification/sections/unmark", d.verifSectionsH.PostUnmark)
 		r.Get("/api/v1/quality/rules", d.qualityH.GetRules)
 		r.Get("/api/v1/quality/export", d.qualityH.GetExport)
 		r.Post("/api/v1/construction-cost-volumes", d.ccvH.Upsert)

@@ -927,6 +927,31 @@ CREATE TABLE IF NOT EXISTS public.verification_finding_events (
     note text,
     created_at timestamp with time zone NOT NULL DEFAULT now()
 );
+-- Отметки готовности по разделам ВОР (см. 2026_09_verification_sections.sql).
+CREATE TABLE IF NOT EXISTS public.verification_section_states (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tender_id uuid NOT NULL,
+    section_key text NOT NULL,
+    stage text NOT NULL,
+    content_hash text NOT NULL,
+    hash_version smallint NOT NULL DEFAULT 1,
+    note text,
+    marked_by uuid,
+    marked_at timestamp with time zone NOT NULL DEFAULT now(),
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS public.verification_section_events (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tender_id uuid NOT NULL,
+    section_key text NOT NULL,
+    stage text NOT NULL,
+    action text NOT NULL,
+    content_hash text,
+    note text,
+    actor_user_id uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now()
+);
 
 -- Машинный доступ к API (страница «Настройки → Доступ к API»).
 -- Секрет ключа в БД не хранится: только SHA-256 хеш и префикс для опознания.

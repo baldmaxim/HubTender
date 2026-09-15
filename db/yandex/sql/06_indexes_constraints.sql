@@ -621,6 +621,33 @@ ALTER TABLE public.verification_finding_events
 CREATE INDEX IF NOT EXISTS verification_finding_events_finding_idx
     ON public.verification_finding_events (finding_id, created_at DESC);
 
+-- ----- verification_section_states / events ---------------------------------
+-- Отметки «раздел расценён» / «раздел проверен» с хешем содержимого раздела.
+ALTER TABLE public.verification_section_states
+    ADD CONSTRAINT verification_section_states_pkey PRIMARY KEY (id);
+ALTER TABLE public.verification_section_states
+    ADD CONSTRAINT verification_section_states_stage_check
+    CHECK (stage IN ('pricing', 'review'));
+ALTER TABLE public.verification_section_states
+    ADD CONSTRAINT verification_section_states_tender_fkey
+    FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS verification_section_states_unique_idx
+    ON public.verification_section_states (tender_id, section_key, stage);
+
+ALTER TABLE public.verification_section_events
+    ADD CONSTRAINT verification_section_events_pkey PRIMARY KEY (id);
+ALTER TABLE public.verification_section_events
+    ADD CONSTRAINT verification_section_events_stage_check
+    CHECK (stage IN ('pricing', 'review'));
+ALTER TABLE public.verification_section_events
+    ADD CONSTRAINT verification_section_events_action_check
+    CHECK (action IN ('marked', 'unmarked'));
+ALTER TABLE public.verification_section_events
+    ADD CONSTRAINT verification_section_events_tender_fkey
+    FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS verification_section_events_tender_idx
+    ON public.verification_section_events (tender_id, section_key, created_at DESC);
+
 -- ─── Машинный доступ к API ──────────────────────────────────────────────────
 ALTER TABLE public.api_keys
     ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);

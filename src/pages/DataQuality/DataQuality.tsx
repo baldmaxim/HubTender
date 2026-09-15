@@ -6,6 +6,7 @@ import { useQualityReport } from './hooks/useQualityReport';
 import { FindingsTable } from './components/FindingsTable';
 import { ProposalReadinessCard } from './components/ProposalReadinessCard';
 import { CheckpointBar } from './components/CheckpointBar';
+import { SectionsPanel } from './components/SectionsPanel';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -77,6 +78,10 @@ const DataQuality: React.FC = () => {
             </Space>
           </Space>
         </Card>
+
+        {/* Разделы грузятся отдельно от находок и не пересоздаются, пока идёт
+            перепрогон правил, — иначе панель мигала бы на каждой правке тендера. */}
+        {selectedTenderId && <SectionsPanel tenderId={selectedTenderId} isPhone={isPhone} />}
 
         {loading && (
           <Card>

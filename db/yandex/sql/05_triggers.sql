@@ -270,3 +270,9 @@ DROP TRIGGER IF EXISTS verification_findings_updated_at ON public.verification_f
 CREATE TRIGGER verification_findings_updated_at
   BEFORE UPDATE ON public.verification_findings
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- ----- verification_section_states ------------------------------------------
+DROP TRIGGER IF EXISTS verification_section_states_updated_at ON public.verification_section_states;
+CREATE TRIGGER verification_section_states_updated_at
+  BEFORE UPDATE ON public.verification_section_states
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
