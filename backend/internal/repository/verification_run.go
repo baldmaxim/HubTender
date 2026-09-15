@@ -25,6 +25,8 @@ const (
 	RunTriggerView = "view"
 	// RunTriggerAPI — машинный ключ.
 	RunTriggerAPI = "api"
+	// RunTriggerAuto — фоновый прогон после успешного пересчёта тендера.
+	RunTriggerAuto = "auto"
 )
 
 // RunAndPersist прогоняет каталог правил по тендеру и сохраняет состояние
@@ -43,7 +45,9 @@ func (r *QualityRepo) RunAndPersist(
 	tenderID, trigger string,
 	triggeredBy *string,
 ) (*QualityReport, error, error) {
-	if trigger != RunTriggerCheckpoint && trigger != RunTriggerView && trigger != RunTriggerAPI {
+	switch trigger {
+	case RunTriggerCheckpoint, RunTriggerView, RunTriggerAPI, RunTriggerAuto:
+	default:
 		return nil, nil, fmt.Errorf("qualityRepo.RunAndPersist: неизвестный trigger %q", trigger)
 	}
 	started := time.Now()

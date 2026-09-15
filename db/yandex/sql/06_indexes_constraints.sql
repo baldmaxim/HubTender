@@ -565,7 +565,7 @@ ALTER TABLE public.verification_runs
     ADD CONSTRAINT verification_runs_pkey PRIMARY KEY (id);
 ALTER TABLE public.verification_runs
     ADD CONSTRAINT verification_runs_trigger_check
-    CHECK (trigger_source IN ('checkpoint', 'view', 'api'));
+    CHECK (trigger_source IN ('checkpoint', 'view', 'api', 'auto'));
 ALTER TABLE public.verification_runs
     ADD CONSTRAINT verification_runs_tender_fkey
     FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;

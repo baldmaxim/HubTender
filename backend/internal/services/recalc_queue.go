@@ -53,6 +53,8 @@ type RecalcQueue struct {
 	timers map[string]*time.Timer
 	closed bool
 	inval  TenderCacheInvalidator
+	after  Enqueuer
+	label  string
 
 	sem chan struct{}  // bounds concurrent recalcs
 	wg  sync.WaitGroup // tracks in-flight recalcs for graceful Close
@@ -72,7 +74,26 @@ func NewRecalcQueue(ctx context.Context, rec Recalculator, debounce time.Duratio
 		ctx:      ctx,
 		timers:   make(map[string]*time.Timer),
 		sem:      make(chan struct{}, maxConcurrent),
+		label:    "commercial recalc",
 	}
+}
+
+// SetLabel — имя работы в логах. Очередь переиспользуется не только для
+// пересчёта (например, фоновый прогон проверки данных).
+func (q *RecalcQueue) SetLabel(label string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.label = label
+}
+
+// SetAfterSuccess ставит следующую работу в цепочку: после успешного выполнения
+// тендер уходит в next. Фоновый прогон проверки данных идёт строго после
+// пересчёта, а не параллельно ему: правила I и J сравнивают хранимые итоги с
+// пересчётом, и прогон посреди окна пересчёта дал бы ложные находки.
+func (q *RecalcQueue) SetAfterSuccess(next Enqueuer) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.after = next
 }
 
 // SetInvalidator привязывает сброс производных кэшей тендера. Необязателен:
@@ -136,12 +157,19 @@ func (q *RecalcQueue) fire(tenderID string) {
 		if q.ctx.Err() != nil {
 			return
 		}
-		if err := q.rec.RecalcTender(q.ctx, tenderID); err != nil {
-			q.logger.Error().Err(err).Str("tender_id", tenderID).Msg("commercial recalc failed")
+		err := q.rec.RecalcTender(q.ctx, tenderID)
+		q.mu.Lock()
+		label, after := q.label, q.after
+		q.mu.Unlock()
+		if err != nil {
+			q.logger.Error().Err(err).Str("tender_id", tenderID).Msg(label + " failed")
 		}
 		// Пересчёт переписал производные суммы — сбрасываем кэш и после него, а не
 		// только на входе: правила I и J сравнивают хранимые итоги с пересчётом.
 		q.invalidate(tenderID)
+		if err == nil && after != nil && q.ctx.Err() == nil {
+			after.Enqueue(tenderID)
+		}
 	}()
 }
 

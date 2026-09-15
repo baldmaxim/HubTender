@@ -28,6 +28,8 @@ import (
 type deps struct {
 	recalcQueue    *services.RecalcQueue
 	recalcRecovery *services.FinancialCalculationRecoveryService
+	verifQueue     *services.RecalcQueue
+	verifRetention *services.VerificationRetentionService
 	recalcHealthH  *handlers.RecalcHealthHandler
 
 	healthH        *handlers.HealthHandler
@@ -192,6 +194,18 @@ func buildDeps(
 	// только при сохранении вердикта. Привязываем его к очереди пересчёта: она
 	// уже дёргается со всех финансовых путей записи.
 	recalcQueue.SetInvalidator(qualitySvc)
+	// Фоновый прогон проверки данных — после каждого успешного пересчёта. Дебаунс
+	// минута: серия правок инженера схлопывается в один прогон (~5 с на тендер).
+	verifQueue := services.NewRecalcQueue(rootCtx, services.NewVerificationRunner(qualitySvc), time.Minute, 1, logger)
+	verifQueue.SetLabel("verification run")
+	if os.Getenv("VERIFICATION_AUTO_RUN_ENABLED") != "false" {
+		recalcQueue.SetAfterSuccess(verifQueue)
+	}
+	verifRetentionCfg := services.DefaultVerificationRetentionConfig()
+	if os.Getenv("VERIFICATION_RETENTION_ENABLED") == "false" {
+		verifRetentionCfg.Enabled = false
+	}
+	verifRetention := services.NewVerificationRetentionService(qualityRepo, verifRetentionCfg, logger)
 	boqSvc := services.NewBoqService(boqRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	bulkBoqSvc := services.NewBulkBoqService(bulkBoqRepo, inMemCache)
 	importBoqSvc := services.NewImportBoqService(importBoqRepo, inMemCache).WithRecalcQueue(recalcQueue)
@@ -385,6 +399,8 @@ func buildDeps(
 	return &deps{
 		recalcQueue:    recalcQueue,
 		recalcRecovery: recalcRecovery,
+		verifQueue:     verifQueue,
+		verifRetention: verifRetention,
 		recalcHealthH:  handlers.NewRecalcHealthHandler(recalcRecovery),
 
 		healthH:           handlers.NewHealthHandler(pool, inMemCache),

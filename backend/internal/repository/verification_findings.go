@@ -75,7 +75,7 @@ up AS (
 	    last_seen_at = now(),
 	    resolved_at = NULL
 	RETURNING f.id, f.rule_code, f.entity_type, f.entity_id::text, f.first_seen_at,
-	          f.fingerprint, (f.first_seen_run_id = $2::uuid) AS changed, (xmax = 0) AS inserted
+	          f.fingerprint, COALESCE(f.first_seen_run_id = $2::uuid, false) AS changed, (xmax = 0) AS inserted
 ),
 ev AS (
 	INSERT INTO public.verification_finding_events (finding_id, event_type, fingerprint, run_id)

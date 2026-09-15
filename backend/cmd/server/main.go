@@ -194,6 +194,7 @@ func main() {
 	// Этап 2.4 (§2): recovery потерянных enqueue / зависших calculating —
 	// один скан сразу после успешного startup, затем периодически.
 	go d.recalcRecovery.Run(rootCtx)
+	go d.verifRetention.Run(rootCtx)
 
 	// Wait for OS signal or server error.
 	quit := make(chan os.Signal, 1)
@@ -223,6 +224,7 @@ func main() {
 	// Step 3a. Stop the recalc queue: drop pending debounce timers and wait for
 	// any in-flight recalc to finish before the DB pool is closed.
 	d.recalcQueue.Close()
+	d.verifQueue.Close()
 
 	// Step 4. Graceful HTTP shutdown — wait up to 15 s for in-flight requests.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
