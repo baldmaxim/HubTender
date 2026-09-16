@@ -131,6 +131,23 @@ func TestVerificationRunIntegration_Lifecycle(t *testing.T) {
 	}
 	hID, qID := *h1.FindingID, *q2.FindingID
 
+	// Находка правила, которого нет в активном каталоге (выключили или заменили),
+	// закрывается следующим прогоном, а не висит открытой навсегда.
+	var retiredID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO public.verification_findings
+			(tender_id, rule_code, entity_type, entity_id, severity, detail, fingerprint)
+		VALUES ($1::uuid, 'ZZ-retired', 'client_position', $2::uuid, 'warning', 'itest', 'fp')
+		RETURNING id::text`, f.tenderID, f.p1).Scan(&retiredID); err != nil {
+		t.Fatalf("retired finding: %v", err)
+	}
+	vrRun(t, repo, f.tenderID, RunTriggerView)
+	var retiredResolved bool
+	if err := pool.QueryRow(ctx, `SELECT resolved_at IS NOT NULL FROM public.verification_findings WHERE id = $1`,
+		retiredID).Scan(&retiredResolved); err != nil || !retiredResolved {
+		t.Fatalf("находка выключенного правила не закрыта: %v %v", retiredResolved, err)
+	}
+
 	var cpID *string
 	if err := pool.QueryRow(ctx, `SELECT client_position_id::text FROM public.verification_findings WHERE id = $1`,
 		qID).Scan(&cpID); err != nil || cpID == nil || *cpID != f.p2 {

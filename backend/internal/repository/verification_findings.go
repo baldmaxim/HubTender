@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/su10/hubtender/backend/internal/quality"
 )
 
 // findingBatch — находки прогона в колоночном виде для unnest.
@@ -145,7 +147,9 @@ func upsertFindings(
 
 // resolveMissing закрывает находки, которые правило в этом прогоне не выдало.
 // Только для правил, отработавших без ошибки: упавшее правило ничего не
-// выдало не потому, что проблем нет.
+// выдало не потому, что проблем нет. Находки правил, выключенных или удалённых из
+// каталога, закрываются тоже — иначе они висят открытыми навсегда (так было с G и Q
+// после замены на GA и QA).
 func resolveMissing(ctx context.Context, tx pgx.Tx, tenderID, runID string, okRules []string) (int, error) {
 	if len(okRules) == 0 {
 		return 0, nil
@@ -156,7 +160,7 @@ func resolveMissing(ctx context.Context, tx pgx.Tx, tenderID, runID string, okRu
 			UPDATE public.verification_findings
 			SET resolved_at = now()
 			WHERE tender_id = $1 AND source = 'rules' AND resolved_at IS NULL
-			  AND rule_code = ANY($3::text[])
+			  AND (rule_code = ANY($3::text[]) OR NOT rule_code = ANY($4::text[]))
 			  AND last_seen_run_id IS DISTINCT FROM $2::uuid
 			RETURNING id, fingerprint
 		),
@@ -165,11 +169,20 @@ func resolveMissing(ctx context.Context, tx pgx.Tx, tenderID, runID string, okRu
 			SELECT id, 'resolved', fingerprint, $2::uuid FROM res
 		)
 		SELECT count(*) FROM res`,
-		tenderID, runID, okRules,
+		tenderID, runID, okRules, activeRuleCodes(),
 	).Scan(&resolved); err != nil {
 		return 0, fmt.Errorf("verification_findings resolve: %w", err)
 	}
 	return resolved, nil
+}
+
+func activeRuleCodes() []string {
+	active := quality.Active()
+	codes := make([]string, len(active))
+	for i, r := range active {
+		codes[i] = r.Code
+	}
+	return codes
 }
 
 // RecordVerdictEvents дописывает вердикты в историю находок. Сохранённой

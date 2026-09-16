@@ -244,11 +244,11 @@ entity_type: boq_item | client_position | material_name | tender
 | [A](../../backend/internal/quality/rules/A-linked-material-quantity.md) | Привязанный материал ≠ работа×перевод×расход (без ровных декад — их берёт AB) | error | 526; 1 851 в 75 тендерах (2026-09-16) |
 | [L](../../backend/internal/quality/rules/L-delivery-sum-zero.md) | Доставка «суммой» при сумме 0 | error | 34 |
 | [N](../../backend/internal/quality/rules/N-no-cost-category.md) | Строка без категории затрат | info | 43 |
-| [B](../../backend/internal/quality/rules/B-mixed-binding.md) | В позиции и привязанные, и непривязанные материалы | warning | 1 543 |
+| [B](../../backend/internal/quality/rules/B-mixed-binding.md) | В позиции и привязанные, и непривязанные материалы той же единицы | warning | 1 543; 1 066 в 77 тендерах (2026-09-16) |
 | [H](../../backend/internal/quality/rules/H-position-zero-gp.md) | Позиция со строками без денег при Кол-ве ГП = 0 (сужено 2026-09-15) | warning | 86 (2026-09-15) |
 | [R](../../backend/internal/quality/rules/R-work-qty-one.md) | Работа кол-во = 1 при объёме позиции > 10 | warning | 1 874 |
 | [M](../../backend/internal/quality/rules/M-conversion-extreme.md) | Коэфф. перевода не согласуется с единицей работы | warning | 158 |
-| [S](../../backend/internal/quality/rules/S-quantity-outlier.md) | ГП материала > 100× объёма позиции при той же единице | warning | 104 |
+| [S](../../backend/internal/quality/rules/S-quantity-outlier.md) | ГП материала > 100× объёма позиции при той же единице (счётные единицы — > 1000×) | warning | 104; 87 в 18 тендерах (2026-09-16) |
 | [P](../../backend/internal/quality/rules/P-price-divergence.md) | Один материал по ценам, различающимся > 2× | warning | 757 |
 
 ### Правила конвейера проверки (включены 2026-09-15)
@@ -277,7 +277,7 @@ H и U включены одновременно: вместе они покры
 |---|---|---|--:|---|
 | [AB](../../backend/internal/quality/rules/AB-linked-qty-decade.md) | Привязанный материал отличается от формулы ровно в 10/100/1000 раз (±1%, без ГП = 1) | error | 30 в 5 тендерах, 182 млн ₽ | часть A |
 | [YD](../../backend/internal/quality/rules/YD-gp-exact-decade.md) | Кол-во ГП отличается от заказчика ровно в 10/100/1000 раз (±2%) | error | 26 в 8 тендерах | часть Y |
-| [GA](../../backend/internal/quality/rules/GA-duplicate-same-binding.md) | Дубль материала при той же работе, категории затрат и цене | warning | 2 000 в 84 тендерах | G (11 886) |
+| [GA](../../backend/internal/quality/rules/GA-duplicate-same-binding.md) | Дубль материала при той же работе, категории затрат, цене и коэффициентах | warning | 1 350 в 52 тендерах | G (11 886) |
 | [QA](../../backend/internal/quality/rules/QA-zero-rate-standalone.md) | Нулевая цена, кроме работ-носителей и позиций с обоснованием | warning | 433 в 31 тендере | Q (7 017) |
 
 Вердикты по A и Y переносятся на AB и YD миграцией
