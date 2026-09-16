@@ -136,6 +136,27 @@ func newRouter(
 			Patch("/api/v1/items/{id}", d.boqWH.UpdateBoqItem)
 		r.With(middleware.RequireAPIKeyScopeResolved(apikey.ScopeTendersWrite, d.tenderOfPosition)).
 			Post("/api/v1/positions/{id}/recompute-totals", d.positionWH.RecomputePositionTotals)
+
+		// Проверка данных по ключу (конвейер проверки, этап 6). Хендлеры общие с
+		// UI; человек с JWT проходит гейт без ограничений. Маршруты сняты с
+		// JWT-группы — у chi побеждает поздняя регистрация.
+		readV := middleware.RequireAPIKeyScope(apikey.ScopeVerificationRead, "id")
+		writeV := middleware.RequireAPIKeyScope(apikey.ScopeVerificationWrite, "id")
+		r.With(readV).Get("/api/v1/tenders/{id}/quality", d.qualityH.GetReport)
+		r.With(middleware.RequireAPIKeyScope(apikey.ScopeVerificationRead, "")).
+			Get("/api/v1/quality/rules", d.qualityH.GetRules)
+		r.With(readV).Get("/api/v1/tenders/{id}/verification/sections", d.verifSectionsH.GetSections)
+		r.With(readV).Get("/api/v1/tenders/{id}/cost-benchmarks", d.costBenchmarkH.GetReport)
+		r.With(middleware.RequireAPIKeyScope(apikey.ScopeVerificationRead, "")).
+			Get("/api/v1/benchmark-ranges", d.costBenchmarkH.GetRanges)
+		r.With(readV).Get("/api/v1/tenders/{id}/brief", d.costBenchmarkH.GetBrief)
+
+		r.With(writeV).Post("/api/v1/tenders/{id}/quality/verdict", d.qualityH.PostVerdict)
+		r.With(writeV).Post("/api/v1/tenders/{id}/quality/verdicts", d.qualityH.PostVerdicts)
+		r.With(writeV).Post("/api/v1/tenders/{id}/quality/checkpoint", d.qualityH.PostCheckpoint)
+		r.With(writeV).Post("/api/v1/tenders/{id}/verification/sections/mark", d.verifSectionsH.PostMark)
+		r.With(writeV).Post("/api/v1/tenders/{id}/verification/sections/unmark", d.verifSectionsH.PostUnmark)
+		r.With(writeV).Put("/api/v1/tenders/{id}/brief", d.costBenchmarkH.PutBrief)
 	})
 
 	r.Group(func(r chi.Router) {
@@ -182,34 +203,18 @@ func newRouter(
 		r.Get("/api/v1/positions/{id}/with-tender", d.positionH.GetPositionWithTender)
 		r.Get("/api/v1/tenders/{id}/construction-cost-volumes", d.ccvH.ListByTender)
 
-		// Проверка данных: находки правил, вердикт инженера, выгрузка для замера.
-		r.Get("/api/v1/tenders/{id}/quality", d.qualityH.GetReport)
-		r.Post("/api/v1/tenders/{id}/quality/verdict", d.qualityH.PostVerdict)
-		r.Post("/api/v1/tenders/{id}/quality/verdicts", d.qualityH.PostVerdicts)
-		r.Post("/api/v1/tenders/{id}/quality/checkpoint", d.qualityH.PostCheckpoint)
+		// Проверка данных: чтение, вердикты, разделы, эталоны и выжимка — в
+		// машинной группе выше (области verification:*). Здесь остаётся то, что
+		// ключу не открывается: рассылка в Telegram, правка справочника эталонов
+		// (роли BenchmarkRangeEditorRoles) и выгрузка вердиктов по всей базе.
 		r.Post("/api/v1/tenders/{id}/verification/dispatch/preview", d.telegramH.PostPreview)
 		r.Post("/api/v1/tenders/{id}/verification/dispatch", d.telegramH.PostDispatch)
-
-		// Конвейер проверки: готовность по разделам ВОР.
-		r.Get("/api/v1/tenders/{id}/verification/sections", d.verifSectionsH.GetSections)
-		r.Post("/api/v1/tenders/{id}/verification/sections/mark", d.verifSectionsH.PostMark)
-		r.Post("/api/v1/tenders/{id}/verification/sections/unmark", d.verifSectionsH.PostUnmark)
-
-		// Конвейер проверки: эталоны удельных показателей. Справочник диапазонов
-		// видят все, правят — только роли из BenchmarkRangeEditorRoles.
-		r.Get("/api/v1/tenders/{id}/cost-benchmarks", d.costBenchmarkH.GetReport)
-		r.Get("/api/v1/benchmark-ranges", d.costBenchmarkH.GetRanges)
-		// Выжимка для руководства на «Финансовых показателях»: текст и выбор
-		// категорий; цифры считаются из расчёта.
-		r.Get("/api/v1/tenders/{id}/brief", d.costBenchmarkH.GetBrief)
-		r.Put("/api/v1/tenders/{id}/brief", d.costBenchmarkH.PutBrief)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireRoles(handlers.BenchmarkRangeEditorRoles))
 			r.Post("/api/v1/benchmark-ranges", d.costBenchmarkH.PostRange)
 			r.Put("/api/v1/benchmark-ranges/{rangeId}", d.costBenchmarkH.PutRange)
 			r.Delete("/api/v1/benchmark-ranges/{rangeId}", d.costBenchmarkH.DeleteRange)
 		})
-		r.Get("/api/v1/quality/rules", d.qualityH.GetRules)
 		r.Get("/api/v1/quality/export", d.qualityH.GetExport)
 		r.Post("/api/v1/construction-cost-volumes", d.ccvH.Upsert)
 

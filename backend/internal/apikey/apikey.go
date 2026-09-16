@@ -40,10 +40,21 @@ const (
 	// обновление работ/материалов, пересчёт итогов позиции. Ограничение ключа
 	// по списку тендеров действует и здесь.
 	ScopeTendersWrite = "tenders:write"
+	// ScopeVerificationRead — чтение «Проверки данных»: находки правил и их
+	// каталог, готовность разделов ВОР, сравнение с эталонами, выжимка для
+	// руководства. Только чтение.
+	ScopeVerificationRead = "verification:read"
+	// ScopeVerificationWrite — действия проверяющего: вердикт по находке,
+	// отметка «Проверка завершена», отметка раздела, текст выжимки. Рассылка
+	// в Telegram и справочник эталонов ключу не открываются.
+	ScopeVerificationWrite = "verification:write"
 )
 
 // KnownScopes — все допустимые области.
-var KnownScopes = []string{ScopeArchiveRead, ScopeArchiveWrite, ScopeTendersRead, ScopeTendersWrite}
+var KnownScopes = []string{
+	ScopeArchiveRead, ScopeArchiveWrite, ScopeTendersRead, ScopeTendersWrite,
+	ScopeVerificationRead, ScopeVerificationWrite,
+}
 
 func isKnownScope(s string) bool {
 	for _, k := range KnownScopes {

@@ -5,7 +5,13 @@
 
 import { apiFetch } from './client';
 
-export type ApiKeyScope = 'archive:read' | 'archive:write' | 'tenders:read' | 'tenders:write';
+export type ApiKeyScope =
+  | 'archive:read'
+  | 'archive:write'
+  | 'tenders:read'
+  | 'tenders:write'
+  | 'verification:read'
+  | 'verification:write';
 export type ApiKeyStatus = 'active' | 'revoked' | 'expired';
 
 export interface ApiKey {

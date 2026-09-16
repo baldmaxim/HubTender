@@ -746,7 +746,8 @@ ALTER TABLE public.api_keys
 ALTER TABLE public.api_keys
     ADD CONSTRAINT api_keys_scopes_chk
     CHECK (cardinality(scopes) > 0
-           AND scopes <@ ARRAY['archive:read', 'archive:write', 'tenders:read', 'tenders:write']::text[]);
+           AND scopes <@ ARRAY['archive:read', 'archive:write', 'tenders:read', 'tenders:write',
+                               'verification:read', 'verification:write']::text[]);
 ALTER TABLE public.api_keys
     ADD CONSTRAINT api_keys_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 ALTER TABLE public.api_keys

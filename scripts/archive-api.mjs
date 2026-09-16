@@ -18,6 +18,16 @@
  *   node scripts/archive-api.mjs estimate <tender_id> [--position=<position_id>]
  *   node scripts/archive-api.mjs suggest "кладка стен" "монтаж дверей"
  *   node scripts/archive-api.mjs compose ./compose.json --dry-run
+ *
+ * Проверка данных (области verification:read / verification:write):
+ *   node scripts/archive-api.mjs quality <tender_id> [--new] [--open] [--rule=U,V] [--full]
+ *   node scripts/archive-api.mjs rules
+ *   node scripts/archive-api.mjs sections <tender_id>
+ *   node scripts/archive-api.mjs benchmarks <tender_id> [--period=24]
+ *   node scripts/archive-api.mjs brief <tender_id>
+ *   node scripts/archive-api.mjs verdicts <tender_id> ./verdicts.json
+ *   node scripts/archive-api.mjs checkpoint <tender_id>
+ *   node scripts/archive-api.mjs brief-set <tender_id> ./brief.txt
  */
 
 const BASE = process.env.TENDERHUB_API_URL ?? 'https://tender.su10.ru';
@@ -197,6 +207,103 @@ switch (command) {
     break;
   }
 
+  case 'quality': {
+    // Находки правил «Проверки данных». По умолчанию — компактно: без текста
+    // «Суть» у каждой находки (он одинаков в группе — смотрите `rules`).
+    // Нужны вердикты — берите rule_code, entity_id и fingerprint отсюда.
+    const tenderId = positional[0];
+    if (!tenderId) throw new Error('Укажите id тендера');
+    const params = new URLSearchParams();
+    if (flags.get('new') === 'true') params.set('only_new', '1');
+    if (flags.get('open') === 'true') params.set('open_only', '1');
+    if (flags.get('rule')) params.set('rule', flags.get('rule'));
+    if (flags.get('refresh') === 'true') params.set('refresh', '1');
+    const qs = params.toString();
+    const rep = await call('GET', `/api/v1/tenders/${tenderId}/quality${qs ? `?${qs}` : ''}`);
+    if (flags.get('full') !== 'true') {
+      rep.findings = rep.findings.map((f) => ({
+        rule_code: f.rule_code, severity: f.severity, position_number: f.position_number, item_no: f.item_no,
+        entity_type: f.entity_type, entity_id: f.entity_id, fingerprint: f.fingerprint, detail: f.detail,
+        money_delta: f.money_delta, verdict: f.verdict, note: f.note, is_new: f.is_new,
+      }));
+    }
+    console.log(JSON.stringify(rep, null, 2));
+    break;
+  }
+
+  case 'rules': {
+    // Каталог правил: код, заголовок, severity, статус и «Суть».
+    const rules = await call('GET', '/api/v1/quality/rules');
+    console.log(JSON.stringify(rules.map((r) => ({
+      code: r.Code, title: r.Title, severity: r.Severity, status: r.Status, entity_type: r.EntityType, summary: r.Summary,
+    })), null, 2));
+    break;
+  }
+
+  case 'sections': {
+    // Готовность по разделам ВОР: расценено, открытые ошибки, отметка «проверено».
+    const tenderId = positional[0];
+    if (!tenderId) throw new Error('Укажите id тендера');
+    console.log(JSON.stringify(await call('GET', `/api/v1/tenders/${tenderId}/verification/sections`), null, 2));
+    break;
+  }
+
+  case 'benchmarks': {
+    // ₽ за единицу объёма и ₽/м² СП против эталонов по классу жилья.
+    const tenderId = positional[0];
+    if (!tenderId) throw new Error('Укажите id тендера');
+    const period = flags.get('period') ?? '24';
+    console.log(JSON.stringify(
+      await call('GET', `/api/v1/tenders/${tenderId}/cost-benchmarks?period_months=${encodeURIComponent(period)}`),
+      null, 2,
+    ));
+    break;
+  }
+
+  case 'brief': {
+    const tenderId = positional[0];
+    if (!tenderId) throw new Error('Укажите id тендера');
+    console.log(JSON.stringify(await call('GET', `/api/v1/tenders/${tenderId}/brief`), null, 2));
+    break;
+  }
+
+  case 'verdicts': {
+    // Пачка вердиктов из JSON-файла: [{rule_code, entity_id, fingerprint, verdict: accepted|error, note?}].
+    // Область verification:write; вердикт пишется от имени владельца ключа.
+    const [tenderId, file] = positional;
+    if (!tenderId || !file) throw new Error('Укажите id тендера и JSON-файл с вердиктами');
+    const { readFile } = await import('node:fs/promises');
+    const items = JSON.parse(await readFile(file, 'utf8'));
+    if (!Array.isArray(items) || items.length === 0) throw new Error('Файл должен содержать непустой массив');
+    await call('POST', `/api/v1/tenders/${tenderId}/quality/verdicts`, { items });
+    console.log(`Сохранено вердиктов: ${items.length}`);
+    break;
+  }
+
+  case 'checkpoint': {
+    // «Проверка завершена»: всё найденное сейчас — просмотрено, новыми дальше
+    // станут только появившиеся после. Сдвигает точку и для людей в интерфейсе.
+    const tenderId = positional[0];
+    if (!tenderId) throw new Error('Укажите id тендера');
+    const rep = await call('POST', `/api/v1/tenders/${tenderId}/quality/checkpoint`);
+    console.log(JSON.stringify({ run_id: rep.run_id, checkpoint_at: rep.checkpoint_at, findings: rep.findings.length }, null, 2));
+    break;
+  }
+
+  case 'brief-set': {
+    // Текст выжимки для руководства из файла. Выбор категорий не трогается.
+    const [tenderId, file] = positional;
+    if (!tenderId || !file) throw new Error('Укажите id тендера и текстовый файл');
+    const { readFile } = await import('node:fs/promises');
+    const current = await call('GET', `/api/v1/tenders/${tenderId}/brief`);
+    const text = await readFile(file, 'utf8');
+    const saved = await call('PUT', `/api/v1/tenders/${tenderId}/brief`, {
+      summary_text: text, fact_category_ids: current.fact_category_ids,
+    });
+    console.log(JSON.stringify({ updated_at: saved.updated_at, length: saved.summary_text.length }, null, 2));
+    break;
+  }
+
   case 'spec': {
     const res = await request('GET', '/api/v1/archive/openapi.yaml');
     console.log(await res.text());
@@ -205,6 +312,7 @@ switch (command) {
 
   default:
     console.error(`Команды: search | position | suggest | compose | tenders | tender | positions | costs | estimate | spec
+          quality | rules | sections | benchmarks | brief | verdicts | checkpoint | brief-set
   node scripts/archive-api.mjs search "устройство стяжки" --unit=м2 --limit=5
   node scripts/archive-api.mjs position <uuid>
   node scripts/archive-api.mjs tenders --search=ЖК --archived=false   # список тендеров (tenders:read)
@@ -215,6 +323,14 @@ switch (command) {
   node scripts/archive-api.mjs estimate x --position=<position_id>    # строки одной позиции
   node scripts/archive-api.mjs suggest "кладка стен" "монтаж дверей"
   node scripts/archive-api.mjs compose ./compose.json            # проба (dry_run)
-  node scripts/archive-api.mjs compose ./compose.json --no-dry-run --verbose`);
+  node scripts/archive-api.mjs compose ./compose.json --no-dry-run --verbose
+  node scripts/archive-api.mjs quality <tender_id> --new --open         # находки проверки (verification:read)
+  node scripts/archive-api.mjs rules                                   # каталог правил
+  node scripts/archive-api.mjs sections <tender_id>                    # готовность разделов
+  node scripts/archive-api.mjs benchmarks <tender_id> --period=24      # сравнение с эталонами
+  node scripts/archive-api.mjs brief <tender_id>                       # выжимка для руководства
+  node scripts/archive-api.mjs verdicts <tender_id> ./verdicts.json    # вердикты (verification:write)
+  node scripts/archive-api.mjs checkpoint <tender_id>                  # «Проверка завершена»
+  node scripts/archive-api.mjs brief-set <tender_id> ./brief.txt       # записать текст выжимки`);
     process.exit(2);
 }

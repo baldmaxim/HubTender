@@ -28,6 +28,8 @@ const SCOPE_LABEL: Record<string, string> = {
   'archive:write': 'Сборка смет',
   'tenders:read': 'Чтение тендеров и смет',
   'tenders:write': 'Запись строк тендера',
+  'verification:read': 'Чтение проверки данных',
+  'verification:write': 'Действия проверяющего',
 };
 
 export const ApiKeysSection: FC<IApiKeysSectionProps> = ({

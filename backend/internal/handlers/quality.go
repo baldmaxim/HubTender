@@ -19,6 +19,8 @@ type qualityServicer interface {
 	Report(ctx context.Context, tenderID string, opts services.ReportOptions) (*repository.QualityReport, error)
 	SetVerdict(ctx context.Context, tenderID, ruleCode, entityID, fingerprint, verdict string,
 		note *string, changedBy *string) error
+	SetVerdictFrom(ctx context.Context, source, tenderID, ruleCode, entityID, fingerprint, verdict string,
+		note *string, changedBy *string) error
 	SetVerdicts(ctx context.Context, tenderID string, in []repository.VerdictInput,
 		changedBy *string) error
 	Export(ctx context.Context) ([]repository.ExportRow, error)
@@ -46,8 +48,28 @@ type exportEnvelope struct {
 	Data []repository.ExportRow `json:"data"`
 }
 
+// verdictSource — откуда вердикт для истории находки: ключ или интерфейс.
+func verdictSource(r *http.Request) string {
+	if middleware.APIKeyFromContext(r.Context()) != nil {
+		return "api"
+	}
+	return "ui"
+}
+
+// runTrigger — источник прогона: машинный ключ пишется отдельно от просмотра
+// страницы, чтобы в истории было видно, кто гонял проверку.
+func runTrigger(r *http.Request, human string) string {
+	if middleware.APIKeyFromContext(r.Context()) != nil && human == repository.RunTriggerView {
+		return repository.RunTriggerAPI
+	}
+	return human
+}
+
 // GetReport handles GET /api/v1/tenders/:id/quality.
-// Query params: refresh=1 обходит кэш.
+// Query params: refresh=1 обходит кэш; only_new=1 — только появившиеся после
+// отметки «Проверка завершена»; open_only=1 — без принятых как норма;
+// rule=U,V — только указанные правила. Фильтры нужны внешнему агенту: полный
+// отчёт по крупному тендеру — тысячи находок.
 func (h *QualityHandler) GetReport(w http.ResponseWriter, r *http.Request) {
 	tenderID := chi.URLParam(r, "id")
 	if tenderID == "" {
@@ -57,7 +79,7 @@ func (h *QualityHandler) GetReport(w http.ResponseWriter, r *http.Request) {
 
 	opts := services.ReportOptions{
 		Refresh: r.URL.Query().Get("refresh") == "1",
-		Trigger: repository.RunTriggerView,
+		Trigger: runTrigger(r, repository.RunTriggerView),
 	}
 	if u := middleware.UserFromContext(r.Context()); u != nil {
 		opts.UserID = &u.ID
@@ -69,6 +91,12 @@ func (h *QualityHandler) GetReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	q := r.URL.Query()
+	rep = filterReport(rep, reportFilter{
+		OnlyNew:  q.Get("only_new") == "1",
+		OpenOnly: q.Get("open_only") == "1",
+		Rules:    splitRules(q.Get("rule")),
+	})
 	renderJSON(w, r, http.StatusOK, qualityEnvelope{Data: rep})
 }
 
@@ -142,7 +170,7 @@ func (h *QualityHandler) PostVerdict(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.svc.SetVerdict(r.Context(), tenderID, req.RuleCode, req.EntityID,
+	err := h.svc.SetVerdictFrom(r.Context(), verdictSource(r), tenderID, req.RuleCode, req.EntityID,
 		req.Fingerprint, req.Verdict, req.Note, &authUser.ID)
 	if err != nil {
 		apierr.InternalFromErr(w, r, err, "quality verdict failed",
@@ -208,6 +236,7 @@ func (h *QualityHandler) PostVerdicts(w http.ResponseWriter, r *http.Request) {
 			Fingerprint: it.Fingerprint,
 			Verdict:     it.Verdict,
 			Note:        it.Note,
+			Source:      verdictSource(r),
 		})
 	}
 
