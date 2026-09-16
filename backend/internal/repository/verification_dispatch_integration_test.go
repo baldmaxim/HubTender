@@ -56,7 +56,7 @@ func TestDispatchIntegration_ResolveEnqueueSend(t *testing.T) {
 	author, frequent, sender := dispatchUser(t, pool, "Автор строки"), dispatchUser(t, pool, "Автор позиции"),
 		dispatchUser(t, pool, "Проверяющий")
 
-	q := findFinding(rep, "Q", f.r2)
+	q := findFinding(rep, "QA", f.r2)
 	u := findFinding(rep, "U", f.p1)
 	if q == nil || u == nil || q.FindingID == nil || u.FindingID == nil {
 		t.Fatalf("нет находок Q/U в фикстуре: %+v", rep.Findings)
@@ -145,7 +145,7 @@ func TestDispatchIntegration_ResolveEnqueueSend(t *testing.T) {
 				t.Fatal(err)
 			}
 			item, err := repo.GetCallbackItem(ctx, p.Items[0].ItemID)
-			if err != nil || item.RecipientUserID != author || item.RuleCode != "Q" ||
+			if err != nil || item.RecipientUserID != author || item.RuleCode != "QA" ||
 				item.SentFingerprint != item.CurrentFingerprint || item.Resolved {
 				t.Fatalf("элемент для кнопки: %+v %v", item, err)
 			}

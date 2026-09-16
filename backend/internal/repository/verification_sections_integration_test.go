@@ -93,7 +93,7 @@ func TestVerificationSectionsIntegration_StructureAndAutoPricing(t *testing.T) {
 	repo := NewVerificationSectionsRepo(pool)
 	f := newVSFixture(t, pool)
 	tid := f.vr.tenderID
-	actives := []string{"H", "Q"}
+	actives := []string{"H", "QA"}
 
 	load := func() *TenderSections {
 		t.Helper()
@@ -176,7 +176,7 @@ func TestVerificationSectionsIntegration_ReviewMarks(t *testing.T) {
 	repo := NewVerificationSectionsRepo(pool)
 	f := newVSFixture(t, pool)
 	tid := f.vr.tenderID
-	actives := []string{"H", "Q"}
+	actives := []string{"H", "QA"}
 
 	load := func() *TenderSections {
 		t.Helper()

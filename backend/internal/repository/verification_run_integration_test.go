@@ -116,7 +116,7 @@ func TestVerificationRunIntegration_Lifecycle(t *testing.T) {
 	// 1. Первый прогон: находки сохранены, отметки проверки нет — новых нет.
 	rep := vrRun(t, repo, f.tenderID, RunTriggerView)
 	h1 := findFinding(rep, "U", f.p1)
-	q2 := findFinding(rep, "Q", f.r2)
+	q2 := findFinding(rep, "QA", f.r2)
 	if h1 == nil || q2 == nil {
 		t.Fatalf("ожидались находки U(p1) и Q(r2), получено %d находок", len(rep.Findings))
 	}
@@ -180,7 +180,7 @@ func TestVerificationRunIntegration_Lifecycle(t *testing.T) {
 	if findFinding(rep, "U", f.p1) != nil {
 		t.Fatal("U(p1) не ушла после проставления ГП")
 	}
-	q2 = findFinding(rep, "Q", f.r2)
+	q2 = findFinding(rep, "QA", f.r2)
 	if q2 == nil || !q2.IsNew || *q2.FindingID != qID {
 		t.Fatalf("Q(r2) со сменой отпечатка должна быть новой и с прежним id: %+v", q2)
 	}
@@ -213,7 +213,7 @@ func TestVerificationRunIntegration_Lifecycle(t *testing.T) {
 	}
 
 	// 6. Вердикт попадает в историю находки.
-	in := []VerdictInput{{RuleCode: "Q", EntityID: f.r2, Fingerprint: q2.Fingerprint, Verdict: "accepted"}}
+	in := []VerdictInput{{RuleCode: "QA", EntityID: f.r2, Fingerprint: q2.Fingerprint, Verdict: "accepted"}}
 	if err := repo.SetVerdicts(ctx, f.tenderID, in, nil); err != nil {
 		t.Fatal(err)
 	}

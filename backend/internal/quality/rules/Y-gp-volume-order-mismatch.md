@@ -44,6 +44,15 @@ WHERE cp.tender_id = $1
   AND cp.manual_volume <> 1
   AND GREATEST(cp.manual_volume / cp.volume,
                cp.volume / cp.manual_volume) > 10
+  -- Ровно 10×, 100×, 1000× (±2%) забирает правило YD (error).
+  AND NOT (
+       abs(GREATEST(cp.manual_volume / cp.volume, cp.volume / cp.manual_volume) - 10)
+         / 10 < 0.02
+    OR abs(GREATEST(cp.manual_volume / cp.volume, cp.volume / cp.manual_volume) - 100)
+         / 100 < 0.02
+    OR abs(GREATEST(cp.manual_volume / cp.volume, cp.volume / cp.manual_volume) - 1000)
+         / 1000 < 0.02
+  )
 ORDER BY cp.position_number
 ```
 

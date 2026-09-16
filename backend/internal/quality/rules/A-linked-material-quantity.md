@@ -61,14 +61,22 @@ FROM public.boq_items b
 JOIN public.boq_items w ON w.id = b.parent_work_item_id
 JOIN public.client_positions cp ON cp.id = b.client_position_id
 JOIN public.tenders t ON t.id = b.tender_id
+CROSS JOIN LATERAL (
+  SELECT COALESCE(w.quantity,0)
+         * COALESCE(NULLIF(b.conversion_coefficient,0), 1)
+         * COALESCE(NULLIF(b.consumption_coefficient,0), 1) AS formula
+) f
 WHERE b.tender_id = $1
   AND b.boq_item_type::text LIKE '%мат%'
-  AND abs(
-        COALESCE(b.quantity,0)
-        - COALESCE(w.quantity,0)
-          * COALESCE(NULLIF(b.conversion_coefficient,0), 1)
-          * COALESCE(NULLIF(b.consumption_coefficient,0), 1)
-      ) > 0.01
+  AND abs(COALESCE(b.quantity,0) - f.formula) > 0.01
+  -- Расхождение ровно на порядок (10×, 100×, 1000× ±1%) забирает правило AB
+  -- (error): одна строка не должна висеть в двух правилах.
+  AND NOT (
+        f.formula > 0.01 AND COALESCE(b.quantity,0) > 0.01 AND b.quantity <> 1
+    AND (   abs(GREATEST(b.quantity / f.formula, f.formula / b.quantity) - 10)   / 10   < 0.01
+         OR abs(GREATEST(b.quantity / f.formula, f.formula / b.quantity) - 100)  / 100  < 0.01
+         OR abs(GREATEST(b.quantity / f.formula, f.formula / b.quantity) - 1000) / 1000 < 0.01)
+  )
 ORDER BY abs(COALESCE(b.quantity,0)
   - COALESCE(w.quantity,0) * COALESCE(NULLIF(b.conversion_coefficient,0),1)
     * COALESCE(NULLIF(b.consumption_coefficient,0),1)) DESC

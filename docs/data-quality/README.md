@@ -241,15 +241,13 @@ entity_type: boq_item | client_position | material_name | tender
 |---|---|---|--:|
 | [I](../../backend/internal/quality/rules/I-total-amount-mismatch.md) | `total_amount` ≠ пересчёту (допуск ≥ 100 ₽) | error | 621 / 106.3 млн ₽ |
 | [J](../../backend/internal/quality/rules/J-position-aggregates-stale.md) | Агрегаты позиции ≠ Σ строк (допуск ≥ 1 ₽) | error | 16 605 |
-| [A](../../backend/internal/quality/rules/A-linked-material-quantity.md) | Привязанный материал ≠ работа×перевод×расход | error | 526 |
+| [A](../../backend/internal/quality/rules/A-linked-material-quantity.md) | Привязанный материал ≠ работа×перевод×расход (без ровных декад — их берёт AB) | error | 526; 1 851 в 75 тендерах (2026-09-16) |
 | [L](../../backend/internal/quality/rules/L-delivery-sum-zero.md) | Доставка «суммой» при сумме 0 | error | 34 |
 | [N](../../backend/internal/quality/rules/N-no-cost-category.md) | Строка без категории затрат | info | 43 |
 | [B](../../backend/internal/quality/rules/B-mixed-binding.md) | В позиции и привязанные, и непривязанные материалы | warning | 1 543 |
 | [H](../../backend/internal/quality/rules/H-position-zero-gp.md) | Позиция со строками без денег при Кол-ве ГП = 0 (сужено 2026-09-15) | warning | 86 (2026-09-15) |
-| [Q](../../backend/internal/quality/rules/Q-zero-unit-rate.md) | Нулевая цена за единицу | warning | 5 468 |
 | [R](../../backend/internal/quality/rules/R-work-qty-one.md) | Работа кол-во = 1 при объёме позиции > 10 | warning | 1 874 |
 | [M](../../backend/internal/quality/rules/M-conversion-extreme.md) | Коэфф. перевода не согласуется с единицей работы | warning | 158 |
-| [G](../../backend/internal/quality/rules/G-duplicate-materials.md) | Дубли материала в позиции | warning | 9 192 |
 | [S](../../backend/internal/quality/rules/S-quantity-outlier.md) | ГП материала > 100× объёма позиции при той же единице | warning | 104 |
 | [P](../../backend/internal/quality/rules/P-price-divergence.md) | Один материал по ценам, различающимся > 2× | warning | 757 |
 
@@ -263,11 +261,27 @@ entity_type: boq_item | client_position | material_name | tender
 |---|---|---|--:|
 | [U](../../backend/internal/quality/rules/U-position-priced-no-gp.md) | Позиция расценена, но Кол-во ГП не задано | error | 1 203 в 52 тендерах |
 | [V](../../backend/internal/quality/rules/V-empty-position-no-reason.md) | Не расценена и без обоснования в разделе, расценённом хотя бы наполовину | warning | 1 207 в 72 тендерах |
-| [Y](../../backend/internal/quality/rules/Y-gp-volume-order-mismatch.md) | Кол-во ГП расходится с заказчиком более чем в 10 раз (без объёмов «1») | warning | 251 в 37 тендерах |
+| [Y](../../backend/internal/quality/rules/Y-gp-volume-order-mismatch.md) | Кол-во ГП расходится с заказчиком более чем в 10 раз (без объёмов «1» и без ровных декад — их берёт YD) | warning | 244 в 38 тендерах (2026-09-16) |
 | [AA](../../backend/internal/quality/rules/AA-position-without-cost-category.md) | В позиции ни у одной строки нет категории затрат | warning | 8 в 2 тендерах, 232 708 ₽ |
 
 H и U включены одновременно: вместе они покрывают прежнее пространство H без
 пересечения.
+
+### Правила по разбору «Большой Татарской» (включены 2026-09-16)
+
+Разведка — [BACKLOG-TATARSKAYA-2026-09](BACKLOG-TATARSKAYA-2026-09.md). Замер на базе 105
+тендеров; пересечения проверены по `entity_id`: ни одна прежняя находка A и Y не
+потеряна, ни одна не выдаётся дважды.
+
+| Код | Правило | Severity | Находок (2026-09-16) | Вместо |
+|---|---|---|--:|---|
+| [AB](../../backend/internal/quality/rules/AB-linked-qty-decade.md) | Привязанный материал отличается от формулы ровно в 10/100/1000 раз (±1%, без ГП = 1) | error | 30 в 5 тендерах, 182 млн ₽ | часть A |
+| [YD](../../backend/internal/quality/rules/YD-gp-exact-decade.md) | Кол-во ГП отличается от заказчика ровно в 10/100/1000 раз (±2%) | error | 26 в 8 тендерах | часть Y |
+| [GA](../../backend/internal/quality/rules/GA-duplicate-same-binding.md) | Дубль материала при той же работе, категории затрат и цене | warning | 2 000 в 84 тендерах | G (11 886) |
+| [QA](../../backend/internal/quality/rules/QA-zero-rate-standalone.md) | Нулевая цена, кроме работ-носителей и позиций с обоснованием | warning | 433 в 31 тендере | Q (7 017) |
+
+Вердикты по A и Y переносятся на AB и YD миграцией
+`db/yandex/incremental/2026_09_quality_rules_tatar_verdicts.sql`: отпечатки у пар совпадают.
 
 ### Выключенные правила (`status: draft`)
 
@@ -277,14 +291,8 @@ H и U включены одновременно: вместе они покры
 | Код | Правило | Почему выключено / что нужно |
 |---|---|---|
 | [T](../../backend/internal/quality/rules/T-linked-sum-vs-work.md) | Σ привязанных материалов ≠ кол-ву работы | Посылка неверна: под одной работой законно стоит комплект разных материалов, каждый равен количеству работы. 97.6% находок — комплекты, точность после сужения 6%. Нужна семантика наименований |
-| [AB](../../backend/internal/quality/rules/AB-linked-qty-decade.md) | A, но кратность 10/100/1000× | Черновик по «Большой Татарской»: высокий TP, ~25.5 млн ₽. Нужен замер на всей базе |
-| [GA](../../backend/internal/quality/rules/GA-duplicate-same-binding.md) | G при той же работе и категории | Черновик: отсечь FP краски/пакетов под разными работами |
-| [QA](../../backend/internal/quality/rules/QA-zero-rate-standalone.md) | Q без работ-носителей | Черновик: на Татарской Q=430 работ; сузить до «не носитель» |
-| [YD](../../backend/internal/quality/rules/YD-gp-exact-decade.md) | Y ровно на порядок (`error`) | Черновик: 9/9 Y на Татарской уже `error` у инженера |
-| [W](../../backend/internal/quality/rules/W-unpriced-in-priced-section.md) | Пустая позиция в расценённом разделе | Гипотеза порогов; V покрывает часть |
-| [X](../../backend/internal/quality/rules/X-gp-equals-client-volume.md) | ГП = объём заказчика | Сигнал «не пересчитывали»; нужен замер FP |
-
-Разведка и план выката: [BACKLOG-TATARSKAYA-2026-09](BACKLOG-TATARSKAYA-2026-09.md).
+| [G](../../backend/internal/quality/rules/G-duplicate-materials.md) | Дубли материала в позиции | 11 886 групп в 99 тендерах (2026-09-16), большинство — законный повтор под разными работами. Заменено GA |
+| [Q](../../backend/internal/quality/rules/Q-zero-unit-rate.md) | Нулевая цена за единицу | 7 017 в 92 тендерах (2026-09-16): 5 459 работ-носителей и позиции с обоснованием. Заменено QA |
 
 ### Черновики конвейера проверки (замер снят, не включены)
 
