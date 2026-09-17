@@ -39,6 +39,7 @@
 | `GET /api/v1/tenders/{id}/cost-benchmarks?period_months=24` | ₽ за единицу объёма и ₽/м² СП по категориям против эталона (справочник или история по классу жилья) |
 | `GET /api/v1/benchmark-ranges` | справочник ручных диапазонов эталонов |
 | `GET /api/v1/tenders/{id}/brief` | выжимка для руководства: текст и выбранные категории |
+| `GET /api/v1/tenders/{id}/verification/ai-assessments` | ИИ-оценки открытых находок: `finding_id`, `label` (`likely_error`/`likely_ok`/`unsure`), `reason`, `evidence` (подтверждённые ссылки на поля), `current` (данные с оценки не менялись); `availability` — можно ли запустить разбор |
 
 **Параметры `/quality`:**
 
@@ -55,8 +56,6 @@
 числами), `money_delta`, `verdict` (`accepted`/`error`/`null`), `note`, `finding_id`,
 `first_seen_at`, `is_new`. Поле `summary` одинаково у всех находок правила — для
 экономии контекста берите его из `/quality/rules`.
-
-| `GET /api/v1/tenders/{id}/verification/ai-assessments` | ИИ-оценки открытых находок: `finding_id`, `label` (`likely_error`/`likely_ok`/`unsure`), `reason`, `evidence` (подтверждённые ссылки на поля), `current` (данные с оценки не менялись); `availability` — можно ли запустить разбор |
 
 ### Действия — `verification:write`
 
