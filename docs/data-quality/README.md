@@ -277,7 +277,7 @@ H и U включены одновременно: вместе они покры
 |---|---|---|--:|---|
 | [AB](../../backend/internal/quality/rules/AB-linked-qty-decade.md) | Привязанный материал отличается от формулы ровно в 10/100/1000 раз (±1%, без ГП = 1) | error | 30 в 5 тендерах, 182 млн ₽ | часть A |
 | [YD](../../backend/internal/quality/rules/YD-gp-exact-decade.md) | Кол-во ГП отличается от заказчика ровно в 10/100/1000 раз (±2%) | error | 26 в 8 тендерах | часть Y |
-| [GA](../../backend/internal/quality/rules/GA-duplicate-same-binding.md) | Дубль материала при той же работе, категории затрат, цене и коэффициентах | warning | 1 350 в 52 тендерах | G (11 886) |
+| [GA](../../backend/internal/quality/rules/GA-duplicate-same-binding.md) | Дубль материала при той же работе, категории затрат и цене | warning | 2 000 в 84 тендерах | G (11 886) |
 | [QA](../../backend/internal/quality/rules/QA-zero-rate-standalone.md) | Нулевая цена, кроме работ-носителей и позиций с обоснованием | warning | 433 в 31 тендере | Q (7 017) |
 
 Вердикты по A и Y переносятся на AB и YD миграцией
