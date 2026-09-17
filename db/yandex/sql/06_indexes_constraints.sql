@@ -780,3 +780,42 @@ ALTER TABLE public.api_call_log
     FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_api_call_log_called_at ON public.api_call_log (called_at DESC);
 CREATE INDEX IF NOT EXISTS idx_api_call_log_api_key ON public.api_call_log (api_key_id, called_at DESC);
+
+-- ----- verification_ai_* ------------------------------------------------------
+ALTER TABLE public.verification_ai_settings ADD CONSTRAINT verification_ai_settings_pkey PRIMARY KEY (id);
+ALTER TABLE public.verification_ai_settings ADD CONSTRAINT verification_ai_settings_single_check CHECK (id = 1);
+ALTER TABLE public.verification_ai_settings ADD CONSTRAINT verification_ai_settings_limits_check CHECK (
+    max_findings_per_run BETWEEN 1 AND 2000
+    AND batch_size BETWEEN 1 AND 20
+    AND max_output_tokens BETWEEN 256 AND 32000
+    AND request_timeout_seconds BETWEEN 10 AND 600
+    AND monthly_token_budget > 0
+    AND daily_request_limit BETWEEN 1 AND 100000);
+ALTER TABLE public.verification_ai_settings ADD CONSTRAINT verification_ai_settings_test_status_check
+    CHECK (last_test_status IS NULL OR last_test_status IN ('passed', 'failed'));
+ALTER TABLE public.verification_ai_settings ADD CONSTRAINT verification_ai_settings_enabled_check
+    CHECK (NOT enabled OR (model_id IS NOT NULL
+                           AND last_test_status IS NOT DISTINCT FROM 'passed'
+                           AND last_test_model_id IS NOT DISTINCT FROM model_id));
+
+ALTER TABLE public.verification_ai_requests ADD CONSTRAINT verification_ai_requests_pkey PRIMARY KEY (id);
+ALTER TABLE public.verification_ai_requests ADD CONSTRAINT verification_ai_requests_trigger_check
+    CHECK (trigger_source IN ('auto', 'manual', 'test'));
+ALTER TABLE public.verification_ai_requests ADD CONSTRAINT verification_ai_requests_status_check
+    CHECK (status IN ('completed', 'failed', 'invalid'));
+ALTER TABLE public.verification_ai_requests ADD CONSTRAINT verification_ai_requests_tender_fkey
+    FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS verification_ai_requests_created_idx
+    ON public.verification_ai_requests (created_at DESC);
+CREATE INDEX IF NOT EXISTS verification_ai_requests_tender_idx
+    ON public.verification_ai_requests (tender_id, created_at DESC);
+
+ALTER TABLE public.verification_ai_assessments ADD CONSTRAINT verification_ai_assessments_pkey PRIMARY KEY (finding_id);
+ALTER TABLE public.verification_ai_assessments ADD CONSTRAINT verification_ai_assessments_label_check
+    CHECK (label IN ('likely_error', 'likely_ok', 'unsure'));
+ALTER TABLE public.verification_ai_assessments ADD CONSTRAINT verification_ai_assessments_finding_fkey
+    FOREIGN KEY (finding_id) REFERENCES public.verification_findings(id) ON DELETE CASCADE;
+ALTER TABLE public.verification_ai_assessments ADD CONSTRAINT verification_ai_assessments_request_fkey
+    FOREIGN KEY (request_id) REFERENCES public.verification_ai_requests(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS verification_ai_assessments_tender_idx
+    ON public.verification_ai_assessments (tender_id);

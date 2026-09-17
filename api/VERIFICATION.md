@@ -56,6 +56,8 @@
 `first_seen_at`, `is_new`. Поле `summary` одинаково у всех находок правила — для
 экономии контекста берите его из `/quality/rules`.
 
+| `GET /api/v1/tenders/{id}/verification/ai-assessments` | ИИ-оценки открытых находок: `finding_id`, `label` (`likely_error`/`likely_ok`/`unsure`), `reason`, `evidence` (подтверждённые ссылки на поля), `current` (данные с оценки не менялись); `availability` — можно ли запустить разбор |
+
 ### Действия — `verification:write`
 
 | Метод и путь | Тело |
@@ -65,6 +67,7 @@
 | `POST /api/v1/tenders/{id}/quality/checkpoint` | без тела — «Проверка завершена» |
 | `POST /api/v1/tenders/{id}/verification/sections/mark` | `{section_key, stage: "review", content_hash, note?}` — `content_hash` из `/sections`; раздел изменился → `409 SECTION_CHANGED` |
 | `POST /api/v1/tenders/{id}/verification/sections/unmark` | `{section_key, stage: "review"}` |
+| `POST /api/v1/tenders/{id}/verification/ai-triage` | без тела — разобрать новые находки ИИ в фоне; ответ `{status}`: `started`, `already_running`, `disabled`, `tender_not_in_pilot`, `not_configured` |
 | `PUT /api/v1/tenders/{id}/brief` | `{summary_text, fact_category_ids}` — `fact_category_ids: null` = крупнейшие категории автоматически |
 
 Вердикт привязан к `fingerprint`: изменились данные строки — вердикт перестаёт

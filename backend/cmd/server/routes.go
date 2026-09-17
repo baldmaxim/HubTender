@@ -157,6 +157,9 @@ func newRouter(
 		r.With(writeV).Post("/api/v1/tenders/{id}/verification/sections/mark", d.verifSectionsH.PostMark)
 		r.With(writeV).Post("/api/v1/tenders/{id}/verification/sections/unmark", d.verifSectionsH.PostUnmark)
 		r.With(writeV).Put("/api/v1/tenders/{id}/brief", d.costBenchmarkH.PutBrief)
+		// ИИ-разбор находок: оценки — чтение, запуск разбора — действие проверяющего.
+		r.With(readV).Get("/api/v1/tenders/{id}/verification/ai-assessments", d.verifAIH.GetAssessments)
+		r.With(writeV).Post("/api/v1/tenders/{id}/verification/ai-triage", d.verifAIH.PostTriage)
 	})
 
 	r.Group(func(r chi.Router) {
@@ -451,6 +454,10 @@ func newRouter(
 			r.Use(middleware.RequireRoles(handlers.AIAdminRoles))
 
 			r.Get("/api/v1/admin/ai/openrouter/status", d.aiAdminH.OpenRouterStatus)
+			// ИИ-разбор находок проверки данных: модель, пилотные тендеры, лимиты.
+			r.Get("/api/v1/verification/ai-settings", d.verifAIH.GetSettings)
+			r.Put("/api/v1/verification/ai-settings", d.verifAIH.PutSettings)
+			r.Post("/api/v1/verification/ai-settings/test", d.verifAIH.PostTest)
 			r.Post("/api/v1/admin/ai/openrouter/test-connection", d.aiAdminH.OpenRouterTestConnection)
 			r.Get("/api/v1/admin/ai/openrouter/models", d.aiAdminH.OpenRouterModels)
 			r.Post("/api/v1/admin/ai/openrouter/models/refresh", d.aiAdminH.OpenRouterModelsRefresh)

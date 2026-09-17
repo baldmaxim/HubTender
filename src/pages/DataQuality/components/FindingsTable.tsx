@@ -5,6 +5,8 @@ import { CheckOutlined, WarningOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { QualityFinding, QualityVerdict } from '../../../lib/api/quality';
 import { findingLink } from '../../../lib/quality/findingsPolicy';
+import type { AIAssessment } from '../../../lib/api/verificationAI';
+import { AIAssessmentTag } from './AIAssessmentTag';
 
 const { Text } = Typography;
 
@@ -12,6 +14,8 @@ interface Props {
   findings: QualityFinding[];
   isPhone: boolean;
   onVerdict: (f: QualityFinding, v: QualityVerdict) => void;
+  /** Текущие оценки ИИ по id находки. */
+  assessments?: Map<string, AIAssessment>;
 }
 
 const money = (v: number | null): string =>
@@ -71,7 +75,9 @@ const VerdictButtons: React.FC<{
   </Space>
 );
 
-export const FindingsTable: React.FC<Props> = ({ findings, isPhone, onVerdict }) => {
+export const FindingsTable: React.FC<Props> = ({ findings, isPhone, onVerdict, assessments }) => {
+  const aiOf = (f: QualityFinding) => (f.finding_id ? assessments?.get(f.finding_id) : undefined);
+
   if (isPhone) {
     return (
       <Space direction="vertical" size={8} style={{ width: '100%' }}>
@@ -92,6 +98,7 @@ export const FindingsTable: React.FC<Props> = ({ findings, isPhone, onVerdict })
                 {f.verdict === 'error' && <Tag color="red">ошибка</Tag>}
               </Space>
               <Text style={{ fontSize: 13 }}>{f.detail}</Text>
+              {aiOf(f) && <AIAssessmentTag assessment={aiOf(f)!} />}
               {f.note && (
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   Примечание: {f.note}
@@ -124,6 +131,7 @@ export const FindingsTable: React.FC<Props> = ({ findings, isPhone, onVerdict })
       render: (detail: string, f) => (
         <Space direction="vertical" size={2}>
           <Text>{detail}</Text>
+          {aiOf(f) && <AIAssessmentTag assessment={aiOf(f)!} />}
           {f.note && (
             <Text type="secondary" style={{ fontSize: 12 }}>
               Примечание: {f.note}

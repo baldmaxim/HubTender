@@ -108,6 +108,7 @@ DATABASE_URL=... APP_JWT_ISSUER=... APP_JWT_PRIVATE_KEY_PATH=... CORS_ORIGINS=..
 | `OPENROUTER_API_KEY` | нет | пусто | ❌ секрет. Пустой = `not_configured`, приложение работает |
 | `OPENROUTER_API_BASE` | нет | официальный | В production вне allowlist **игнорируется** |
 | `OPENROUTER_TIMEOUT_SECONDS` | нет | `60` | Таймаут вызова в режиме `openrouter` |
+| `AI_HTTPS_PROXY_URL` | нет | — | HTTP(S)-прокси только для запросов к модели (CONNECT, TLS до провайдера не разрывается), когда у хоста нет выхода к openrouter.ai. Прод: tinyproxy на nl3 (`http://194.37.81.38:18443`, в фильтре `openrouter.ai`) |
 | `OPENROUTER_HTTP_REFERER` / `OPENROUTER_APP_TITLE` | нет | пусто | Маркетинговые заголовки OpenRouter; в режиме прокси не отправляются |
 | `OPENROUTER_LIVE_TEST` | нет | `false` | Разрешает live evaluation |
 | `PROXY_LLM_BASE_URL` | да при `proxy_llm` | — | **ORIGIN** прокси (`/healthz` живёт вне `/api/v1`). В production обязателен https |

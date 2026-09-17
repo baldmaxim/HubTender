@@ -1073,3 +1073,58 @@ CREATE TABLE IF NOT EXISTS public.api_call_log (
     dry_run boolean,
     called_at timestamp with time zone NOT NULL DEFAULT now()
 );
+
+-- ИИ-разбор находок проверки данных (см. 2026_09_verification_triage_ai.sql).
+CREATE TABLE IF NOT EXISTS public.verification_ai_settings (
+    id smallint NOT NULL DEFAULT 1,
+    enabled boolean NOT NULL DEFAULT false,
+    model_id text,
+    allowed_tender_ids uuid[],
+    max_findings_per_run integer NOT NULL DEFAULT 200,
+    batch_size integer NOT NULL DEFAULT 8,
+    max_output_tokens integer NOT NULL DEFAULT 3000,
+    request_timeout_seconds integer NOT NULL DEFAULT 120,
+    monthly_token_budget bigint NOT NULL DEFAULT 10000000,
+    daily_request_limit integer NOT NULL DEFAULT 1000,
+    last_test_at timestamp with time zone,
+    last_test_model_id text,
+    last_test_status text,
+    last_test_error text,
+    last_test_latency_ms integer,
+    updated_by uuid,
+    updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.verification_ai_requests (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tender_id uuid,
+    trigger_source text NOT NULL,
+    status text NOT NULL,
+    model_id text NOT NULL,
+    prompt_version text NOT NULL,
+    findings_count integer NOT NULL DEFAULT 0,
+    assessed_count integer NOT NULL DEFAULT 0,
+    prompt_tokens integer NOT NULL DEFAULT 0,
+    completion_tokens integer NOT NULL DEFAULT 0,
+    total_tokens integer NOT NULL DEFAULT 0,
+    cost numeric(14, 8),
+    latency_ms integer NOT NULL DEFAULT 0,
+    error_code text,
+    created_by uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.verification_ai_assessments (
+    finding_id uuid NOT NULL,
+    tender_id uuid NOT NULL,
+    rule_code text NOT NULL,
+    fingerprint text NOT NULL,
+    prompt_version text NOT NULL,
+    model_id text NOT NULL,
+    label text NOT NULL,
+    reason text NOT NULL DEFAULT '',
+    evidence jsonb NOT NULL DEFAULT '[]'::jsonb,
+    downgraded boolean NOT NULL DEFAULT false,
+    request_id uuid,
+    created_at timestamp with time zone NOT NULL DEFAULT now()
+);

@@ -229,6 +229,7 @@ func main() {
 	// any in-flight recalc to finish before the DB pool is closed.
 	d.recalcQueue.Close()
 	d.verifQueue.Close()
+	d.aiTriageQueue.Close()
 
 	// Step 4. Graceful HTTP shutdown — wait up to 15 s for in-flight requests.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)

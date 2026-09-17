@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Select, Button, Space, Typography, Tag, Collapse, Empty, Spin, Switch, Alert, Popconfirm } from 'antd';
-import { ReloadOutlined, SafetyCertificateOutlined, CheckOutlined, SendOutlined } from '@ant-design/icons';
+import { ReloadOutlined, SafetyCertificateOutlined, CheckOutlined, SendOutlined, RobotOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useQualityReport } from './hooks/useQualityReport';
 import { FindingsTable } from './components/FindingsTable';
@@ -11,6 +11,11 @@ import { CostBenchmarkPanel } from './components/CostBenchmarkPanel';
 import { DispatchModal } from './components/DispatchModal';
 import { fetchTelegramStatus } from '../../lib/api/telegram';
 import { dispatchableIds } from '../../lib/quality/dispatchPolicy';
+import { useAuth } from '../../contexts/AuthContext';
+import { useAITriage } from './hooks/useAITriage';
+import { AITriageBar } from './components/AITriageBar';
+import { AITriageSettingsCard } from './components/AITriageSettingsCard';
+import { aiOkToAccept, arrangeFindings, canEditAISettings, countLabels } from '../../lib/quality/aiTriagePolicy';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -51,6 +56,20 @@ const DataQuality: React.FC = () => {
       .catch(() => setTelegramEnabled(false));
   }, []);
   const allDispatchable = dispatchableIds(groups.flatMap((g) => g.findings));
+
+  // ИИ-разбор: оценки модели — подсказка, вердикт ставит проверяющий.
+  const { user } = useAuth();
+  const ai = useAITriage(selectedTenderId);
+  const [hideAIOk, setHideAIOk] = useState(false);
+  const shownGroups = useMemo(
+    () =>
+      groups
+        .map((g) => ({ ...g, findings: arrangeFindings(g.findings, ai.byFinding, hideAIOk) }))
+        .filter((g) => g.findings.length > 0),
+    [groups, ai.byFinding, hideAIOk],
+  );
+  const activeFindings = (report?.findings ?? []).filter((f) => f.verdict === null);
+  const aiCounts = countLabels(activeFindings, ai.byFinding);
 
   return (
     <div style={{ padding: isPhone ? 12 : 24 }}>
@@ -101,6 +120,8 @@ const DataQuality: React.FC = () => {
             </Space>
           </Space>
         </Card>
+
+        {canEditAISettings(user?.role_code) && <AITriageSettingsCard tenders={tenders} />}
 
         {/* Разделы грузятся отдельно от находок и не пересоздаются, пока идёт
             перепрогон правил, — иначе панель мигала бы на каждой правке тендера. */}
@@ -153,6 +174,17 @@ const DataQuality: React.FC = () => {
               isPhone={isPhone}
             />
 
+            <AITriageBar
+              data={ai.data}
+              counts={aiCounts}
+              total={activeFindings.length}
+              starting={ai.starting}
+              hideLikelyOk={hideAIOk}
+              onHideLikelyOkChange={setHideAIOk}
+              onStart={() => void ai.start()}
+              isPhone={isPhone}
+            />
+
             {report.errors.length > 0 && (
               <Alert
                 type="warning"
@@ -162,7 +194,7 @@ const DataQuality: React.FC = () => {
               />
             )}
 
-            {groups.length === 0 ? (
+            {shownGroups.length === 0 ? (
               <Card>
                 <Empty
                   description={
@@ -176,7 +208,7 @@ const DataQuality: React.FC = () => {
               </Card>
             ) : (
               <Collapse
-                items={groups.map((g) => ({
+                items={shownGroups.map((g) => ({
                   key: g.ruleCode,
                   label: (
                     <Space size={8} wrap>
@@ -223,10 +255,28 @@ const DataQuality: React.FC = () => {
                           Отправить группу исполнителям ({dispatchableIds(g.findings).length})
                         </Button>
                       )}
+                      {(() => {
+                        const okByAI = aiOkToAccept(g.findings, ai.byFinding);
+                        if (okByAI.length === 0) return null;
+                        return (
+                          <Popconfirm
+                            title="Принять как норму то, что ИИ считает нормой?"
+                            description={`Будет отмечено находок: ${okByAI.length}. Перед этим просмотрите причины в таблице.`}
+                            okText="Принять"
+                            cancelText="Отмена"
+                            onConfirm={() => void submitGroupVerdict(okByAI, 'accepted')}
+                          >
+                            <Button size="small" icon={<RobotOutlined />}>
+                              Принять «похоже на норму» по ИИ ({okByAI.length})
+                            </Button>
+                          </Popconfirm>
+                        );
+                      })()}
                       <FindingsTable
                         findings={g.findings}
                         isPhone={isPhone}
                         onVerdict={submitVerdict}
+                        assessments={ai.byFinding}
                       />
                     </Space>
                   ),

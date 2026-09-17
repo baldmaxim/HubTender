@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -33,6 +35,8 @@ type deps struct {
 	verifRetention *services.VerificationRetentionService
 	telegramBot    *services.TelegramBot
 	telegramH      *handlers.TelegramHandler
+	aiTriageQueue  *services.RecalcQueue
+	verifAIH       *handlers.VerificationAIHandler
 	recalcHealthH  *handlers.RecalcHealthHandler
 
 	healthH        *handlers.HealthHandler
@@ -353,7 +357,20 @@ func buildDeps(
 					"НЕ применяется; транспорт отключён до явного подтверждения оператора")
 		}
 	}
-	orClient, orErr := openrouter.New(orCfg, openrouter.WithKeySource(aiKeyResolver.Current))
+	orOpts := []openrouter.Option{openrouter.WithKeySource(aiKeyResolver.Current)}
+	// У прод-хоста нет выхода к openrouter.ai: запросы к модели можно пустить через
+	// HTTP(S)-прокси (CONNECT; TLS до провайдера не разрывается). Только для клиента
+	// модели — остальной исходящий трафик процесса прокси не трогает.
+	if raw := strings.TrimSpace(os.Getenv("AI_HTTPS_PROXY_URL")); raw != "" {
+		if pu, perr := url.Parse(raw); perr != nil || pu.Host == "" {
+			logger.Error().Msg("AI_HTTPS_PROXY_URL некорректен — прокси для модели не используется")
+		} else {
+			tr := http.DefaultTransport.(*http.Transport).Clone()
+			tr.Proxy = http.ProxyURL(pu)
+			orOpts = append(orOpts, openrouter.WithHTTPClient(&http.Client{Transport: tr, Timeout: orCfg.Timeout}))
+		}
+	}
+	orClient, orErr := openrouter.New(orCfg, orOpts...)
 	if orErr != nil {
 		// Невалидный base — не валим приложение: клиент без конфигурации.
 		logger.Warn().Err(orErr).Msg("openrouter client init failed; AI administration будет not_configured")
@@ -363,6 +380,15 @@ func buildDeps(
 	// подставляется синтетический каталог из одной псевдо-модели (вариант A:
 	// модель выбирает прокси). Это сохраняет radio-выбор из server-каталога и
 	// валидацию model ID через FindModel вместо ветки «здесь не проверяем».
+	// ИИ-разбор находок проверки данных: после фонового прогона правил сервер отдаёт
+	// модели новые находки с контекстом позиции. Оценка — подсказка проверяющему.
+	verifAIRepo := repository.NewVerificationAIRepo(pool)
+	verifAISvc := services.NewVerificationAIService(rootCtx, verifAIRepo, orClient, logger)
+	aiTriageQueue := services.NewRecalcQueue(rootCtx, verifAISvc, 10*time.Second, 1, logger)
+	aiTriageQueue.SetLabel("verification ai triage")
+	verifQueue.SetAfterSuccess(aiTriageQueue)
+	verifAIH := handlers.NewVerificationAIHandler(verifAISvc)
+
 	var catalogSource openrouter.ModelsLister = orClient
 	if llmTransport == openrouter.TransportProxyLLM {
 		catalogSource = openrouter.ProxyCatalogLister{}
@@ -425,6 +451,8 @@ func buildDeps(
 		verifRetention: verifRetention,
 		telegramBot:    telegramBot,
 		telegramH:      telegramH,
+		aiTriageQueue:  aiTriageQueue,
+		verifAIH:       verifAIH,
 		recalcHealthH:  handlers.NewRecalcHealthHandler(recalcRecovery),
 
 		healthH:           handlers.NewHealthHandler(pool, inMemCache),
