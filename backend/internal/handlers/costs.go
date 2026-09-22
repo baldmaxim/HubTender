@@ -36,6 +36,26 @@ type CostsHandler struct {
 	svc costsServicer
 }
 
+// costDeleteFKOverrides — причины отказа на удаление справочника затрат. FK из
+// boq_items / templates / template_items объявлены без ON DELETE, поэтому занятую
+// категорию Postgres не отдаёт: без этого маппинга пользователь получал 500 без
+// объяснения, а собственный FK-конфликт улетал в Sentry как internal error.
+var costDeleteFKOverrides = map[string]string{
+	"boq_items_detail_cost_category_id_fkey":       "Категория используется в позициях BOQ — сначала освободите её в тендерах",
+	"templates_detail_cost_category_id_fkey":       "Категория используется в шаблонах — сначала освободите её в шаблонах",
+	"template_items_detail_cost_category_id_fkey":  "Категория используется в элементах шаблонов — сначала освободите её в шаблонах",
+	"detail_cost_categories_cost_category_id_fkey": "У категории затрат есть детализации — сначала удалите их",
+}
+
+// renderCostDeleteErr отдаёт 409 с причиной на FK-конфликте, иначе обычную 500.
+func renderCostDeleteErr(w http.ResponseWriter, r *http.Request, err error, msg string) {
+	if p := apierr.ProblemFromPgErr(err, costDeleteFKOverrides); p != nil {
+		p.Render(w)
+		return
+	}
+	apierr.InternalFromErr(w, r, err, msg)
+}
+
 func NewCostsHandler(svc costsServicer) *CostsHandler {
 	return &CostsHandler{svc: svc}
 }
@@ -136,7 +156,7 @@ func (h *CostsHandler) DeleteCostCategory(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.svc.DeleteCostCategory(r.Context(), id); err != nil {
-		apierr.InternalFromErr(w, r, err, "failed to delete cost category")
+		renderCostDeleteErr(w, r, err, "failed to delete cost category")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -144,7 +164,7 @@ func (h *CostsHandler) DeleteCostCategory(w http.ResponseWriter, r *http.Request
 
 func (h *CostsHandler) DeleteAllCostCategories(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.DeleteAllCostCategories(r.Context()); err != nil {
-		apierr.InternalFromErr(w, r, err, "failed to delete all cost categories")
+		renderCostDeleteErr(w, r, err, "failed to delete all cost categories")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -211,7 +231,7 @@ func (h *CostsHandler) DeleteDetailCostCategory(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err := h.svc.DeleteDetailCostCategory(r.Context(), id); err != nil {
-		apierr.InternalFromErr(w, r, err, "failed to delete detail cost category")
+		renderCostDeleteErr(w, r, err, "failed to delete detail cost category")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -219,7 +239,7 @@ func (h *CostsHandler) DeleteDetailCostCategory(w http.ResponseWriter, r *http.R
 
 func (h *CostsHandler) DeleteAllDetailCostCategories(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.DeleteAllDetailCostCategories(r.Context()); err != nil {
-		apierr.InternalFromErr(w, r, err, "failed to delete all detail cost categories")
+		renderCostDeleteErr(w, r, err, "failed to delete all detail cost categories")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

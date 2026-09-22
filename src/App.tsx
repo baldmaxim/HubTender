@@ -29,6 +29,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
 const DataQuality = lazy(() => import('./pages/DataQuality/DataQuality'));
 const Tasks = lazy(() => import('./pages/Tasks'));
 const Nomenclatures = lazy(() => import('./pages/Admin/Nomenclatures/Nomenclatures'));
+const ConstructionCost = lazy(() => import('./pages/Admin/ConstructionCost/ConstructionCost'));
 const AdminTenders = lazy(() => import('./pages/Admin/Tenders/Tenders'));
 const Tenders = lazy(() => import('./pages/Tenders/Tenders'));
 const MarkupConstructor = lazy(() => import('./pages/Admin/MarkupConstructor/MarkupConstructor'));
@@ -116,6 +117,7 @@ function AppContent() {
             <Route path="admin">
               <Route index element={<Navigate to="/admin/nomenclatures" replace />} />
               <Route path="nomenclatures" element={<Nomenclatures />} />
+              <Route path="construction_cost" element={<ConstructionCost />} />
               <Route path="tenders" element={<AdminTenders />} />
               <Route path="markup_constructor" element={<MarkupConstructor />} />
               <Route path="markup" element={<MarkupPercentages />} />

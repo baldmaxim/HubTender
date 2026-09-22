@@ -322,7 +322,6 @@ func (r *CostsRepo) ListActiveUnitsFull(ctx context.Context) ([]UnitFull, error)
 type ImportedUnitRow struct {
 	Code      string `json:"code"`
 	Name      string `json:"name"`
-	NameShort string `json:"name_short"`
 	Category  string `json:"category"`
 	SortOrder int    `json:"sort_order"`
 	IsActive  bool   `json:"is_active"`
@@ -340,16 +339,15 @@ func (r *CostsRepo) UpsertImportedUnits(ctx context.Context, units []ImportedUni
 
 	for _, u := range units {
 		_, err := tx.Exec(ctx, `
-			INSERT INTO public.units (code, name, name_short, category, sort_order, is_active)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO public.units (code, name, category, sort_order, is_active)
+			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (code) DO UPDATE SET
 				name       = EXCLUDED.name,
-				name_short = EXCLUDED.name_short,
 				category   = EXCLUDED.category,
 				sort_order = EXCLUDED.sort_order,
 				is_active  = EXCLUDED.is_active,
 				updated_at = NOW()
-		`, u.Code, u.Name, u.NameShort, u.Category, u.SortOrder, u.IsActive)
+		`, u.Code, u.Name, u.Category, u.SortOrder, u.IsActive)
 		if err != nil {
 			return fmt.Errorf("costsRepo.UpsertImportedUnits exec: %w", err)
 		}

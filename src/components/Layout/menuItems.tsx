@@ -3,6 +3,7 @@ import {
   DashboardOutlined,
   ShoppingCartOutlined,
   BookOutlined,
+  BankOutlined,
   DollarOutlined,
   SettingOutlined,
   UserOutlined,
@@ -97,6 +98,11 @@ export const menuItems: NonNullable<MenuProps['items']> = [
         key: '/admin/nomenclatures',
         icon: <ProfileOutlined />,
         label: 'Номенклатуры',
+      },
+      {
+        key: '/admin/construction_cost',
+        icon: <BankOutlined />,
+        label: 'Справочник затрат',
       },
     ],
   },
@@ -243,6 +249,7 @@ export const MOBILE_HIDDEN_KEYS = new Set<string>([
   '/library',
   '/library/templates',
   '/admin/nomenclatures',
+  '/admin/construction_cost',
   // Список задач
   '/tasks',
   // Настройки

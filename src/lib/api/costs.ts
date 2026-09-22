@@ -153,7 +153,6 @@ export async function deleteAllDetailCostCategories(): Promise<void> {
 export interface ImportedUnit {
   code: string;
   name: string;
-  name_short: string;
   category: string;
   sort_order: number;
   is_active: boolean;
