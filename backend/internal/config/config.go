@@ -71,6 +71,18 @@ type Config struct {
 	// auto-fill tender currency rates. Public URL, not a secret.
 	CBRBaseURL string
 
+	// MCP/OAuth integration. MCP is fail-closed until MCP_ENABLED=true.
+	MCPEnabled              bool
+	MCPWriteEnabled         bool
+	MCPTemplateWriteEnabled bool
+	MCPAudience             string
+	MCPAccessTokenTTL       time.Duration
+	MCPRefreshTokenTTL      time.Duration
+	MCPAuthorizationCodeTTL time.Duration
+	MCPDCREnabled           bool
+	MCPCIMDAllowedHosts     []string
+	MCPMaxRequestBodyBytes  int64
+
 	// OpenRouter (этап 2.5). OpenRouterAPIKey — server-only secret: НЕ хранится
 	// в БД, НЕ возвращается frontend'у, НЕ логируется. Пустой ключ допустим —
 	// приложение стартует, AI-статус = not_configured, ручной Smart Import
@@ -116,6 +128,15 @@ func Load() (*Config, error) {
 	v.SetDefault("APP_ENV", "development")
 	v.SetDefault("SMTP_PORT", 587)
 	v.SetDefault("CBR_BASE_URL", "https://www.cbr.ru/scripts/XML_daily.asp")
+	v.SetDefault("MCP_ENABLED", false)
+	v.SetDefault("MCP_WRITE_ENABLED", false)
+	v.SetDefault("MCP_TEMPLATE_WRITE_ENABLED", false)
+	v.SetDefault("MCP_AUDIENCE", "hubtender-mcp")
+	v.SetDefault("MCP_ACCESS_TOKEN_TTL_MINUTES", 10)
+	v.SetDefault("MCP_REFRESH_TOKEN_TTL_DAYS", 30)
+	v.SetDefault("MCP_AUTHORIZATION_CODE_TTL_MINUTES", 5)
+	v.SetDefault("MCP_DCR_ENABLED", false)
+	v.SetDefault("MCP_MAX_REQUEST_BODY_BYTES", 1048576)
 	v.SetDefault("OPENROUTER_TIMEOUT_SECONDS", 60)
 	// Дедлайн самого прокси ~190 с: клиентский таймаут обязан быть больше,
 	// иначе его 504 deadline_exceeded недостижим в принципе.
@@ -168,6 +189,22 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: DB_MAX_CONN_IDLE_TIME parse: %w", err)
 	}
+	mcpAccessMins := v.GetInt("MCP_ACCESS_TOKEN_TTL_MINUTES")
+	mcpRefreshDays := v.GetInt("MCP_REFRESH_TOKEN_TTL_DAYS")
+	mcpCodeMins := v.GetInt("MCP_AUTHORIZATION_CODE_TTL_MINUTES")
+	if mcpAccessMins < 1 || mcpAccessMins > 60 {
+		return nil, fmt.Errorf("config: MCP_ACCESS_TOKEN_TTL_MINUTES must be in [1,60]")
+	}
+	if mcpRefreshDays < 1 || mcpRefreshDays > 90 {
+		return nil, fmt.Errorf("config: MCP_REFRESH_TOKEN_TTL_DAYS must be in [1,90]")
+	}
+	if mcpCodeMins < 1 || mcpCodeMins > 10 {
+		return nil, fmt.Errorf("config: MCP_AUTHORIZATION_CODE_TTL_MINUTES must be in [1,10]")
+	}
+	mcpMaxBody := v.GetInt64("MCP_MAX_REQUEST_BODY_BYTES")
+	if mcpMaxBody < 65536 || mcpMaxBody > 8*1024*1024 {
+		return nil, fmt.Errorf("config: MCP_MAX_REQUEST_BODY_BYTES must be in [65536,8388608]")
+	}
 
 	appEnv := strings.ToLower(strings.TrimSpace(v.GetString("APP_ENV")))
 	providerMode, proxyBase, proxyToken, proxyTimeout, err := loadLLMTransport(v, appEnv)
@@ -176,32 +213,42 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		DatabaseURL:          dbURL,
-		AppJWTIssuer:         appIssuer,
-		AppJWTAudience:       appAudience,
-		AppJWTKeyID:          appKID,
-		AppJWTPrivateKeyPath: appKeyPath,
-		AppJWTPrivateKeyB64:  appKeyB64,
-		AppAccessTokenTTL:    time.Duration(accessMins) * time.Minute,
-		AppRefreshTokenTTL:   time.Duration(refreshDays) * 24 * time.Hour,
-		BindHost:             v.GetString("BIND_HOST"),
-		Port:                 v.GetString("PORT"),
-		LogLevel:             v.GetString("LOG_LEVEL"),
-		CORSOrigins:          origins,
-		DBMaxConns:           maxConns,
-		DBMinConns:           minConns,
-		DBMaxConnIdleTime:    maxIdle,
-		SentryDSN:            v.GetString("SENTRY_DSN"),
-		SentryEnvironment:    v.GetString("SENTRY_ENVIRONMENT"),
-		SentryRelease:        v.GetString("SENTRY_RELEASE"),
-		AppEnv:               appEnv,
-		AppBaseURL:           strings.TrimRight(strings.TrimSpace(v.GetString("APP_BASE_URL")), "/"),
-		SMTPHost:             v.GetString("SMTP_HOST"),
-		SMTPPort:             v.GetInt("SMTP_PORT"),
-		SMTPUser:             v.GetString("SMTP_USER"),
-		SMTPPassword:         v.GetString("SMTP_PASSWORD"),
-		SMTPFrom:             v.GetString("SMTP_FROM"),
-		CBRBaseURL:           v.GetString("CBR_BASE_URL"),
+		DatabaseURL:             dbURL,
+		AppJWTIssuer:            appIssuer,
+		AppJWTAudience:          appAudience,
+		AppJWTKeyID:             appKID,
+		AppJWTPrivateKeyPath:    appKeyPath,
+		AppJWTPrivateKeyB64:     appKeyB64,
+		AppAccessTokenTTL:       time.Duration(accessMins) * time.Minute,
+		AppRefreshTokenTTL:      time.Duration(refreshDays) * 24 * time.Hour,
+		BindHost:                v.GetString("BIND_HOST"),
+		Port:                    v.GetString("PORT"),
+		LogLevel:                v.GetString("LOG_LEVEL"),
+		CORSOrigins:             origins,
+		DBMaxConns:              maxConns,
+		DBMinConns:              minConns,
+		DBMaxConnIdleTime:       maxIdle,
+		SentryDSN:               v.GetString("SENTRY_DSN"),
+		SentryEnvironment:       v.GetString("SENTRY_ENVIRONMENT"),
+		SentryRelease:           v.GetString("SENTRY_RELEASE"),
+		AppEnv:                  appEnv,
+		AppBaseURL:              strings.TrimRight(strings.TrimSpace(v.GetString("APP_BASE_URL")), "/"),
+		SMTPHost:                v.GetString("SMTP_HOST"),
+		SMTPPort:                v.GetInt("SMTP_PORT"),
+		SMTPUser:                v.GetString("SMTP_USER"),
+		SMTPPassword:            v.GetString("SMTP_PASSWORD"),
+		SMTPFrom:                v.GetString("SMTP_FROM"),
+		CBRBaseURL:              v.GetString("CBR_BASE_URL"),
+		MCPEnabled:              v.GetBool("MCP_ENABLED"),
+		MCPWriteEnabled:         v.GetBool("MCP_WRITE_ENABLED"),
+		MCPTemplateWriteEnabled: v.GetBool("MCP_TEMPLATE_WRITE_ENABLED"),
+		MCPAudience:             strings.TrimSpace(v.GetString("MCP_AUDIENCE")),
+		MCPAccessTokenTTL:       time.Duration(mcpAccessMins) * time.Minute,
+		MCPRefreshTokenTTL:      time.Duration(mcpRefreshDays) * 24 * time.Hour,
+		MCPAuthorizationCodeTTL: time.Duration(mcpCodeMins) * time.Minute,
+		MCPDCREnabled:           v.GetBool("MCP_DCR_ENABLED"),
+		MCPCIMDAllowedHosts:     parseCORSOrigins(v.GetString("MCP_CIMD_ALLOWED_HOSTS")),
+		MCPMaxRequestBodyBytes:  mcpMaxBody,
 
 		OpenRouterAPIKey:         v.GetString("OPENROUTER_API_KEY"),
 		OpenRouterAPIBase:        strings.TrimSpace(v.GetString("OPENROUTER_API_BASE")),
@@ -214,6 +261,12 @@ func Load() (*Config, error) {
 		ProxyLLMToken:               proxyToken,
 		ProxyLLMTimeoutSeconds:      proxyTimeout,
 		ProxyLLMAckNoProviderPolicy: v.GetBool("PROXY_LLM_ACK_NO_PROVIDER_POLICY"),
+	}
+	if cfg.MCPEnabled && cfg.MCPAudience == "" {
+		return nil, fmt.Errorf("config: MCP_AUDIENCE is required when MCP_ENABLED=true")
+	}
+	if cfg.MCPEnabled && cfg.AppBaseURL == "" {
+		return nil, fmt.Errorf("config: APP_BASE_URL is required when MCP_ENABLED=true")
 	}
 
 	return cfg, nil

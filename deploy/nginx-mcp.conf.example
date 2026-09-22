@@ -1,0 +1,35 @@
+# Merge into the existing HTTPS server block. Backend listens on 127.0.0.1:3006.
+
+location = /mcp {
+    proxy_pass http://127.0.0.1:3006;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_read_timeout 300s;
+    client_max_body_size 1m;
+}
+
+location ^~ /oauth/ {
+    proxy_pass http://127.0.0.1:3006;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+
+location = /.well-known/oauth-protected-resource {
+    proxy_pass http://127.0.0.1:3006;
+    proxy_set_header Host $host;
+}
+location = /.well-known/oauth-protected-resource/mcp {
+    proxy_pass http://127.0.0.1:3006;
+    proxy_set_header Host $host;
+}
+location = /.well-known/oauth-authorization-server {
+    proxy_pass http://127.0.0.1:3006;
+    proxy_set_header Host $host;
+}

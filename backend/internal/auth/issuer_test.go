@@ -124,6 +124,21 @@ func TestIssueRefreshToken_OpaqueAndUnique(t *testing.T) {
 	}
 }
 
+func TestIssueScopedAccessTokenCarriesOAuthScope(t *testing.T) {
+	iss := newTestIssuer(t)
+	access, err := iss.IssueScopedAccessToken("00000000-0000-0000-0000-000000000001", "agent@example.com", "engineer", "tenders:read pricing:draft")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := jwt.ParseWithClaims(access.Token, &AccessClaims{}, func(*jwt.Token) (any, error) { return &iss.key.Private.PublicKey, nil })
+	if err != nil || !tok.Valid {
+		t.Fatalf("parse scoped token: %v", err)
+	}
+	if got := tok.Claims.(*AccessClaims).Scope; got != "tenders:read pricing:draft" {
+		t.Fatalf("scope=%q", got)
+	}
+}
+
 func TestPublicJWKS_ContainsActiveKid(t *testing.T) {
 	iss := newTestIssuer(t)
 	jwks := iss.SigningKey().PublicJWKS()

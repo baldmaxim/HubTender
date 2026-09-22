@@ -159,17 +159,32 @@ func main() {
 		AppIssuer:    cfg.AppJWTIssuer,
 		AppAudience:  cfg.AppJWTAudience,
 	}
+	mcpIssuer, err := auth.NewIssuer(auth.IssuerConfig{
+		SigningKey: signingKey,
+		Issuer:     cfg.AppJWTIssuer,
+		Audience:   cfg.MCPAudience,
+		AccessTTL:  cfg.MCPAccessTokenTTL,
+		RefreshTTL: cfg.MCPRefreshTokenTTL,
+	})
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to construct MCP OAuth JWT issuer")
+	}
+	mcpVerifyCfg := middleware.VerifyConfig{
+		AppPublicKey: &signingKey.Private.PublicKey,
+		AppIssuer:    cfg.AppJWTIssuer,
+		AppAudience:  cfg.MCPAudience,
+	}
 	log.Info().Str("kid", signingKey.KID).Str("iss", cfg.AppJWTIssuer).Msg("app JWT issuer ready")
 
 	// -------------------------------------------------------------------------
 	// 8. Repositories, cache, services, handlers — see wire.go.
 	// -------------------------------------------------------------------------
-	d := buildDeps(rootCtx, pool, hub, verifyCfg, cfg, logger)
+	d := buildDeps(rootCtx, pool, hub, verifyCfg, cfg, logger, mcpIssuer)
 
 	// -------------------------------------------------------------------------
 	// 9. Router — see routes.go.
 	// -------------------------------------------------------------------------
-	r := newRouter(cfg, d, authH, verifyCfg, logger)
+	r := newRouter(cfg, d, authH, verifyCfg, mcpVerifyCfg, logger)
 
 	// -------------------------------------------------------------------------
 	// 10. HTTP server with graceful shutdown

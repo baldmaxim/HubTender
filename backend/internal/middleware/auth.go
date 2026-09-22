@@ -34,10 +34,12 @@ const CtxUser ctxKey = "user"
 
 // AuthUser holds the verified claims extracted from the app-issued JWT.
 type AuthUser struct {
-	ID     string
-	Email  string
-	Role   string // public.users.role_code, e.g. "administrator"
-	Issuer string
+	ID       string
+	Email    string
+	Role     string // public.users.role_code, e.g. "administrator"
+	Issuer   string
+	Scopes   []string // OAuth scopes; empty for ordinary portal JWTs
+	ClientID string   // OAuth client_id; empty for ordinary portal JWTs
 }
 
 // appClaims captures the shape of an access token minted by the local
@@ -45,8 +47,10 @@ type AuthUser struct {
 // time by issuer_test.go's round-trip assertions.
 type appClaims struct {
 	jwt.RegisteredClaims
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+	Scope    string `json:"scope,omitempty"`
+	ClientID string `json:"client_id,omitempty"`
 }
 
 // VerifyConfig bundles the knobs needed to verify app-issued tokens.
@@ -99,23 +103,55 @@ func verifyAppToken(cfg VerifyConfig, raw string) (*AuthUser, error) {
 	if err != nil || sub == "" {
 		return nil, fmt.Errorf("token missing sub claim")
 	}
-	return &AuthUser{ID: sub, Email: claims.Email, Role: claims.Role, Issuer: cfg.AppIssuer}, nil
+	scopes := strings.Fields(claims.Scope)
+	return &AuthUser{ID: sub, Email: claims.Email, Role: claims.Role, Issuer: cfg.AppIssuer, Scopes: scopes, ClientID: claims.ClientID}, nil
+}
+
+// HasScope reports whether the verified token includes scope. It is intended
+// for OAuth/MCP tokens; normal portal JWTs deliberately have no scopes.
+func (u *AuthUser) HasScope(scope string) bool {
+	if u == nil {
+		return false
+	}
+	for _, s := range u.Scopes {
+		if s == scope {
+			return true
+		}
+	}
+	return false
 }
 
 // JWTAuth returns a chi middleware that validates the Bearer JWT against the
 // supplied VerifyConfig. On success the AuthUser is attached to the request
 // context.
 func JWTAuth(cfg VerifyConfig) func(http.Handler) http.Handler {
+	return jwtAuth(cfg, "")
+}
+
+// JWTAuthWithChallenge validates a bearer token and advertises OAuth
+// protected-resource metadata on 401 responses, as required for remote MCP.
+func JWTAuthWithChallenge(cfg VerifyConfig, resourceMetadataURL string) func(http.Handler) http.Handler {
+	challenge := `Bearer resource_metadata="` + resourceMetadataURL + `"`
+	return jwtAuth(cfg, challenge)
+}
+
+func jwtAuth(cfg VerifyConfig, challenge string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr, ok := bearerToken(r)
 			if !ok {
+				if challenge != "" {
+					w.Header().Set("WWW-Authenticate", challenge)
+				}
 				apierr.Unauthorized("missing or malformed Authorization header").Render(w)
 				return
 			}
 			authUser, err := VerifyToken(cfg, tokenStr)
 			if err != nil {
 				log.Warn().Err(err).Str("path", r.URL.Path).Msg("JWT verification failed")
+				if challenge != "" {
+					w.Header().Set("WWW-Authenticate", challenge)
+				}
 				apierr.Unauthorized("invalid or expired token").Render(w)
 				return
 			}

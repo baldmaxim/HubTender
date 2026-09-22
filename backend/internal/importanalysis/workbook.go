@@ -85,7 +85,18 @@ func preflight(data []byte) error {
 // OpenWorkbook — читает разрешённый xlsx в нормализованное представление
 // (§2A). Формулы НЕ исполняются: сохраняется текст формулы и cached-значение,
 // как их отдаёт excelize. Никаких финансовых расчётов.
-func OpenWorkbook(fileName string, data []byte) (*Workbook, error) {
+func OpenWorkbook(fileName string, data []byte) (result *Workbook, resultErr error) {
+	// excelize v2.11.0 has a published panic path for malformed negative
+	// shared-string indexes (GO-2026-6452) and no fixed release yet. Preflight
+	// rejects malformed/oversized containers; this final boundary converts any
+	// remaining dependency panic into a typed invalid-workbook error instead of
+	// terminating the request process.
+	defer func() {
+		if recover() != nil {
+			result = nil
+			resultErr = &InvalidWorkbookError{Reason: "xlsx содержит некорректные ссылки на общие строки"}
+		}
+	}()
 	if err := preflight(data); err != nil {
 		return nil, err
 	}

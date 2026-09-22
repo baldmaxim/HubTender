@@ -57,8 +57,10 @@ func NewIssuer(cfg IssuerConfig) (*Issuer, error) {
 // the legacy Supabase JWT shape so the existing JWTAuth middleware (which
 // reads `sub` and `email`) does not need to change.
 type AccessClaims struct {
-	Email string `json:"email,omitempty"`
-	Role  string `json:"role,omitempty"` // public.users.role_code, e.g. "administrator"
+	Email    string `json:"email,omitempty"`
+	Role     string `json:"role,omitempty"`      // public.users.role_code, e.g. "administrator"
+	Scope    string `json:"scope,omitempty"`     // OAuth space-delimited scope for MCP tokens
+	ClientID string `json:"client_id,omitempty"` // OAuth client that owns the delegated token
 	jwt.RegisteredClaims
 }
 
@@ -72,6 +74,26 @@ type IssuedAccess struct {
 // IssueAccessToken signs a fresh RS256 access JWT for a user. userID becomes
 // the `sub` claim and must match the UUID stored in public.users.id.
 func (i *Issuer) IssueAccessToken(userID, email, role string) (IssuedAccess, error) {
+	return i.IssueScopedAccessToken(userID, email, role, "")
+}
+
+// IssueScopedAccessToken signs an access token carrying an OAuth-compatible
+// space-delimited scope claim. Ordinary portal access tokens call this with an
+// empty scope; MCP OAuth tokens use a dedicated issuer instance/audience.
+func (i *Issuer) IssueScopedAccessToken(userID, email, role, scope string) (IssuedAccess, error) {
+	return i.issueAccessToken(userID, email, role, scope, "")
+}
+
+// IssueDelegatedAccessToken adds the OAuth client_id used by the MCP
+// resource server to re-check the grant on every tool call.
+func (i *Issuer) IssueDelegatedAccessToken(userID, email, role, scope, clientID string) (IssuedAccess, error) {
+	if clientID == "" {
+		return IssuedAccess{}, errors.New("auth: clientID is empty")
+	}
+	return i.issueAccessToken(userID, email, role, scope, clientID)
+}
+
+func (i *Issuer) issueAccessToken(userID, email, role, scope, clientID string) (IssuedAccess, error) {
 	if userID == "" {
 		return IssuedAccess{}, errors.New("auth: userID is empty")
 	}
@@ -80,8 +102,7 @@ func (i *Issuer) IssueAccessToken(userID, email, role string) (IssuedAccess, err
 	exp := now.Add(i.accessTTL)
 
 	claims := AccessClaims{
-		Email: email,
-		Role:  role,
+		Email: email, Role: role, Scope: scope, ClientID: clientID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    i.issuer,
 			Subject:   userID,

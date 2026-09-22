@@ -14,6 +14,7 @@ import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import ForgotPassword from './pages/Auth/ForgotPassword';
 import ResetPassword from './pages/Auth/ResetPassword';
+import AgentConnect from './pages/AgentConnect/AgentConnect';
 // Keep-alive страницы «рабочего стола» — статически: их уже статически импортирует
 // MainLayout (workspacePages/WorkspaceKeepAlive), dynamic import их из бандла не вынесет.
 import ClientPositions from './pages/ClientPositions/ClientPositions';
@@ -55,6 +56,8 @@ const ChangeImpact = lazy(() => import('./pages/ChangeImpact/ChangeImpact'));
 const ReviewPack = lazy(() => import('./pages/ReviewPack/ReviewPack'));
 const AdminAiSettings = lazy(() => import('./pages/AdminAiSettings/AdminAiSettings'));
 const AdminApiAccess = lazy(() => import('./pages/AdminApiAccess/AdminApiAccess'));
+const AgentConnections = lazy(() => import('./pages/AgentConnections/AgentConnections'));
+const PricingDrafts = lazy(() => import('./pages/PricingDrafts/PricingDrafts'));
 
 function AppContent() {
   const { theme: currentTheme } = useTheme();
@@ -80,6 +83,7 @@ function AppContent() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/agent-connect" element={<AgentConnect />} />
 
           {/* Защищенные маршруты */}
           <Route
@@ -99,6 +103,7 @@ function AppContent() {
             <Route path="tasks" element={<Tasks />} />
             <Route path="positions" element={<ClientPositions />} />
             <Route path="positions/:positionId/items" element={<PositionItemsRoute />} />
+            <Route path="pricing-drafts" element={<PricingDrafts />} />
             <Route path="commerce/proposal" element={<Commerce />} />
             <Route path="commerce/redistribution" element={<CostRedistribution />} />
             <Route path="commerce" element={<Navigate to="/commerce/proposal" replace />} />
@@ -132,7 +137,8 @@ function AppContent() {
             <Route path="projects" element={<Projects />} />
             <Route path="projects/:projectId" element={<ProjectDetail />} />
             <Route path="users" element={<Users />} />
-            <Route path="settings" element={<div>Настройки</div>} />
+            <Route path="settings" element={<Navigate to="/settings/agents" replace />} />
+            <Route path="settings/agents" element={<AgentConnections />} />
           </Route>
 
           {/* Перенаправление на главную для неизвестных маршрутов */}
