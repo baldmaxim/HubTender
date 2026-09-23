@@ -13,6 +13,10 @@ alwaysApply: false
 Требуется `TENDERHUB_API_KEY` в окружении (см. `api/README.md`). Если переменной нет —
 скажи об этом и не пытайся обойти. Как читать поля ответов — `api/AGENT_INSTRUCTIONS.md`.
 
+Если идёшь HTTP мимо CLI: заголовок только `X-API-Key: thk_…`, `Authorization: Bearer`
+не слать (иначе исправный ключ даёт `401 invalid or expired token`). Список тендеров
+для ключа — `/api/v1/tenders/brief`, а не `/api/v1/tenders`.
+
 ## Команды
 
 ```bash
@@ -72,7 +76,8 @@ node scripts/archive-api.mjs compose ./compose.json --no-dry-run  # запись
 
 | Код | Что делать |
 |---|---|
-| 401 | Ключ отсутствует, отозван или просрочен — выпустить новый в UI |
+| 401 `invalid or expired token` | Заголовок не тот: нужен `X-API-Key`, а не `Authorization: Bearer`. Новый ключ не поможет |
+| 401 `invalid API key` | Ключ отсутствует, отозван или просрочен — выпустить новый в UI |
 | 403 `API_KEY_SCOPE_DENIED` | Ключу не выдана нужная область (чтение/запись) |
 | 403 `API_KEY_TENDER_DENIED` | Ключ ограничен списком тендеров, этот в него не входит |
 | 403 при `tenders`/`tender`/`positions`/`costs`/`estimate` | Ключу не выдана область `tenders:read` («Чтение тендеров и смет») — попросить перевыпуск, не обходить |
