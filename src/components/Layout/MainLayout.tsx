@@ -383,7 +383,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               const p = location.pathname;
               if (['/library', '/library/templates', '/admin/nomenclatures', '/admin/construction_cost'].includes(p)) return ['library'];
               if (['/costs', '/bsm', '/projects'].includes(p) || p.startsWith('/analytics')) return ['analytics'];
-              if (['/settings', '/admin/import-log', '/admin/insurance'].includes(p)) return ['settings-group'];
+              if (['/settings', '/settings/agents', '/admin/import-log', '/admin/insurance'].includes(p)) return ['settings-group'];
               if (p.startsWith('/admin')) return ['admin'];
               return [];
             })()}

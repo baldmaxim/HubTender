@@ -38,6 +38,7 @@ func newRouter(
 	d *deps,
 	authH *auth.Handler,
 	verifyCfg middleware.VerifyConfig,
+	mcpVerifyCfg middleware.VerifyConfig,
 	logger zerolog.Logger,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -72,6 +73,23 @@ func newRouter(
 	r.Post("/api/v1/auth/forgot-password", authH.ForgotPassword)
 	r.Post("/api/v1/auth/reset-password", authH.ResetPassword)
 	r.Get("/.well-known/jwks.json", authH.JWKS)
+
+	if cfg.MCPEnabled {
+		r.Get("/.well-known/oauth-protected-resource", d.mcpOAuthH.ProtectedResourceMetadata)
+		r.Get("/.well-known/oauth-protected-resource/mcp", d.mcpOAuthH.ProtectedResourceMetadata)
+		r.Get("/.well-known/oauth-authorization-server", d.mcpOAuthH.AuthorizationServerMetadata)
+		r.Get("/oauth/authorize", d.mcpOAuthH.Authorize)
+		r.Post("/oauth/token", d.mcpOAuthH.Token)
+		r.Post("/oauth/revoke", d.mcpOAuthH.Revoke)
+		r.Post("/oauth/register", d.mcpOAuthH.Register)
+		resourceMetadata := strings.TrimRight(cfg.AppBaseURL, "/") + "/.well-known/oauth-protected-resource"
+		mcpHandler := middleware.JWTAuthWithChallenge(mcpVerifyCfg, resourceMetadata)(d.mcpOAuthH.RequireActiveGrant(d.mcpHTTP))
+		originProtection := http.NewCrossOriginProtection()
+		for _, origin := range cfg.CORSOrigins {
+			_ = originProtection.AddTrustedOrigin(origin)
+		}
+		r.Handle("/mcp", originProtection.Handler(mcpHandler))
+	}
 
 	// Authenticated API routes — app-issued JWT only (see VerifyConfig).
 	authMW := middleware.JWTAuth(verifyCfg)
@@ -165,6 +183,7 @@ func newRouter(
 	r.Group(func(r chi.Router) {
 		r.Use(compressMW)
 		r.Use(authMW)
+		templateAdminMW := middleware.RequireRoles(map[string]bool{"veduschiy_inzhener": true, "administrator": true, "developer": true})
 
 		r.Get("/api/v1/me", d.meH.GetMe)
 		r.Get("/api/v1/me/permissions", d.meH.GetPermissions)
@@ -179,6 +198,19 @@ func newRouter(
 		// login/refresh/me).
 		r.Get("/api/v1/auth/me", authH.Me)
 		r.Post("/api/v1/auth/change-password", authH.ChangePassword)
+		if cfg.MCPEnabled {
+			r.Post("/api/v1/oauth/authorize", d.mcpOAuthH.Consent)
+			r.Get("/api/v1/oauth/grants", d.mcpOAuthH.ListGrants)
+			r.Delete("/api/v1/oauth/grants/{clientId}", d.mcpOAuthH.RevokeGrant)
+
+			r.Get("/api/v1/tenders/{id}/pricing-state", d.pricingH.GetState)
+			r.Get("/api/v1/tenders/{id}/pricing-qa", d.pricingH.QAReport)
+			r.Get("/api/v1/pricing/drafts", d.pricingH.ListDrafts)
+			r.Get("/api/v1/pricing/drafts/{id}", d.pricingH.GetDraft)
+			r.Post("/api/v1/pricing/drafts/{id}/validate", d.pricingH.ValidateDraft)
+			r.Post("/api/v1/pricing/drafts/{id}/apply", d.pricingH.ApplyDraft)
+			r.Post("/api/v1/pricing/drafts/{id}/cancel", d.pricingH.CancelDraft)
+		}
 
 		r.Get("/api/v1/references/roles", d.refH.GetRoles)
 		r.Get("/api/v1/references/units", d.refH.GetUnits)
@@ -321,25 +353,25 @@ func newRouter(
 
 		// Library — WorksTab (works_library CRUD).
 		r.Get("/api/v1/library/works", d.libraryH.ListWorks)
-		r.Post("/api/v1/library/works", d.libraryH.CreateWork)
-		r.Patch("/api/v1/library/works/{id}", d.libraryH.UpdateWork)
-		r.Delete("/api/v1/library/works/{id}", d.libraryH.DeleteWork)
+		r.With(templateAdminMW).Post("/api/v1/library/works", d.libraryH.CreateWork)
+		r.With(templateAdminMW).Patch("/api/v1/library/works/{id}", d.libraryH.UpdateWork)
+		r.With(templateAdminMW).Delete("/api/v1/library/works/{id}", d.libraryH.DeleteWork)
 		r.Get("/api/v1/library/materials", d.libraryH.ListMaterials)
-		r.Post("/api/v1/library/materials", d.libraryH.CreateMaterial)
-		r.Patch("/api/v1/library/materials/{id}", d.libraryH.UpdateMaterial)
-		r.Delete("/api/v1/library/materials/{id}", d.libraryH.DeleteMaterial)
+		r.With(templateAdminMW).Post("/api/v1/library/materials", d.libraryH.CreateMaterial)
+		r.With(templateAdminMW).Patch("/api/v1/library/materials/{id}", d.libraryH.UpdateMaterial)
+		r.With(templateAdminMW).Delete("/api/v1/library/materials/{id}", d.libraryH.DeleteMaterial)
 		r.Get("/api/v1/library/folders", d.libraryH.ListFolders)
-		r.Post("/api/v1/library/folders", d.libraryH.CreateFolder)
-		r.Patch("/api/v1/library/folders/{id}", d.libraryH.RenameFolder)
-		r.Delete("/api/v1/library/folders/{id}", d.libraryH.DeleteFolder)
-		r.Post("/api/v1/library/move", d.libraryH.MoveItem)
+		r.With(templateAdminMW).Post("/api/v1/library/folders", d.libraryH.CreateFolder)
+		r.With(templateAdminMW).Patch("/api/v1/library/folders/{id}", d.libraryH.RenameFolder)
+		r.With(templateAdminMW).Delete("/api/v1/library/folders/{id}", d.libraryH.DeleteFolder)
+		r.With(templateAdminMW).Post("/api/v1/library/move", d.libraryH.MoveItem)
 		r.Get("/api/v1/library/templates", d.libraryH.ListTemplates)
-		r.Post("/api/v1/library/templates", d.libraryH.CreateTemplate)
-		r.Patch("/api/v1/library/templates/{id}", d.libraryH.UpdateTemplate)
-		r.Delete("/api/v1/library/templates/{id}", d.libraryH.DeleteTemplate)
+		r.With(templateAdminMW).Post("/api/v1/library/templates", d.libraryH.CreateTemplate)
+		r.With(templateAdminMW).Patch("/api/v1/library/templates/{id}", d.libraryH.UpdateTemplate)
+		r.With(templateAdminMW).Delete("/api/v1/library/templates/{id}", d.libraryH.DeleteTemplate)
 		r.Get("/api/v1/library/templates/{id}/items", d.libraryH.ListTemplateItems)
-		r.Post("/api/v1/library/templates/{id}/items", d.libraryH.AddTemplateItem)
-		r.Delete("/api/v1/library/template-items/{id}", d.libraryH.DeleteTemplateItem)
+		r.With(templateAdminMW).Post("/api/v1/library/templates/{id}/items", d.libraryH.AddTemplateItem)
+		r.With(templateAdminMW).Delete("/api/v1/library/template-items/{id}", d.libraryH.DeleteTemplateItem)
 
 		// Phase 5: atomic redistribution save (cost_redistribution_results).
 		r.Post("/api/v1/redistributions/save", d.redistributionH.Save)
@@ -574,7 +606,7 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 					w.Header().Set("Access-Control-Allow-Credentials", "true")
 					w.Header().Set(
 						"Access-Control-Allow-Headers",
-						"Authorization, Content-Type, X-Request-ID, If-Match, If-None-Match, Cache-Control, X-API-Key",
+						"Authorization, Content-Type, X-Request-ID, If-Match, If-None-Match, Cache-Control, X-API-Key, MCP-Protocol-Version, MCP-Session-Id, MCP-Method, MCP-Name",
 					)
 					// Preflight cache: Chrome default is only 5s, so every
 					// realtime refetch would otherwise re-issue OPTIONS.
@@ -585,7 +617,7 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 					)
 					w.Header().Set(
 						"Access-Control-Expose-Headers",
-						"ETag, Location",
+						"ETag, Location, MCP-Session-Id, WWW-Authenticate",
 					)
 				}
 			}

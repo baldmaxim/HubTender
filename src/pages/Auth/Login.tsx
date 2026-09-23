@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Input, Button, Card, message, Typography, Spin, Result } from 'antd';
 import { UserOutlined, LockOutlined, LoginOutlined, LoadingOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { reapplyAccess } from '../../lib/api/users';
 import { useAuth } from '../../contexts/AuthContext';
 import { HeaderIcon } from '../../components/Icons/HeaderIcon';
@@ -21,6 +21,7 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, loading: authLoading } = useAuth();
 
   // Автоматический редирект если пользователь уже авторизован
@@ -35,10 +36,13 @@ const Login: React.FC = () => {
     }
 
     if (user.access_status === 'approved' && user.access_enabled) {
-      const targetPath = user.allowed_pages.length === 0 ? '/dashboard' : user.allowed_pages[0];
+      const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
+      const targetPath = from?.pathname
+        ? `${from.pathname}${from.search ?? ''}`
+        : (user.allowed_pages.length === 0 ? '/dashboard' : user.allowed_pages[0]);
       navigate(targetPath, { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, location.state]);
 
   const handleLogin = async (values: LoginFormValues) => {
     setLoading(true);

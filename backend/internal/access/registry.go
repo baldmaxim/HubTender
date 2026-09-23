@@ -21,6 +21,7 @@ var AllPages = []string{
 	"/dashboard",
 	"/tenders",
 	"/positions",
+	"/pricing-drafts",
 	"/library",
 	"/library/templates",
 	"/bsm",
@@ -39,6 +40,7 @@ var AllPages = []string{
 	"/tasks",
 	"/tender-timeline",
 	"/projects",
+	"/settings/agents",
 }
 
 // GetAllowedPages computes the set of pages a user may visit.

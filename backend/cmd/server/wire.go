@@ -15,10 +15,13 @@ import (
 	"github.com/su10/hubtender/backend/internal/ai/keycrypt"
 	ainom "github.com/su10/hubtender/backend/internal/ai/nomenclature"
 	"github.com/su10/hubtender/backend/internal/ai/openrouter"
+	"github.com/su10/hubtender/backend/internal/auth"
 	"github.com/su10/hubtender/backend/internal/cache"
 	"github.com/su10/hubtender/backend/internal/cbr"
 	"github.com/su10/hubtender/backend/internal/config"
 	"github.com/su10/hubtender/backend/internal/handlers"
+	"github.com/su10/hubtender/backend/internal/mcpauth"
+	"github.com/su10/hubtender/backend/internal/mcpserver"
 	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/notify/telegram"
 	"github.com/su10/hubtender/backend/internal/realtime"
@@ -100,6 +103,9 @@ type deps struct {
 	qualityH          *handlers.QualityHandler
 	verifSectionsH    *handlers.VerificationSectionsHandler
 	costBenchmarkH    *handlers.CostBenchmarkHandler
+	pricingH          *handlers.PricingHandler
+	mcpOAuthH         *mcpauth.Handler
+	mcpHTTP           http.Handler
 }
 
 // buildDeps wires repositories → cache → services → handlers. Extracted from
@@ -111,6 +117,7 @@ func buildDeps(
 	verifyCfg middleware.VerifyConfig,
 	cfg *config.Config,
 	logger zerolog.Logger,
+	mcpIssuer *auth.Issuer,
 ) *deps {
 	inMemCache := cache.New()
 	cbrClient := cbr.NewClient(inMemCache, cfg.CBRBaseURL)
@@ -160,6 +167,8 @@ func buildDeps(
 	importMemoryRepo := repository.NewImportMemoryRepo(pool)
 	archiveRepo := repository.NewArchiveRepo(pool)
 	apiAccessRepo := repository.NewApiAccessRepo(pool)
+	pricingRepo := repository.NewPricingRepo(pool)
+	mcpOAuthRepo := mcpauth.NewRepository(pool)
 
 	// Commercial-cost auto-recalc — replaces the manual «Пересчитать» button.
 	// Mutation services Enqueue(tenderID) after changing a pricing input (BOQ
@@ -266,6 +275,13 @@ func buildDeps(
 	reviewPackSvc := services.NewReviewPackService(reviewPackRepo)
 	archiveSvc := services.NewArchiveService(archiveRepo, inMemCache)
 	apiAccessSvc := services.NewApiAccessService(rootCtx, apiAccessRepo)
+	pricingSvc := services.NewPricingService(pricingRepo, userRepo, libraryRepo, mcpOAuthRepo, services.PricingFeatures{
+		WriteEnabled: cfg.MCPWriteEnabled, TemplateWriteEnabled: cfg.MCPTemplateWriteEnabled,
+	}).WithRecalcQueue(recalcQueue)
+	mcpOAuthSvc := mcpauth.NewService(mcpOAuthRepo, userRepo, mcpauth.ServiceConfig{
+		Issuer: mcpIssuer, CodeTTL: cfg.MCPAuthorizationCodeTTL,
+		DCR: cfg.MCPDCREnabled, CIMDAllowedHosts: cfg.MCPCIMDAllowedHosts,
+	})
 	// Этап 2.2: AI-подбор номенклатуры. Одобренного provider в проекте нет —
 	// по умолчанию DisabledProvider; config-contract (владелец проекта):
 	//   AI_NOMENCLATURE_ENABLED, AI_NOMENCLATURE_PROVIDER, AI_NOMENCLATURE_MODEL,
@@ -468,6 +484,9 @@ func buildDeps(
 		qualityH:          handlers.NewQualityHandler(qualitySvc),
 		verifSectionsH:    handlers.NewVerificationSectionsHandler(verifSectionsSvc),
 		costBenchmarkH:    handlers.NewCostBenchmarkHandler(costBenchmarkSvc),
+		pricingH:          handlers.NewPricingHandler(pricingSvc),
+		mcpOAuthH:         mcpauth.NewHandler(mcpOAuthSvc, mcpauth.HandlerConfig{PublicBaseURL: cfg.AppBaseURL, DCR: cfg.MCPDCREnabled}),
+		mcpHTTP:           mcpserver.NewHTTPHandler(pricingSvc, mcpserver.Config{MaxRequestBodyBytes: cfg.MCPMaxRequestBodyBytes, Logger: logger}),
 		boqH:              handlers.NewBoqHandler(boqSvc),
 		boqWH:             handlers.NewBoqWriteHandler(boqSvc),
 		bulkBoqH:          handlers.NewBulkBoqHandler(bulkBoqSvc),

@@ -1,0 +1,43 @@
+<evaluation>
+  <qa_pair>
+    <question>In the fixed MCP evaluation tenders, find the archived mobile waste-compaction material whose name identifies the PRESSMAX 900 series. What is its unit rate? Return an integer only.</question>
+    <answer>2070000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Find the archived source used for the exact PRESSMAX 900 material match in the fixed evaluation data. What is the tender title?</question>
+    <answer>ЖК Сокольники</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Within the same archived position as the exact PRESSMAX 900 material, identify the compatible general equipment-installation work rather than the furniture work. What is its unit rate? Return an integer only.</question>
+    <answer>1000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In the fixed archived security-post tender, a workstation is priced in a foreign currency. After using that source tender's own exchange rate, what historical RUB unit rate does the archive search return? Return an integer only.</question>
+    <answer>200000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Find the exact archived PRESSMAX 900 material in the fixed evaluation data and report its quote-link evidence value exactly.</question>
+    <answer>КП-PRESSMAX-900</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Inspect the fixed managed template for a metal wheel stop. How many work/material items does the template contain? Return an integer only.</question>
+    <answer>2</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Among the fixed archived sign sources, find the GBO sign material. What is its unit rate? Return an integer only.</question>
+    <answer>42000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Inspect direct-price completeness for tender number EVAL-NEW in the fixed evaluation data. How many positions are currently unresolved? Return an integer only.</question>
+    <answer>1</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Find the fixed archived security workstation source and report its original currency code.</question>
+    <answer>USD</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Among fixed evaluation archive sources, identify the deliberately stale pump source and report its tender date in YYYY-MM-DD format.</question>
+    <answer>2025-01-10</answer>
+  </qa_pair>
+</evaluation>
+

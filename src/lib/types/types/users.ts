@@ -79,6 +79,7 @@ export const ALL_PAGES = [
   '/library/templates',
   '/positions',
   '/positions/:positionId/items',
+  '/pricing-drafts',
   '/commerce',
   '/commerce/proposal',
   '/commerce/redistribution',
@@ -95,6 +96,7 @@ export const ALL_PAGES = [
   '/projects',
   '/projects/:projectId',
   '/settings',
+  '/settings/agents',
   '/users',
   '/admin/import-log',
   '/admin/insurance',
@@ -115,6 +117,7 @@ export const DEFAULT_ROLE_PAGES: Record<UserRole, string[]> = {
     '/tasks',
     '/positions',
     '/positions/:positionId/items',
+    '/pricing-drafts',
     '/commerce',
     '/commerce/proposal',
     '/library',
@@ -124,6 +127,7 @@ export const DEFAULT_ROLE_PAGES: Record<UserRole, string[]> = {
     '/analytics/comparison',
     '/financial-indicators',
     '/settings',
+    '/settings/agents',
   ],
   'Инженер': [
     '/dashboard',
@@ -131,10 +135,12 @@ export const DEFAULT_ROLE_PAGES: Record<UserRole, string[]> = {
     '/tasks',
     '/positions',
     '/positions/:positionId/items',
+    '/pricing-drafts',
     '/library',
     '/library/templates',
     '/bsm',
     '/settings',
+    '/settings/agents',
   ],
 };
 
@@ -145,6 +151,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/tender-timeline': 'Хронология расчёта тендеров',
   '/tasks': 'Список задач',
   '/positions': 'Позиции заказчика',
+  '/pricing-drafts': 'Черновики расценки',
   '/commerce/proposal': 'Форма КП',
   '/commerce/redistribution': 'Перераспределение',
   '/library': 'Материалы и работы',
@@ -165,6 +172,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/admin/api-access': 'Доступ к API',
   '/users': 'Пользователи',
   '/settings': 'Настройки',
+  '/settings/agents': 'Подключённые агенты',
   '/positions/:positionId/items': 'Работы и материалы',
   '/commerce': 'Форма КП', // Старый путь, оставлен для совместимости
   '/data-quality': 'Проверка данных',
@@ -181,7 +189,7 @@ export const PAGE_LABELS: Record<string, string> = {
 export const PAGES_STRUCTURE = [
   {
     title: null, // Без группы
-    pages: ['/dashboard', '/positions'],
+    pages: ['/dashboard', '/positions', '/pricing-drafts'],
   },
   {
     title: 'Данные по тендерам',
@@ -217,7 +225,7 @@ export const PAGES_STRUCTURE = [
   },
   {
     title: 'Настройки',
-    pages: ['/admin/import-log', '/admin/insurance', '/admin/api-access'],
+    pages: ['/settings/agents', '/admin/import-log', '/admin/insurance', '/admin/api-access'],
   },
 ] as const;
 
@@ -257,6 +265,13 @@ export const hasPageAccess = (user: AuthUser, pagePath: string): boolean => {
     if (user.allowed_pages.includes('/positions')) {
       return true;
     }
+  }
+
+  if (pagePath === '/pricing-drafts' && user.allowed_pages.includes('/positions')) {
+    return true;
+  }
+  if (pagePath === '/settings/agents' && user.allowed_pages.includes('/settings')) {
+    return true;
   }
 
   // Специальная логика: если есть доступ к /projects, автоматически разрешен доступ к /projects/:projectId
