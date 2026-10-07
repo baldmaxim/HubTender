@@ -205,3 +205,6 @@ authorized_key.json
 # Локальный allowlist разрешений Claude Code: меняется каждую сессию,
 # общие настройки живут в .claude/settings.json.
 .claude/settings.local.json
+
+# Загрузчик выгрузки 1С: отчёты, решения, манифест (коммерческие данные)
+scripts/import-1c/out/

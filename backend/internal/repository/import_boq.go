@@ -58,6 +58,9 @@ type ImportBoqItem struct {
 	DetailCostCategoryID *string  `json:"detail_cost_category_id"`
 	MaterialType         *string  `json:"material_type"`
 	Description          *string  `json:"description"`
+	// QuotePriceDate — справочная дата источника цены (YYYY-MM-DD, metadata-only,
+	// вне расчёта): архив цен показывает её вместо даты импорта.
+	QuotePriceDate *string `json:"quote_price_date"`
 }
 
 // ImportPositionUpdate represents one element of the position_updates array.
@@ -302,7 +305,8 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			detail_cost_category_id,
 			material_type,
 			description,
-			import_session_id
+			import_session_id,
+			quote_price_date
 		) VALUES (
 			$1::uuid,
 			$2::uuid,
@@ -324,7 +328,8 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			$18::uuid,
 			$19::public.material_type,
 			$20,
-			$21::uuid
+			$21::uuid,
+			$22::date
 		)
 		RETURNING id
 	`
@@ -393,6 +398,11 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			}
 		}
 
+		quotePriceDate, err := importQuotePriceDate(item, rowLabel)
+		if err != nil {
+			return nil, err
+		}
+
 		var insertedID string
 		if err := tx.QueryRow(ctx, insertBoqQ,
 			in.TenderID,               // $1  tender_id
@@ -416,6 +426,7 @@ func (r *ImportRepo) BulkImport(ctx context.Context, in ImportInput) (*ImportRes
 			item.MaterialType,         // $19 material_type
 			item.Description,          // $20 description
 			importSessionID,           // $21 import_session_id
+			quotePriceDate,            // $22 quote_price_date (metadata-only)
 		).Scan(&insertedID); err != nil {
 			return nil, boqInsertError(err, rowLabel, currentPositionID)
 		}
