@@ -38,12 +38,12 @@ export const replacePreflight = async ({ api, refs, replace }) => {
   const old = [];
   if (!replace.length) return { problems, old };
   const projects = await api.listProjects();
-  for (const n of replace) {
-    for (const t of refs.tenders.filter((x) => x.tender_number === n)) {
+  for (const r of replace) {
+    for (const t of refs.tenders.filter((x) => x.tender_number === r.old)) {
       const proj = projects.find((p) => p.tender_id === t.id);
-      if (proj) problems.push(`${n} v${t.version}: на тендер ссылается проект «${proj.name ?? proj.id}»`);
+      if (proj) problems.push(`${r.old} v${t.version}: на тендер ссылается проект «${proj.name ?? proj.id}»`);
       const groups = await api.listTimelineGroups(t.id).catch(() => []);
-      old.push({ id: t.id, number: n, version: t.version, title: t.title, timelineGroups: groups.length });
+      old.push({ id: t.id, number: r.old, version: t.version, title: t.title, timelineGroups: groups.length });
     }
   }
   return { problems, old };

@@ -203,3 +203,27 @@ test('Разбор ДОП в Excel: шаблон, решения 1/2/3, номе
     'T|V|12': 'position',
   });
 });
+
+test('Наименования: каноническая форма и порядок слов', async () => {
+  const { canonKey, canonName } = await import('./names.mjs');
+  assert.equal(canonName('Плита ПДП (3,0х1,75х0,17м)'), canonName('плита пдп 3.0x1.75x0.17 м'));
+  assert.equal(canonName('Гвозди 100 (кг)'), canonName('Гвозди 100'));
+  assert.equal(canonName('Дренаж QDrain или аналог'), canonName('Дренаж QDrain'));
+  assert.equal(canonName('Бетон B25'), canonName('Бетон В25'), 'латинская B = кириллическая В');
+  assert.notEqual(canonName('Труба 32, 40 мм'), canonName('Труба 32.40 мм'), '«32, 40» — список, не дробь');
+  assert.equal(canonKey('material', 'Бетон В25 F150', 'м3'), canonKey('material', 'F150 Бетон B25', 'м3'));
+  assert.notEqual(canonKey('material', 'Кладка ГСБ 250 мм', 'м3'), canonKey('material', 'Кладка ГСБ 200 мм', 'м3'));
+  assert.notEqual(canonKey('work', 'Песок', 'м3'), canonKey('work', 'Песок', 'т'));
+});
+
+test('Единицы портала: т→тн, маш/час→м-час; 298 → 298.1; --replace', async () => {
+  const { buildUnitMap } = await import('./units.mjs');
+  const known = new Set(['шт', 'тн', 'м-час', 'м2']);
+  const items = buildUnitMap(new Map([['т', 5], ['маш/час', 2], ['лист', 1]]), known, {}, { proposeNew: true });
+  assert.deepEqual(Object.fromEntries(items.map), { 'т': 'тн', 'маш/час': 'м-час', 'лист': 'лист' });
+  assert.equal(buildUnitMap(new Map([['тн', 1]]), known).map.get('тн'), 'тн');
+  const m = assignTenderNumbers(['298. ЖК Сокольники (АЙСОРС)']);
+  assert.deepEqual([m.get('298. ЖК Сокольники (АЙСОРС)').number, m.get('298. ЖК Сокольники (АЙСОРС)').title], ['298.1', 'ЖК Сокольники (претендер)']);
+  const { parseReplace } = await import('./tenders.mjs');
+  assert.deepEqual(parseReplace('269=Т-001-ГАЛС, 300'), [{ number: '269', old: 'Т-001-ГАЛС' }, { number: '300', old: '300' }]);
+});

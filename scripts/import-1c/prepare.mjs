@@ -4,9 +4,10 @@
 
 import { readVersions } from './csv.mjs';
 import { buildVersion } from './model.mjs';
-import { buildNomenclatureLookupKey } from '../../src/utils/boq/importShared.ts';
+import { canonKey } from './names.mjs';
 
-export const nameKey = (kind, name, unit) => `${kind}|${buildNomenclatureLookupKey(name, unit ?? '')}`;
+/** Ключ наименования для сопоставления со справочником (см. names.mjs). */
+export const nameKey = canonKey;
 
 /**
  * Обходит выгрузку и отдаёт собранные версии выбранных тендеров по порядку файла.
@@ -57,8 +58,10 @@ export const prepareAll = async (opts) => {
         }
         useUnit(it.unit_code);
         const key = nameKey(it.kind, it.name, it.unit_code);
-        if (!names.has(key)) names.set(key, { kind: it.kind, name: it.name, unit: it.unit_code, rows: 0 });
-        names.get(key).rows += 1;
+        if (!names.has(key)) names.set(key, { kind: it.kind, name: it.name, unit: it.unit_code, rows: 0, spellings: new Map() });
+        const entry = names.get(key);
+        entry.rows += 1;
+        entry.spellings.set(it.name, (entry.spellings.get(it.name) ?? 0) + 1);
       }
     }
     for (const u of built.stats.unresolved) unresolved.push({ tender: tender.number, version: version.version, ...u });
@@ -81,6 +84,11 @@ export const prepareAll = async (opts) => {
     });
   });
 
+  // Новое наименование заводим в самом частом написании 1С.
+  for (const entry of names.values()) {
+    entry.name = [...entry.spellings.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    delete entry.spellings;
+  }
   fillMissingRates(versions);
   return { versions, names, usedUnits, unresolved, reviewDops, noUnitItems };
 };

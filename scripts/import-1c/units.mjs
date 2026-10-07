@@ -46,6 +46,13 @@ export const suggestUnitCode = (raw, knownCodes) => {
   return null;
 };
 
+/** Код справочника, если подобранного нет, а на портале он заведён иначе. */
+const UNIT_ALIASES = { 'т': ['тн'], 'маш/час': ['м-час'], 'маш.-час': ['м-час'] };
+const withAlias = (code, knownCodes) => {
+  if (!code || knownCodes.has(code)) return code;
+  return (UNIT_ALIASES[code] ?? []).find((a) => knownCodes.has(a)) ?? code;
+};
+
 /** Похоже на нормальную единицу справочника (её можно завести как новую). */
 const looksLikeUnit = (text) => /^[a-zа-яё][a-zа-яё./]{0,11}$/i.test(text) && !/^(\d+|%)$/.test(text);
 
@@ -65,6 +72,7 @@ export const buildUnitMap = (texts, knownCodes, overrides = {}, { proposeNew = f
     const hasOverride = Object.prototype.hasOwnProperty.call(overrides, text);
     let suggested = suggestUnitCode(text, knownCodes);
     if (suggested === null && proposeNew && looksLikeUnit(text)) suggested = text;
+    suggested = withAlias(suggested, knownCodes);
     const code = hasOverride ? overrides[text] : suggested;
     const exists = code === null || knownCodes.has(code);
     map.set(text, code);

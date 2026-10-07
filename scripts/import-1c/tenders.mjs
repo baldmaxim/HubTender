@@ -3,6 +3,11 @@
 /** Тендеры, которые по решению пользователя не грузим (базовые номера). */
 export const EXCLUDED_NUMBERS = ['297', '272'];
 
+/** Номер/название вместо выведенных из tender_name (номер уже занят на портале). */
+export const TENDER_OVERRIDES = {
+  '298': { number: '298.1', title: 'ЖК Сокольники (претендер)' },
+};
+
 /** «263. ЖК События (Донстрой)» → { baseNumber: '263', title: 'ЖК События (Донстрой)' }. */
 export const parseTenderName = (name) => {
   const m = /^\s*(\d+)\.\s*(.+?)\s*$/.exec(name ?? '');
@@ -35,15 +40,26 @@ export const assignTenderNumbers = (names) => {
   for (const [base, list] of byBase) {
     list.forEach((name, i) => {
       const { title } = parseTenderName(name);
+      const override = list.length === 1 ? TENDER_OVERRIDES[base] : undefined;
       out.set(name, {
-        number: list.length > 1 ? `${base}.${i + 1}` : base,
+        number: override?.number ?? (list.length > 1 ? `${base}.${i + 1}` : base),
         baseNumber: base,
-        title,
+        title: override?.title ?? title,
       });
     });
   }
   return out;
 };
+
+/**
+ * --replace «269=Т-001-ГАЛС,…»: номер из файла = номер на портале, который он заменяет.
+ * Просто «269» — заменяет тот же номер.
+ */
+export const parseReplace = (raw) => (raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [])
+  .map((s) => {
+    const [number, old] = s.split('=').map((x) => x.trim());
+    return { number, old: old || number };
+  });
 
 /** Причина пропуска тендера или null, если его грузим. */
 export const skipReason = (name) => {
