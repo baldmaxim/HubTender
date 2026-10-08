@@ -3,6 +3,7 @@
 import type { Tables } from '../types/database.types';
 import type { ProjectInsert } from '../types/types';
 import { apiFetch } from './client';
+import { sortTendersByNumber } from '../../utils/tenderSort';
 
 export type ProjectAgreementRow = Tables<'project_additional_agreements'>;
 export type ProjectMonthlyCompletionRow = Tables<'project_monthly_completion'>;
@@ -184,5 +185,5 @@ export async function listActiveTendersForProjectSelect(): Promise<TenderForProj
   const res = await apiFetch<{ data: TenderForProjectSelect[] }>(
     '/api/v1/projects/active-tenders',
   );
-  return res.data ?? [];
+  return sortTendersByNumber(res.data ?? []);
 }

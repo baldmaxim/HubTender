@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { listTimelineTenders } from '../../../lib/api/timeline';
 import { useRealtimeAwareLoading } from '../../../lib/realtime/useRealtimeAwareLoading';
 import type { ApprovalStatus } from '../../../lib/types/types';
+import { compareTenderNumbersDesc } from '../../../utils/tenderSort';
 
 const EXCLUDED_TENDER_NUMBERS = new Set([
   '306-TEST-V2-20260407174128',
@@ -222,10 +223,7 @@ function isExcludedTender(title: string, tenderNumber: string): boolean {
 
 function sortTendersByNumber(tenders: TimelineTenderListItem[]): TimelineTenderListItem[] {
   return [...tenders].sort((left, right) => {
-    const byNumber = left.tender_number.localeCompare(right.tender_number, 'ru-RU', {
-      numeric: true,
-      sensitivity: 'base',
-    });
+    const byNumber = compareTenderNumbersDesc(left.tender_number, right.tender_number);
 
     if (byNumber !== 0) {
       return byNumber;

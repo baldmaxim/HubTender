@@ -112,11 +112,7 @@ export function useRedistributionData() {
 
   const loadTenders = async () => {
     try {
-      const all = await apiFetchTenders();
-      const sorted = [...all].sort((a, b) =>
-        (b.created_at || '').localeCompare(a.created_at || ''),
-      );
-      setTenders(sorted);
+      setTenders(await apiFetchTenders());
     } catch (error) {
       console.error('Ошибка загрузки тендеров:', error);
       message.error('Не удалось загрузить список тендеров');

@@ -3,6 +3,7 @@
 
 import { apiFetch } from './client';
 import type { CreatedAdditionalPosition } from '../../utils/boq/additionalImport';
+import { sortTendersByNumber } from '../../utils/tenderSort';
 
 export interface ImportSession {
   id: string;
@@ -75,7 +76,7 @@ export async function fetchAllTendersForFilter(): Promise<ImportLogTender[]> {
   const res = await apiFetch<{ data: ImportLogTender[] }>(
     '/api/v1/import-sessions/all-tenders',
   );
-  return res.data ?? [];
+  return sortTendersByNumber(res.data ?? []);
 }
 
 /**

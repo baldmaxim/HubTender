@@ -4,6 +4,7 @@
 // type works at both call sites without adaptation.
 import type { Tender } from '../types/types';
 import { apiFetch } from './client';
+import { sortTendersByNumber } from '../../utils/tenderSort';
 
 export interface ListTendersParams {
   isArchived?: boolean;
@@ -39,9 +40,9 @@ async function fetchAllFromGo(params?: ListTendersParams): Promise<Tender[]> {
   return all;
 }
 
-/** List tenders. Routes to Go BFF when `VITE_API_TENDERS_ENABLED=true`. */
+/** List tenders, отсортированные по номеру (новые сверху), внутри номера — по версии. */
 export async function fetchTenders(params?: ListTendersParams): Promise<Tender[]> {
-  return fetchAllFromGo(params);
+  return sortTendersByNumber(await fetchAllFromGo(params));
 }
 
 /** Bulk fetch tenders by id. Go path filters the list response in-memory. */

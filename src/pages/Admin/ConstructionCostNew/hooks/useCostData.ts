@@ -97,11 +97,7 @@ export const useCostData = () => {
 
   const fetchTenders = async () => {
     try {
-      const all = await apiFetchTenders();
-      const sorted = [...all].sort((a, b) =>
-        (b.created_at || '').localeCompare(a.created_at || ''),
-      );
-      setTenders(sorted);
+      setTenders(await apiFetchTenders());
     } catch (error) {
       message.error('Ошибка загрузки тендеров: ' + getErrorMessage(error));
     }
