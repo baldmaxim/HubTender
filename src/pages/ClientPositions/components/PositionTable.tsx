@@ -17,6 +17,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { ClientPosition, Tender } from '../../../lib/types';
 import { PositionRowActions } from './PositionRowActions';
+import { ClampedText } from './ClampedText';
 import { renderStrikeRuns, renderStruck } from '../../../components/RichText/StrikeText';
 import { IconSwap } from '../../../components/transitions';
 import { useWorkspaceTabActions } from '../../../contexts/WorkspaceTabsContext';
@@ -194,15 +195,19 @@ export const PositionTable: React.FC<PositionTableProps> = ({
         const sectionColor = isLeaf ? '#52c41a' : '#ff7875';
         const isAdditional = record.is_additional;
         const paddingLeft = isAdditional ? 20 : 0;
+        const workName = renderStrikeRuns(record.rich_runs?.work_name, record.work_name);
+        // Длинное наименование — 2 строки и троеточие: 2 строки (44px) укладываются
+        // в минимальную высоту строки (48px у «Итого»), поэтому строка от имени не растёт.
+        const nameClampProps = {
+          rows: 2,
+          title: workName,
+          isDark: currentTheme === 'dark',
+          style: { paddingLeft: `${paddingLeft}px` },
+        };
 
         if (isLeaf && selectedTender) {
           return (
-            <div
-              style={{
-                display: 'block',
-                paddingLeft: `${paddingLeft}px`,
-              }}
-            >
+            <ClampedText {...nameClampProps}>
               {isAdditional ? (
                 <Tag color="orange" style={{ marginRight: 8 }}>ДОП</Tag>
               ) : (
@@ -212,13 +217,13 @@ export const PositionTable: React.FC<PositionTableProps> = ({
                   </Text>
                 )
               )}
-              <Text style={{ textDecoration: 'underline' }}>{renderStrikeRuns(record.rich_runs?.work_name, record.work_name)}</Text>
-            </div>
+              <Text style={{ textDecoration: 'underline' }}>{workName}</Text>
+            </ClampedText>
           );
         }
 
         return (
-          <div style={{ paddingLeft: `${paddingLeft}px` }}>
+          <ClampedText {...nameClampProps}>
             {isAdditional ? (
               <Tag color="orange" style={{ marginRight: 8 }}>ДОП</Tag>
             ) : (
@@ -228,8 +233,8 @@ export const PositionTable: React.FC<PositionTableProps> = ({
                 </Text>
               )
             )}
-            <Text style={{ fontWeight: 700, fontFamily: 'Georgia, "Times New Roman", serif' }}>{renderStrikeRuns(record.rich_runs?.work_name, record.work_name)}</Text>
-          </div>
+            <Text style={{ fontWeight: 700, fontFamily: 'Georgia, "Times New Roman", serif' }}>{workName}</Text>
+          </ClampedText>
         );
       },
     },
