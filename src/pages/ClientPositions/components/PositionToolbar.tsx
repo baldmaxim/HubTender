@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Select, Row, Col, Divider, Button, Space, Typography } from 'antd';
+import { Card, Select, Row, Col, Divider, Button, Space, Typography, Tag } from 'antd';
 import {
   LinkOutlined,
   FileTextOutlined,
@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { HOUSING_CLASS_COLORS } from '../../../utils/housingClassColor';
 
 const { Text } = Typography;
 
@@ -104,6 +105,15 @@ const PositionToolbarInner: React.FC<PositionToolbarProps> = ({
       </span>
     ),
   };
+  // Класс жилья — только отображение (задаётся на странице «Тендеры»), тег тех же цветов.
+  const housingClass = selectedTender?.housing_class;
+  const housingClassTag = housingClass ? (
+    <Tag color={HOUSING_CLASS_COLORS[housingClass] || 'default'} style={{ margin: 0 }}>
+      {housingClass}
+    </Tag>
+  ) : (
+    <Text type="secondary">—</Text>
+  );
 
   return (
     <>
@@ -133,8 +143,12 @@ const PositionToolbarInner: React.FC<PositionToolbarProps> = ({
                 Подписи «Тендер:»/«Версия:» на телефоне скрыты: их роль берут на себя
                 плейсхолдеры селектов, а высота нужнее списку позиций. */}
             <Col xs={24} lg={9} onClick={(e) => e.stopPropagation()}>
-              <Row gutter={8}>
-                <Col span={16}>
+              {/* Тендер забирает остаток ширины; Версия — фикс. 118px (селект 110 + gutter),
+                  чтобы «Версия N» не обрезалась; Класс жилья — по содержимому. Если ряд уже
+                  minWidth тендера + остальных (узкий десктоп), Класс переносится вниз, а не
+                  наезжает на соседей. */}
+              <Row gutter={[8, 8]}>
+                <Col flex="1 1 0" style={{ minWidth: 120 }}>
                   {!isPhoneDevice && (
                     <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000', fontSize: 14 }}>Тендер:</Text>
                   )}
@@ -144,13 +158,16 @@ const PositionToolbarInner: React.FC<PositionToolbarProps> = ({
                     value={selectedTenderTitle}
                     onChange={onTenderTitleChange}
                     options={tenderTitles}
+                    // Селект ужат колонкой «Класс жилья» — список раскрывается по ширине
+                    // названий (не уже селекта), иначе длинные имена обрезаются.
+                    popupMatchSelectWidth={false}
                     showSearch
                     filterOption={(input, option) =>
                       (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                     }
                   />
                 </Col>
-                <Col span={8}>
+                <Col flex="118px">
                   {!isPhoneDevice && (
                     <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000', fontSize: 14 }}>Версия:</Text>
                   )}
@@ -163,6 +180,19 @@ const PositionToolbarInner: React.FC<PositionToolbarProps> = ({
                     options={versions}
                   />
                 </Col>
+                {/* Портретный телефон: третьей колонке в ряду места нет (селекты обрезаются) —
+                    там класс выводится в строке «Заказчик». */}
+                {selectedTender && !isPhone && (
+                  <Col flex="none">
+                    {!isPhoneDevice && (
+                      <Text strong style={{ color: currentTheme === 'dark' ? '#fff' : '#000', fontSize: 14 }}>Класс жилья:</Text>
+                    )}
+                    {/* Высота и отступ — как у селектов, чтобы тег стоял с ними на одной линии. */}
+                    <div style={{ height: 32, marginTop: isPhoneDevice ? 0 : 6, display: 'flex', alignItems: 'center' }}>
+                      {housingClassTag}
+                    </div>
+                  </Col>
+                )}
               </Row>
             </Col>
 
@@ -178,6 +208,14 @@ const PositionToolbarInner: React.FC<PositionToolbarProps> = ({
                       <>
                         <Text strong style={txt}>Название: </Text>
                         <Text style={txt}>{selectedTender.title}</Text>
+                        {vDivider}
+                      </>
+                    )}
+                    {/* Портретный телефон: класс жилья — в начале строки, чтобы при переносе
+                        длинного имени заказчика тег с разделителем не повисал отдельно. */}
+                    {isPhone && (
+                      <>
+                        {housingClassTag}
                         {vDivider}
                       </>
                     )}

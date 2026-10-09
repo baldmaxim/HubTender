@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
 import type { TenderRecord } from '../hooks/useTendersData';
 import { getVersionColor } from '../../../../utils/versionColor';
+import { HOUSING_CLASS_COLORS } from '../../../../utils/housingClassColor';
 
 const { Text } = Typography;
 
@@ -63,15 +64,8 @@ export const getTendersTableColumns = (params: GetColumnsParams): ColumnsType<Te
       render: (housingClass?: string) => {
         if (!housingClass) return <Text type="secondary">—</Text>;
 
-        const colorMap: Record<string, string> = {
-          'комфорт': 'blue',
-          'бизнес': 'green',
-          'премиум': 'purple',
-          'делюкс': 'gold',
-        };
-
         return (
-          <Tag color={colorMap[housingClass] || 'default'} style={{ margin: 0 }}>
+          <Tag color={HOUSING_CLASS_COLORS[housingClass] || 'default'} style={{ margin: 0 }}>
             {housingClass}
           </Tag>
         );
