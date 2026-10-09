@@ -361,7 +361,6 @@ interface ClientPositionsState {
 
 - **[Элементы позиций](POSITION_ITEMS.md)**: Элементы BOQ для каждой позиции
 - **[Коммерция](COMMERCE_PAGE.md)**: Коммерческие расчеты с использованием данных позиций
-- **[Дашборд](DASHBOARD_DESIGN_SYSTEM.md)**: Обзор и статистика тендеров
 
 ## Скриншоты
 

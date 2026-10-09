@@ -14,7 +14,6 @@
     "test:go": "cd backend && go test ./..."
   },
   "dependencies": {
-    "@ant-design/charts": "^2.6.7",
     "@ant-design/icons": "^6.1.0",
     "@sentry/react": "^8.55.2",
     "antd": "^5.28.0",

@@ -115,7 +115,7 @@ export default defineConfig(async ({ mode }) => {
         output: {
           manualChunks: {
             'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-antd': ['antd', '@ant-design/icons', '@ant-design/charts'],
+            'vendor-antd': ['antd', '@ant-design/icons'],
             'vendor-charts': ['chart.js', 'react-chartjs-2', 'chartjs-plugin-datalabels'],
             'vendor-xlsx': ['xlsx', 'xlsx-js-style'],
           },

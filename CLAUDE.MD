@@ -246,7 +246,7 @@ Tenders → Client Positions → BOQ Items (материалы и работы �
 ## Технологический стек
 
 Основные зависимости — в `package.json`. Заметные библиотеки:
-- **UI**: `antd` + `@ant-design/icons` + `@ant-design/charts`
+- **UI**: `antd` + `@ant-design/icons`
 - **Графики**: `chart.js` + `react-chartjs-2` + `chartjs-plugin-datalabels`
 - **Excel**: `xlsx` (чтение) + `xlsx-js-style` (запись со стилями)
 - **Даты**: `dayjs`

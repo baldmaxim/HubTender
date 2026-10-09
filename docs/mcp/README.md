@@ -22,6 +22,5 @@ change markup tactics, write redistribution results, or approve financials.
 - [VERIFY.md](VERIFY.md) — acceptance gates and smoke checks.
 - [ROLLBACK.md](ROLLBACK.md) — safe disable/revert sequence.
 - [SECURITY.md](SECURITY.md) — trust boundaries and secret handling.
-- [CODEX_INSTALL_PROMPT.md](CODEX_INSTALL_PROMPT.md) — ready prompt for a colleague's Codex.
 - [MIGRATION_MANIFEST.md](MIGRATION_MANIFEST.md) — database objects and ordering.
 - [TEST_REPORT.md](TEST_REPORT.md) — factual local test evidence and external gates.
