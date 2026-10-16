@@ -112,17 +112,16 @@ func buildOldToNewMap(matches []MatchInput, newPosMap map[int]string) map[string
 
 // transferManualFields copies manual_volume / manual_note from matched old
 // positions onto their new counterparts (Step 8). Returns rows updated.
+// The GP journal gets the source position's author, not the transferring user.
 func transferManualFields(ctx context.Context, tx pgx.Tx, oldToNew map[string]string) (int, error) {
 	if len(oldToNew) == 0 {
 		return 0, nil
 	}
-	oldIDs := make([]string, 0, len(oldToNew))
-	newIDs := make([]string, 0, len(oldToNew))
-	for old, nw := range oldToNew {
-		oldIDs = append(oldIDs, old)
-		newIDs = append(newIDs, nw)
-	}
+	oldIDs, newIDs := splitIDPairs(oldToNew)
 
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.skip_gp_audit', 'on', true)`); err != nil {
+		return 0, fmt.Errorf("transferRepo: skip GP audit: %w", err)
+	}
 	tag, err := tx.Exec(ctx, `
 		UPDATE public.client_positions new_cp
 		SET
@@ -134,6 +133,12 @@ func transferManualFields(ctx context.Context, tx pgx.Tx, oldToNew map[string]st
 	`, oldIDs, newIDs)
 	if err != nil {
 		return 0, fmt.Errorf("transferRepo: transfer manual fields: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.skip_gp_audit', '', true)`); err != nil {
+		return 0, fmt.Errorf("transferRepo: resume GP audit: %w", err)
+	}
+	if _, err := copyPositionGPAuthorshipTx(ctx, tx, oldToNew); err != nil {
+		return 0, fmt.Errorf("transferRepo: %w", err)
 	}
 	return int(tag.RowsAffected()), nil
 }

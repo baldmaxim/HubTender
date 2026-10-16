@@ -206,6 +206,12 @@ ALTER TABLE public.boq_items ADD CONSTRAINT boq_items_import_session_id_fkey FOR
 CREATE INDEX IF NOT EXISTS idx_boq_items_audit_boq_item_id ON public.boq_items_audit(boq_item_id);
 ALTER TABLE public.boq_items_audit ADD CONSTRAINT boq_items_audit_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.users(id);
 
+-- client_position_gp_audit (журнал ГП): без FK на позицию — история остаётся.
+ALTER TABLE public.client_position_gp_audit ADD CONSTRAINT client_position_gp_audit_pkey PRIMARY KEY (id);
+ALTER TABLE public.client_position_gp_audit ADD CONSTRAINT client_position_gp_audit_origin_check CHECK (origin IN ('edit', 'version_copy'));
+ALTER TABLE public.client_position_gp_audit ADD CONSTRAINT client_position_gp_audit_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.users(id);
+CREATE INDEX IF NOT EXISTS client_position_gp_audit_position_idx ON public.client_position_gp_audit (client_position_id, changed_at DESC);
+
 -- import_sessions
 ALTER TABLE public.import_sessions ADD CONSTRAINT import_sessions_tender_id_fkey FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
 ALTER TABLE public.import_sessions ADD CONSTRAINT import_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id);

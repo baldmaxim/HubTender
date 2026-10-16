@@ -106,6 +106,16 @@ func copyAdditionalPositions(
 		addPosPairs = append(addPosPairs, addPosPair{oldPosID: ap.id, newPosID: newAddPosID})
 	}
 
+	// ГП ДОП вставлено вместе с позицией (триггер журнала ГП срабатывает только
+	// на UPDATE) — автора переносим из исходной позиции явно.
+	addPosMap := make(map[string]string, len(addPosPairs))
+	for _, p := range addPosPairs {
+		addPosMap[p.oldPosID] = p.newPosID
+	}
+	if _, err := copyPositionGPAuthorshipTx(ctx, tx, addPosMap); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("transferRepo: %w", err)
+	}
+
 	// Batched BOQ copy across all additional positions in one set-based insert +
 	// one bulk parent UPDATE. Parents resolve against the global oldItemIDToNew
 	// (matched-position items already merged), since an additional material's

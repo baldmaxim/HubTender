@@ -1,6 +1,8 @@
 # TenderHUB MCP: direct pricing in VOR
 
-The Go BFF exposes stateless Streamable HTTP at `POST /mcp`.
+The Go BFF exposes Streamable HTTP with sessions at `/mcp` (POST/GET/DELETE);
+the session carries the confirmation window to clients older than protocol
+`2026-07-28`. `MCP_STATELESS_HTTP=true` is the emergency stateless mode.
 MCP v2 writes directly to the existing VOR/BOQ. There is no separate draft
 section, draft tool, draft REST endpoint or draft lifecycle in the runtime.
 The old `/pricing-drafts` URL redirects to `/positions`.
@@ -70,6 +72,7 @@ reconnect a client with the new scopes. Template editing retains its separate ga
 - [ROLLBACK.md](ROLLBACK.md) — disable writes and restore BOQ via VOR audit.
 - [SECURITY.md](SECURITY.md) — scopes, receipts, transaction and source rules.
 - [MIGRATION_MANIFEST.md](MIGRATION_MANIFEST.md) — database object changes.
+- [AUTHORSHIP.md](AUTHORSHIP.md) — чьи строки и ГП можно менять через MCP, окно подтверждения.
 
 ## Проверки записи
 
@@ -77,6 +80,7 @@ reconnect a client with the new scopes. Template editing retains its separate ga
 правил, предварительный расчёт, подтверждение предупреждений и атомарная
 повторная проверка. См. [PRICING_CHECKS.md](PRICING_CHECKS.md).
 
-Расчёт позиции закрепляется за одним инженером. Другие пользователи не могут
-изменять или удалять его через MCP и обычные API. Для выкладки обязательны
-миграция владения и согласованное обновление BFF: [OWNERSHIP.md](OWNERSHIP.md).
+Через MCP можно добавлять строки в любую конечную позицию, а менять и удалять —
+только строки и ГП, которые последним менял сам пользователь; портал не
+ограничивается. «Новая версия» и перенос при сопоставлении переносят авторов.
+Каждую запись подтверждает человек в окне клиента. См. [AUTHORSHIP.md](AUTHORSHIP.md).

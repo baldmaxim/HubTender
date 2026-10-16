@@ -462,6 +462,22 @@ CREATE TABLE IF NOT EXISTS public.boq_items_audit (
     changed_fields text[]
 );
 
+-- Журнал количества и примечания ГП (кто, когда, было → стало; перенос автора
+-- между версиями). Инкремент: 2026_10_mcp_row_authorship.sql.
+CREATE TABLE IF NOT EXISTS public.client_position_gp_audit (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    client_position_id uuid NOT NULL,
+    tender_id uuid NOT NULL,
+    changed_by uuid,
+    origin text NOT NULL DEFAULT 'edit',
+    request_key text,
+    old_manual_volume numeric,
+    new_manual_volume numeric,
+    old_manual_note text,
+    new_manual_note text,
+    changed_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.template_items (
     id uuid NOT NULL DEFAULT gen_random_uuid(),
     template_id uuid NOT NULL,

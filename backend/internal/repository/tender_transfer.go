@@ -97,8 +97,9 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	// Атрибутируем создаваемые/обновляемые boq_items пользователю, выполнившему
-	// перенос версии (иначе триггерный аудит запишет «Системную операцию»).
+	// Пользователь, выполнивший перенос, — для записей аудита этой транзакции.
+	// Скопированные строки ВОР и ГП он не «присваивает»: их аудит получает
+	// автора из предыдущей версии (Steps 8–10b).
 	if err := setAuditUser(ctx, tx, in.ChangedBy); err != nil {
 		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
 	}
@@ -142,6 +143,13 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		return nil, err
 	}
 
+	// Steps 9–10b write copied rows without trigger audit: instead of «the
+	// transferring user inserted every row» each copy carries the author of its
+	// source row (copyBoqItemAuthorshipTx below, docs/mcp/AUTHORSHIP.md).
+	if err := skipBoqAuditTrigger(ctx, tx); err != nil {
+		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
+	}
+
 	// Step 9: Copy BOQ items for matched positions. oldItemTypes accumulates
 	// old_item_id → boq_item_type so parent links can be validated (a parent must
 	// be a WORK item) without an extra query.
@@ -173,6 +181,12 @@ func (r *TransferRepo) ExecuteVersionTransfer(
 		newItemIDs = append(newItemIDs, newID)
 	}
 	if _, err := RecomputeBoqTotalAmountsTx(ctx, tx, newTenderID, newItemIDs); err != nil {
+		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
+	}
+	if _, err := copyBoqItemAuthorshipTx(ctx, tx, oldItemIDToNew); err != nil {
+		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
+	}
+	if err := resumeBoqAuditTrigger(ctx, tx); err != nil {
 		return nil, fmt.Errorf("transferRepo.ExecuteVersionTransfer: %w", err)
 	}
 

@@ -2,6 +2,8 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -26,8 +28,8 @@ func TestToolCatalogIsCompleteAndAnnotated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Tools) != 21 {
-		t.Fatalf("got %d tools, want 21", len(result.Tools))
+	if len(result.Tools) != 23 {
+		t.Fatalf("got %d tools, want 23", len(result.Tools))
 	}
 	names := map[string]bool{}
 	for _, tool := range result.Tools {
@@ -36,14 +38,23 @@ func TestToolCatalogIsCompleteAndAnnotated(t *testing.T) {
 			t.Fatalf("tool %s missing schema/description/annotations", tool.Name)
 		}
 	}
-	for _, want := range []string{"tenderhub_search_archive_prices", "tenderhub_list_cost_categories", "tenderhub_list_boq_items", "tenderhub_get_boq_item", "tenderhub_get_direct_pricing_receipt", "tenderhub_price_boq_item", "tenderhub_get_pricing_qa_report"} {
+	for _, want := range []string{"tenderhub_search_archive_prices", "tenderhub_list_cost_categories", "tenderhub_list_boq_items", "tenderhub_get_boq_item", "tenderhub_get_direct_pricing_receipt", "tenderhub_price_boq_item", "tenderhub_delete_boq_item", "tenderhub_set_position_gp", "tenderhub_get_pricing_qa_report"} {
 		if !names[want] {
 			t.Errorf("missing %s", want)
 		}
 	}
 	for _, tool := range result.Tools {
-		if tool.Name == "tenderhub_price_boq_item" && (!tool.Annotations.IdempotentHint || tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint) {
-			t.Fatal("direct pricing tool annotations are unsafe")
+		switch tool.Name {
+		case "tenderhub_price_boq_item", "tenderhub_delete_boq_item", "tenderhub_set_position_gp":
+			if !tool.Annotations.IdempotentHint || tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint {
+				t.Fatalf("%s annotations are unsafe", tool.Name)
+			}
+		}
+		// Only the human confirms a write, in the client window: no tool may
+		// accept an agent-supplied confirmation argument.
+		schema, _ := json.Marshal(tool.InputSchema)
+		if strings.Contains(string(schema), "user_confirmed") || strings.Contains(string(schema), "confirmation_state") {
+			t.Fatalf("%s lets the agent confirm a write itself", tool.Name)
 		}
 	}
 	for _, legacy := range []string{"tenderhub_create_pricing_draft", "tenderhub_apply_pricing_draft", "tenderhub_get_pricing_draft"} {

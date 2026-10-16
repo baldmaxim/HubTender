@@ -1,7 +1,7 @@
 import React from 'react';
 import { Space, Typography, Tooltip } from 'antd';
 import type { BoqItemAudit } from '../../../types/audit';
-import { getFieldDiffs, formatFieldValue } from '../utils/auditHelpers';
+import { getFieldDiffs, formatFieldValue, isVersionCopy } from '../utils/auditHelpers';
 import { useTheme } from '../../../contexts/ThemeContext';
 
 const { Text } = Typography;
@@ -19,6 +19,10 @@ const AuditDiffCell: React.FC<AuditDiffCellProps> = ({ record }) => {
 
   // Для INSERT и DELETE не показываем diff
   if (diffs.length === 0) {
+    if (isVersionCopy(record)) {
+      return <Text type="secondary">Перенесено из предыдущей версии; пользователь — последний, кто менял строку там</Text>;
+    }
+
     if (record.operation_type === 'INSERT') {
       return <Text type="secondary">Элемент добавлен</Text>;
     }

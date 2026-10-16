@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rs/zerolog"
 	"github.com/su10/hubtender/backend/internal/middleware"
@@ -16,11 +16,19 @@ import (
 	"github.com/su10/hubtender/backend/internal/services"
 )
 
-const serverInstructions = `TenderHUB MCP works only with already-created and imported tenders. Search archive/library sources, copy the selected source_version into expected_source_version, inspect the target BOQ item and financial_input_revision, then use tenderhub_price_boq_item to write directly to the VOR. The source version covers currency, units, delivery, consumption and quote evidence as well as rate. Only суб-раб and суб-мат may be written; complex types are unsupported. Only the verified owner of a position calculation may add to or change it; unknown or mixed legacy authors block writes until resolved by the operator. Reading and copying another calculation as a source is allowed. Pricing checks run before consent and again atomically before commit. Errors block; warnings/information require reviewing the exact findings. Set position_quantity explicitly when Количество ГП is missing. Use source_kind=current to change an existing work/standalone quantity or a linked material conversion coefficient while preserving its price. A linked material quantity is read-only: the server derives it as parent work quantity * conversion_coefficient * stored consumption_coefficient. Never send quantity for a linked material or change its consumption through MCP. Work changes atomically recalculate every linked material and position totals. Writes require confirmation and a request_key for safe retries. When the client advertises form elicitation (protocol >= 2026-07-28), confirmation uses mode=form InputRequests; otherwise the tool returns CONFIRMATION_REQUIRED with confirmation_state — after human approval retry with confirmation_state and user_confirmed=true. Read the item and tender back after every write. Never invent a rate or silently replace an unmatched item. If a required work/material is missing, search nomenclature and units first; use confirmed create_unit/create_nomenclature_item/create_library_item with create-scopes and a user/quote-supplied price. The created library item gives its source_version for VOR insertion. Catalog creation never edits/deletes an existing record.`
+const serverInstructions = `TenderHUB MCP works only with already-created and imported tenders. Search archive/library sources, copy the selected source_version into expected_source_version, inspect the target BOQ item and financial_input_revision, then use tenderhub_price_boq_item to write directly to the VOR. The source version covers currency, units, delivery, consumption and quote evidence as well as rate. Only суб-раб and суб-мат may be written; complex types are unsupported. Authorship rule: you may add rows to any leaf position, but change or delete only rows that you (this TenderHUB account) changed last; a work quantity change also requires its linked materials to be yours. Fill an empty Количество ГП/note freely; change a filled one only if you changed it last. Other users' rows and rows without an author (copied into a version, system changes) are read-only through MCP — MCP_NOT_AUTHOR names the last author; the user edits them in the portal. Reading and copying another calculation as a source is allowed. Pricing checks run before consent and again atomically before commit. Errors block; warnings/information require reviewing the exact findings. Set position_quantity explicitly when Количество ГП is missing. Use source_kind=current to change an existing work/standalone quantity or a linked material conversion coefficient while preserving its price. A linked material quantity is read-only: the server derives it as parent work quantity * conversion_coefficient * stored consumption_coefficient. Never send quantity for a linked material or change its consumption through MCP. Work changes atomically recalculate every linked material and position totals. Use tenderhub_delete_boq_item to delete a row (a work together with its linked materials) and tenderhub_set_position_gp to change Количество ГП or its note. Every write shows a confirmation window to the human with the rows before → after; only the human can confirm, and a client without a confirmation window cannot write. Each write needs a request_key for safe retries. Read the item and tender back after every write. Never invent a rate or silently replace an unmatched item. If a required work/material is missing, search nomenclature and units first; use confirmed create_unit/create_nomenclature_item/create_library_item with create-scopes and a user/quote-supplied price. The created library item gives its source_version for VOR insertion. Catalog creation never edits/deletes an existing record.`
+
+// sessionIdleTimeout closes an MCP session after this much inactivity. A
+// confirmation window is answered within one request (chi timeout, 5 min).
+const sessionIdleTimeout = 30 * time.Minute
 
 type Config struct {
 	MaxRequestBodyBytes int64
 	Logger              zerolog.Logger
+	// Stateless drops MCP sessions (MCP_STATELESS_HTTP). Then only clients on
+	// protocol >= 2026-07-28 can show the confirmation window; older clients
+	// (elicitation/create inside a call) cannot write. Emergency switch only.
+	Stateless bool
 }
 
 func NewHTTPHandler(svc *services.PricingService, cfg Config) http.Handler {
@@ -33,15 +41,31 @@ func NewHTTPHandler(svc *services.PricingService, cfg Config) http.Handler {
 		principal := pricing.Principal{UserID: u.ID, Email: u.Email, RoleCode: u.Role, Scopes: u.Scopes, ClientID: u.ClientID}
 		server := mcp.NewServer(&mcp.Implementation{
 			Name: "tenderhub-mcp-server", Title: "TenderHUB MCP", Version: "2.2.0",
-			Description: "Source-backed direct VOR pricing with audit and retry-safe receipts",
+			Description: "Source-backed direct VOR pricing with authorship rules, confirmation window and retry-safe receipts",
 		}, &mcp.ServerOptions{Instructions: serverInstructions, SchemaCache: cache, Capabilities: &mcp.ServerCapabilities{}})
 		registerTools(server, svc, principal)
 		return server
 	}, &mcp.StreamableHTTPOptions{
-		Stateless: true, JSONResponse: true, MaxRequestBodyBytes: cfg.MaxRequestBodyBytes,
-		PropagateRequestCancellation: true,
+		// Sessions with SSE responses let the server open the confirmation
+		// window (elicitation/create) in the middle of a tool call for clients
+		// older than protocol 2026-07-28.
+		Stateless: cfg.Stateless, JSONResponse: cfg.Stateless, SessionTimeout: sessionIdleTimeout,
+		MaxRequestBodyBytes: cfg.MaxRequestBodyBytes, PropagateRequestCancellation: true,
 	})
-	return auditHTTP(h, cfg.Logger)
+	return auditHTTP(bindSessionUser(h), cfg.Logger)
+}
+
+// bindSessionUser hands the authenticated TenderHUB user to go-sdk, which then
+// lets only that user continue an MCP session (no session reuse by others).
+func bindSessionUser(next http.Handler) http.Handler {
+	verify := func(_ context.Context, _ string, r *http.Request) (*auth.TokenInfo, error) {
+		u := middleware.UserFromContext(r.Context())
+		if u == nil {
+			return nil, auth.ErrInvalidToken
+		}
+		return &auth.TokenInfo{UserID: u.ID, Scopes: u.Scopes}, nil
+	}
+	return auth.RequireBearerToken(verify, &auth.RequireBearerTokenOptions{AllowMissingExpiration: true})(next)
 }
 
 type statusRecorder struct {
@@ -50,6 +74,11 @@ type statusRecorder struct {
 }
 
 func (w *statusRecorder) WriteHeader(code int) { w.status = code; w.ResponseWriter.WriteHeader(code) }
+
+// Unwrap lets http.ResponseController flush SSE events (the confirmation
+// window request) through this recorder.
+func (w *statusRecorder) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 func auditHTTP(next http.Handler, logger zerolog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -63,7 +92,7 @@ func auditHTTP(next http.Handler, logger zerolog.Logger) http.Handler {
 		if u != nil {
 			event = event.Str("user_id", u.ID).Str("oauth_client_id", u.ClientID)
 		}
-		event.Str("mcp_method", r.Header.Get("Mcp-Method")).Str("mcp_name", r.Header.Get("Mcp-Name")).Int("status", rec.status).Dur("duration", time.Since(start)).Msg("mcp request")
+		event.Str("mcp_method", r.Header.Get("Mcp-Method")).Str("mcp_name", r.Header.Get("Mcp-Name")).Str("mcp_protocol", r.Header.Get("Mcp-Protocol-Version")).Int("status", rec.status).Dur("duration", time.Since(start)).Msg("mcp request")
 	})
 }
 
@@ -107,6 +136,21 @@ type directItemOutput struct {
 	Item repository.BoqItemRow `json:"item"`
 	ETag string                `json:"etag"`
 }
+type directDeleteInput struct {
+	TenderID         string `json:"tender_id"`
+	ItemID           string `json:"item_id" jsonschema:"BOQ row to delete; a work deletes its linked materials too"`
+	ExpectedETag     string `json:"expected_etag" jsonschema:"ETag from tenderhub_get_boq_item"`
+	ExpectedRevision int64  `json:"expected_revision" jsonschema:"financial_input_revision from tenderhub_get_pricing_state"`
+	RequestKey       string `json:"request_key" jsonschema:"Unique 16-80 character idempotency key; reuse only for an identical retry"`
+}
+type positionGPInput struct {
+	TenderID         string   `json:"tender_id"`
+	PositionID       string   `json:"position_id" jsonschema:"Leaf VOR position"`
+	PositionQuantity *float64 `json:"position_quantity,omitempty" jsonschema:"New positive Количество ГП; omit to keep the current value"`
+	PositionNote     *string  `json:"position_note,omitempty" jsonschema:"New GP note; empty string clears it; omit to keep the current note"`
+	ExpectedRevision int64    `json:"expected_revision" jsonschema:"financial_input_revision from tenderhub_get_pricing_state"`
+	RequestKey       string   `json:"request_key" jsonschema:"Unique 16-80 character idempotency key; reuse only for an identical retry"`
+}
 type directReceiptInput struct {
 	RequestKey string `json:"request_key"`
 }
@@ -128,7 +172,6 @@ type directPriceInput struct {
 	ExpectedRevision      int64    `json:"expected_revision" jsonschema:"financial_input_revision from tenderhub_get_pricing_state"`
 	RequestKey            string   `json:"request_key" jsonschema:"Unique 16-80 character idempotency key; reuse only for an identical retry"`
 	Rationale             string   `json:"rationale,omitempty"`
-	confirmationAck
 }
 type archiveSearchToolInput struct {
 	Query                string `json:"query" jsonschema:"Russian item or work description to match"`
@@ -189,7 +232,6 @@ type createTemplateInput struct {
 	DetailCostCategoryID string                             `json:"detail_cost_category_id"`
 	Works                []repository.TemplateWorkInput     `json:"works"`
 	Materials            []repository.TemplateMaterialInput `json:"materials"`
-	confirmationAck
 }
 type createTemplateOutput struct {
 	ID string `json:"id"`
@@ -199,7 +241,6 @@ type updateTemplateInput struct {
 	Name                 string                         `json:"name"`
 	DetailCostCategoryID string                         `json:"detail_cost_category_id"`
 	Items                []repository.TemplateItemPatch `json:"items"`
-	confirmationAck
 }
 
 func registerTools(server *mcp.Server, svc *services.PricingService, principal pricing.Principal) {
@@ -281,31 +322,25 @@ func registerTools(server *mcp.Server, svc *services.PricingService, principal p
 		if err != nil {
 			return nil, pricing.DirectPricingResult{}, err
 		}
+		if preview.Replayed {
+			return md("Recovered committed request `" + in.RequestKey + "`; no new write."), *preview, nil
+		}
 		if preview.Checks != nil && preview.Checks.Blocking {
 			return nil, pricing.DirectPricingResult{}, &repository.PricingChecksError{Checks: *preview.Checks}
 		}
-		msg := fmt.Sprintf("Записать расчёт TenderHUB: тендер %s, позиция %s. Строка %s (%s), единица %s. Количество строки %s; цена за единицу %s %s; сумма строки %s RUB; Количество ГП %v → %v; итог позиции %s RUB. Коэффициенты: перевод %v, расход %v. Изменение работы пересчитывает связанные материалы.",
-			in.TenderID, in.TargetPositionID, preview.Name, preview.ItemType, preview.UnitCode, strconv.FormatFloat(preview.Quantity, 'f', -1, 64), strconv.FormatFloat(preview.UnitRate, 'f', -1, 64), preview.Currency,
-			strconv.FormatFloat(preview.TotalAmount, 'f', -1, 64), valueOrNone(preview.PreviousPositionQuantity), valueOrNone(preview.PositionQuantity), strconv.FormatFloat(preview.PositionTotal, 'f', -1, 64), valueOrNone(preview.ConversionCoefficient), valueOrNone(preview.ConsumptionCoefficient))
+		msg := priceMessage(preview)
 		fingerprint := ""
 		if preview.Checks != nil {
 			fingerprint = preview.Checks.Fingerprint
-			for _, f := range preview.Checks.Findings {
-				msg += fmt.Sprintf("\n%s [%s], %s: %s", f.RuleCode, f.Severity, f.EntityID, f.Detail)
-			}
 		}
-		for _, warning := range preview.Warnings {
-			msg += "\nИсточник: " + warning
-		}
-		// The acknowledgement binds both request arguments and the actual server
-		// findings. Never bind nested acknowledgement fields to themselves.
-		cleanInput := in
-		cleanInput.confirmationAck = confirmationAck{}
+		// The answer binds the request, the server findings and the exact text
+		// the human saw; any change in between invalidates it.
 		state := confirmationState(struct {
-			Input  directPriceInput
-			Checks string
-		}{cleanInput, fingerprint})
-		if pending, err := requireConfirmation(req, msg, state, in.confirmationAck); pending != nil || err != nil {
+			Input   directPriceInput
+			Checks  string
+			Message string
+		}{in, fingerprint, msg})
+		if pending, err := requireConfirmation(req, msg, state); pending != nil || err != nil {
 			return pending, pricing.DirectPricingResult{}, err
 		}
 		input.ExpectedChecksFingerprint = fingerprint
@@ -314,6 +349,52 @@ func registerTools(server *mcp.Server, svc *services.PricingService, principal p
 			return nil, pricing.DirectPricingResult{}, err
 		}
 		return md(fmt.Sprintf("%s BOQ item `%s` directly. Revision %d; rate %.2f %s. Read back before continuing.", out.Action, out.ItemID, out.FinancialInputRevision, out.UnitRate, out.Currency)), *out, err
+	})
+
+	mcp.AddTool(server, destructiveTool("tenderhub_delete_boq_item", "Delete one BOQ row from the VOR", "Delete a row you changed last; deleting a work also deletes its linked materials, which must be yours too. Requires pricing:write, current revision/ETag and the human's confirmation in the client window. Reuse request_key only for identical retry."), func(ctx context.Context, req *mcp.CallToolRequest, in directDeleteInput) (*mcp.CallToolResult, pricing.DirectDeleteResult, error) {
+		input := services.DirectDeleteInput{TenderID: in.TenderID, ItemID: in.ItemID, ExpectedETag: in.ExpectedETag, ExpectedRevision: in.ExpectedRevision, RequestKey: in.RequestKey}
+		preview, err := svc.PreviewDirectDelete(ctx, principal, input)
+		if err != nil {
+			return nil, pricing.DirectDeleteResult{}, err
+		}
+		if preview.Replayed {
+			return md("Recovered committed request `" + in.RequestKey + "`; no new write."), *preview, nil
+		}
+		msg := deleteMessage(preview)
+		if pending, err := requireConfirmation(req, msg, confirmationState(struct {
+			Input   directDeleteInput
+			Message string
+		}{in, msg})); pending != nil || err != nil {
+			return pending, pricing.DirectDeleteResult{}, err
+		}
+		out, err := svc.ApplyDirectDelete(ctx, principal, input)
+		if out == nil {
+			return nil, pricing.DirectDeleteResult{}, err
+		}
+		return md(fmt.Sprintf("Deleted %d BOQ row(s). Revision %d. Read back before continuing.", len(out.Deleted), out.FinancialInputRevision)), *out, nil
+	})
+
+	mcp.AddTool(server, destructiveTool("tenderhub_set_position_gp", "Change Количество ГП or its note", "Fill an empty Количество ГП/note, or change a filled one that you changed last. An empty position_note clears the note. Requires pricing:write, current revision and the human's confirmation in the client window. Reuse request_key only for identical retry."), func(ctx context.Context, req *mcp.CallToolRequest, in positionGPInput) (*mcp.CallToolResult, pricing.PositionGPResult, error) {
+		input := services.PositionGPInput{TenderID: in.TenderID, PositionID: in.PositionID, Quantity: in.PositionQuantity, Note: in.PositionNote, ExpectedRevision: in.ExpectedRevision, RequestKey: in.RequestKey}
+		preview, err := svc.PreviewPositionGP(ctx, principal, input)
+		if err != nil {
+			return nil, pricing.PositionGPResult{}, err
+		}
+		if preview.Replayed {
+			return md("Recovered committed request `" + in.RequestKey + "`; no new write."), *preview, nil
+		}
+		msg := gpMessage(preview)
+		if pending, err := requireConfirmation(req, msg, confirmationState(struct {
+			Input   positionGPInput
+			Message string
+		}{in, msg})); pending != nil || err != nil {
+			return pending, pricing.PositionGPResult{}, err
+		}
+		out, err := svc.ApplyPositionGP(ctx, principal, input)
+		if out == nil {
+			return nil, pricing.PositionGPResult{}, err
+		}
+		return md(fmt.Sprintf("Updated GP of position `%s`. Revision %d. Read back before continuing.", out.PositionID, out.FinancialInputRevision)), *out, nil
 	})
 
 	mcp.AddTool(server, readTool("tenderhub_get_pricing_qa_report", "Generate a direct-price QA report", "Check leaf-position coverage, missing rates/quantities/categories/FX, weak or stale sources, provenance and direct total. Does not modify data."), func(ctx context.Context, _ *mcp.CallToolRequest, in qaInput) (*mcp.CallToolResult, pricing.QAReport, error) {
@@ -325,14 +406,14 @@ func registerTools(server *mcp.Server, svc *services.PricingService, principal p
 	})
 
 	mcp.AddTool(server, additiveTool("tenderhub_create_template", "Create a managed pricing template", "Create a global template. Requires templates:write and a leading-engineer/administrator/developer role."), func(ctx context.Context, req *mcp.CallToolRequest, in createTemplateInput) (*mcp.CallToolResult, createTemplateOutput, error) {
-		if pending, err := requireConfirmation(req, "Create global pricing template "+in.Name+"?", confirmationState(in), in.confirmationAck); pending != nil || err != nil {
+		if pending, err := requireConfirmation(req, "Создать общий шаблон расценки «"+in.Name+"»?", confirmationState(in)); pending != nil || err != nil {
 			return pending, createTemplateOutput{}, err
 		}
 		id, err := svc.CreateTemplate(ctx, principal, repository.CreateTemplateInput{Name: in.Name, DetailCostCategoryID: in.DetailCostCategoryID, Works: in.Works, Materials: in.Materials})
 		return md("Created managed template `" + id + "`."), createTemplateOutput{id}, err
 	})
 	mcp.AddTool(server, destructiveTool("tenderhub_update_template", "Update a managed pricing template", "Update global template metadata and relationships. Requires templates:write and an allowed senior role."), func(ctx context.Context, req *mcp.CallToolRequest, in updateTemplateInput) (*mcp.CallToolResult, statusOutput, error) {
-		if pending, err := requireConfirmation(req, "Update global pricing template "+in.Name+"?", confirmationState(in), in.confirmationAck); pending != nil || err != nil {
+		if pending, err := requireConfirmation(req, "Изменить общий шаблон расценки «"+in.Name+"»?", confirmationState(in)); pending != nil || err != nil {
 			return pending, statusOutput{}, err
 		}
 		err := svc.UpdateTemplate(ctx, principal, in.ID, repository.UpdateTemplateInput{Name: in.Name, DetailCostCategoryID: in.DetailCostCategoryID, Items: in.Items})

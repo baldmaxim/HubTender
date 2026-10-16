@@ -77,9 +77,6 @@ func (r *BoqRepo) UpdateBoqItem(ctx context.Context, id string, in BoqItemPatch)
 		return nil, fmt.Errorf("boqRepo.UpdateBoqItem: lock row: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, `SELECT public.assert_position_pricing_owner($1,false)`, oldItem.ClientPositionID); err != nil {
-		return nil, err
-	}
 	// 1.3: quote source dates — валидация ДО каких-либо записей.
 	if err := validateQuoteDates(in.QuotePriceDate, in.QuoteValidUntil, oldItem); err != nil {
 		return nil, err

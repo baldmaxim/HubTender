@@ -27,13 +27,14 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f scripts/mcp/verify_direct_migration.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f scripts/mcp/verify_pricing_ownership.sql
+  -f scripts/mcp/verify_row_authorship.sql
 ```
 
 Expected: `MCP_MIGRATION_OK` and `MCP_DIRECT_MIGRATION_OK`. No production
-data is changed. Ownership verification additionally prints
-`MCP_PRICING_OWNERSHIP_SCHEMA_OK`; review unresolved/missing-owner counts and
-perform the two-engineer staging scenarios in `OWNERSHIP.md`.
+data is changed. The authorship verifier prints `MCP_ROW_AUTHORSHIP_OK`.
+Two engineers then check the rules in `AUTHORSHIP.md`: a foreign row is
+`MCP_NOT_AUTHOR` through MCP and still editable in the portal; a version copy
+keeps the authors; the confirmation window appears in the engineers' client.
 
 ## HTTP/MCP gates
 

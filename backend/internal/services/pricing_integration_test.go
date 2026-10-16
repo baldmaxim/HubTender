@@ -26,9 +26,6 @@ const (
 func seedPricingActor(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	scopes := []string{mcpauth.ScopeTendersRead, mcpauth.ScopeArchiveRead, mcpauth.ScopeLibraryRead, mcpauth.ScopePricingWrite}
-	if _, err := pool.Exec(ctx, `DELETE FROM public.position_pricing_owners WHERE client_position_id IN ($1,$2,$3)`, targetPosition, templatePosition, fxPosition); err != nil {
-		t.Fatal(err)
-	}
 	statements := []struct {
 		sql  string
 		args []any
@@ -42,6 +39,7 @@ func seedPricingActor(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 		{`DELETE FROM public.mcp_catalog_creation_requests WHERE actor_id=$1`, []any{evalUser}},
 		{`DELETE FROM public.boq_items WHERE client_position_id IN ($1,$2)`, []any{targetPosition, templatePosition}},
 		{`DELETE FROM public.boq_items_audit WHERE changed_by=$1`, []any{evalUser}},
+		{`DELETE FROM public.client_position_gp_audit WHERE changed_by=$1`, []any{evalUser}},
 		{`DELETE FROM public.pricing_drafts WHERE tender_id=$1`, []any{targetTender}},
 		{`DELETE FROM public.pricing_drafts WHERE tender_id=$1`, []any{fxTender}},
 		{`DELETE FROM public.client_positions WHERE id=$1`, []any{templatePosition}},
@@ -65,6 +63,7 @@ func cleanupPricingActor(ctx context.Context, pool *pgxpool.Pool) {
 		{`DELETE FROM public.mcp_catalog_creation_requests WHERE actor_id=$1`, []any{evalUser}},
 		{`DELETE FROM public.boq_items WHERE client_position_id IN ($1,$2)`, []any{targetPosition, templatePosition}},
 		{`DELETE FROM public.boq_items_audit WHERE changed_by=$1`, []any{evalUser}},
+		{`DELETE FROM public.client_position_gp_audit WHERE changed_by=$1`, []any{evalUser}},
 		{`DELETE FROM public.pricing_drafts WHERE tender_id=$1`, []any{targetTender}},
 		{`DELETE FROM public.pricing_drafts WHERE tender_id=$1`, []any{fxTender}},
 		{`DELETE FROM public.client_positions WHERE id=$1`, []any{templatePosition}},

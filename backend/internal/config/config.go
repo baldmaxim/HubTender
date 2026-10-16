@@ -83,6 +83,9 @@ type Config struct {
 	MCPDCREnabled           bool
 	MCPCIMDAllowedHosts     []string
 	MCPMaxRequestBodyBytes  int64
+	// MCPStatelessHTTP drops MCP sessions (emergency switch): the confirmation
+	// window then works only in clients on protocol >= 2026-07-28.
+	MCPStatelessHTTP bool
 
 	// OpenRouter (этап 2.5). OpenRouterAPIKey — server-only secret: НЕ хранится
 	// в БД, НЕ возвращается frontend'у, НЕ логируется. Пустой ключ допустим —
@@ -139,6 +142,7 @@ func Load() (*Config, error) {
 	v.SetDefault("MCP_AUTHORIZATION_CODE_TTL_MINUTES", 5)
 	v.SetDefault("MCP_DCR_ENABLED", false)
 	v.SetDefault("MCP_MAX_REQUEST_BODY_BYTES", 1048576)
+	v.SetDefault("MCP_STATELESS_HTTP", false)
 	v.SetDefault("OPENROUTER_TIMEOUT_SECONDS", 60)
 	// Дедлайн самого прокси ~190 с: клиентский таймаут обязан быть больше,
 	// иначе его 504 deadline_exceeded недостижим в принципе.
@@ -252,6 +256,7 @@ func Load() (*Config, error) {
 		MCPDCREnabled:           v.GetBool("MCP_DCR_ENABLED"),
 		MCPCIMDAllowedHosts:     parseCORSOrigins(v.GetString("MCP_CIMD_ALLOWED_HOSTS")),
 		MCPMaxRequestBodyBytes:  mcpMaxBody,
+		MCPStatelessHTTP:        v.GetBool("MCP_STATELESS_HTTP"),
 
 		OpenRouterAPIKey:         v.GetString("OPENROUTER_API_KEY"),
 		OpenRouterAPIBase:        strings.TrimSpace(v.GetString("OPENROUTER_API_BASE")),

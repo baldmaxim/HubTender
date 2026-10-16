@@ -40,7 +40,8 @@ Dropping MCP tables is permitted only on an empty/disposable staging database
 after confirming there are no applied drafts. There is intentionally no
 automated destructive down script in this package.
 
-Retain `position_pricing_owners`, its guards, and `client_position_pricing_audit`.
-Rolling the BFF back to a version that does not propagate the verified actor
-requires pausing portal pricing writes: old routes cannot enforce the new
-ownership contract. Disabling MCP alone does not fix an incompatible portal BFF.
+Retain `client_position_gp_audit` and the authorship functions: the previous
+BFF works with them (no portal restrictions). Rolling the BFF back is a normal
+image switch; `MCP_WRITE_ENABLED=false` stops MCP writes. If the session mode
+misbehaves behind a proxy, set `MCP_STATELESS_HTTP=true` and restart the BFF:
+reads keep working, writes then need a client on protocol `2026-07-28`.

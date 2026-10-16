@@ -35,14 +35,12 @@ type createCatalogUnitInput struct {
 	Code       string `json:"code" jsonschema:"Exact unit code; case matters, e.g. SI milli and mega prefixes are different"`
 	Name       string `json:"name"`
 	RequestKey string `json:"request_key" jsonschema:"Unique 16-80 character key; reuse only to retry identical inputs"`
-	confirmationAck
 }
 type createCatalogNameInput struct {
 	Kind       string `json:"kind" jsonschema:"work or material"`
 	Name       string `json:"name"`
 	UnitCode   string `json:"unit_code" jsonschema:"Existing active code from tenderhub_list_units"`
 	RequestKey string `json:"request_key"`
-	confirmationAck
 }
 type createCatalogLibraryInput struct {
 	Kind                   string   `json:"kind" jsonschema:"work or material"`
@@ -57,7 +55,6 @@ type createCatalogLibraryInput struct {
 	DeliveryAmount         *float64 `json:"delivery_amount,omitempty" jsonschema:"Nonnegative RUB delivery cost per unit; only nonzero for суммой"`
 	PriceSource            string   `json:"price_source" jsonschema:"Quote identifier/link or reference to the user's explicit price; stored with the confirmed creation for audit"`
 	RequestKey             string   `json:"request_key"`
-	confirmationAck
 }
 
 func registerCatalogTools(server *mcp.Server, svc *services.PricingService, p pricing.Principal) {
@@ -80,13 +77,13 @@ func registerCatalogTools(server *mcp.Server, svc *services.PricingService, p pr
 		return md("Committed catalog creation `" + in.RequestKey + "`."), *out, nil
 	})
 	mcp.AddTool(server, catalogCreateTool("tenderhub_create_unit", "Create a unit of measurement", "Create an active shared unit, or return the existing active code unchanged. Requires nomenclature:create, catalog write gate and confirmation. No update/delete."), func(ctx context.Context, req *mcp.CallToolRequest, in createCatalogUnitInput) (*mcp.CallToolResult, pricing.CatalogCreationResult, error) {
-		return confirmCatalogCreation(ctx, req, svc, p, pricing.CatalogCreationInput{EntityType: "unit", Name: in.Name, UnitCode: in.Code, RequestKey: in.RequestKey}, in.confirmationAck)
+		return confirmCatalogCreation(ctx, req, svc, p, pricing.CatalogCreationInput{EntityType: "unit", Name: in.Name, UnitCode: in.Code, RequestKey: in.RequestKey})
 	})
 	mcp.AddTool(server, catalogCreateTool("tenderhub_create_nomenclature_item", "Create a work/material name", "Create a shared name in an active unit, or return one exact existing name/unit match. Multiple historical matches require choosing an ID. Requires nomenclature:create and confirmation. Never merges or edits existing names."), func(ctx context.Context, req *mcp.CallToolRequest, in createCatalogNameInput) (*mcp.CallToolResult, pricing.CatalogCreationResult, error) {
-		return confirmCatalogCreation(ctx, req, svc, p, pricing.CatalogCreationInput{EntityType: "nomenclature", Kind: in.Kind, Name: in.Name, UnitCode: in.UnitCode, RequestKey: in.RequestKey}, in.confirmationAck)
+		return confirmCatalogCreation(ctx, req, svc, p, pricing.CatalogCreationInput{EntityType: "nomenclature", Kind: in.Kind, Name: in.Name, UnitCode: in.UnitCode, RequestKey: in.RequestKey})
 	})
 	mcp.AddTool(server, catalogCreateTool("tenderhub_create_library_item", "Create a priced work/material library card", "Create a card for existing nomenclature using a user/quote-supplied rate, currency and material recipe/delivery. Requires library:create and confirmation. Exact existing variants are reused unchanged. Result includes source_version for direct VOR insertion; linked quantity stays server-derived."), func(ctx context.Context, req *mcp.CallToolRequest, in createCatalogLibraryInput) (*mcp.CallToolResult, pricing.CatalogCreationResult, error) {
-		return confirmCatalogCreation(ctx, req, svc, p, pricing.CatalogCreationInput{EntityType: "library", Kind: in.Kind, NameID: in.NameID, ExpectedNameVersion: in.ExpectedNameVersion, ItemType: in.ItemType, MaterialType: in.MaterialType, UnitRate: in.UnitRate, Currency: in.Currency, ConsumptionCoefficient: in.ConsumptionCoefficient, DeliveryPriceType: in.DeliveryPriceType, DeliveryAmount: in.DeliveryAmount, PriceSource: in.PriceSource, RequestKey: in.RequestKey}, in.confirmationAck)
+		return confirmCatalogCreation(ctx, req, svc, p, pricing.CatalogCreationInput{EntityType: "library", Kind: in.Kind, NameID: in.NameID, ExpectedNameVersion: in.ExpectedNameVersion, ItemType: in.ItemType, MaterialType: in.MaterialType, UnitRate: in.UnitRate, Currency: in.Currency, ConsumptionCoefficient: in.ConsumptionCoefficient, DeliveryPriceType: in.DeliveryPriceType, DeliveryAmount: in.DeliveryAmount, PriceSource: in.PriceSource, RequestKey: in.RequestKey})
 	})
 }
 
@@ -96,7 +93,7 @@ func catalogCreateTool(name, title, description string) *mcp.Tool {
 	return t
 }
 
-func confirmCatalogCreation(ctx context.Context, req *mcp.CallToolRequest, svc *services.PricingService, p pricing.Principal, in pricing.CatalogCreationInput, ack confirmationAck) (*mcp.CallToolResult, pricing.CatalogCreationResult, error) {
+func confirmCatalogCreation(ctx context.Context, req *mcp.CallToolRequest, svc *services.PricingService, p pricing.Principal, in pricing.CatalogCreationInput) (*mcp.CallToolResult, pricing.CatalogCreationResult, error) {
 	normalized, err := services.NormalizeCatalogCreation(in)
 	if err != nil {
 		return nil, pricing.CatalogCreationResult{}, err
@@ -109,7 +106,7 @@ func confirmCatalogCreation(ctx context.Context, req *mcp.CallToolRequest, svc *
 		}
 		message = fmt.Sprintf("Создать общую карточку %s «%s», единица %s: цена %s %s, тип %s, материал %s, расход %v, доставка %s/%v? Источник цены: %s. Существующие карточки и строки ВОР не изменяются.", normalized.Kind, n.Name, n.UnitCode, strconv.FormatFloat(normalized.UnitRate, 'f', -1, 64), normalized.Currency, normalized.ItemType, normalized.MaterialType, valueOrNone(normalized.ConsumptionCoefficient), normalized.DeliveryPriceType, valueOrNone(normalized.DeliveryAmount), normalized.PriceSource)
 	}
-	if pending, err := requireConfirmation(req, message, confirmationState(normalized), ack); pending != nil || err != nil {
+	if pending, err := requireConfirmation(req, message, confirmationState(normalized)); pending != nil || err != nil {
 		return pending, pricing.CatalogCreationResult{}, err
 	}
 	normalized.Confirm = true

@@ -13,17 +13,20 @@
   role gates. Explicitly approved MCP catalog creation additionally allows the
   current `engineer` role with `/library`, separate create-scopes, both write
   flags and confirmation. It never edits/deletes an existing shared record.
-- Direct pricing requires `pricing:write`, the `MCP_WRITE_ENABLED` gate, a
-  matching position calculation owner (unknown/mixed legacy owners fail closed),
-  current financial-input revision, and (for updates) the item's ETag. The MCP
-  tool requires explicit confirmation before the transaction, including all
-  linked children. Clients that advertise form elicitation on protocol
-  `>= 2026-07-28` receive `InputRequests` with `mode=form` and a boolean
-  `requestedSchema`. Clients without elicitation (including Cursor on
-  Stateless Streamable HTTP, where server→client `elicitation/create` cannot
-  complete) receive `CONFIRMATION_REQUIRED` with `confirmation_state` and must
-  retry with `confirmation_state` + `user_confirmed=true` only after human
-  approval. The canonical Go calculation kernel computes the total.
+- Direct pricing requires `pricing:write`, the `MCP_WRITE_ENABLED` gate, the
+  current financial-input revision and (for updates/deletes) the item's ETag.
+  MCP changes or deletes only rows and GP values whose last author is the caller
+  (`AUTHORSHIP.md`); others fail with `MCP_NOT_AUTHOR` and stay editable in
+  the portal. Every write is confirmed by the human in the client window: on
+  protocol `>= 2026-07-28` via `InputRequests` (`mode=form`), on older protocols
+  via `elicitation/create` inside the call over the MCP session. Tools have no
+  agent-supplied confirmation arguments; a client without a window gets
+  `MCP_CONFIRMATION_UNSUPPORTED`. The answer is bound to the exact preview text;
+  a changed preview is `MCP_CONFIRMATION_STALE`. The canonical Go calculation
+  kernel computes the total.
+- MCP sessions are bound to the authenticated user (go-sdk TokenInfo): another
+  user's token cannot continue a session (HTTP 403). Idle sessions close after
+  30 minutes.
 - One actor/request key has one committed-command receipt. Repeating identical
   inputs returns that receipt; reusing the key for different inputs is rejected.
   Audit and source provenance commit with the BOQ item.
@@ -44,10 +47,9 @@
   UPDATE to avoid mutually blocked lock upgrades between simultaneous receipts.
   Source/position/item/parent/child locks use NOWAIT for MCP writes, so portal
   lock ordering returns a conflict rather than forming a wait cycle.
-- Position ownership is also enforced by database triggers for authenticated
-  portal/API writes, including import, clearing, restore and cascading deletion.
-  A senior role does not bypass it; journal visibility does not permit cancelling
-  another user's import. Verified context identity overrides helper/body values.
+- Audit attribution uses the verified request identity (JWT/API key) over
+  helper/body values. A version copy writes the source rows' authors to the
+  audit, not the copying user.
 - Nomenclature names/units are locked and included in confirmation along with
   the effective target snapshot and previous GP. Changed names invalidate consent.
 - The privileged database/BFF and background jobs without a delegated actor

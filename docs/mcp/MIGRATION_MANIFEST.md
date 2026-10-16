@@ -6,7 +6,7 @@ Apply after the existing Yandex baseline/incrementals and before enabling MCP:
 db/yandex/incremental/2026_09_tenderhub_mcp_v1.sql
 db/yandex/incremental/2026_10_tenderhub_direct_pricing.sql
 db/yandex/incremental/2026_10_tenderhub_mcp_catalog_creation.sql
-db/yandex/incremental/2026_10_mcp_pricing_ownership.sql
+db/yandex/incremental/2026_10_mcp_row_authorship.sql
 ```
 
 Objects:
@@ -26,15 +26,17 @@ Objects:
 - `public.mcp_catalog_creation_requests`: confirmed catalog inputs, actor/client,
   creation/reuse result and retry receipt; normalized-name non-unique indexes
 - `pg_trgm` indexes on work/material/position names
-- `public.position_pricing_owners`: persistent position calculation ownership,
-  including tombstones for safe restoration
-- `public.client_position_pricing_audit`: old/new GP and note, actor/request key
-- ownership guards on BOQ inputs and position GP/note/deletion
+- `public.client_position_gp_audit` + trigger `trg_client_positions_gp_audit`:
+  old/new Количество ГП and note, author, MCP request key, `version_copy` origin
+- `public.boq_audit_counts_as_authorship`, `public.boq_item_last_authorship`,
+  `public.client_position_gp_last_authorship`: last author for MCP rules
+- `public.copy_boq_item_authorship`, `public.copy_position_gp_authorship` and a
+  new `public.clone_tender_as_new_version`: a version copy keeps the authors
 
 The migrations are additive and idempotent. Apply the direct-pricing migration
 before deploying the new BFF. `CREATE EXTENSION pg_trgm` is a hard gate for
 the first migration. Production rollback disables write access but retains
 audit/provenance rows and historical drafts.
 
-Ownership requires a coordinated BFF/migration rollout with portal writes
-paused; see `OWNERSHIP.md`. Verify with `scripts/mcp/verify_pricing_ownership.sql`.
+The authorship migration needs no portal downtime; order: migration → backend →
+frontend. Verify with `scripts/mcp/verify_row_authorship.sql`; see `AUTHORSHIP.md`.

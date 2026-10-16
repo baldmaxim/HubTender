@@ -27,6 +27,14 @@ CREATE TRIGGER trg_boq_items_audit
 -- только application-транзакции (RecalculateTenderGrandTotalTx, backend/internal/calc).
 
 -- ----- client_positions -----------------------------------------------------
+DROP TRIGGER IF EXISTS trg_client_positions_gp_audit ON public.client_positions;
+CREATE TRIGGER trg_client_positions_gp_audit
+    AFTER UPDATE OF manual_volume, manual_note ON public.client_positions
+    FOR EACH ROW
+    WHEN (OLD.manual_volume IS DISTINCT FROM NEW.manual_volume
+          OR OLD.manual_note IS DISTINCT FROM NEW.manual_note)
+    EXECUTE FUNCTION public.log_client_position_gp_change();
+
 DROP TRIGGER IF EXISTS trigger_update_client_positions_updated_at ON public.client_positions;
 CREATE TRIGGER trigger_update_client_positions_updated_at
   BEFORE UPDATE ON public.client_positions

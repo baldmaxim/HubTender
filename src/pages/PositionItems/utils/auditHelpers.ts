@@ -242,6 +242,14 @@ export function getOperationText(operationType: AuditOperationType): string {
 }
 
 /**
+ * Запись перенесена из предыдущей версии тендера («Новая версия» или перенос
+ * при сопоставлении): пользователь — тот, кто последним менял строку там.
+ */
+export function isVersionCopy(record: BoqItemAudit): boolean {
+  return record.operation_type === 'INSERT' && (record.changed_fields ?? []).includes('version_copy');
+}
+
+/**
  * Получает название пользователя из записи audit
  *
  * @param record - Запись audit

@@ -88,6 +88,7 @@ type DirectPricingResult struct {
 	FinancialInputRevision   int64                  `json:"financial_input_revision"`
 	Warnings                 []string               `json:"warnings"`
 	Replayed                 bool                   `json:"replayed"`
+	Context                  *ChangeContext         `json:"context,omitempty"`
 }
 
 type LinkedMaterialResult struct {
@@ -95,6 +96,66 @@ type LinkedMaterialResult struct {
 	Quantity    float64 `json:"quantity"`
 	TotalAmount float64 `json:"total_amount"`
 	ETag        string  `json:"etag"`
+}
+
+// ChangeContext is what a human sees in the MCP confirmation window: where the
+// write happens, whose data it touches and the values before the write.
+type ChangeContext struct {
+	Tender              string      `json:"tender"`
+	Position            string      `json:"position"`
+	Category            string      `json:"category,omitempty"`
+	RowAuthor           string      `json:"row_author,omitempty"`
+	PositionTotalBefore float64     `json:"position_total_before"`
+	Before              *RowValues  `json:"before,omitempty"`
+	Rows                []RowChange `json:"rows,omitempty"`
+}
+
+// RowValues are the values of an updated row before the write.
+type RowValues struct {
+	Quantity    *float64 `json:"quantity,omitempty"`
+	UnitRate    *float64 `json:"unit_rate,omitempty"`
+	Currency    string   `json:"currency,omitempty"`
+	TotalAmount *float64 `json:"total_amount,omitempty"`
+}
+
+// RowChange is a row affected by a write: a deleted row or a linked material
+// recalculated from its work.
+type RowChange struct {
+	ItemID      string   `json:"item_id"`
+	Name        string   `json:"name"`
+	ItemType    string   `json:"item_type"`
+	UnitCode    string   `json:"unit_code,omitempty"`
+	Quantity    *float64 `json:"quantity,omitempty"`
+	TotalAmount *float64 `json:"total_amount,omitempty"`
+	Author      string   `json:"author,omitempty"`
+}
+
+// DirectDeleteResult is a committed MCP deletion of one VOR row together with
+// its linked materials.
+type DirectDeleteResult struct {
+	RequestKey             string         `json:"request_key"`
+	TenderID               string         `json:"tender_id"`
+	PositionID             string         `json:"position_id"`
+	ItemID                 string         `json:"item_id"`
+	Deleted                []RowChange    `json:"deleted"`
+	PositionTotal          float64        `json:"position_total"`
+	FinancialInputRevision int64          `json:"financial_input_revision"`
+	Context                *ChangeContext `json:"context,omitempty"`
+	Replayed               bool           `json:"replayed"`
+}
+
+// PositionGPResult is a committed MCP change of Количество ГП and/or its note.
+type PositionGPResult struct {
+	RequestKey             string         `json:"request_key"`
+	TenderID               string         `json:"tender_id"`
+	PositionID             string         `json:"position_id"`
+	PreviousQuantity       *float64       `json:"previous_quantity,omitempty"`
+	Quantity               *float64       `json:"quantity,omitempty"`
+	PreviousNote           *string        `json:"previous_note,omitempty"`
+	Note                   *string        `json:"note,omitempty"`
+	FinancialInputRevision int64          `json:"financial_input_revision"`
+	Context                *ChangeContext `json:"context,omitempty"`
+	Replayed               bool           `json:"replayed"`
 }
 
 type CostCategory struct {

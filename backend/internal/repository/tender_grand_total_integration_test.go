@@ -45,7 +45,6 @@ func seedCachedGrandTotalFixture(t *testing.T, pool *pgxpool.Pool, tag string) *
 		VALUES ($1,'itest-client',$2) RETURNING id::text`, "itest-cgt-"+tag, "ITEST-CGT-"+tag)
 	scan(&f.posID, `INSERT INTO public.client_positions (tender_id, position_number, work_name)
 		VALUES ($1::uuid, 1, 'p') RETURNING id::text`, f.tenderID)
-	seedTestPricingOwner(t, pool, f.posID)
 	workNameID, _ := ensureTestNames(t, pool)
 	addItem := func(mat, work float64) string {
 		var id string
@@ -514,6 +513,7 @@ func TestCachedGrandTotal_DecimalRoundingParity(t *testing.T) {
 		})
 	}
 }
+
 
 // ─── cached_base_total: the helper persists SUM(total_amount) in the same write ─
 

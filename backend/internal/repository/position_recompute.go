@@ -104,9 +104,6 @@ func (r *BoqRepo) RecomputeLinkedMaterialsForWork(
 	}
 	workTenderID := work.TenderID
 
-	if _, err := tx.Exec(ctx, `SELECT public.assert_position_pricing_owner($1,false)`, work.ClientPositionID); err != nil {
-		return 0, err
-	}
 	// 0-F2 (category A): one user command → one revision bump for the tender;
 	// the children's quantity/total change here, commercial recalc is async.
 	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, workTenderID, "recompute_linked_materials"); err != nil {

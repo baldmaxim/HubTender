@@ -39,15 +39,8 @@ type DirectPricingCommit struct {
 // key. A missing row is not an error, so callers can check before rebuilding
 // a source-backed operation after a lost MCP response.
 func (r *PricingRepo) GetDirectPricingReceipt(ctx context.Context, actorID, requestKey string) (*pricing.DirectPricingResult, string, error) {
-	var hash string
-	var raw []byte
-	err := r.pool.QueryRow(ctx, `SELECT request_hash,result
-		FROM public.mcp_direct_pricing_requests
-		WHERE actor_id=$1 AND request_key=$2`, actorID, requestKey).Scan(&hash, &raw)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, "", nil
-	}
-	if err != nil {
+	raw, hash, err := r.GetDirectReceiptRaw(ctx, actorID, requestKey)
+	if raw == nil || err != nil {
 		return nil, "", err
 	}
 	var result pricing.DirectPricingResult
@@ -109,12 +102,7 @@ func (r *PricingRepo) ListDirectCostCategories(ctx context.Context, search strin
 // ApplyDirectPricing commits one source-backed BOQ mutation. The request key
 // makes creation safe to retry when an MCP response is lost after commit.
 func (r *PricingRepo) ApplyDirectPricing(ctx context.Context, in DirectPricingCommit) (result *pricing.DirectPricingResult, err error) {
-	defer func() {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "55P03" {
-			err = ErrDirectPricingBusy
-		}
-	}()
+	defer mapDirectPricingBusy(&err)
 	// The tender and target rows are locked explicitly. Read committed lets an
 	// identical concurrent request observe the committed command receipt after
 	// ON CONFLICT waits, while revision/ETag checks still reject stale writes.
@@ -128,24 +116,11 @@ func (r *PricingRepo) ApplyDirectPricing(ctx context.Context, in DirectPricingCo
 	}
 
 	if !in.Preview {
-		var inserted int
-		err = tx.QueryRow(ctx, `INSERT INTO public.mcp_direct_pricing_requests
-		(actor_id,request_key,request_hash,tender_id,result)
-		VALUES ($1,$2,$3,$4,'{}'::jsonb)
-		ON CONFLICT (actor_id,request_key) DO NOTHING RETURNING 1`,
-			in.ActorID, in.RequestKey, in.RequestHash, in.TenderID).Scan(&inserted)
-		if errors.Is(err, pgx.ErrNoRows) {
-			var existingHash string
-			var raw []byte
-			if err := tx.QueryRow(ctx, `SELECT request_hash,result
-			FROM public.mcp_direct_pricing_requests
-			WHERE actor_id=$1 AND request_key=$2 FOR UPDATE`,
-				in.ActorID, in.RequestKey).Scan(&existingHash, &raw); err != nil {
-				return nil, err
-			}
-			if existingHash != in.RequestHash {
-				return nil, ErrDirectRequestKeyReused
-			}
+		raw, err := claimDirectReceiptTx(ctx, tx, in.ActorID, in.RequestKey, in.RequestHash, in.TenderID)
+		if err != nil {
+			return nil, err
+		}
+		if raw != nil {
 			var prior pricing.DirectPricingResult
 			if err := json.Unmarshal(raw, &prior); err != nil {
 				return nil, err
@@ -153,10 +128,6 @@ func (r *PricingRepo) ApplyDirectPricing(ctx context.Context, in DirectPricingCo
 			prior.Replayed = true
 			return &prior, nil
 		}
-		if err != nil {
-			return nil, err
-		}
-
 	}
 
 	// Receipt insertion holds FK KEY SHARE on the tender. NO KEY UPDATE
@@ -197,11 +168,19 @@ func (r *PricingRepo) ApplyDirectPricing(ctx context.Context, in DirectPricingCo
 	if !leaf {
 		return nil, ErrDirectTargetInvalid
 	}
-	if _, err := tx.Exec(ctx, `SELECT public.assert_position_pricing_owner($1,true)`, in.Operation.TargetPositionID); err != nil {
-		return nil, err
-	}
+	// The GP journal trigger stores the MCP request key next to old/new values.
 	if _, err := tx.Exec(ctx, `SELECT set_config('app.pricing_request_key',$1,true)`, in.RequestKey); err != nil {
 		return nil, err
+	}
+	changeCtx, positionLabel, err := changeContextTx(ctx, tx, in.Operation.TargetPositionID)
+	if err != nil {
+		return nil, err
+	}
+	// A filled Количество ГП may be changed through MCP only by its last author.
+	if in.PositionQuantity != nil && previousGP != nil && *previousGP != *in.PositionQuantity {
+		if err := requireMCPGPAuthorTx(ctx, tx, in.ActorID, in.Operation.TargetPositionID, "volume", "количество ГП позиции "+positionLabel); err != nil {
+			return nil, err
+		}
 	}
 	// Lock all existing target rows before checking the prospective position.
 	locked, err := tx.Query(ctx, `SELECT id FROM public.boq_items WHERE client_position_id=$1 ORDER BY id FOR UPDATE NOWAIT`, in.Operation.TargetPositionID)
@@ -247,6 +226,17 @@ func (r *PricingRepo) ApplyDirectPricing(ctx context.Context, in DirectPricingCo
 			pricingETag(old.ID, old.UpdatedAt) != *in.Operation.ExpectedETag {
 			return nil, ErrDirectPricingStale
 		}
+		// MCP changes only rows the caller changed last; others are edited in the portal.
+		authors, err := boqRowAuthorsTx(ctx, tx, []string{old.ID})
+		if err != nil {
+			return nil, err
+		}
+		if err := requireMCPRowAuthors(in.ActorID, authors); err != nil {
+			return nil, err
+		}
+		changeCtx.RowAuthor = authors[0].Author
+		changeCtx.Before = &pricing.RowValues{Quantity: old.Quantity, UnitRate: old.UnitRate,
+			Currency: deref(old.CurrencyType), TotalAmount: old.TotalAmount}
 	} else if in.Operation.Action != "create_item" || in.Operation.TargetItemID != nil {
 		return nil, ErrDirectTargetInvalid
 	}
@@ -285,6 +275,29 @@ func (r *PricingRepo) ApplyDirectPricing(ctx context.Context, in DirectPricingCo
 		return nil, err
 	}
 	in.Operation.ProposedPayload = payload
+	category, err := categoryNameTx(ctx, tx, payload.DetailCostCategoryID)
+	if err != nil {
+		return nil, err
+	}
+	changeCtx.Category = category
+	// A work quantity change recalculates its linked materials: they must be
+	// the caller's rows too. A price-only change leaves them untouched.
+	if old != nil && calc.IsWorkBoqType(old.BoqItemType) && !sameFloat(old.Quantity, payload.Quantity) {
+		childIDs, err := linkedMaterialIDsTx(ctx, tx, old.ID)
+		if err != nil {
+			return nil, err
+		}
+		children, err := boqRowAuthorsTx(ctx, tx, childIDs)
+		if err != nil {
+			return nil, err
+		}
+		if err := requireMCPRowAuthors(in.ActorID, children); err != nil {
+			return nil, err
+		}
+		for _, child := range children {
+			changeCtx.Rows = append(changeCtx.Rows, child.RowChange)
+		}
+	}
 
 	if err := skipBoqAuditTrigger(ctx, tx); err != nil {
 		return nil, err
@@ -371,6 +384,7 @@ func (r *PricingRepo) ApplyDirectPricing(ctx context.Context, in DirectPricingCo
 	}
 	result.ETag = etag
 	result.PreviousPositionQuantity = previousGP
+	result.Context = changeCtx
 	result.ItemType = item.BoqItemType
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(wn.name,mn.name,''),COALESCE(b.unit_code,'') FROM public.boq_items b LEFT JOIN public.work_names wn ON wn.id=b.work_name_id LEFT JOIN public.material_names mn ON mn.id=b.material_name_id WHERE b.id=$1`, item.ID).Scan(&result.Name, &result.UnitCode); err != nil {
 		return nil, err
@@ -399,12 +413,7 @@ func (r *PricingRepo) ApplyDirectPricing(ctx context.Context, in DirectPricingCo
 	if (in.ExpectedChecksFingerprint != "" && in.ExpectedChecksFingerprint != result.Checks.Fingerprint) || (len(result.Checks.Findings) > 0 && in.ExpectedChecksFingerprint == "") {
 		return nil, fmt.Errorf("MCP_PRICING_CHECKS_CHANGED: preview and explicitly confirm the current findings before writing")
 	}
-	encoded, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := tx.Exec(ctx, `UPDATE public.mcp_direct_pricing_requests SET result=$3::jsonb
-		WHERE actor_id=$1 AND request_key=$2`, in.ActorID, in.RequestKey, encoded); err != nil {
+	if err := storeDirectReceiptTx(ctx, tx, in.ActorID, in.RequestKey, result); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {

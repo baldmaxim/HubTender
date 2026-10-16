@@ -42,9 +42,9 @@ VITE_API_URL=https://staging.example npm run build
 ## 3. Apply the additive migration on staging
 
 Take a snapshot/backup first. The v1 MCP migration must already be installed.
-For the pricing-checks release also apply `2026_10_mcp_pricing_ownership.sql`.
-Pause portal pricing writes during the coordinated migration/BFF update; review
-legacy attribution and runtime DB privileges as described in `OWNERSHIP.md`.
+For the authorship release also apply `2026_10_mcp_row_authorship.sql` (GP
+journal, authorship functions, version copy keeps authors). It is additive and
+needs no portal downtime: migration → backend → frontend. See `AUTHORSHIP.md`.
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -54,8 +54,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 Run `scripts/mcp/verify_direct_migration.sql` to verify the new table,
 columns and unique direct-request index on staging. Do not
 run this migration on production until direct-write integration UAT passes.
-Run `scripts/mcp/verify_pricing_ownership.sql` with the same runtime role, then
-perform the two-engineer ownership tests in `OWNERSHIP.md` on staging.
+Run `scripts/mcp/verify_row_authorship.sql` (read-only); expect
+`MCP_ROW_AUTHORSHIP_OK`. nginx `/mcp` must stream SSE: `proxy_buffering off`.
 
 ## 4. Configure staging
 

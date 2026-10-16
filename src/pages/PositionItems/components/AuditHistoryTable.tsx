@@ -12,6 +12,7 @@ import {
   getOperationText,
   getUserDisplayName,
   canRollback,
+  isVersionCopy,
 } from '../utils/auditHelpers';
 
 interface AuditHistoryTableProps {
@@ -73,7 +74,12 @@ const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ positionId, filte
           dataIndex: 'operation_type',
           width: 120,
           align: 'center',
-          render: (op) => <Tag color={getOperationColor(op)}>{getOperationText(op)}</Tag>,
+          render: (op, record) =>
+            isVersionCopy(record) ? (
+              <Tag color="purple">Перенос версии</Tag>
+            ) : (
+              <Tag color={getOperationColor(op)}>{getOperationText(op)}</Tag>
+            ),
         },
         {
           title: 'Изменённые поля',

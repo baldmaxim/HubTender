@@ -1606,6 +1606,175 @@ AS $function$
     END;
     $function$;
 
+-- Авторство строк ВОР и журнал ГП для правил MCP (docs/mcp/AUTHORSHIP.md).
+-- Инкремент: 2026_10_mcp_row_authorship.sql.
+CREATE OR REPLACE FUNCTION public.boq_audit_counts_as_authorship(
+    p_operation text, p_fields text[], p_new_data jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $function$
+  SELECT CASE
+    WHEN p_operation = 'INSERT' THEN true
+    WHEN p_operation <> 'UPDATE' THEN false
+    -- UPDATE без списка полей пишет бэкенд, когда пересчёт ничего не изменил
+    -- (changedFields пуст): например, пересчёт привязанных материалов при смене
+    -- цены работы. Триггерный аудит пустые правки не пишет вовсе.
+    WHEN p_fields IS NULL THEN false
+    WHEN p_fields <@ ARRAY['total_amount', 'sort_number', 'updated_at', 'created_at',
+                           'commercial_markup', 'total_commercial_material_cost',
+                           'total_commercial_work_cost']::text[] THEN false
+    -- Количество привязанного материала сервер пересчитывает от его работы.
+    WHEN (p_new_data ->> 'parent_work_item_id') IS NOT NULL
+     AND p_fields <@ ARRAY['quantity', 'base_quantity', 'total_amount', 'sort_number',
+                           'updated_at', 'created_at', 'commercial_markup',
+                           'total_commercial_material_cost',
+                           'total_commercial_work_cost']::text[] THEN false
+    ELSE true
+  END
+$function$;
+
+COMMENT ON FUNCTION public.boq_audit_counts_as_authorship(text, text[], jsonb) IS
+    'Делает ли запись boq_items_audit её автора автором строки: добавление и правка входных полей — да; пересчёты (итог, коммерция, порядок, количество привязанного материала) — нет.';
+
+CREATE OR REPLACE FUNCTION public.boq_item_last_authorship(p_item uuid)
+RETURNS TABLE (changed_by uuid, changed_at timestamptz)
+LANGUAGE sql
+STABLE
+AS $function$
+  SELECT a.changed_by, a.changed_at
+  FROM public.boq_items_audit a
+  WHERE a.boq_item_id = p_item
+    AND a.changed_by IS NOT NULL
+    AND public.boq_audit_counts_as_authorship(a.operation_type, a.changed_fields, a.new_data)
+  ORDER BY a.changed_at DESC, a.id DESC
+  LIMIT 1
+$function$;
+
+COMMENT ON FUNCTION public.boq_item_last_authorship(uuid) IS
+    'Последний автор строки ВОР: последнее добавление/правка под учёткой пользователя. Нет строки — автора нет («Системная операция»).';
+
+CREATE OR REPLACE FUNCTION public.log_client_position_gp_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_user_id uuid;
+BEGIN
+  -- Перенос версии пишет авторов из предыдущей версии сам
+  -- (copy_position_gp_authorship), без записи от имени того, кто переносит.
+  IF current_setting('app.skip_gp_audit', true) = 'on' THEN
+    RETURN NEW;
+  END IF;
+
+  BEGIN
+    v_user_id := auth.uid();
+  EXCEPTION WHEN OTHERS THEN
+    v_user_id := NULL;
+  END;
+
+  INSERT INTO public.client_position_gp_audit (
+    client_position_id, tender_id, changed_by, origin, request_key,
+    old_manual_volume, new_manual_volume, old_manual_note, new_manual_note
+  ) VALUES (
+    NEW.id, NEW.tender_id, v_user_id, 'edit',
+    NULLIF(current_setting('app.pricing_request_key', true), ''),
+    OLD.manual_volume, NEW.manual_volume, OLD.manual_note, NEW.manual_note
+  );
+  RETURN NEW;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.client_position_gp_last_authorship(p_position uuid, p_field text)
+RETURNS TABLE (changed_by uuid, changed_at timestamptz)
+LANGUAGE sql
+STABLE
+AS $function$
+  SELECT g.changed_by, g.changed_at
+  FROM public.client_position_gp_audit g
+  WHERE g.client_position_id = p_position
+    AND g.changed_by IS NOT NULL
+    AND CASE p_field
+          WHEN 'volume' THEN g.old_manual_volume IS DISTINCT FROM g.new_manual_volume
+          WHEN 'note'   THEN g.old_manual_note IS DISTINCT FROM g.new_manual_note
+          ELSE false
+        END
+  ORDER BY g.changed_at DESC, g.id DESC
+  LIMIT 1
+$function$;
+
+COMMENT ON FUNCTION public.client_position_gp_last_authorship(uuid, text) IS
+    'Последний автор количества (volume) или примечания (note) ГП позиции по client_position_gp_audit.';
+
+CREATE OR REPLACE FUNCTION public.copy_boq_item_authorship(p_old_ids uuid[], p_new_ids uuid[])
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_count integer;
+BEGIN
+  -- Одна запись на скопированную строку: автор и время его последнего
+  -- изменения в предыдущей версии. Нет автора — запись «Системная операция»,
+  -- как раньше писал триггер. Полная история остаётся у исходной строки.
+  INSERT INTO public.boq_items_audit (
+    boq_item_id, operation_type, changed_by, old_data, new_data, changed_fields, changed_at
+  )
+  SELECT b.id, 'INSERT', la.changed_by, NULL, to_jsonb(b.*),
+         ARRAY['version_copy']::text[], COALESCE(la.changed_at, now())
+  FROM unnest(p_old_ids, p_new_ids) AS m(old_id, new_id)
+  JOIN public.boq_items b ON b.id = m.new_id
+  LEFT JOIN LATERAL public.boq_item_last_authorship(m.old_id) la ON true;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END;
+$function$;
+
+COMMENT ON FUNCTION public.copy_boq_item_authorship(uuid[], uuid[]) IS
+    'Пишет в boq_items_audit для каждой новой строки копии автора исходной строки (changed_fields = {version_copy}). Вызывать при выключенном триггерном аудите (app.skip_boq_audit = on).';
+
+CREATE OR REPLACE FUNCTION public.copy_position_gp_authorship(p_old_ids uuid[], p_new_ids uuid[])
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_volumes integer;
+  v_notes integer;
+BEGIN
+  INSERT INTO public.client_position_gp_audit (
+    client_position_id, tender_id, changed_by, origin, old_manual_volume, new_manual_volume, changed_at
+  )
+  SELECT cp.id, cp.tender_id, g.changed_by, 'version_copy', NULL, cp.manual_volume, g.changed_at
+  FROM unnest(p_old_ids, p_new_ids) AS m(old_id, new_id)
+  JOIN public.client_positions cp ON cp.id = m.new_id
+  JOIN LATERAL public.client_position_gp_last_authorship(m.old_id, 'volume') g ON true
+  WHERE cp.manual_volume IS NOT NULL;
+  GET DIAGNOSTICS v_volumes = ROW_COUNT;
+
+  INSERT INTO public.client_position_gp_audit (
+    client_position_id, tender_id, changed_by, origin, old_manual_note, new_manual_note, changed_at
+  )
+  SELECT cp.id, cp.tender_id, g.changed_by, 'version_copy', NULL, cp.manual_note, g.changed_at
+  FROM unnest(p_old_ids, p_new_ids) AS m(old_id, new_id)
+  JOIN public.client_positions cp ON cp.id = m.new_id
+  JOIN LATERAL public.client_position_gp_last_authorship(m.old_id, 'note') g ON true
+  WHERE cp.manual_note IS NOT NULL AND cp.manual_note <> '';
+  GET DIAGNOSTICS v_notes = ROW_COUNT;
+
+  RETURN v_volumes + v_notes;
+END;
+$function$;
+
+COMMENT ON FUNCTION public.copy_position_gp_authorship(uuid[], uuid[]) IS
+    'Переносит последнего автора количества и примечания ГП из исходных позиций в новые (origin = version_copy).';
+
+
 CREATE OR REPLACE FUNCTION public.set_tender_group_quality(p_group_id uuid, p_quality_level smallint, p_quality_comment text DEFAULT NULL::text)
  RETURNS tender_groups
  LANGUAGE plpgsql
@@ -1791,6 +1960,11 @@ declare
   v_documents_copied integer := 0;
   v_notes_copied integer := 0;
   v_groups_copied integer := 0;
+  v_boq_authorship_copied integer := 0;
+  v_gp_authorship_copied integer := 0;
+  v_prev_skip_audit text;
+  v_old_ids uuid[];
+  v_new_ids uuid[];
 begin
   select * into v_source from public.tenders where id = p_source_tender_id;
   if not found then
@@ -1865,6 +2039,13 @@ begin
 
   get diagnostics v_position_parent_links_restored = row_count;
 
+  -- Автор количества и примечания ГП переходит из предыдущей версии.
+  select array_agg(old_id order by new_id), array_agg(new_id order by new_id)
+  into v_old_ids, v_new_ids
+  from tmp_cp_map;
+  v_gp_authorship_copied := public.copy_position_gp_authorship(
+    coalesce(v_old_ids, '{}'), coalesce(v_new_ids, '{}'));
+
   -- Pre-generate new UUIDs for boq_items.
   create temporary table tmp_boq_map on commit drop as
   select
@@ -1882,6 +2063,11 @@ begin
   from public.boq_items old_boq
   join tmp_cp_map cp_map on cp_map.old_id = old_boq.client_position_id
   where old_boq.tender_id = p_source_tender_id;
+
+  -- Триггерный аудит записал бы «Системную операцию» на каждую строку копии;
+  -- вместо этого copy_boq_item_authorship переносит автора из предыдущей версии.
+  v_prev_skip_audit := current_setting('app.skip_boq_audit', true);
+  perform set_config('app.skip_boq_audit', 'on', true);
 
   insert into public.boq_items (
     id, tender_id, client_position_id, sort_number, boq_item_type, material_type,
@@ -1911,6 +2097,14 @@ begin
   where target_boq.id = src.new_id and src.parent_work_item_id is not null;
 
   get diagnostics v_parent_links_restored = row_count;
+
+  select array_agg(old_id order by new_id), array_agg(new_id order by new_id)
+  into v_old_ids, v_new_ids
+  from tmp_boq_map;
+  v_boq_authorship_copied := public.copy_boq_item_authorship(
+    coalesce(v_old_ids, '{}'), coalesce(v_new_ids, '{}'));
+
+  perform set_config('app.skip_boq_audit', coalesce(v_prev_skip_audit, ''), true);
 
   insert into public.construction_cost_volumes (tender_id, detail_cost_category_id, volume, group_key)
   select v_new.id, detail_cost_category_id, volume, group_key
@@ -2009,7 +2203,9 @@ begin
     'markupPercentageCopied', v_markup_percentage_copied,
     'documentsCopied', v_documents_copied,
     'notesCopied', v_notes_copied,
-    'groupsCopied', v_groups_copied
+    'groupsCopied', v_groups_copied,
+    'boqAuthorshipCopied', v_boq_authorship_copied,
+    'gpAuthorshipCopied', v_gp_authorship_copied
   );
 end;
 $function$;

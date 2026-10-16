@@ -32,13 +32,14 @@ func checksFixture(t *testing.T) (context.Context, *pgxpool.Pool, *PricingServic
 	must(`DELETE FROM public.boq_items_audit WHERE new_data->>'tender_id'=$1 OR old_data->>'tender_id'=$1`, checksTender)
 	must(`INSERT INTO public.tenders(id,title,client_name,tender_number,version) VALUES($1,'MCP checks','Eval','MCP-CHECKS',1)`, checksTender)
 	must(`INSERT INTO public.client_positions(id,tender_id,position_number,work_name,unit_code,volume,manual_volume) VALUES($1,$2,1,'MCP checks work','шт',10,10)`, checksPosition, checksTender)
+	// Количество ГП 10 was set by the engineer who now prices the position via MCP.
+	must(`INSERT INTO public.client_position_gp_audit(client_position_id,tender_id,changed_by,old_manual_volume,new_manual_volume) VALUES($1,$2,$3,NULL,10)`, checksPosition, checksTender, p.UserID)
 	must(`INSERT INTO public.work_names(id,name,unit) VALUES($1,'MCP checks work','шт')`, checksWorkName)
 	must(`INSERT INTO public.works_library(id,work_name_id,item_type,unit_rate,currency_type) VALUES($1,$2,'суб-раб',100,'RUB')`, checksWorkCard, checksWorkName)
 	t.Cleanup(func() {
 		must(`DELETE FROM public.mcp_direct_pricing_requests WHERE tender_id=$1`, checksTender)
 		must(`DELETE FROM public.boq_items WHERE tender_id=$1`, checksTender)
-		must(`DELETE FROM public.position_pricing_owners WHERE client_position_id IN (SELECT id FROM public.client_positions WHERE tender_id=$1)`, checksTender)
-		must(`DELETE FROM public.client_position_pricing_audit WHERE tender_id=$1`, checksTender)
+		must(`DELETE FROM public.client_position_gp_audit WHERE tender_id=$1`, checksTender)
 		must(`DELETE FROM public.client_positions WHERE tender_id=$1`, checksTender)
 		must(`DELETE FROM public.tenders WHERE id=$1`, checksTender)
 		must(`DELETE FROM public.boq_items_audit WHERE new_data->>'tender_id'=$1 OR old_data->>'tender_id'=$1`, checksTender)

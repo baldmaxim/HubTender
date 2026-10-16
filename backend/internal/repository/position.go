@@ -381,12 +381,6 @@ func (r *PositionRepo) ClearPositionsBoq(ctx context.Context, ids []string, chan
 		return fmt.Errorf("positionRepo.ClearPositionsBoq: %w", err)
 	}
 
-	for _, id := range ids {
-		if _, err := tx.Exec(ctx, `SELECT public.assert_position_pricing_owner($1,false)`, id); err != nil {
-			return err
-		}
-	}
-
 	// Категория A (0.1.2.4a): удаление BOQ-строк с commercial values — пересчёт
 	// cached_grand_total один раз на каждый затронутый тендер в этой же tx.
 	affectedTenders, err := affectedTenderIDs(ctx, tx, ids)

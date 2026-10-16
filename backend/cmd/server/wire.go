@@ -488,7 +488,7 @@ func buildDeps(
 		costBenchmarkH:    handlers.NewCostBenchmarkHandler(costBenchmarkSvc),
 		pricingH:          handlers.NewPricingHandler(pricingSvc),
 		mcpOAuthH:         mcpauth.NewHandler(mcpOAuthSvc, mcpauth.HandlerConfig{PublicBaseURL: cfg.AppBaseURL, DCR: cfg.MCPDCREnabled}),
-		mcpHTTP:           mcpserver.NewHTTPHandler(pricingSvc, mcpserver.Config{MaxRequestBodyBytes: cfg.MCPMaxRequestBodyBytes, Logger: logger}),
+		mcpHTTP:           mcpserver.NewHTTPHandler(pricingSvc, mcpserver.Config{MaxRequestBodyBytes: cfg.MCPMaxRequestBodyBytes, Logger: logger, Stateless: cfg.MCPStatelessHTTP}),
 		boqH:              handlers.NewBoqHandler(boqSvc),
 		boqWH:             handlers.NewBoqWriteHandler(boqSvc),
 		bulkBoqH:          handlers.NewBulkBoqHandler(bulkBoqSvc),
