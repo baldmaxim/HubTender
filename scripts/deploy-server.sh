@@ -221,8 +221,8 @@ summary() {
   local sha; sha="$(git rev-parse --short HEAD)"
   echo
   ok "deploy done — release $sha"
-  echo "  Frontend: https://tender.su10.ru/"
-  echo "  Backend:  https://tender.su10.ru/api/health (loopback: http://127.0.0.1:$BFF_PORT/health)"
+  echo "  Frontend: https://gp.su10.ru/"
+  echo "  Backend:  https://gp.su10.ru/health (loopback: http://127.0.0.1:$BFF_PORT/health)"
 }
 
 main() {
