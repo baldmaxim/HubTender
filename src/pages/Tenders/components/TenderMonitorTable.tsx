@@ -1,5 +1,6 @@
 import React from 'react';
-import { Empty, Input, Skeleton, Space } from 'antd';
+import { Empty, Input, Segmented, Skeleton, Space } from 'antd';
+import { ProjectOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import type { TenderRegistryWithRelations } from '../../../lib/types';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
@@ -13,6 +14,16 @@ import {
 import { getTenderMonitorPalette, type TenderMonitorPalette } from '../utils/tenderMonitorTheme';
 import { TenderMonitorCards } from './TenderMonitorCards';
 import { DesktopTableHeader, SectionHeader, TenderRow } from './TenderMonitorDesktopRows';
+
+export type TenderViewMode = 'list' | 'kanban';
+
+// Без View Transitions API смену вида проигрываем CSS-анимацией (.tm-view-enter).
+const SUPPORTS_VIEW_TRANSITIONS = typeof document !== 'undefined' && 'startViewTransition' in document;
+
+const VIEW_MODE_OPTIONS = [
+  { value: 'list' as const, label: 'Список', icon: <UnorderedListOutlined /> },
+  { value: 'kanban' as const, label: 'Канбан', icon: <ProjectOutlined /> },
+];
 
 interface TenderMonitorTableProps {
   tenders: TenderRegistryWithRelations[];
@@ -32,6 +43,10 @@ interface TenderMonitorTableProps {
   onUpdate: () => Promise<void> | void;
   /** Режим «только просмотр» — скрывает кнопки звонка (Генеральный директор) */
   readOnly?: boolean;
+  viewMode: TenderViewMode;
+  onViewModeChange: (mode: TenderViewMode) => void;
+  /** Канбан-доска (рендерит страница), показывается вместо списка. */
+  kanban: React.ReactNode;
 }
 
 function SortButton({
@@ -83,8 +98,12 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   onQuickCall,
   onUpdate,
   readOnly,
+  viewMode,
+  onViewModeChange,
+  kanban,
 }) => {
   void onUpdate;
+  const isKanban = viewMode === 'kanban';
 
   const { theme } = useTheme();
   const { screens, isPhone } = useIsMobile();
@@ -179,7 +198,7 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
 
   return (
     <div>
-      {!isCardView && tabsBlock}
+      {!isCardView && !isKanban && tabsBlock}
 
       <div
         style={{
@@ -200,6 +219,13 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
           }}
         >
           <Space wrap size={12}>
+            <Segmented
+              size="small"
+              aria-label="Режим просмотра"
+              options={VIEW_MODE_OPTIONS}
+              value={viewMode}
+              onChange={(value) => onViewModeChange(value as TenderViewMode)}
+            />
             <Input
               allowClear
               value={searchValue}
@@ -232,49 +258,53 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
           </Space>
         </div>
 
-        {isCardView && tabsBlock}
+        {isCardView && !isKanban && tabsBlock}
 
-        {loading ? (
-          <div style={{ padding: 24 }}>
-            <Skeleton active paragraph={{ rows: 8 }} />
-          </div>
-        ) : sections.every((section) => section.items.length === 0) ? (
-          <Empty description="Тендеры не найдены" style={{ padding: 48 }} />
-        ) : isCardView ? (
-          <div {...cardSwipe} style={{ touchAction: 'pan-y' }}>
-            <TenderMonitorCards
-              sections={sections}
-              onOpenTender={onOpenTender}
-              onOpenTimeline={onOpenTimeline}
-              onOpenPackage={onOpenPackage}
-              onQuickCall={onQuickCall}
-              palette={palette}
-              readOnly={readOnly}
-            />
-          </div>
-        ) : (
-          sections.map((section) => (
-            <div key={section.key}>
-              <SectionHeader title={section.title} tenders={section.items} palette={palette} />
-              <DesktopTableHeader palette={palette} />
-              {section.items.length > 0 ? (
-                section.items.map((tender) => (
-                  <TenderRow
-                    key={tender.id}
-                    tender={tender}
-                    onOpenTender={onOpenTender}
-                    onOpenTimeline={onOpenTimeline}
-                    onQuickCall={onQuickCall}
-                    palette={palette}
-                    readOnly={readOnly}
-                  />
-                ))
-              ) : (
-                <div style={{ padding: 36, color: palette.muted, textAlign: 'center' }}>Нет тендеров</div>
-              )}
+        <div key={viewMode} className={SUPPORTS_VIEW_TRANSITIONS ? 'tm-view' : 'tm-view tm-view-enter'}>
+          {loading ? (
+            <div style={{ padding: 24 }}>
+              <Skeleton active paragraph={{ rows: 8 }} />
             </div>
-          ))
-        )}
+          ) : isKanban ? (
+            <div className="tm-kanban-wrap">{kanban}</div>
+          ) : sections.every((section) => section.items.length === 0) ? (
+            <Empty description="Тендеры не найдены" style={{ padding: 48 }} />
+          ) : isCardView ? (
+            <div {...cardSwipe} style={{ touchAction: 'pan-y' }}>
+              <TenderMonitorCards
+                sections={sections}
+                onOpenTender={onOpenTender}
+                onOpenTimeline={onOpenTimeline}
+                onOpenPackage={onOpenPackage}
+                onQuickCall={onQuickCall}
+                palette={palette}
+                readOnly={readOnly}
+              />
+            </div>
+          ) : (
+            sections.map((section) => (
+              <div key={section.key}>
+                <SectionHeader title={section.title} tenders={section.items} palette={palette} />
+                <DesktopTableHeader palette={palette} />
+                {section.items.length > 0 ? (
+                  section.items.map((tender) => (
+                    <TenderRow
+                      key={tender.id}
+                      tender={tender}
+                      onOpenTender={onOpenTender}
+                      onOpenTimeline={onOpenTimeline}
+                      onQuickCall={onQuickCall}
+                      palette={palette}
+                      readOnly={readOnly}
+                    />
+                  ))
+                ) : (
+                  <div style={{ padding: 36, color: palette.muted, textAlign: 'center' }}>Нет тендеров</div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

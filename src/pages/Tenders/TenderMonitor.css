@@ -64,3 +64,49 @@
     filter: brightness(1.03);
   }
 }
+
+/* Смена вида «Список ↔ Канбан»: View Transitions API, без него — .tm-view-enter. */
+.tm-view {
+  view-transition-name: tm-view;
+}
+
+::view-transition-group(tm-view),
+::view-transition-old(tm-view),
+::view-transition-new(tm-view) {
+  animation-duration: 200ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tm-view-enter {
+  animation: tm-view-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes tm-view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tm-kanban-wrap {
+  padding: 12px;
+}
+
+@media (max-width: 575px) {
+  .tm-kanban-wrap {
+    padding: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-view-enter,
+  ::view-transition-group(tm-view),
+  ::view-transition-old(tm-view),
+  ::view-transition-new(tm-view) {
+    animation: none;
+  }
+}

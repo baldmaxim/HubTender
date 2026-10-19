@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { App, Button, Space } from 'antd';
 import { PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -11,7 +12,8 @@ import { useTenderData } from './hooks/useTenderData';
 import { TenderAddForm } from './components';
 import ImportTendersModal from './ImportTendersModal';
 import TenderMonitorModal from './components/TenderMonitorModal';
-import TenderMonitorTable from './components/TenderMonitorTable';
+import TenderMonitorTable, { type TenderViewMode } from './components/TenderMonitorTable';
+import { TenderKanbanBoard } from './components/kanban/TenderKanbanBoard';
 import {
   buildCallFollowUpItem,
   formatArea,
@@ -28,6 +30,16 @@ import { getTenderMonitorPalette, mixHex, type TenderMonitorPalette } from './ut
 import './Tenders.css';
 import './TendersModern.css';
 import './TenderMonitor.css';
+
+const VIEW_MODE_STORAGE_KEY = 'tenderHub_tendersView';
+
+const readViewMode = (): TenderViewMode => {
+  try {
+    return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'kanban' ? 'kanban' : 'list';
+  } catch {
+    return 'list';
+  }
+};
 
 interface MetricCardProps {
   title: string;
@@ -101,6 +113,7 @@ const Tenders: React.FC = () => {
   const [detailInitialTab, setDetailInitialTab] = useState<'info' | 'timeline' | 'package'>('info');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [viewMode, setViewMode] = useState<TenderViewMode>(readViewMode);
 
   const { tenders, statuses, constructionScopes, tenderNumbers, loading, refetch } = useTenderData();
 
@@ -113,20 +126,40 @@ const Tenders: React.FC = () => {
     setSelectedTender(updatedTender);
   }, [selectedTender, tenders]);
 
-  const visibleTenders = useMemo(() => {
-    const filteredBySearch = searchValue.trim()
-      ? tenders.filter((tender) =>
-          getTenderSearchText(tender).includes(searchValue.trim().toLocaleLowerCase('ru-RU'))
-        )
-      : tenders;
+  const searchedTenders = useMemo(() => {
+    const query = searchValue.trim().toLocaleLowerCase('ru-RU');
+    return query ? tenders.filter((tender) => getTenderSearchText(tender).includes(query)) : tenders;
+  }, [searchValue, tenders]);
 
+  const visibleTenders = useMemo(() => {
     const filteredByTab =
       activeTab === 'all'
-        ? filteredBySearch
-        : filteredBySearch.filter((tender) => getDashboardStatus(tender) === activeTab);
+        ? searchedTenders
+        : searchedTenders.filter((tender) => getDashboardStatus(tender) === activeTab);
 
     return sortTenders(filteredByTab, sortField, sortDirection);
-  }, [activeTab, searchValue, sortDirection, sortField, tenders]);
+  }, [activeTab, searchedTenders, sortDirection, sortField]);
+
+  // Доска показывает все статусы колонками: вкладки к ней не применяются.
+  const boardTenders = useMemo(
+    () => sortTenders(searchedTenders, sortField, sortDirection),
+    [searchedTenders, sortDirection, sortField]
+  );
+
+  const handleViewModeChange = (mode: TenderViewMode) => {
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+    } catch {
+      // приватный режим — выбор живёт до перезагрузки
+    }
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduceMotion && 'startViewTransition' in document) {
+      document.startViewTransition(() => flushSync(() => setViewMode(mode)));
+      return;
+    }
+    setViewMode(mode);
+  };
 
   const counts = useMemo(() => {
     const base = {
@@ -287,7 +320,7 @@ const Tenders: React.FC = () => {
 
         <TenderMonitorTable
           tenders={visibleTenders}
-          loading={loading}
+          loading={loading && (viewMode === 'list' || tenders.length === 0)}
           activeTab={activeTab}
           searchValue={searchValue}
           sortField={sortField}
@@ -302,6 +335,21 @@ const Tenders: React.FC = () => {
           onQuickCall={handleQuickCall}
           onUpdate={refetch}
           readOnly={isGeneralDirector || isMobile}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+          kanban={
+            <TenderKanbanBoard
+              tenders={boardTenders}
+              statuses={statuses}
+              dragEnabled={!isGeneralDirector && !isPhoneDevice}
+              readOnly={isGeneralDirector || isMobile}
+              onOpenTender={(tender) => handleOpenTender(tender, 'info')}
+              onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
+              onOpenPackage={(tender) => handleOpenTender(tender, 'package')}
+              onQuickCall={handleQuickCall}
+              onUpdate={refetch}
+            />
+          }
         />
       </div>
 

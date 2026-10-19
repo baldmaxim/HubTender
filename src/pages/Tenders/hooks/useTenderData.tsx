@@ -94,7 +94,15 @@ export const useTenderData = () => {
       const data = await fetchTenderRegistryWithRelations();
       const tendersData = dedupeTenderRegistry(data);
 
-      setTenders(tendersData);
+      // Сумму КП до догрузки версий берём из прошлого ответа — иначе при каждом
+      // фоновом обновлении суммы мигают «—».
+      setTenders((prev) => {
+        const prevTotals = new Map(prev.map((tender) => [tender.id, tender.total_cost]));
+        return tendersData.map((tender) => ({
+          ...tender,
+          total_cost: tender.manual_total_cost ?? prevTotals.get(tender.id) ?? null,
+        }));
+      });
       setLoading(false);
 
       const tendersWithNumbers = tendersData.filter((t) => t.tender_number);

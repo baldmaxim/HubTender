@@ -1,0 +1,617 @@
+/* Канбан «Перечня тендеров». Цвета — CSS-переменные из палитры страницы (ставит TenderKanbanBoard). */
+
+.kb {
+  --kb-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --kb-gap: 12px;
+  /* Всё, что над доской при прокрутке страницы до низа: шапка, отступы, панель поиска. */
+  --kb-offset: 226px;
+  /* Строка фишек (32px + зазор 10px) — только когда доска шире экрана. */
+  --kb-toolbar-h: 0px;
+  --kb-fade-left: 0px;
+  --kb-fade-right: 0px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* ── Панель над доской: фишки колонок + подсказка ── */
+.kb-toolbar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--kb-toolbar-h);
+}
+
+.kb-chips {
+  display: none;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.kb-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.kb--overflow {
+  --kb-toolbar-h: 42px;
+}
+
+.kb--overflow .kb-toolbar,
+.kb--overflow .kb-chips {
+  display: flex;
+}
+
+.kb-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--kb-col-border);
+  background: var(--kb-col-bg);
+  color: var(--kb-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+/* Тап-цель 44px при визуальной высоте 32px. */
+.kb-chip::after {
+  content: '';
+  position: absolute;
+  inset: -6px -2px;
+}
+
+.kb-chip--visible {
+  border-color: var(--kb-accent);
+  color: var(--kb-text);
+}
+
+.kb-chip:focus-visible {
+  outline: 2px solid var(--kb-info);
+  outline-offset: 2px;
+}
+
+.kb-chip__dot,
+.kb-column__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--kb-accent);
+  flex-shrink: 0;
+}
+
+.kb-chip__count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.kb-hint {
+  margin-left: auto;
+  color: var(--kb-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Доска ── */
+.kb-board {
+  display: flex;
+  gap: var(--kb-gap);
+  height: max(400px, calc(100dvh - var(--kb-offset) - var(--kb-toolbar-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+  /* Край, за которым есть ещё колонки, плавно тает — обрез не выглядит багом. */
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--kb-fade-left), #000 calc(100% - var(--kb-fade-right)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--kb-fade-left), #000 calc(100% - var(--kb-fade-right)), transparent 100%);
+}
+
+.kb-board.kb-board--more-left {
+  --kb-fade-left: 32px;
+}
+
+.kb-board.kb-board--more-right {
+  --kb-fade-right: 32px;
+}
+
+/* Автопрокрутка dnd-kit и прилипание конфликтуют — на время переноса выключаем;
+   края доски — зона автопрокрутки, их не маскируем. */
+.kb--dragging .kb-board {
+  scroll-snap-type: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.kb-column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 272px;
+  max-width: 360px;
+  min-height: 0;
+  background: var(--kb-col-bg);
+  border: 1px solid var(--kb-col-border);
+  border-radius: 14px;
+  box-shadow: inset 0 3px 0 var(--kb-accent);
+  scroll-snap-align: start;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    opacity 150ms ease-out;
+}
+
+.kb-column--over {
+  background: var(--kb-over-bg);
+  border-color: var(--kb-accent);
+}
+
+.kb-column--disabled {
+  opacity: 0.5;
+}
+
+.kb-column__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--kb-col-border);
+}
+
+.kb-column__title {
+  margin: 0;
+  color: var(--kb-text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.kb-column__count {
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--kb-badge-bg);
+  color: var(--kb-text2);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.kb-column__alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--kb-danger-bg);
+  color: var(--kb-danger);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.kb-column__sum {
+  margin-left: auto;
+  color: var(--kb-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.kb-column__list {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.kb-column__item {
+  flex-shrink: 0;
+}
+
+.kb-empty {
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed transparent;
+  border-radius: 12px;
+  color: var(--kb-muted);
+  font-size: 12px;
+  transition: border-color 150ms ease-out;
+}
+
+.kb-empty__icon {
+  font-size: 20px;
+  color: var(--kb-subtle);
+}
+
+.kb--dragging .kb-empty {
+  border-color: var(--kb-col-border);
+}
+
+.kb-column--over .kb-empty {
+  border-color: var(--kb-accent);
+}
+
+/* ── Карточка ── */
+.kb-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--kb-card-border);
+  background: var(--kb-card-bg);
+  box-shadow: var(--kb-shadow-rest);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition:
+    transform 150ms ease-out,
+    box-shadow 150ms ease-out,
+    border-color 150ms ease-out,
+    background-color 300ms ease-out,
+    opacity 150ms ease-out;
+}
+
+/* Тонкая полоска цвета статуса сверху (колонка уже несёт акцент — не дублируем в полную силу). */
+.kb-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--kb-accent);
+  opacity: 0.6;
+  transition: background-color 150ms ease-out;
+}
+
+.kb-card--draggable {
+  cursor: grab;
+}
+
+.kb-card--readonly {
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .kb-card--draggable:hover,
+  .kb-card--readonly:hover {
+    transform: translateY(-1px);
+    border-color: var(--kb-hover-border);
+    box-shadow: var(--kb-shadow-hover);
+  }
+}
+
+.kb-card:focus-visible {
+  outline: 2px solid var(--kb-info);
+  outline-offset: 2px;
+}
+
+/* Во время переноса карточки в колонках не реагируют на курсор (нет ховеров и поповеров). */
+.kb--dragging .kb-column .kb-card {
+  pointer-events: none;
+}
+
+/* Исходное место: пустой пунктир. Содержимое скрыто — не спорит с «поднятой» карточкой. */
+.kb-card--source {
+  opacity: 0.5;
+  border: 1px dashed var(--kb-card-border);
+  background: var(--kb-placeholder-bg);
+  box-shadow: none;
+}
+
+/* Место в колонке-цели: пунктир цвета колонки. Высота сохраняется. */
+.kb-card--target {
+  border: 1px dashed var(--kb-accent);
+  background: var(--kb-target-bg);
+  box-shadow: inset 0 0 0 1px var(--kb-accent);
+}
+
+.kb-card--source > *,
+.kb-card--source::before,
+.kb-card--target > *,
+.kb-card--target::before {
+  visibility: hidden;
+}
+
+.kb-card--pending {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.kb-card__spinner {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  font-size: 14px;
+  color: var(--kb-muted);
+}
+
+/* Ошибка: после возврата в колонку — встряска (рецепт transitions.dev «Error state shake»). */
+.kb-card--error {
+  border-color: var(--kb-danger-border);
+  background: var(--kb-danger-bg);
+  animation: t-input-shake calc(var(--shake-dur-a) * 2 + var(--shake-dur-b) * 2) linear 320ms;
+}
+
+/* «Поднятая» карточка под курсором. */
+.kb-card--overlay {
+  cursor: grabbing;
+  border-color: var(--kb-lift-border);
+  box-shadow: var(--kb-shadow-lift);
+  animation: kb-lift 160ms var(--kb-ease) both;
+}
+
+.kb-overlay--dropping .kb-card--overlay {
+  animation: kb-settle 220ms var(--kb-ease) both;
+}
+
+@keyframes kb-lift {
+  from {
+    transform: scale(1) rotate(0deg);
+    box-shadow: var(--kb-shadow-rest);
+  }
+  to {
+    transform: scale(1.03) rotate(1.5deg);
+    box-shadow: var(--kb-shadow-lift);
+  }
+}
+
+@keyframes kb-settle {
+  from {
+    transform: scale(1.03) rotate(1.5deg);
+    box-shadow: var(--kb-shadow-lift);
+  }
+  to {
+    transform: scale(1) rotate(0deg);
+    box-shadow: var(--kb-shadow-rest);
+  }
+}
+
+/* Клон, перелетающий между колонками (отмена, откат, правка другим пользователем). */
+.kb-flight {
+  position: fixed;
+  z-index: 1050;
+  margin: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.kb-flight > .kb-card {
+  box-shadow: var(--kb-shadow-hover);
+}
+
+.kb-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kb-card__title {
+  flex: 1;
+  min-width: 0;
+  color: var(--kb-text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kb-card__map {
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.kb-card__meta {
+  color: var(--kb-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kb-card__number {
+  color: var(--kb-subtle);
+  font-size: 11px;
+}
+
+.kb-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin-top: 2px;
+}
+
+.kb-metric__label {
+  color: var(--kb-muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.kb-metric__value {
+  margin-top: 1px;
+  color: var(--kb-text);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kb-tone--title {
+  color: var(--kb-title);
+}
+
+.kb-tone--danger {
+  color: var(--kb-danger);
+}
+
+.kb-tone--warn {
+  color: var(--kb-warn);
+}
+
+.kb-tone--success {
+  color: var(--kb-success);
+}
+
+.kb-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+  margin-top: 2px;
+}
+
+.kb-card__icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Тап-цель 44px у кнопок хронологии и пакета (визуально 28px). */
+.kb-card__icons > * {
+  position: relative;
+}
+
+.kb-card__icons > *::after {
+  content: '';
+  position: absolute;
+  inset: -8px -3px;
+}
+
+.kb-call {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 6px;
+  border: 1px solid var(--kb-danger-border);
+  background: var(--kb-danger-bg);
+  color: var(--kb-danger);
+  font-size: 11px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.kb-call::after {
+  content: '';
+  position: absolute;
+  inset: -8px -4px;
+}
+
+.kb-call:focus-visible {
+  outline: 2px solid var(--kb-info);
+  outline-offset: 2px;
+}
+
+/* «Отменить» в тосте переноса. */
+.kb-toast-undo {
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+/* ── Адаптив ── */
+
+/* iPad и узкий десктоп: фиксированная ширина колонки, прилипание к началу. */
+@media (max-width: 1023px) {
+  .kb-column {
+    flex: 0 0 300px;
+  }
+
+  .kb-hint {
+    display: none;
+  }
+}
+
+/* Телефоны: колонка почти во всю ширину, листаются по одной. */
+@media (max-width: 767px) {
+  .kb {
+    --kb-gap: 8px;
+    --kb-offset: 190px;
+  }
+
+  .kb-board {
+    scroll-snap-type: x mandatory;
+  }
+
+  .kb-column {
+    flex: 0 0 85vw;
+    min-width: min(296px, 85vw);
+    max-width: 340px;
+    scroll-snap-stop: always;
+  }
+
+  .kb-column__list {
+    overscroll-behavior-y: contain;
+  }
+
+  .kb-chip__label {
+    display: none;
+  }
+
+  .kb-chip--visible .kb-chip__label {
+    display: inline;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-column,
+  .kb-card,
+  .kb-card::before,
+  .kb-chip,
+  .kb-empty {
+    transition: none;
+  }
+
+  .kb-card--draggable:hover,
+  .kb-card--readonly:hover {
+    transform: none;
+  }
+
+  .kb-card--overlay,
+  .kb-overlay--dropping .kb-card--overlay,
+  .kb-card--error {
+    animation: none;
+  }
+}
