@@ -59,41 +59,29 @@ const MetricCard: React.FC<MetricCardProps> = ({
   blinking = false,
   palette,
   isPhone = false,
-}) => {
-  // Текст блоков статистики ярче: на телефоне сильнее (0.5), на остальных экранах 0.2.
-  const brightMuted = mixHex(palette.muted, palette.text, isPhone ? 0.5 : 0.2);
-  return (
+}) => (
   <div
-    className={blinking ? 'tender-monitor-alert-card' : undefined}
-    style={{
-      background: palette.cardBg,
-      border: `1px solid ${palette.border}`,
-      borderRadius: 14,
-      padding: isPhone ? '6px 8px' : '14px 18px',
-      position: 'relative',
-      overflow: 'hidden',
-      minHeight: isPhone ? 40 : 104,
-      textAlign: isPhone ? 'center' : undefined,
-      flex: isPhone ? '0 0 calc((100% - 16px) / 3)' : undefined,
-      minWidth: isPhone ? 0 : undefined,
-    }}
+    className={blinking ? 'tm-metric tender-monitor-alert-card' : 'tm-metric'}
+    style={
+      {
+        '--tm-metric-accent': accent,
+        '--tm-metric-bg': palette.cardBg,
+        '--tm-metric-border': palette.border,
+        '--tm-metric-text': palette.text,
+        // Текст статистики ярче приглушённого: на телефоне сильнее (0.5), на остальных экранах 0.2.
+        '--tm-metric-muted': mixHex(palette.muted, palette.text, isPhone ? 0.5 : 0.2),
+      } as React.CSSProperties
+    }
   >
-    <div
-      style={{
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: 4,
-        background: accent,
-      }}
-    />
-    <div style={{ color: brightMuted, fontSize: isPhone ? 9 : 12, textTransform: 'uppercase', letterSpacing: isPhone ? '0.04em' : '0.12em', lineHeight: 1.15 }}>{title}</div>
-    <div style={{ color: isPhone ? brightMuted : palette.text, fontSize: isPhone ? 'clamp(13px, 4.4vw, 19px)' : 28, fontWeight: isPhone ? 600 : 700, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{value}</div>
-    <div style={{ color: brightMuted, fontSize: isPhone ? 9 : 13, marginTop: isPhone ? 1 : 8, lineHeight: 1.15 }}>{caption}</div>
+    <div className="tm-metric__title">{title}</div>
+    <div className="tm-metric__row">
+      <span className="tm-metric__value">{value}</span>
+      <span className="tm-metric__caption" title={caption}>
+        {caption}
+      </span>
+    </div>
   </div>
-  );
-};
+);
 
 const Tenders: React.FC = () => {
   const { message } = App.useApp();
@@ -239,7 +227,8 @@ const Tenders: React.FC = () => {
 
   return (
     <div
-      className="tender-monitor-page"
+      // Канбан — страница ровно в экран: прокручиваются только колонки доски.
+      className={viewMode === 'kanban' ? 'tender-monitor-page tender-monitor-page--fit' : 'tender-monitor-page'}
       style={
         {
           '--tm-page-bg': palette.pageBg,
@@ -252,7 +241,7 @@ const Tenders: React.FC = () => {
         } as React.CSSProperties
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%' }}>
+      <div className="tm-page-body">
         {/* Описание и кнопки управления — скрыты на телефонах (заголовок страницы — в общей шапке, здесь режим просмотра).
             В ландшафте телефона isMobile=false, поэтому добавляем !isLandscapePhone, чтобы не дублировать шапку. */}
         {!isMobile && !isLandscapePhone && (
@@ -276,13 +265,7 @@ const Tenders: React.FC = () => {
           </div>
         )}
 
-        <div
-          style={
-            isPhoneDevice
-              ? { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }
-              : { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }
-          }
-        >
+        <div className={isPhoneDevice ? 'tm-metrics tm-metrics--phone' : 'tm-metrics'}>
           <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} isPhone={isPhoneDevice} />
           <MetricCard title="В расчете" value={counts.calc} caption="готовятся КП" accent={palette.info} palette={palette} isPhone={isPhoneDevice} />
           <MetricCard title="Направлено" value={counts.sent} caption="ожидает ответа" accent="#ef9f27" palette={palette} isPhone={isPhoneDevice} />

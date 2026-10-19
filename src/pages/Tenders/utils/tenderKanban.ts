@@ -111,7 +111,7 @@ export function getKanbanAccent(key: KanbanColumnKey, palette: TenderMonitorPale
     case 'won':
       return palette.successStrong;
     default:
-      return palette.muted;
+      return palette.danger;
   }
 }
 

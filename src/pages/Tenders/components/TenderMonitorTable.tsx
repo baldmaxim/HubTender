@@ -197,10 +197,11 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   );
 
   return (
-    <div>
+    <div className={isKanban ? 'tm-table tm-table--fit' : 'tm-table'}>
       {!isCardView && !isKanban && tabsBlock}
 
       <div
+        className="tm-table__frame"
         style={{
           border: isPhone ? 'none' : `1px solid ${palette.border}`,
           borderRadius: isPhone ? 0 : 14,

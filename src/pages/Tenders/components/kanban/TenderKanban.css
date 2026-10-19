@@ -3,12 +3,11 @@
 .kb {
   --kb-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --kb-gap: 12px;
-  /* Всё, что над доской при прокрутке страницы до низа: шапка, отступы, панель поиска. */
-  --kb-offset: 226px;
-  /* Строка фишек (32px + зазор 10px) — только когда доска шире экрана. */
-  --kb-toolbar-h: 0px;
   --kb-fade-left: 0px;
   --kb-fade-right: 0px;
+  /* Доска занимает остаток экрана под шапкой страницы; прокручиваются только колонки. */
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -21,7 +20,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: var(--kb-toolbar-h);
+  min-height: 32px;
 }
 
 .kb-chips {
@@ -35,10 +34,6 @@
 
 .kb-chips::-webkit-scrollbar {
   display: none;
-}
-
-.kb--overflow {
-  --kb-toolbar-h: 42px;
 }
 
 .kb--overflow .kb-toolbar,
@@ -112,7 +107,8 @@
 .kb-board {
   display: flex;
   gap: var(--kb-gap);
-  height: max(400px, calc(100dvh - var(--kb-offset) - var(--kb-toolbar-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+  flex: 1;
+  min-height: 320px;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
@@ -568,7 +564,6 @@
 @media (max-width: 767px) {
   .kb {
     --kb-gap: 8px;
-    --kb-offset: 190px;
   }
 
   .kb-board {
