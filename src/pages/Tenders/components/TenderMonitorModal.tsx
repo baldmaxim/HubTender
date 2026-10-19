@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, DatePicker, Input, InputNumber, Modal, Select, Space, Tag, Typography, message } from 'antd';
-import { CloseOutlined, EditOutlined, PhoneOutlined } from '@ant-design/icons';
-import dayjs from 'dayjs';
-import { patchTenderRegistryFields } from '../../../lib/api/tenderRegistry';
+import { Button, ConfigProvider, Modal, Space, Tag, Typography } from 'antd';
+import { CloseOutlined, EditOutlined, PhoneOutlined, SaveOutlined } from '@ant-design/icons';
 import type {
   ConstructionScope,
   TenderRegistryWithRelations,
@@ -12,256 +10,31 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useHorizontalSwipe } from '../../../hooks/useHorizontalSwipe';
 import {
-  DATE_INPUT_FORMATS,
-  formatArea,
-  formatDate,
-  formatMoneyFull,
-  formatTime,
-  formatRubPerSquare,
   getChronologyItems,
   getDashboardStatus,
-  getDashboardStatusByStatusName,
-  getLastCallFollowUpDate,
   getPackageItems,
   getStatusBadgeStyle,
   getTenderStatusDisplayLabel,
   shouldShowCallAction,
 } from '../utils/tenderMonitor';
-import { getTenderMonitorPalette, type TenderMonitorPalette } from '../utils/tenderMonitorTheme';
-import { inputEnterToSave, textareaEnterToSave } from '../../../utils/keyboardSave';
+import { getTenderMonitorPalette } from '../utils/tenderMonitorTheme';
+import { SENT_STATUS_VALUE } from '../utils/tenderMonitorDraft';
+import { useTenderMonitorEdit } from '../hooks/useTenderMonitorEdit';
+import { TenderMonitorInfo } from './TenderMonitorInfo';
 import {
-  EditableChronologySection,
-  EditablePackageSection,
+  ChronologyEditor,
+  PackageEditor,
   ReadOnlyChronologySection,
   ReadOnlyPackageSection,
 } from './TenderMonitorTabs';
 
 const { Text } = Typography;
-const { TextArea } = Input;
-
-// Режим «только просмотр» полей карточки (Генеральный директор) —
-// прокидывается через контекст, чтобы не передавать проп в каждое поле.
-const FieldReadOnlyContext = React.createContext(false);
 
 type ModalTab = 'info' | 'timeline' | 'package';
-type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'select';
 
-interface EditableMonitorFieldProps {
-  tenderId: string;
-  field: string;
-  label: string;
-  value: string | number | null | undefined;
-  displayValue: React.ReactNode;
-  palette: TenderMonitorPalette;
-  type?: FieldType;
-  withTime?: boolean;
-  options?: Array<{ value: string; label: string }>;
-  buildUpdatePayload?: (draft: string | number | null) => Record<string, unknown>;
-  onUpdated: () => Promise<void> | void;
-}
-
-function EditableMonitorField({
-  tenderId,
-  field,
-  label,
-  value,
-  displayValue,
-  palette,
-  type = 'text',
-  withTime = false,
-  options,
-  buildUpdatePayload,
-  onUpdated,
-}: EditableMonitorFieldProps) {
-  const readOnly = React.useContext(FieldReadOnlyContext);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [draft, setDraft] = useState<string | number | null>(value ?? null);
-
-  useEffect(() => {
-    setDraft(value ?? null);
-    setEditing(false);
-  }, [value]);
-
-  const handleSave = async () => {
-    setSaving(true);
-
-    try {
-      let payload: string | number | null = draft;
-
-      if (type === 'text' || type === 'textarea') {
-        payload = typeof draft === 'string' ? draft.trim() || null : null;
-      }
-
-      if (type === 'number') {
-        payload = draft == null || draft === '' ? null : Number(draft);
-        if (payload != null && Number.isNaN(payload)) {
-          payload = null;
-        }
-      }
-
-      if (type === 'date') {
-        payload = typeof draft === 'string' && draft ? dayjs(draft).toISOString() : null;
-      }
-
-      if (type === 'select') {
-        payload = typeof draft === 'string' && draft ? draft : null;
-      }
-
-      const updatePayload = buildUpdatePayload ? buildUpdatePayload(payload) : { [field]: payload };
-
-      try {
-        await patchTenderRegistryFields(tenderId, updatePayload);
-      } catch (err) {
-        message.error((err as Error).message);
-        return;
-      }
-
-      await onUpdated();
-      setEditing(false);
-      message.success('Поле обновлено');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  let editor: React.ReactNode;
-
-  if (type === 'textarea') {
-    editor = (
-      <TextArea
-        value={typeof draft === 'string' ? draft : ''}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={textareaEnterToSave(() => void handleSave(), (v) => setDraft(v))}
-        autoSize={{ minRows: 2, maxRows: 4 }}
-      />
-    );
-  } else if (type === 'number') {
-    editor = (
-      <InputNumber
-        value={typeof draft === 'number' ? draft : draft != null ? Number(draft) : null}
-        onChange={(next) => setDraft(next)}
-        onPressEnter={() => void handleSave()}
-        style={{ width: '100%' }}
-        controls={false}
-        decimalSeparator=","
-      />
-    );
-  } else if (type === 'date') {
-    editor = (
-      <DatePicker
-        value={typeof draft === 'string' && draft ? dayjs(draft) : null}
-        onChange={(next) => setDraft(next ? next.toISOString() : null)}
-        style={{ width: '100%' }}
-        format={withTime ? 'DD.MM.YYYY HH:mm' : DATE_INPUT_FORMATS}
-        showTime={withTime ? { format: 'HH:mm' } : undefined}
-        size="small"
-      />
-    );
-  } else if (type === 'select') {
-    editor = (
-      <Select
-        value={typeof draft === 'string' && draft ? draft : undefined}
-        onChange={(next) => setDraft(next)}
-        style={{ width: '100%' }}
-        allowClear
-        options={options}
-        size="small"
-      />
-    );
-  } else {
-    editor = (
-      <Input
-        value={typeof draft === 'string' ? draft : draft == null ? '' : String(draft)}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={inputEnterToSave(() => void handleSave())}
-        size="small"
-      />
-    );
-  }
-
-  return (
-    <div
-      style={{
-        padding: '10px 12px',
-        borderRadius: 10,
-        background: palette.sectionBg,
-        border: `1px solid ${palette.borderSoft}`,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              color: palette.muted,
-              fontSize: 10,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              marginBottom: 6,
-            }}
-          >
-            {label}
-          </div>
-
-          {editing ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {editor}
-              <Space size={6}>
-                <Button type="primary" size="small" onClick={() => void handleSave()} loading={saving}>
-                  Сохранить
-                </Button>
-                <Button size="small" onClick={() => setEditing(false)} disabled={saving}>
-                  Отмена
-                </Button>
-              </Space>
-            </div>
-          ) : (
-            <div
-              style={{
-                color: palette.text,
-                fontSize: 12,
-                lineHeight: 1.35,
-                fontWeight: 600,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              {displayValue || '—'}
-            </div>
-          )}
-        </div>
-
-        {!editing && !readOnly ? (
-          <Button
-            type="text"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => setEditing(true)}
-            style={{ color: palette.warning, flexShrink: 0 }}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function InfoCard({ label, value, palette }: { label: string; value: React.ReactNode; palette: TenderMonitorPalette }) {
-  return (
-    <div
-      style={{
-        padding: '10px 12px',
-        borderRadius: 10,
-        background: palette.sectionBg,
-        border: `1px solid ${palette.borderSoft}`,
-      }}
-    >
-      <div style={{ color: palette.muted, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>
-        {label}
-      </div>
-      <div style={{ color: palette.text, fontSize: 12, lineHeight: 1.35, fontWeight: 600 }}>{value || '—'}</div>
-    </div>
-  );
-}
+// iPad и другие сенсорные экраны: крупные кнопки и поля (шрифт полей 16px — Safari не зумит форму).
+const isCoarsePointer = () =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 
 interface TenderMonitorModalProps {
   open: boolean;
@@ -272,7 +45,7 @@ interface TenderMonitorModalProps {
   onClose: () => void;
   onQuickCall?: (tender: TenderRegistryWithRelations) => Promise<void> | void;
   onUpdate: () => Promise<void> | void;
-  /** Режим «только просмотр» — скрывает ярлыки редактирования и кнопку звонка (Генеральный директор) */
+  /** Режим «только просмотр» — скрывает «Редактировать» и кнопку звонка (Генеральный директор, телефон) */
   readOnly?: boolean;
 }
 
@@ -291,6 +64,10 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
   const { isPhoneDevice } = useIsMobile();
   const palette = getTenderMonitorPalette(theme === 'dark');
   const [activeTab, setActiveTab] = useState<ModalTab>(initialTab);
+  // Плавная смена «просмотр ↔ редактирование»; при открытии окна — без неё, у окна своя анимация.
+  const [animateMode, setAnimateMode] = useState(false);
+  const edit = useTenderMonitorEdit({ tender, open, statuses, onUpdate });
+  const { draft, editing } = edit;
 
   const modalTabKeys: ModalTab[] = ['info', 'timeline', 'package'];
   const goToTabOffset = (delta: number) => {
@@ -322,27 +99,56 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
   const dashboardStatus = getDashboardStatus(tender);
   const statusStyle = getStatusBadgeStyle(dashboardStatus);
   const canQuickCall = shouldShowCallAction(tender);
-  const lastCallDate = getLastCallFollowUpDate(tender);
+  const coarsePointer = isCoarsePointer();
+  const actionSize = coarsePointer ? 'large' : 'small';
 
-  const constructionScopeOptions = constructionScopes.map((scope) => ({
+  const scopeOptions = constructionScopes.map((scope) => ({
     value: scope.id,
     label: scope.name,
   }));
 
-  const statusOptions = statuses.map((status) => ({
-    value: status.id,
-    label: status.name,
-  }));
-
-  const statusOptionsWithSent = [
-    { value: '__sent__', label: 'Направлено' },
-    ...statusOptions,
+  const statusOptions = [
+    { value: SENT_STATUS_VALUE, label: 'Направлено' },
+    ...statuses.map((status) => ({ value: status.id, label: status.name })),
   ];
+
+  const handleClose = () => {
+    setAnimateMode(false);
+    onClose();
+  };
+
+  const startEdit = () => {
+    setAnimateMode(true);
+    edit.startEdit();
+  };
+
+  const cancelEdit = () => {
+    setAnimateMode(true);
+    edit.cancelEdit();
+  };
+
+  const handleSave = async () => {
+    setAnimateMode(true);
+    if ((await edit.save()) === 'invalid') {
+      setActiveTab('info');
+    }
+  };
+  const submit = () => void handleSave();
+
+  const panelStyle = (tab: ModalTab): React.CSSProperties => ({
+    gridArea: '1 / 1',
+    minWidth: 0,
+    visibility: activeTab === tab ? 'visible' : 'hidden',
+    pointerEvents: activeTab === tab ? undefined : 'none',
+  });
 
   return (
     <Modal
       open={open}
-      onCancel={onClose}
+      onCancel={handleClose}
+      // При редактировании окно закрывается только кнопкой: промах мимо окна или Esc не теряют правки.
+      maskClosable={!editing}
+      keyboard={!editing}
       footer={null}
       closeIcon={null}
       width={860}
@@ -388,12 +194,37 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
           </div>
 
           <Space size={6}>
-            {canQuickCall && onQuickCall && !readOnly ? (
-              <Button type="primary" danger icon={<PhoneOutlined />} size="small" onClick={() => void onQuickCall(tender)}>
-                Позвонить
-              </Button>
-            ) : null}
-            <Button type="text" icon={<CloseOutlined />} size="small" onClick={onClose} style={{ color: palette.muted }} />
+            {editing ? (
+              <>
+                <Button size={actionSize} onClick={cancelEdit} disabled={edit.saving}>
+                  Отмена
+                </Button>
+                <Button type="primary" size={actionSize} icon={<SaveOutlined />} loading={edit.saving} onClick={submit}>
+                  Сохранить
+                </Button>
+              </>
+            ) : (
+              <>
+                {canQuickCall && onQuickCall && !readOnly ? (
+                  <Button type="primary" danger icon={<PhoneOutlined />} size={actionSize} onClick={() => void onQuickCall(tender)}>
+                    Позвонить
+                  </Button>
+                ) : null}
+                {!readOnly ? (
+                  <Button size={actionSize} icon={<EditOutlined />} onClick={startEdit}>
+                    Редактировать
+                  </Button>
+                ) : null}
+              </>
+            )}
+            <Button
+              type="text"
+              icon={<CloseOutlined />}
+              size={actionSize}
+              onClick={handleClose}
+              aria-label="Закрыть"
+              style={{ color: palette.muted }}
+            />
           </Space>
         </div>
 
@@ -428,110 +259,44 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
           {...(isPhoneDevice ? contentSwipe : {})}
           style={{ paddingTop: 14, ...(isPhoneDevice ? { touchAction: 'pan-y' as const } : {}) }}
         >
-          {/* Все три панели рендерятся всегда и накладываются в одну grid-ячейку:
-              высота окна = самой высокой (Информация), активная видна и прижата к верху — окно не «прыгает». */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', alignItems: 'start' }}>
-          <div style={{ gridArea: '1 / 1', minWidth: 0, visibility: activeTab === 'info' ? 'visible' : 'hidden', pointerEvents: activeTab === 'info' ? undefined : 'none' }}>
-            <FieldReadOnlyContext.Provider value={!!readOnly}>
+          <ConfigProvider componentSize={coarsePointer ? 'large' : undefined}>
+            {/* Все три панели рендерятся всегда и накладываются в одну grid-ячейку:
+                высота окна = самой высокой (Информация), активная видна и прижата к верху — окно не «прыгает». */}
             <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                gap: '10px 12px',
-              }}
+              key={editing ? 'edit' : 'view'}
+              className={animateMode ? 'tm-view-enter' : undefined}
+              style={{ display: 'grid', gridTemplateColumns: '1fr', alignItems: 'start' }}
             >
-              {!isPhoneDevice && (
-                <EditableMonitorField tenderId={tender.id} field="title" label="Наименование" value={tender.title} displayValue={tender.title} palette={palette} onUpdated={onUpdate} />
-              )}
-              {!isPhoneDevice && (
-                <EditableMonitorField tenderId={tender.id} field="client_name" label="Заказчик" value={tender.client_name} displayValue={tender.client_name || '—'} palette={palette} onUpdated={onUpdate} />
-              )}
-              {!isPhoneDevice && (
-                <EditableMonitorField tenderId={tender.id} field="construction_scope_id" label="Объем строительства" value={tender.construction_scope_id} displayValue={tender.construction_scope?.name || '—'} type="select" options={constructionScopeOptions} palette={palette} onUpdated={onUpdate} />
-              )}
-              {!isPhoneDevice && (
-                <EditableMonitorField
-                  tenderId={tender.id}
-                  field="status_id"
-                  label="Статус"
-                  value={dashboardStatus === 'sent' ? '__sent__' : tender.status_id}
-                  displayValue={tender.status?.name || (dashboardStatus === 'sent' ? 'Направлено' : '—')}
-                  type="select"
-                  options={statusOptionsWithSent}
+              <div style={panelStyle('info')}>
+                <TenderMonitorInfo
+                  tender={tender}
                   palette={palette}
-                  buildUpdatePayload={(draft) => {
-                    if (draft === '__sent__') {
-                      return {
-                        status_id: null,
-                        dashboard_status: 'sent',
-                        is_archived: false,
-                      };
-                    }
-
-                    const selectedStatus = statuses.find((status) => status.id === draft);
-                    const mappedDashboardStatus = getDashboardStatusByStatusName(selectedStatus?.name);
-
-                    return {
-                      status_id: draft,
-                      dashboard_status: mappedDashboardStatus || tender.dashboard_status || 'calc',
-                      is_archived: mappedDashboardStatus === 'archive',
-                    };
-                  }}
-                  onUpdated={onUpdate}
+                  isPhone={isPhoneDevice}
+                  draft={draft?.info ?? null}
+                  scopeOptions={scopeOptions}
+                  statusOptions={statusOptions}
+                  onChange={edit.updateInfo}
+                  onSubmit={submit}
                 />
-              )}
-              {!isPhoneDevice && (
-                <EditableMonitorField tenderId={tender.id} field="tender_number" label="Номер тендера" value={tender.tender_number} displayValue={tender.tender_number || '—'} palette={palette} onUpdated={onUpdate} />
-              )}
-              <EditableMonitorField tenderId={tender.id} field="area" label="Площадь по СП" value={tender.area} displayValue={formatArea(tender.area)} type="number" palette={palette} onUpdated={onUpdate} />
-              <InfoCard label="Цена ₽/м²" value={formatRubPerSquare(tender.total_cost || tender.manual_total_cost, tender.area)} palette={palette} />
-              <EditableMonitorField tenderId={tender.id} field="manual_total_cost" label="Стоимость КП" value={tender.manual_total_cost} displayValue={formatMoneyFull(tender.manual_total_cost ?? tender.total_cost)} type="number" palette={palette} onUpdated={onUpdate} />
-              {!isPhoneDevice && (
-                <InfoCard label="Направлено КП" value={lastCallDate ? `${formatDate(tender.submission_date)} · контроль ${formatDate(lastCallDate)}` : formatDate(tender.submission_date)} palette={palette} />
-              )}
-              <EditableMonitorField tenderId={tender.id} field="submission_date" label="Дата подачи КП" value={tender.submission_date} displayValue={`${formatDate(tender.submission_date)}${formatTime(tender.submission_date) ? ' ' + formatTime(tender.submission_date) : ''}`} type="date" withTime palette={palette} onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="commission_date" label="Ввод в эксплуатацию" value={tender.commission_date} displayValue={formatDate(tender.commission_date)} type="date" palette={palette} onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="construction_start_date" label="Выход на площадку" value={tender.construction_start_date} displayValue={formatDate(tender.construction_start_date)} type="date" palette={palette} onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="invitation_date" label="Поступило приглашение" value={tender.invitation_date} displayValue={formatDate(tender.invitation_date)} type="date" palette={palette} onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="object_address" label="Адрес объекта" value={tender.object_address} displayValue={tender.object_address || '—'} type="textarea" palette={palette} onUpdated={onUpdate} />
-              <EditableMonitorField tenderId={tender.id} field="object_coordinates" label="Координаты" value={tender.object_coordinates} displayValue={tender.object_coordinates || '—'} palette={palette} onUpdated={onUpdate} />
-              <EditableMonitorField
-                tenderId={tender.id}
-                field="site_visit_photo_url"
-                label="Ссылка на посещение площадки"
-                value={tender.site_visit_photo_url}
-                displayValue={
-                  tender.site_visit_photo_url ? (
-                    <a href={tender.site_visit_photo_url} target="_blank" rel="noreferrer" style={{ color: palette.info, fontSize: 12 }}>
-                      {tender.site_visit_photo_url}
-                    </a>
-                  ) : (
-                    '—'
-                  )
-                }
-                palette={palette}
-                onUpdated={onUpdate}
-              />
+              </div>
+
+              <div style={panelStyle('timeline')}>
+                {draft ? (
+                  <ChronologyEditor rows={draft.chronology} palette={palette} onChange={edit.updateChronology} onSubmit={submit} />
+                ) : (
+                  <ReadOnlyChronologySection items={chronologyItems} palette={palette} />
+                )}
+              </div>
+
+              <div style={panelStyle('package')}>
+                {draft ? (
+                  <PackageEditor rows={draft.packageItems} palette={palette} onChange={edit.updatePackageItems} onSubmit={submit} />
+                ) : (
+                  <ReadOnlyPackageSection items={packageItems} palette={palette} />
+                )}
+              </div>
             </div>
-            </FieldReadOnlyContext.Provider>
-          </div>
-
-          <div style={{ gridArea: '1 / 1', minWidth: 0, visibility: activeTab === 'timeline' ? 'visible' : 'hidden', pointerEvents: activeTab === 'timeline' ? undefined : 'none' }}>
-            {readOnly ? (
-              <ReadOnlyChronologySection items={chronologyItems} palette={palette} />
-            ) : (
-              <EditableChronologySection tenderId={tender.id} items={chronologyItems} palette={palette} onUpdated={onUpdate} />
-            )}
-          </div>
-
-          <div style={{ gridArea: '1 / 1', minWidth: 0, visibility: activeTab === 'package' ? 'visible' : 'hidden', pointerEvents: activeTab === 'package' ? undefined : 'none' }}>
-            {readOnly ? (
-              <ReadOnlyPackageSection items={packageItems} palette={palette} />
-            ) : (
-              <EditablePackageSection tenderId={tender.id} items={packageItems} palette={palette} onUpdated={onUpdate} />
-            )}
-          </div>
-          </div>
+          </ConfigProvider>
         </div>
       </div>
     </Modal>

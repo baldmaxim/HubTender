@@ -245,7 +245,7 @@ export function ChronologyPopover({
           fontSize: 11,
           cursor: 'pointer',
         }}
-        title="Клик — редактировать хронологию"
+        title="Клик — открыть хронологию"
       >
         <FileTextOutlined />
         <span>{chronologyItems.length}</span>

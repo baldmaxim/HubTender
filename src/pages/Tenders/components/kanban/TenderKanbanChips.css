@@ -1,0 +1,80 @@
+/* Фишки колонок над доской и подсказка про перетаскивание. Цвета — переменные .kb (TenderKanbanBoard). */
+
+.kb-toolbar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.kb-chips {
+  display: none;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.kb-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.kb--overflow .kb-toolbar,
+.kb--overflow .kb-chips {
+  display: flex;
+}
+
+.kb-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--kb-col-border);
+  background: var(--kb-col-bg);
+  color: var(--kb-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+/* Тап-цель 44px при визуальной высоте 32px. */
+.kb-chip::after {
+  content: '';
+  position: absolute;
+  inset: -6px -2px;
+}
+
+.kb-chip--visible {
+  border-color: var(--kb-accent);
+  color: var(--kb-text);
+}
+
+.kb-chip:focus-visible {
+  outline: 2px solid var(--kb-info);
+  outline-offset: 2px;
+}
+
+.kb-chip__count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.kb-hint {
+  margin-left: auto;
+  color: var(--kb-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

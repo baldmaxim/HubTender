@@ -301,7 +301,8 @@ func (r *TenderRegistryRepo) Update(ctx context.Context, id string, in TenderReg
 }
 
 // TenderRegistryPatch is the admin-modal patch shape — all fields the
-// Tenders/* UI surfaces; only non-nil pointer fields are applied.
+// Tenders/* UI surfaces. Non-nil fields are applied; an explicit null clears
+// a nullable column (see sqlSet).
 type TenderRegistryPatch struct {
 	TenderNumber          *string          `json:"tender_number"`
 	Title                 *string          `json:"title"`
@@ -325,14 +326,15 @@ type TenderRegistryPatch struct {
 	SortOrder             *int             `json:"sort_order"`
 
 	// present — множество ключей, реально пришедших в JSON-теле. Позволяет
-	// PatchFields отличить явный null (очистить столбец) от отсутствия поля
-	// (не трогать) для nullable-колонок вроде status_id.
+	// sqlSet отличить явный null (очистить столбец) от отсутствия поля
+	// (не трогать) для nullable-колонок: status_id, даты, адрес, площадь и т.д.
 	present map[string]bool
 }
 
 // UnmarshalJSON декодирует патч и одновременно фиксирует набор присутствующих
 // ключей. Без этого JSON `status_id: null` неотличим от отсутствия поля
-// (оба дают *string == nil), и очистка статуса («Направлено») молча теряется.
+// (оба дают *string == nil), и очистка статуса («Направлено») или поля карточки
+// тендера молча теряется.
 func (p *TenderRegistryPatch) UnmarshalJSON(b []byte) error {
 	type alias TenderRegistryPatch
 	if err := json.Unmarshal(b, (*alias)(p)); err != nil {
@@ -349,8 +351,11 @@ func (p *TenderRegistryPatch) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// PatchFields applies non-nil fields to a tender_registry row.
-func (r *TenderRegistryRepo) PatchFields(ctx context.Context, id string, p TenderRegistryPatch) error {
+// sqlSet собирает SET-часть UPDATE. Nullable-колонки: явный null в теле (ключ
+// пришёл — present) очищает столбец, отсутствие ключа их не трогает; pgx пишет
+// NULL для nil-указателя. NOT NULL-колонки и jsonb-списки null не принимают —
+// для них, как и раньше, пишется только непустое значение.
+func (p TenderRegistryPatch) sqlSet() (string, []any) {
 	args := []any{}
 	setClauses := ""
 	add := func(col string, val any) {
@@ -360,69 +365,52 @@ func (r *TenderRegistryRepo) PatchFields(ctx context.Context, id string, p Tende
 		setClauses += fmt.Sprintf("%s = $%d", col, len(args)+1)
 		args = append(args, val)
 	}
-	if p.TenderNumber != nil {
-		add("tender_number", *p.TenderNumber)
+	nullable := func(col string, val any, isSet bool) {
+		if isSet || p.present[col] {
+			add(col, val)
+		}
 	}
+	nullable("tender_number", p.TenderNumber, p.TenderNumber != nil)
 	if p.Title != nil {
 		add("title", *p.Title)
 	}
 	if p.ClientName != nil {
 		add("client_name", *p.ClientName)
 	}
-	if p.ObjectAddress != nil {
-		add("object_address", *p.ObjectAddress)
-	}
-	if p.ObjectCoordinates != nil {
-		add("object_coordinates", *p.ObjectCoordinates)
-	}
-	if p.ConstructionScopeID != nil {
-		add("construction_scope_id", *p.ConstructionScopeID)
-	}
-	if p.Area != nil {
-		add("area", *p.Area)
-	}
-	if p.SubmissionDate != nil {
-		add("submission_date", *p.SubmissionDate)
-	}
+	nullable("object_address", p.ObjectAddress, p.ObjectAddress != nil)
+	nullable("object_coordinates", p.ObjectCoordinates, p.ObjectCoordinates != nil)
+	nullable("construction_scope_id", p.ConstructionScopeID, p.ConstructionScopeID != nil)
+	nullable("area", p.Area, p.Area != nil)
+	nullable("submission_date", p.SubmissionDate, p.SubmissionDate != nil)
 	if p.ChronologyItems != nil {
 		add("chronology_items", []byte(*p.ChronologyItems))
 	}
-	if p.ConstructionStartDate != nil {
-		add("construction_start_date", *p.ConstructionStartDate)
-	}
-	if p.SiteVisitDate != nil {
-		add("site_visit_date", *p.SiteVisitDate)
-	}
-	if p.SiteVisitPhotoURL != nil {
-		add("site_visit_photo_url", *p.SiteVisitPhotoURL)
-	}
+	nullable("construction_start_date", p.ConstructionStartDate, p.ConstructionStartDate != nil)
+	nullable("site_visit_date", p.SiteVisitDate, p.SiteVisitDate != nil)
+	nullable("site_visit_photo_url", p.SiteVisitPhotoURL, p.SiteVisitPhotoURL != nil)
 	if p.TenderPackageItems != nil {
 		add("tender_package_items", []byte(*p.TenderPackageItems))
 	}
-	if p.InvitationDate != nil {
-		add("invitation_date", *p.InvitationDate)
-	}
-	// status_id nullable: явный null («Направлено») должен очищать столбец.
-	// Ориентируемся на присутствие ключа, а не на nil; pgx пишет NULL для
-	// nil-указателя.
-	if p.present["status_id"] {
-		add("status_id", p.StatusID)
-	}
-	if p.CommissionDate != nil {
-		add("commission_date", *p.CommissionDate)
-	}
+	nullable("invitation_date", p.InvitationDate, p.InvitationDate != nil)
+	// status_id = null — псевдостатус «Направлено».
+	nullable("status_id", p.StatusID, p.StatusID != nil)
+	nullable("commission_date", p.CommissionDate, p.CommissionDate != nil)
 	if p.DashboardStatus != nil {
 		add("dashboard_status", *p.DashboardStatus)
 	}
-	if p.ManualTotalCost != nil {
-		add("manual_total_cost", *p.ManualTotalCost)
-	}
+	nullable("manual_total_cost", p.ManualTotalCost, p.ManualTotalCost != nil)
 	if p.IsArchived != nil {
 		add("is_archived", *p.IsArchived)
 	}
 	if p.SortOrder != nil {
 		add("sort_order", *p.SortOrder)
 	}
+	return setClauses, args
+}
+
+// PatchFields applies the patch (see sqlSet) to a tender_registry row.
+func (r *TenderRegistryRepo) PatchFields(ctx context.Context, id string, p TenderRegistryPatch) error {
+	setClauses, args := p.sqlSet()
 	if setClauses == "" {
 		return nil
 	}

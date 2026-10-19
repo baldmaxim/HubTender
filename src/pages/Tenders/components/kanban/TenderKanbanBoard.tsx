@@ -254,6 +254,10 @@ export const TenderKanbanBoard: FC<ITenderKanbanBoardProps> = ({
     '--kb-shadow-rest': isDark ? '0 1px 2px rgba(0, 0, 0, 0.18)' : '0 1px 2px rgba(15, 23, 42, 0.08)',
     '--kb-shadow-hover': isDark ? '0 6px 16px rgba(0, 0, 0, 0.32)' : '0 6px 16px rgba(15, 23, 42, 0.10)',
     '--kb-shadow-lift': isDark ? '0 14px 32px rgba(0, 0, 0, 0.48)' : '0 14px 32px rgba(15, 23, 42, 0.20)',
+    '--kb-scroll-thumb': isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(15, 23, 42, 0.18)',
+    '--kb-scroll-thumb-hover': isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(15, 23, 42, 0.32)',
+    // Нативные части прокрутки (Safari, оверлейные ползунки) — в цвет темы приложения, а не системы.
+    colorScheme: isDark ? 'dark' : 'light',
   } as CSSProperties;
 
   const rootClassName = ['kb', activeId && 'kb--dragging', overflowing && 'kb--overflow'].filter(Boolean).join(' ');

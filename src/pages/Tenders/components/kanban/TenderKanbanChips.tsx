@@ -1,5 +1,6 @@
 import type { CSSProperties, FC } from 'react';
 import type { KanbanColumnDef, KanbanColumnKey } from '../../utils/tenderKanban';
+import './TenderKanbanChips.css';
 
 interface ITenderKanbanChipsProps {
   columns: Array<{ def: KanbanColumnDef; count: number; accent: string }>;

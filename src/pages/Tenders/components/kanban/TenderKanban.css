@@ -14,72 +14,7 @@
   min-width: 0;
 }
 
-/* ── Панель над доской: фишки колонок + подсказка ── */
-.kb-toolbar {
-  display: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 32px;
-}
-
-.kb-chips {
-  display: none;
-  gap: 6px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  min-width: 0;
-}
-
-.kb-chips::-webkit-scrollbar {
-  display: none;
-}
-
-.kb--overflow .kb-toolbar,
-.kb--overflow .kb-chips {
-  display: flex;
-}
-
-.kb-chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--kb-col-border);
-  background: var(--kb-col-bg);
-  color: var(--kb-muted);
-  font-size: 12px;
-  white-space: nowrap;
-  cursor: pointer;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    border-color 150ms ease-out,
-    color 150ms ease-out,
-    background-color 150ms ease-out;
-}
-
-/* Тап-цель 44px при визуальной высоте 32px. */
-.kb-chip::after {
-  content: '';
-  position: absolute;
-  inset: -6px -2px;
-}
-
-.kb-chip--visible {
-  border-color: var(--kb-accent);
-  color: var(--kb-text);
-}
-
-.kb-chip:focus-visible {
-  outline: 2px solid var(--kb-info);
-  outline-offset: 2px;
-}
-
+/* Фишки колонок и подсказка над доской — TenderKanbanChips.css. */
 .kb-chip__dot,
 .kb-column__dot {
   width: 8px;
@@ -87,20 +22,6 @@
   border-radius: 50%;
   background: var(--kb-accent);
   flex-shrink: 0;
-}
-
-.kb-chip__count {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.kb-hint {
-  margin-left: auto;
-  color: var(--kb-muted);
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ── Доска ── */
@@ -115,6 +36,7 @@
   scroll-snap-type: x proximity;
   padding-bottom: 6px;
   scrollbar-width: thin;
+  scrollbar-color: var(--kb-scroll-thumb) transparent;
   /* Край, за которым есть ещё колонки, плавно тает — обрез не выглядит багом. */
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--kb-fade-left), #000 calc(100% - var(--kb-fade-right)), transparent 100%);
   mask-image: linear-gradient(to right, transparent 0, #000 var(--kb-fade-left), #000 calc(100% - var(--kb-fade-right)), transparent 100%);
@@ -222,10 +144,35 @@
   padding: 8px;
   overflow-y: auto;
   scrollbar-width: thin;
+  scrollbar-color: var(--kb-scroll-thumb) transparent;
 }
 
 .kb-column__item {
   flex-shrink: 0;
+}
+
+/* ── Ползунки прокрутки в цвет темы ──
+   Без scrollbar-color Chrome рисует нативный светлый ползунок с белой дорожкой — в тёмной теме он «горит». */
+.kb-board:hover,
+.kb-column__list:hover {
+  scrollbar-color: var(--kb-scroll-thumb-hover) transparent;
+}
+
+/* Safari и Chromium без scrollbar-color берут ::-webkit-scrollbar (размер — общий, из index.css). */
+.kb-board::-webkit-scrollbar-track,
+.kb-column__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.kb-board::-webkit-scrollbar-thumb,
+.kb-column__list::-webkit-scrollbar-thumb {
+  background: var(--kb-scroll-thumb);
+  border-radius: 4px;
+}
+
+.kb-board::-webkit-scrollbar-thumb:hover,
+.kb-column__list::-webkit-scrollbar-thumb:hover {
+  background: var(--kb-scroll-thumb-hover);
 }
 
 .kb-empty {
