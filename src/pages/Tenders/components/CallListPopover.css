@@ -1,0 +1,189 @@
+/* «Кому позвонить» — выезжающий список у «Требуют звонка» и у значка звонков в колонках канбана. */
+
+.tm-calls {
+  width: min(340px, calc(100vw - 24px));
+  animation: tm-calls-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tm-calls__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--tm-calls-border);
+  color: var(--tm-calls-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tm-calls__head > .anticon {
+  color: var(--tm-calls-danger);
+}
+
+.tm-calls__count {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--tm-calls-danger-bg);
+  color: var(--tm-calls-danger);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tm-calls__list {
+  max-height: min(360px, 60dvh);
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tm-calls__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px 2px 4px;
+  animation: tm-calls-row-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--tm-calls-i, 0) * 25ms + 40ms);
+}
+
+.tm-calls__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 44px;
+  justify-content: center;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 150ms ease-out;
+}
+
+.tm-calls__open:hover {
+  background: var(--tm-calls-hover);
+}
+
+.tm-calls__title {
+  color: var(--tm-calls-text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tm-calls__meta {
+  color: var(--tm-calls-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tm-calls__days {
+  flex-shrink: 0;
+  color: var(--tm-calls-danger);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tm-calls__call {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--tm-calls-danger-border);
+  background: var(--tm-calls-danger-bg);
+  color: var(--tm-calls-danger);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 150ms ease-out;
+}
+
+.tm-calls__call:active {
+  transform: scale(0.94);
+}
+
+.tm-calls__open:focus-visible,
+.tm-calls__call:focus-visible {
+  outline: 2px solid var(--tm-calls-focus);
+  outline-offset: 1px;
+}
+
+.tm-calls__empty {
+  padding: 16px 14px;
+  color: var(--tm-calls-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+@keyframes tm-calls-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tm-calls-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Плашка «Требуют звонка» — кнопка, открывающая список. */
+.tm-metric-trigger {
+  display: flex;
+  min-width: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Сильнее правила телефона «.tm-metrics--phone .tm-metric» — внутри кнопки плашка во всю её ширину. */
+.tm-metrics .tm-metric-trigger > .tm-metric {
+  flex: 1 1 auto;
+}
+
+.tm-metric-trigger:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.tm-metrics--phone > .tm-metric-trigger {
+  flex: 0 0 calc((100% - 12px) / 3);
+  scroll-snap-align: start;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-calls,
+  .tm-calls__item {
+    animation: none;
+  }
+
+  .tm-calls__call,
+  .tm-calls__open {
+    transition: none;
+  }
+}

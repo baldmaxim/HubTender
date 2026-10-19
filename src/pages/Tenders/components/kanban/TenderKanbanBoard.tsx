@@ -22,6 +22,7 @@ import {
   getKanbanAccent,
   getKanbanColumn,
   getKanbanColumnDef,
+  getTenderCost,
   isKanbanColumnKey,
   resolveKanbanTarget,
   type KanbanColumnKey,
@@ -97,6 +98,12 @@ export const TenderKanbanBoard: FC<ITenderKanbanBoardProps> = ({
     });
     return buckets;
   }, [effectiveTenders, activeId, overColumn]);
+
+  // 100% для доли колонки — сумма КП всех колонок (перенос её не меняет).
+  const boardTotalCost = useMemo(
+    () => effectiveTenders.reduce((sum, tender) => sum + getTenderCost(tender), 0),
+    [effectiveTenders]
+  );
 
   useKanbanFlip(rootRef, skipFlightRef, reducedMotion);
   // Ключ заглушки держим до конца рендера, в котором карточку отпустили (см. useKanbanFlip).
@@ -305,6 +312,7 @@ export const TenderKanbanBoard: FC<ITenderKanbanBoardProps> = ({
                 pendingIds={pendingIds}
                 errorIds={errorIds}
                 readOnly={readOnly}
+                boardTotalCost={boardTotalCost}
                 registerElement={registerElement}
                 {...handlers}
               />

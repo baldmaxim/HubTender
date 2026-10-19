@@ -14,6 +14,7 @@ import ImportTendersModal from './ImportTendersModal';
 import TenderMonitorModal from './components/TenderMonitorModal';
 import TenderMonitorTable, { type TenderViewMode } from './components/TenderMonitorTable';
 import { TenderKanbanBoard } from './components/kanban/TenderKanbanBoard';
+import { CallListPopover } from './components/CallListPopover';
 import {
   buildCallFollowUpItem,
   formatArea,
@@ -167,10 +168,8 @@ const Tenders: React.FC = () => {
     return base;
   }, [tenders]);
 
-  const needCallCount = useMemo(
-    () => tenders.filter((tender) => shouldShowCallAction(tender)).length,
-    [tenders]
-  );
+  const callTenders = useMemo(() => tenders.filter((tender) => shouldShowCallAction(tender)), [tenders]);
+  const needCallCount = callTenders.length;
 
   const activeTenders = useMemo(
     () =>
@@ -269,15 +268,49 @@ const Tenders: React.FC = () => {
           <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} isPhone={isPhoneDevice} />
           <MetricCard title="В расчете" value={counts.calc} caption="готовятся КП" accent={palette.info} palette={palette} isPhone={isPhoneDevice} />
           <MetricCard title="Направлено" value={counts.sent} caption="ожидает ответа" accent="#ef9f27" palette={palette} isPhone={isPhoneDevice} />
-          <MetricCard
-            title="Требуют звонка"
-            value={needCallCount}
-            caption="более 7 дней без контроля"
-            accent={needCallCount > 0 ? palette.danger : palette.success}
-            blinking={needCallCount > 0}
-            palette={palette}
-            isPhone={isPhoneDevice}
-          />
+          {needCallCount > 0 ? (
+            <CallListPopover
+              tenders={callTenders}
+              palette={palette}
+              readOnly={isGeneralDirector || isMobile}
+              placement="bottom"
+              onOpenTender={(tender) => handleOpenTender(tender, 'info')}
+              onQuickCall={handleQuickCall}
+            >
+              <div
+                role="button"
+                tabIndex={0}
+                className="tm-metric-trigger"
+                aria-label={`Требуют звонка: ${needCallCount}. Показать, кому позвонить`}
+                aria-haspopup="dialog"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    event.currentTarget.click();
+                  }
+                }}
+              >
+                <MetricCard
+                  title="Требуют звонка"
+                  value={needCallCount}
+                  caption="более 7 дней без контроля"
+                  accent={palette.danger}
+                  blinking
+                  palette={palette}
+                  isPhone={isPhoneDevice}
+                />
+              </div>
+            </CallListPopover>
+          ) : (
+            <MetricCard
+              title="Требуют звонка"
+              value={0}
+              caption="более 7 дней без контроля"
+              accent={palette.success}
+              palette={palette}
+              isPhone={isPhoneDevice}
+            />
+          )}
           <MetricCard
             title="Сумма КП"
             value={formatMoney(totalCost)}
