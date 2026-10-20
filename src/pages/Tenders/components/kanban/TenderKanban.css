@@ -259,6 +259,13 @@
   animation: t-input-shake calc(var(--shake-dur-a) * 2 + var(--shake-dur-b) * 2) linear 320ms;
 }
 
+/* Выбор для удаления: отмеченная карточка — красная рамка и заливка (и при наведении). */
+.kb-card.kb-card--selected,
+.kb-card.kb-card--selected:hover {
+  border-color: var(--kb-danger);
+  box-shadow: inset 0 0 0 999px var(--kb-danger-bg);
+}
+
 /* «Поднятая» карточка под курсором. */
 .kb-card--overlay {
   cursor: grabbing;

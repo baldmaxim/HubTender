@@ -18,6 +18,8 @@ import {
 } from '../utils/tenderMonitor';
 import type { TenderMonitorPalette } from '../utils/tenderMonitorTheme';
 import { MapPopover, ChronologyPopover, PackagePopover } from './TenderMonitorPopovers';
+import { getSelectableProps, selectableClassName, useTenderSelection } from './selection/tenderSelection';
+import { SelectCheck } from './selection/SelectCheck';
 
 interface TenderSection {
   key: string;
@@ -123,10 +125,14 @@ function TenderCard({
   const controlDate = getControlDate(tender);
   const canQuickCall = dashboardStatus === 'sent' && (daysSinceControl ?? 0) > 7;
   const canSubmissionCall = dashboardStatus === 'calc' && controlDate != null && (daysSinceControl ?? 0) >= 7;
+  const selection = useTenderSelection();
+  const selected = selection.active && selection.isSelected(tender.id);
 
   return (
     <div
-      onClick={() => onOpenTender(tender)}
+      // В режиме удаления карточка — флажок выбора, а не ссылка на тендер.
+      {...(selection.active ? getSelectableProps(selection, tender.id) : { onClick: () => onOpenTender(tender) })}
+      className={selection.active ? selectableClassName(selected) : undefined}
       style={{
         height: '100%',
         display: 'flex',
@@ -142,9 +148,11 @@ function TenderCard({
     >
       {/* Заголовок */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minWidth: 0 }}>
-        {!isPhone && (
+        {selection.active ? (
+          <SelectCheck checked={selected} />
+        ) : !isPhone ? (
           <span style={{ color: palette.subtleText, fontSize: 11, fontWeight: 700, marginTop: 2 }}>{tender.sort_order}</span>
-        )}
+        ) : null}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
             <span style={{ color: palette.text, fontSize: isPhone ? 13 : 15, fontWeight: 700, lineHeight: 1.25, wordBreak: 'break-word' }}>

@@ -64,6 +64,15 @@ func (s *TenderRegistryService) PatchFields(ctx context.Context, id string, p re
 	return nil
 }
 
+// DeleteMany removes rows from the tender list (tender calculations stay intact).
+func (s *TenderRegistryService) DeleteMany(ctx context.Context, ids []string) ([]repository.DeletedRegistryRow, error) {
+	rows, err := s.repo.DeleteMany(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("tenderRegistryService.DeleteMany: %w", err)
+	}
+	return rows, nil
+}
+
 func (s *TenderRegistryService) ListTenderStatuses(ctx context.Context) ([]repository.NamedRefRow, error) {
 	rows, err := s.repo.ListTenderStatuses(ctx)
 	if err != nil {

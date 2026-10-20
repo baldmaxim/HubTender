@@ -316,6 +316,7 @@ func newRouter(
 		r.Get("/api/v1/tender-registry/tender-numbers", d.tenderRegistryH.TenderNumbers)
 		r.Get("/api/v1/tender-registry/related-tenders", d.tenderRegistryH.RelatedTenders)
 		r.Post("/api/v1/tender-registry", d.tenderRegistryH.Create)
+		r.Post("/api/v1/tender-registry/bulk-delete", d.tenderRegistryH.BulkDelete)
 		r.Patch("/api/v1/tender-registry/{id}", d.tenderRegistryH.Update)
 		r.Patch("/api/v1/tender-registry/{id}/fields", d.tenderRegistryH.PatchFields)
 		r.Get("/api/v1/tender-statuses", d.tenderRegistryH.ListTenderStatuses)

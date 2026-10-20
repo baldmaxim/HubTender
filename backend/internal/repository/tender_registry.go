@@ -423,6 +423,41 @@ func (r *TenderRegistryRepo) PatchFields(ctx context.Context, id string, p Tende
 	return nil
 }
 
+// DeletedRegistryRow — строка, удалённая из «Перечня тендеров» (ответ клиенту и журнал).
+type DeletedRegistryRow struct {
+	ID           string  `json:"id"`
+	Title        string  `json:"title"`
+	TenderNumber *string `json:"tender_number,omitempty"`
+}
+
+// DeleteMany удаляет строки перечня одним запросом. Расчёты тендеров (tenders,
+// позиции, ВОР) связаны с перечнем только номером тендера и не затрагиваются;
+// каскадом уходят лишь напоминания Telegram-бота по этим строкам.
+func (r *TenderRegistryRepo) DeleteMany(ctx context.Context, ids []string) ([]DeletedRegistryRow, error) {
+	rows, err := r.pool.Query(ctx, `
+		DELETE FROM public.tender_registry
+		WHERE id = ANY($1::uuid[])
+		RETURNING id::text, title, tender_number
+	`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("tenderRegistryRepo.DeleteMany: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]DeletedRegistryRow, 0, len(ids))
+	for rows.Next() {
+		var d DeletedRegistryRow
+		if err := rows.Scan(&d.ID, &d.Title, &d.TenderNumber); err != nil {
+			return nil, fmt.Errorf("tenderRegistryRepo.DeleteMany: scan: %w", err)
+		}
+		out = append(out, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("tenderRegistryRepo.DeleteMany: %w", err)
+	}
+	return out, nil
+}
+
 // ListTenderStatuses returns rows from public.tender_statuses ordered by name.
 func (r *TenderRegistryRepo) ListTenderStatuses(ctx context.Context) ([]NamedRefRow, error) {
 	return r.listNamedRef(ctx, `SELECT id::text, name FROM public.tender_statuses ORDER BY name`)

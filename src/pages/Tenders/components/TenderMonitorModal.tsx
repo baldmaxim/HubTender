@@ -17,7 +17,7 @@ import {
   getTenderStatusDisplayLabel,
   shouldShowCallAction,
 } from '../utils/tenderMonitor';
-import { getTenderMonitorPalette } from '../utils/tenderMonitorTheme';
+import { getTenderControlVars, getTenderMonitorPalette } from '../utils/tenderMonitorTheme';
 import { SENT_STATUS_VALUE } from '../utils/tenderMonitorDraft';
 import { useTenderMonitorEdit } from '../hooks/useTenderMonitorEdit';
 import { TenderMonitorInfo } from './TenderMonitorInfo';
@@ -176,16 +176,8 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
           {
             padding: '18px 18px 14px',
             borderRight: `3px solid ${palette.warning}`,
-            // Кнопки окна (.tm-modal-btn) — как кнопки страницы: фон секции, тонкая рамка, золотой акцент.
-            '--tm-btn-bg': palette.sectionBg,
-            '--tm-btn-border': palette.border,
-            '--tm-btn-text': palette.textSecondary,
-            '--tm-btn-muted': palette.muted,
-            '--tm-accent': palette.warning,
-            '--tm-accent-bg': palette.warningBg,
-            '--tm-danger': palette.danger,
-            '--tm-danger-bg': palette.dangerBg,
-            '--tm-danger-border': palette.dangerBorder,
+            // Кнопки окна (.tm-btn) — как кнопки страницы: фон секции, тонкая рамка, золотой акцент.
+            ...getTenderControlVars(palette),
           } as React.CSSProperties
         }
       >
@@ -215,12 +207,12 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
           <Space size={6}>
             {editing ? (
               <>
-                <button type="button" className="tm-modal-btn" onClick={cancelEdit} disabled={edit.saving}>
+                <button type="button" className="tm-btn" onClick={cancelEdit} disabled={edit.saving}>
                   Отмена
                 </button>
                 <button
                   type="button"
-                  className="tm-modal-btn tm-modal-btn--accent"
+                  className="tm-btn tm-btn--accent"
                   onClick={submit}
                   disabled={edit.saving}
                   aria-busy={edit.saving || undefined}
@@ -232,20 +224,20 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
             ) : (
               <>
                 {canQuickCall && onQuickCall && !readOnly ? (
-                  <button type="button" className="tm-modal-btn tm-modal-btn--danger" onClick={() => void onQuickCall(tender)}>
+                  <button type="button" className="tm-btn tm-btn--danger" onClick={() => void onQuickCall(tender)}>
                     <PhoneOutlined aria-hidden />
                     Позвонить
                   </button>
                 ) : null}
                 {!readOnly ? (
-                  <button type="button" className="tm-modal-btn" onClick={startEdit}>
+                  <button type="button" className="tm-btn" onClick={startEdit}>
                     <EditOutlined aria-hidden />
                     Редактировать
                   </button>
                 ) : null}
               </>
             )}
-            <button type="button" className="tm-modal-btn tm-modal-btn--icon" onClick={handleClose} aria-label="Закрыть">
+            <button type="button" className="tm-btn tm-btn--icon" onClick={handleClose} aria-label="Закрыть">
               <CloseOutlined aria-hidden />
             </button>
           </Space>

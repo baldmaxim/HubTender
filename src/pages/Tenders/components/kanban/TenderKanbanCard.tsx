@@ -22,6 +22,8 @@ import {
 import { getTenderCost, type KanbanColumnKey } from '../../utils/tenderKanban';
 import type { TenderMonitorPalette } from '../../utils/tenderMonitorTheme';
 import { ChronologyPopover, MapPopover, PackagePopover } from '../TenderMonitorPopovers';
+import { getSelectableProps, useTenderSelection } from '../selection/tenderSelection';
+import { SelectCheck } from '../selection/SelectCheck';
 
 export type KanbanCardVariant = 'default' | 'source' | 'target' | 'overlay';
 
@@ -118,6 +120,9 @@ export const TenderKanbanCard = memo(function TenderKanbanCard({
   const control = getControlMetric(tender, column);
   const canCall = !readOnly && variant !== 'overlay' && shouldShowCallAction(tender);
   const isPlaceholder = variant === 'source' || variant === 'target';
+  const selection = useTenderSelection();
+  const selecting = selection.active && variant === 'default';
+  const selected = selecting && selection.isSelected(tender.id);
 
   const className = [
     'kb-card',
@@ -125,6 +130,8 @@ export const TenderKanbanCard = memo(function TenderKanbanCard({
     variant !== 'default' && `kb-card--${variant}`,
     pending && 'kb-card--pending',
     error && 'kb-card--error',
+    selecting && 'tm-select-item',
+    selected && 'kb-card--selected',
   ]
     .filter(Boolean)
     .join(' ');
@@ -138,23 +145,31 @@ export const TenderKanbanCard = memo(function TenderKanbanCard({
     }
   };
 
+  // В режиме удаления карточка — флажок выбора (перенос на это время выключен).
+  const interaction = selecting
+    ? getSelectableProps(selection, tender.id)
+    : {
+        role: 'button' as const,
+        tabIndex: variant === 'overlay' ? -1 : 0,
+        onClick: () => {
+          if (!isPlaceholder) onOpenTender(tender);
+        },
+        onKeyDown: handleKeyDown,
+      };
+
   return (
     <div
       ref={dragRef}
       {...dragAttributes}
       {...dragListeners}
-      role="button"
-      tabIndex={variant === 'overlay' ? -1 : 0}
+      {...interaction}
       aria-label={`Тендер ${tender.title}, ${tender.client_name || 'заказчик не указан'}`}
       aria-busy={pending || undefined}
       className={className}
       style={accent ? ({ '--kb-accent': accent } as CSSProperties) : undefined}
-      onClick={() => {
-        if (!isPlaceholder) onOpenTender(tender);
-      }}
-      onKeyDown={handleKeyDown}
     >
       <div className="kb-card__head">
+        {selecting ? <SelectCheck checked={selected} /> : null}
         <div className="kb-card__title">{tender.title}</div>
         <span className="kb-card__map" {...interactionStopper}>
           <MapPopover tender={tender} palette={palette} />

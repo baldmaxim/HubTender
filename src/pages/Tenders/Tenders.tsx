@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { App, Button, Space } from 'antd';
-import { PlusOutlined, UploadOutlined } from '@ant-design/icons';
+import { App } from 'antd';
 import dayjs from 'dayjs';
 import { patchTenderRegistryFields } from '../../lib/api/tenderRegistry';
 import type { TenderRegistryWithRelations } from '../../lib/types';
@@ -9,12 +8,17 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useTenderData } from './hooks/useTenderData';
+import { useTenderDeleteMode } from './hooks/useTenderDeleteMode';
 import { TenderAddForm } from './components';
 import ImportTendersModal from './ImportTendersModal';
 import TenderMonitorModal from './components/TenderMonitorModal';
 import TenderMonitorTable, { type TenderViewMode } from './components/TenderMonitorTable';
 import { TenderKanbanBoard } from './components/kanban/TenderKanbanBoard';
 import { CallListPopover } from './components/CallListPopover';
+import { TenderPageActions } from './components/TenderPageActions';
+import { TenderSelectionContext } from './components/selection/tenderSelection';
+import { TenderSelectionBar } from './components/selection/TenderSelectionBar';
+import { TenderDeleteConfirm } from './components/selection/TenderDeleteConfirm';
 import {
   buildCallFollowUpItem,
   formatArea,
@@ -27,7 +31,7 @@ import {
   type TenderMonitorSortField,
   type TenderMonitorTab,
 } from './utils/tenderMonitor';
-import { getTenderMonitorPalette, mixHex, type TenderMonitorPalette } from './utils/tenderMonitorTheme';
+import { getTenderControlVars, getTenderMonitorPalette, mixHex, type TenderMonitorPalette } from './utils/tenderMonitorTheme';
 import './Tenders.css';
 import './TendersModern.css';
 import './TenderMonitor.css';
@@ -105,6 +109,7 @@ const Tenders: React.FC = () => {
   const [viewMode, setViewMode] = useState<TenderViewMode>(readViewMode);
 
   const { tenders, statuses, constructionScopes, tenderNumbers, loading, refetch } = useTenderData();
+  const deleteMode = useTenderDeleteMode({ tenders, onDeleted: refetch });
 
   useEffect(() => {
     if (!selectedTender) {
@@ -227,7 +232,13 @@ const Tenders: React.FC = () => {
   return (
     <div
       // Канбан — страница ровно в экран: прокручиваются только колонки доски.
-      className={viewMode === 'kanban' ? 'tender-monitor-page tender-monitor-page--fit' : 'tender-monitor-page'}
+      className={[
+        'tender-monitor-page',
+        viewMode === 'kanban' && 'tender-monitor-page--fit',
+        deleteMode.active && 'tender-monitor-page--selecting',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       style={
         {
           '--tm-page-bg': palette.pageBg,
@@ -237,6 +248,7 @@ const Tenders: React.FC = () => {
           '--tm-call-pulse-shadow': palette.callPulseShadow,
           '--tm-alert-pulse-shadow': palette.alertPulseShadow,
           '--tm-alert-pulse-border': palette.alertPulseBorder,
+          ...getTenderControlVars(palette),
         } as React.CSSProperties
       }
     >
@@ -252,14 +264,13 @@ const Tenders: React.FC = () => {
             </div>
 
             {!isDirector ? (
-              <Space wrap>
-                <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowAddForm((prev) => !prev)}>
-                  {showAddForm ? 'Скрыть форму' : 'Добавить тендер'}
-                </Button>
-                <Button icon={<UploadOutlined />} onClick={() => setImportModalOpen(true)}>
-                  Импорт из Excel
-                </Button>
-              </Space>
+              <TenderPageActions
+                showAddForm={showAddForm}
+                selecting={deleteMode.active}
+                onToggleSelect={deleteMode.active ? deleteMode.cancel : deleteMode.start}
+                onToggleAddForm={() => setShowAddForm((prev) => !prev)}
+                onImport={() => setImportModalOpen(true)}
+              />
             ) : null}
           </div>
         )}
@@ -334,40 +345,59 @@ const Tenders: React.FC = () => {
           />
         ) : null}
 
-        <TenderMonitorTable
-          tenders={visibleTenders}
-          loading={loading && (viewMode === 'list' || tenders.length === 0)}
-          activeTab={activeTab}
-          searchValue={searchValue}
-          sortField={sortField}
-          sortDirection={sortDirection}
-          counts={counts}
-          onTabChange={setActiveTab}
-          onSearchChange={setSearchValue}
-          onSortChange={handleSortChange}
-          onOpenTender={(tender) => handleOpenTender(tender, 'info')}
-          onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
-          onOpenPackage={(tender) => handleOpenTender(tender, 'package')}
-          onQuickCall={handleQuickCall}
-          onUpdate={refetch}
-          readOnly={isGeneralDirector || isMobile}
-          viewMode={viewMode}
-          onViewModeChange={handleViewModeChange}
-          kanban={
-            <TenderKanbanBoard
-              tenders={boardTenders}
-              statuses={statuses}
-              dragEnabled={!isGeneralDirector && !isPhoneDevice}
-              readOnly={isGeneralDirector || isMobile}
-              onOpenTender={(tender) => handleOpenTender(tender, 'info')}
-              onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
-              onOpenPackage={(tender) => handleOpenTender(tender, 'package')}
-              onQuickCall={handleQuickCall}
-              onUpdate={refetch}
-            />
-          }
-        />
+        <TenderSelectionContext.Provider value={deleteMode.selection}>
+          <TenderMonitorTable
+            tenders={visibleTenders}
+            loading={loading && (viewMode === 'list' || tenders.length === 0)}
+            activeTab={activeTab}
+            searchValue={searchValue}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            counts={counts}
+            onTabChange={setActiveTab}
+            onSearchChange={setSearchValue}
+            onSortChange={handleSortChange}
+            onOpenTender={(tender) => handleOpenTender(tender, 'info')}
+            onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
+            onOpenPackage={(tender) => handleOpenTender(tender, 'package')}
+            onQuickCall={handleQuickCall}
+            onUpdate={refetch}
+            readOnly={isGeneralDirector || isMobile}
+            viewMode={viewMode}
+            onViewModeChange={handleViewModeChange}
+            kanban={
+              <TenderKanbanBoard
+                tenders={boardTenders}
+                statuses={statuses}
+                dragEnabled={!isGeneralDirector && !isPhoneDevice && !deleteMode.active}
+                readOnly={isGeneralDirector || isMobile}
+                onOpenTender={(tender) => handleOpenTender(tender, 'info')}
+                onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
+                onOpenPackage={(tender) => handleOpenTender(tender, 'package')}
+                onQuickCall={handleQuickCall}
+                onUpdate={refetch}
+              />
+            }
+          />
+        </TenderSelectionContext.Provider>
       </div>
+
+      {deleteMode.active ? (
+        <TenderSelectionBar
+          count={deleteMode.selectedTenders.length}
+          onCancel={deleteMode.cancel}
+          onDelete={deleteMode.openConfirm}
+        />
+      ) : null}
+
+      <TenderDeleteConfirm
+        open={deleteMode.confirmOpen}
+        tenders={deleteMode.selectedTenders}
+        deleting={deleteMode.deleting}
+        palette={palette}
+        onCancel={deleteMode.closeConfirm}
+        onConfirm={() => void deleteMode.confirmDelete()}
+      />
 
       <TenderMonitorModal
         open={detailOpen}

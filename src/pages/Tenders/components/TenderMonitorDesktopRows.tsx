@@ -19,6 +19,8 @@ import {
 } from '../utils/tenderMonitor';
 import type { TenderMonitorPalette } from '../utils/tenderMonitorTheme';
 import { MapPopover, ChronologyPopover } from './TenderMonitorPopovers';
+import { getSelectableProps, selectableClassName, useTenderSelection } from './selection/tenderSelection';
+import { SelectCheck } from './selection/SelectCheck';
 
 type TableColumn = {
   key: string;
@@ -132,10 +134,14 @@ export function TenderRow({
   const canQuickCall = dashboardStatus === 'sent' && (daysSinceControl ?? 0) > 7;
   const controlDate = getControlDate(tender);
   const canSubmissionCall = dashboardStatus === 'calc' && controlDate != null && (daysSinceControl ?? 0) >= 7;
+  const selection = useTenderSelection();
+  const selected = selection.active && selection.isSelected(tender.id);
 
   return (
     <div
-      onClick={() => onOpenTender(tender)}
+      // В режиме удаления строка — флажок выбора, а не ссылка на карточку тендера.
+      {...(selection.active ? getSelectableProps(selection, tender.id) : { onClick: () => onOpenTender(tender) })}
+      className={selection.active ? selectableClassName(selected) : undefined}
       style={{
         display: 'grid',
         gridTemplateColumns: GRID_TEMPLATE,
@@ -147,7 +153,9 @@ export function TenderRow({
         background: palette.cardBgAlt,
       }}
     >
-      <div style={{ padding: '12px 0', color: palette.subtleText, fontSize: 11, textAlign: 'center' }}>{tender.sort_order}</div>
+      <div style={{ padding: '12px 0', color: palette.subtleText, fontSize: 11, textAlign: 'center' }}>
+        {selection.active ? <SelectCheck checked={selected} /> : tender.sort_order}
+      </div>
 
       <div style={{ padding: '12px 0', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>

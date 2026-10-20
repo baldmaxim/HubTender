@@ -255,9 +255,9 @@
   }
 }
 
-/* ── Окно тендера: кнопки в стиле кнопок страницы (сортировка, «Позвонить» на карточке) ──
-   Цвета — переменные --tm-btn-*, --tm-accent*, --tm-danger* из палитры (TenderMonitorModal). */
-.tm-modal-btn {
+/* ── Кнопки страницы и окон тендера — в стиле сортировки и «Позвонить» на карточке ──
+   Цвета — переменные --tm-btn-*, --tm-accent*, --tm-danger* из палитры (getTenderControlVars). */
+.tm-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -281,37 +281,56 @@
     box-shadow 150ms ease-out;
 }
 
-.tm-modal-btn:focus-visible {
+.tm-btn:focus-visible {
   outline: 2px solid var(--tm-accent);
   outline-offset: 2px;
 }
 
-.tm-modal-btn:disabled {
+.tm-btn:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
 /* Основное действие — золотой акцент окна, как активная вкладка и сортировка. */
-.tm-modal-btn--accent {
+.tm-btn--accent {
   border-color: var(--tm-accent);
   background: var(--tm-accent-bg);
   color: var(--tm-accent);
 }
 
-.tm-modal-btn--danger {
+.tm-btn--danger {
   border-color: var(--tm-danger-border);
   background: var(--tm-danger-bg);
   color: var(--tm-danger);
 }
 
-.tm-modal-btn--small {
+.tm-btn--small {
   min-height: 26px;
   padding: 0 10px;
   font-weight: 500;
 }
 
+/* Шапка страницы: «Удалить тендер», «Добавить тендер», «Импорт из Excel». */
+.tm-btn--lg {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+/* Нажатая «Удалить тендер» — идёт выбор тендеров. */
+.tm-btn--danger[aria-pressed='true'] {
+  border-color: var(--tm-danger);
+  box-shadow: inset 0 0 0 999px var(--tm-danger-bg);
+}
+
+.tm-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Только иконка (закрыть окно). */
-.tm-modal-btn--icon {
+.tm-btn--icon {
   width: 30px;
   padding: 0;
   border-color: transparent;
@@ -321,35 +340,36 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .tm-modal-btn:hover:not(:disabled) {
+  .tm-btn:hover:not(:disabled) {
     border-color: var(--tm-accent);
     color: var(--tm-accent);
   }
 
   /* Акцент при наведении — заливка вдвое плотнее (тот же полупрозрачный тон поверх). */
-  .tm-modal-btn--accent:hover:not(:disabled) {
+  .tm-btn--accent:hover:not(:disabled) {
     box-shadow: inset 0 0 0 999px var(--tm-accent-bg);
   }
 
-  .tm-modal-btn--danger:hover:not(:disabled) {
+  .tm-btn--danger:hover:not(:disabled),
+  .tm-btn--delete:hover:not(:disabled) {
     border-color: var(--tm-danger);
     color: var(--tm-danger);
   }
 
-  .tm-modal-btn--icon:hover:not(:disabled) {
+  .tm-btn--icon:hover:not(:disabled) {
     border-color: transparent;
   }
 }
 
 /* Сенсорные экраны: тап-цель не меньше 44px. */
 @media (pointer: coarse) {
-  .tm-modal-btn {
+  .tm-btn {
     min-height: 44px;
     padding: 0 14px;
     font-size: 14px;
   }
 
-  .tm-modal-btn--icon {
+  .tm-btn--icon {
     width: 44px;
     padding: 0;
     font-size: 16px;
@@ -357,7 +377,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tm-modal-btn {
+  .tm-btn {
     transition: none;
   }
 }
@@ -366,4 +386,175 @@
 .tm-modal-panel--inactive,
 .tm-modal-panel--inactive * {
   transition: none !important;
+}
+
+/* ── Выбор тендеров для удаления ── */
+/* Клик в любом месте строки или карточки отмечает её: кнопки и ссылки внутри на время выбора отключены. */
+.tm-select-item {
+  cursor: pointer;
+}
+
+.tm-select-item * {
+  pointer-events: none;
+}
+
+.tm-select-item:focus-visible {
+  outline: 2px solid var(--tm-danger);
+  outline-offset: -2px;
+}
+
+/* Отмеченная строка: красная полоса слева и лёгкая заливка поверх своего фона. */
+.tm-select-item--selected {
+  box-shadow:
+    inset 3px 0 0 var(--tm-danger),
+    inset 0 0 0 999px var(--tm-danger-bg);
+}
+
+.tm-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--tm-btn-muted);
+  color: transparent;
+  font-size: 11px;
+  vertical-align: middle;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.tm-check--on {
+  border-color: var(--tm-danger);
+  background: var(--tm-danger);
+  color: var(--tm-check-mark);
+}
+
+/* Панель внизу экрана, пока идёт выбор. Подложка нулевой высоты в конце страницы прилипает
+   к низу видимой области — панель центрируется по странице, а не по окну (слева меню). */
+.tm-select-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 999;
+  flex: none;
+  height: 0;
+}
+
+.tm-select-bar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--tm-danger-border);
+  background: var(--tm-panel-bg);
+  box-shadow: var(--tm-panel-shadow);
+  transform: translateX(-50%);
+  animation: tm-select-bar-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Панель не закрывает последние строки списка и низ доски. */
+.tender-monitor-page--selecting .tm-page-body {
+  padding-bottom: 64px;
+}
+
+.tm-select-bar__text {
+  min-width: 0;
+  margin-right: 8px;
+  color: var(--tm-text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes tm-select-bar-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ── Подтверждение удаления ── */
+.tm-delete {
+  padding: 20px 20px 16px;
+}
+
+.tm-delete__title {
+  color: var(--tm-text);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.tm-delete__list {
+  max-height: 240px;
+  margin: 14px 0 12px;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  border: 1px solid var(--tm-btn-border);
+  border-radius: 10px;
+  background: var(--tm-btn-bg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--tm-scroll-thumb) transparent;
+}
+
+.tm-delete__item {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--tm-btn-border);
+}
+
+.tm-delete__item:last-child {
+  border-bottom: none;
+}
+
+.tm-delete__name {
+  color: var(--tm-text);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tm-delete__meta {
+  margin-top: 2px;
+  color: var(--tm-btn-muted);
+  font-size: 12px;
+}
+
+.tm-delete__note {
+  margin: 0 0 16px;
+  color: var(--tm-btn-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tm-delete__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-check {
+    transition: none;
+  }
+
+  .tm-select-bar {
+    animation: none;
+  }
 }

@@ -7,6 +7,9 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
+	"github.com/rs/zerolog/log"
+	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
@@ -19,6 +22,7 @@ type tenderRegistryServicer interface {
 	Create(ctx context.Context, in repository.TenderRegistryCreateInput) error
 	Update(ctx context.Context, id string, in repository.TenderRegistryUpdateInput) error
 	PatchFields(ctx context.Context, id string, p repository.TenderRegistryPatch) error
+	DeleteMany(ctx context.Context, ids []string) ([]repository.DeletedRegistryRow, error)
 	ListTenderStatuses(ctx context.Context) ([]repository.NamedRefRow, error)
 	ListConstructionScopes(ctx context.Context) ([]repository.NamedRefRow, error)
 	TenderNumbers(ctx context.Context) ([]string, error)
@@ -126,6 +130,47 @@ func (h *TenderRegistryHandler) PatchFields(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// bulkDeleteRegistryReq is the request body for POST /api/v1/tender-registry/bulk-delete.
+type bulkDeleteRegistryReq struct {
+	IDs []string `json:"ids" validate:"required,min=1,max=500,dive,uuid"`
+}
+
+var registryValidate = validator.New()
+
+// BulkDelete handles POST /api/v1/tender-registry/bulk-delete — удаляет
+// выбранные строки «Перечня тендеров» одним запросом.
+func (h *TenderRegistryHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
+	var req bulkDeleteRegistryReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := registryValidate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+	deleted, err := h.svc.DeleteMany(r.Context(), req.IDs)
+	if err != nil {
+		apierr.InternalFromErr(w, r, err, "failed to delete tender registry rows")
+		return
+	}
+
+	// Удаление необратимо — в журнале остаётся, кто и какие строки убрал.
+	titles := make([]string, 0, len(deleted))
+	ids := make([]string, 0, len(deleted))
+	for _, d := range deleted {
+		titles = append(titles, d.Title)
+		ids = append(ids, d.ID)
+	}
+	userID := ""
+	if u := middleware.UserFromContext(r.Context()); u != nil {
+		userID = u.ID
+	}
+	log.Info().Str("user_id", userID).Strs("ids", ids).Strs("titles", titles).Msg("tender registry rows deleted")
+
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: map[string]any{"deleted": deleted}})
 }
 
 // ListTenderStatuses handles GET /api/v1/tender-statuses.

@@ -102,6 +102,21 @@ export async function patchTenderRegistryFields(
   });
 }
 
+export interface DeletedTenderRegistryRow {
+  id: string;
+  title: string;
+  tender_number?: string | null;
+}
+
+/** Удалить строки «Перечня тендеров»; расчёты тендеров (позиции, ВОР, КП) не затрагиваются. */
+export async function deleteTenderRegistryRows(ids: string[]): Promise<DeletedTenderRegistryRow[]> {
+  const res = await apiFetch<{ data: { deleted: DeletedTenderRegistryRow[] } }>(
+    '/api/v1/tender-registry/bulk-delete',
+    { method: 'POST', body: JSON.stringify({ ids }) },
+  );
+  return res.data?.deleted ?? [];
+}
+
 export async function archiveTenderRegistry(id: string): Promise<void> {
   await apiFetch<undefined>(`/api/v1/tender-registry/${encodeURIComponent(id)}`, {
     method: 'PATCH',

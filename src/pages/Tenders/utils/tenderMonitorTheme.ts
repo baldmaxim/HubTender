@@ -31,6 +31,10 @@ export interface TenderMonitorPalette {
   callPulseShadow: string;
   alertPulseShadow: string;
   alertPulseBorder: string;
+  /** Ползунок прокрутки поверх фона темы. */
+  scrollThumb: string;
+  /** Тень всплывающей панели (выбор тендеров для удаления). */
+  floatingShadow: string;
 }
 
 // mixHex переехал в общий src/utils/color.ts; ре-экспорт сохраняет 8 импортёров в Tenders зелёными.
@@ -71,6 +75,8 @@ export function getTenderMonitorPalette(isDark: boolean): TenderMonitorPalette {
       callPulseShadow: 'rgba(226, 75, 74, 0.08)',
       alertPulseShadow: 'rgba(226, 75, 74, 0.08)',
       alertPulseBorder: 'rgba(226, 75, 74, 0.28)',
+      scrollThumb: 'rgba(255, 255, 255, 0.16)',
+      floatingShadow: '0 12px 32px rgba(0, 0, 0, 0.5)',
     };
   }
 
@@ -107,5 +113,27 @@ export function getTenderMonitorPalette(isDark: boolean): TenderMonitorPalette {
     callPulseShadow: 'rgba(220, 38, 38, 0.10)',
     alertPulseShadow: 'rgba(220, 38, 38, 0.10)',
     alertPulseBorder: 'rgba(220, 38, 38, 0.24)',
+    scrollThumb: 'rgba(15, 23, 42, 0.18)',
+    floatingShadow: '0 12px 32px rgba(15, 23, 42, 0.18)',
+  };
+}
+
+/** CSS-переменные кнопок (.tm-btn), флажков выбора и всплывающей панели — из палитры темы. */
+export function getTenderControlVars(palette: TenderMonitorPalette): Record<string, string> {
+  return {
+    '--tm-btn-bg': palette.sectionBg,
+    '--tm-btn-border': palette.border,
+    '--tm-btn-text': palette.textSecondary,
+    '--tm-btn-muted': palette.muted,
+    '--tm-text': palette.text,
+    '--tm-accent': palette.warning,
+    '--tm-accent-bg': palette.warningBg,
+    '--tm-danger': palette.danger,
+    '--tm-danger-bg': palette.dangerBg,
+    '--tm-danger-border': palette.dangerBorder,
+    '--tm-panel-bg': palette.cardBg,
+    '--tm-panel-shadow': palette.floatingShadow,
+    '--tm-check-mark': palette.cardBg,
+    '--tm-scroll-thumb': palette.scrollThumb,
   };
 }

@@ -37,7 +37,7 @@ const toPickerValue = (value: string | null) => {
 function EditorFooter({ hint, palette, onAdd }: { hint: string; palette: TenderMonitorPalette; onAdd: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-      <button type="button" className="tm-modal-btn tm-modal-btn--small" onClick={onAdd}>
+      <button type="button" className="tm-btn tm-btn--small" onClick={onAdd}>
         <PlusOutlined aria-hidden />
         Добавить строку
       </button>
