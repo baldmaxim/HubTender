@@ -9,9 +9,7 @@ import {
   createWorkName,
   updateWorkName,
   deleteWorkName,
-  deleteWorkNamesIn,
-  remapBoqWorkName,
-  remapWorksLibraryWorkName,
+  mergeWorkNames,
   unitExists,
 } from '../../../../lib/api/nomenclatures';
 
@@ -184,12 +182,7 @@ export const useWorks = () => {
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
         try {
-          for (const { duplicateId, keeperId } of remapPairs) {
-            await remapBoqWorkName(duplicateId, keeperId);
-            await remapWorksLibraryWorkName(duplicateId, keeperId);
-          }
-
-          await deleteWorkNamesIn(remapPairs.map((p) => p.duplicateId));
+          await mergeWorkNames(remapPairs.map((p) => ({ from: p.duplicateId, to: p.keeperId })));
 
           message.success(`Удалено ${remapPairs.length} дублей`);
           await loadWorks();

@@ -112,6 +112,18 @@ export async function deleteMaterialNamesIn(ids: string[]): Promise<void> {
   });
 }
 
+// Слияние дублей одной транзакцией на сервере: ссылки ВОР/библиотеки
+// переводятся на оригинал, дубли удаляются. Без таймаута — запрос один, но
+// на больших справочниках дольше дефолтных 10 с.
+export async function mergeMaterialNames(pairs: Array<{ from: string; to: string }>): Promise<void> {
+  if (pairs.length === 0) return;
+  await apiFetch<undefined>('/api/v1/nomenclatures/material-names/merge', {
+    method: 'POST',
+    body: JSON.stringify({ pairs }),
+    timeoutMs: 0,
+  });
+}
+
 export async function remapBoqMaterialName(from: string, to: string): Promise<void> {
   await apiFetch<undefined>('/api/v1/nomenclatures/remap/boq-material', {
     method: 'POST',
@@ -175,6 +187,18 @@ export async function deleteWorkNamesIn(ids: string[]): Promise<void> {
   await apiFetch<undefined>('/api/v1/nomenclatures/work-names/delete-batch', {
     method: 'POST',
     body: JSON.stringify({ ids }),
+  });
+}
+
+// Слияние дублей одной транзакцией на сервере: ссылки ВОР/библиотеки
+// переводятся на оригинал, дубли удаляются. Без таймаута — запрос один, но
+// на больших справочниках дольше дефолтных 10 с.
+export async function mergeWorkNames(pairs: Array<{ from: string; to: string }>): Promise<void> {
+  if (pairs.length === 0) return;
+  await apiFetch<undefined>('/api/v1/nomenclatures/work-names/merge', {
+    method: 'POST',
+    body: JSON.stringify({ pairs }),
+    timeoutMs: 0,
   });
 }
 

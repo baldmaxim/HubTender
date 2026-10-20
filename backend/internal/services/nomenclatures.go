@@ -132,6 +132,21 @@ func (s *NomenclaturesService) DeleteWorkNamesIn(ctx context.Context, ids []stri
 	return nil
 }
 
+func (s *NomenclaturesService) MergeMaterialNames(ctx context.Context, userID string, pairs []repository.NamePair) error {
+	if err := s.repo.MergeMaterialNames(ctx, userID, pairs); err != nil {
+		return fmt.Errorf("nomenclaturesService.MergeMaterialNames: %w", err)
+	}
+	s.invalidate()
+	return nil
+}
+func (s *NomenclaturesService) MergeWorkNames(ctx context.Context, userID string, pairs []repository.NamePair) error {
+	if err := s.repo.MergeWorkNames(ctx, userID, pairs); err != nil {
+		return fmt.Errorf("nomenclaturesService.MergeWorkNames: %w", err)
+	}
+	s.invalidate()
+	return nil
+}
+
 func (s *NomenclaturesService) RemapBoqMaterialName(ctx context.Context, from, to string) error {
 	if err := s.repo.RemapBoqMaterialName(ctx, from, to); err != nil {
 		return fmt.Errorf("nomenclaturesService.RemapBoqMaterialName: %w", err)

@@ -159,7 +159,7 @@ func (r *NomenclaturesRepo) listAllNames(ctx context.Context, table string) ([]N
 			       to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 			       to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 			FROM %s
-			ORDER BY name
+			ORDER BY name, id
 			LIMIT $1 OFFSET $2
 		`, table), pageSize, from)
 		if err != nil {
@@ -323,4 +323,76 @@ func (r *NomenclaturesRepo) RemapBoqWorkName(ctx context.Context, from, to strin
 }
 func (r *NomenclaturesRepo) RemapWorksLibraryWorkName(ctx context.Context, from, to string) error {
 	return r.remap(ctx, tableLibWork, colWorkNameID, from, to)
+}
+
+// ─── Merge duplicates ──────────────────────────────────────────────────────
+
+// NamePair — дубль (From) и запись, на которую переводятся его ссылки (To).
+type NamePair struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// ErrInvalidNamePairs — пара без id, сама на себя, либо оригинал одной пары
+// значится дублем в другой (удалили бы запись, на которую только что сослались).
+var ErrInvalidNamePairs = errors.New("nomenclaturesRepo: invalid name pairs")
+
+// mergeNames переводит ссылки с дублей на оригиналы (ВОР, библиотека,
+// псевдонимы импорта) и удаляет дубли одной транзакцией. Раньше страница
+// делала это двумя запросами на каждую пару: сотни последовательных UPDATE
+// рвались по клиентскому таймауту и оставляли справочник наполовину слитым.
+func (r *NomenclaturesRepo) mergeNames(ctx context.Context, userID, table, libTable, col string, pairs []NamePair) error {
+	if len(pairs) == 0 {
+		return nil
+	}
+	from := make([]string, len(pairs))
+	to := make([]string, len(pairs))
+	dups := make(map[string]struct{}, len(pairs))
+	for i, p := range pairs {
+		if p.From == "" || p.To == "" || p.From == p.To {
+			return ErrInvalidNamePairs
+		}
+		from[i], to[i] = p.From, p.To
+		dups[p.From] = struct{}{}
+	}
+	for _, id := range to {
+		if _, isDup := dups[id]; isDup {
+			return ErrInvalidNamePairs
+		}
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("nomenclaturesRepo.mergeNames %s: begin: %w", table, err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if err := setAuditUser(ctx, tx, userID); err != nil {
+		return fmt.Errorf("nomenclaturesRepo.mergeNames %s: %w", table, err)
+	}
+	for _, ref := range []string{"public.boq_items", libTable, "public.nomenclature_import_aliases"} {
+		if _, err := tx.Exec(ctx, fmt.Sprintf(`
+			UPDATE %s t SET %s = p.keep
+			FROM unnest($1::uuid[], $2::uuid[]) AS p(dup, keep)
+			WHERE t.%s = p.dup
+		`, ref, col, col), from, to); err != nil {
+			return fmt.Errorf("nomenclaturesRepo.mergeNames %s: remap %s: %w", table, ref, err)
+		}
+	}
+	if _, err := tx.Exec(ctx, fmt.Sprintf(`
+		DELETE FROM %s WHERE id = ANY($1::uuid[])
+	`, table), from); err != nil {
+		return fmt.Errorf("nomenclaturesRepo.mergeNames %s: delete: %w", table, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("nomenclaturesRepo.mergeNames %s: commit: %w", table, err)
+	}
+	return nil
+}
+
+func (r *NomenclaturesRepo) MergeMaterialNames(ctx context.Context, userID string, pairs []NamePair) error {
+	return r.mergeNames(ctx, userID, tableMaterials, tableLibMat, colMatNameID, pairs)
+}
+func (r *NomenclaturesRepo) MergeWorkNames(ctx context.Context, userID string, pairs []NamePair) error {
+	return r.mergeNames(ctx, userID, tableWorks, tableLibWork, colWorkNameID, pairs)
 }

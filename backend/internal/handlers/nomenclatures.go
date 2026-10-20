@@ -3,9 +3,11 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/su10/hubtender/backend/internal/middleware"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/pkg/apierr"
 )
@@ -34,6 +36,8 @@ type nomenclaturesServicer interface {
 	RemapMaterialsLibraryMaterialName(ctx context.Context, from, to string) error
 	RemapBoqWorkName(ctx context.Context, from, to string) error
 	RemapWorksLibraryWorkName(ctx context.Context, from, to string) error
+	MergeMaterialNames(ctx context.Context, userID string, pairs []repository.NamePair) error
+	MergeWorkNames(ctx context.Context, userID string, pairs []repository.NamePair) error
 }
 
 // NomenclaturesHandler serves admin Nomenclatures + ConstructionCost endpoints.
@@ -421,4 +425,48 @@ func (h *NomenclaturesHandler) RemapLibraryWork(w http.ResponseWriter, r *http.R
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ─── Merge duplicates ──────────────────────────────────────────────────────
+
+type mergeNamesReq struct {
+	Pairs []repository.NamePair `json:"pairs"`
+}
+
+func (h *NomenclaturesHandler) mergeNames(
+	w http.ResponseWriter, r *http.Request,
+	merge func(ctx context.Context, userID string, pairs []repository.NamePair) error,
+	failMsg string,
+) {
+	authUser := middleware.UserFromContext(r.Context())
+	if authUser == nil {
+		apierr.Unauthorized("missing auth context").Render(w)
+		return
+	}
+	var req mergeNamesReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := merge(r.Context(), authUser.ID, req.Pairs); err != nil {
+		if errors.Is(err, repository.ErrInvalidNamePairs) {
+			apierr.BadRequest("Некорректный список дублей — обновите страницу и повторите").Render(w)
+			return
+		}
+		if p := apierr.ProblemFromPgErr(err, nil); p != nil {
+			p.Render(w)
+			return
+		}
+		apierr.InternalFromErr(w, r, err, failMsg)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *NomenclaturesHandler) MergeMaterialNames(w http.ResponseWriter, r *http.Request) {
+	h.mergeNames(w, r, h.svc.MergeMaterialNames, "failed to merge material names")
+}
+
+func (h *NomenclaturesHandler) MergeWorkNames(w http.ResponseWriter, r *http.Request) {
+	h.mergeNames(w, r, h.svc.MergeWorkNames, "failed to merge work names")
 }

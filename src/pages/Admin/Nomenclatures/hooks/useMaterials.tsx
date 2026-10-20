@@ -9,9 +9,7 @@ import {
   createMaterialName,
   updateMaterialName,
   deleteMaterialName,
-  deleteMaterialNamesIn,
-  remapBoqMaterialName,
-  remapMaterialsLibraryMaterialName,
+  mergeMaterialNames,
   unitExists,
 } from '../../../../lib/api/nomenclatures';
 
@@ -184,12 +182,7 @@ export const useMaterials = () => {
       rootClassName: theme === 'dark' ? 'dark-modal' : '',
       onOk: async () => {
         try {
-          for (const { duplicateId, keeperId } of remapPairs) {
-            await remapBoqMaterialName(duplicateId, keeperId);
-            await remapMaterialsLibraryMaterialName(duplicateId, keeperId);
-          }
-
-          await deleteMaterialNamesIn(remapPairs.map((p) => p.duplicateId));
+          await mergeMaterialNames(remapPairs.map((p) => ({ from: p.duplicateId, to: p.keeperId })));
 
           message.success(`Удалено ${remapPairs.length} дублей`);
           await loadMaterials();

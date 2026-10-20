@@ -355,6 +355,7 @@ func newRouter(
 		r.Patch("/api/v1/nomenclatures/material-names/{id}", d.nomenclaturesH.UpdateMaterialName)
 		r.Delete("/api/v1/nomenclatures/material-names/{id}", d.nomenclaturesH.DeleteMaterialName)
 		r.Post("/api/v1/nomenclatures/material-names/delete-batch", d.nomenclaturesH.DeleteMaterialNamesIn)
+		r.Post("/api/v1/nomenclatures/material-names/merge", d.nomenclaturesH.MergeMaterialNames)
 
 		r.Get("/api/v1/nomenclatures/work-names", d.nomenclaturesH.ListWorkNames)
 		r.Get("/api/v1/nomenclatures/work-names/by-unit", d.nomenclaturesH.ListWorkNamesByUnit)
@@ -362,6 +363,7 @@ func newRouter(
 		r.Patch("/api/v1/nomenclatures/work-names/{id}", d.nomenclaturesH.UpdateWorkName)
 		r.Delete("/api/v1/nomenclatures/work-names/{id}", d.nomenclaturesH.DeleteWorkName)
 		r.Post("/api/v1/nomenclatures/work-names/delete-batch", d.nomenclaturesH.DeleteWorkNamesIn)
+		r.Post("/api/v1/nomenclatures/work-names/merge", d.nomenclaturesH.MergeWorkNames)
 
 		r.Post("/api/v1/nomenclatures/remap/boq-material", d.nomenclaturesH.RemapBoqMaterial)
 		r.Post("/api/v1/nomenclatures/remap/library-material", d.nomenclaturesH.RemapLibraryMaterial)
