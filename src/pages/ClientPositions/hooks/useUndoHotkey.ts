@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
+import { useIsTabActive } from '../../../hooks/useIsTabActive';
 
 /**
- * Глобальный Ctrl/Cmd+Z, вызывающий переданный диспетчер отмены.
+ * Глобальный Ctrl/Cmd+Z, вызывающий переданный диспетчер отмены. Слушает только пока вкладка
+ * активна: скрытая keep-alive страница иначе откатывала бы свои шаги по Ctrl+Z на другой вкладке.
  * Диспетчер держим в ref, чтобы слушатель keydown вешался один раз и был стабильным,
  * но всегда вызывал свежую версию колбэка. Если диспетчер вернул true — отменяем
  * нативный undo (preventDefault). В полях ввода (INPUT/TEXTAREA/contentEditable)
@@ -10,8 +12,10 @@ import { useEffect, useRef } from 'react';
 export function useUndoHotkey(dispatch: () => boolean): void {
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
+  const active = useIsTabActive();
 
   useEffect(() => {
+    if (!active) return undefined;
     const onKeyDown = (e: KeyboardEvent) => {
       // e.code (физическая клавиша) — устойчиво к раскладке (RU/EN), в отличие от e.key.
       if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.code !== 'KeyZ') return;
@@ -23,5 +27,5 @@ export function useUndoHotkey(dispatch: () => boolean): void {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [active]);
 }

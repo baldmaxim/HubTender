@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Typography, Spin, Card, Tabs, Select, Button, Row, Col, Tag, Input, Drawer, Space, Popconfirm, message, Alert } from 'antd';
 import { formatFXUnavailable } from '../../utils/boq/currencyGuard';
 import { BarChartOutlined, TableOutlined, EditOutlined, CheckOutlined, CloseOutlined, FullscreenOutlined, ZoomInOutlined, ZoomOutOutlined, FallOutlined, FileTextOutlined } from '@ant-design/icons';
@@ -51,6 +52,7 @@ ChartJS.register(
 const { Title, Text } = Typography;
 
 const FinancialIndicators: React.FC = () => {
+  const navigate = useNavigate();
   const { theme: currentTheme } = useTheme();
   const { user } = useAuth();
   const { isPhone, isLandscapePhone, isPhoneDevice, isMobile, screens } = useIsMobile();
@@ -487,10 +489,10 @@ const FinancialIndicators: React.FC = () => {
                 children: (
                   <>
                     <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                      <Button size="small" onClick={() => { window.location.href = `/analytics/change-impact?tenderId=${selectedTenderId}`; }}>
+                      <Button size="small" onClick={() => navigate(`/analytics/change-impact?tenderId=${selectedTenderId}`)}>
                         Изменения расчёта →
                       </Button>
-                      <Button size="small" onClick={() => { window.location.href = `/analytics/review-pack?tenderId=${selectedTenderId}`; }}>
+                      <Button size="small" onClick={() => navigate(`/analytics/review-pack?tenderId=${selectedTenderId}`)}>
                         Скачать отчёт для проверки →
                       </Button>
                       {showFullscreenTable && (

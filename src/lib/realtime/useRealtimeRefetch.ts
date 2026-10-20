@@ -12,7 +12,7 @@
 //      edit forms mutate, while useBoqItems subscribes). Both sides reference
 //      the same topic string (`tender:<id>`), so the echo is suppressed.
 import { useCallback, useRef } from 'react';
-import { useRealtimeTopic, type RealtimeTopicHandler } from './useRealtimeTopic';
+import { useDeferWhileHidden, useRealtimeTopic, type RealtimeTopicHandler } from './useRealtimeTopic';
 import type { RealtimeEvent } from './ws';
 
 const DEFAULT_ECHO_MS = 1500;
@@ -68,6 +68,12 @@ export function useRealtimeRefetch(
   const { enabled = true, echoMs = DEFAULT_ECHO_MS, shouldRefetch, selfEchoOnly = false } = opts;
   const mutatedAtRef = useRef<number>(0);
 
+  // Hidden workspace tab: the echo / shouldRefetch filters run when an event ARRIVES, and only
+  // the refetch itself is deferred (once, on show). Deferring the whole handler would replay
+  // just the last event through the filters — it could be rejected by a filter that an earlier,
+  // relevant event had passed.
+  const deferredRefetch = useDeferWhileHidden(refetch);
+
   const active = useRealtimeTopic(
     topic,
     (event) => {
@@ -76,9 +82,10 @@ export function useRealtimeRefetch(
       // view's mutation can't suppress this subscription's refetch.
       if (!selfEchoOnly && topic && mutatedWithin(topic, echoMs)) return;
       if (shouldRefetch && !shouldRefetch(event)) return;
-      refetch(event);
+      deferredRefetch(event);
     },
     enabled,
+    { deferWhenHidden: false },
   );
 
   // Stable identity so callers can list it in dependency arrays without churn.

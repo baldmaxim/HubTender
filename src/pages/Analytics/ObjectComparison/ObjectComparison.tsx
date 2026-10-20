@@ -8,6 +8,7 @@ import type { ComparisonRow, CostType, ViewMode } from './types';
 import { exportComparisonToExcel } from './utils/exportComparisonToExcel';
 import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useIsTabActive } from '../../../hooks/useIsTabActive';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../../components/responsive/LandscapeTableOverlay';
 import { DiffCell, DiffPerUnitCell, NoteCell } from './components/comparisonCells';
@@ -170,8 +171,11 @@ const ObjectComparison: React.FC = () => {
   // Ландшафт телефона: страница скроллится, но карточка таблицы липкая — доскроллив,
   // пользователь получает таблицу на весь экран с закреплённой шапкой колонок.
   const pinTable = isLandscapePhone && !useOverlay;
+  // Замер размеров — только у активной вкладки: у скрытой (display:none) высоты нулевые, а при
+  // показе эффект перезапускается и измеряет заново.
+  const isTabActive = useIsTabActive();
   const { ref: tableWrapRef, scrollY: tableScrollY, availH: tableAvailH } = useTableScrollY(
-    !isPhone && !useOverlay,
+    !isPhone && !useOverlay && isTabActive,
     `${loadedCount}-${selectedTenders.length}-${effectiveViewMode}-${comparisonData.length}-${fxMissing.length}`,
     pinTable ? { pinned: true, minBody: 96 } : undefined,
   );

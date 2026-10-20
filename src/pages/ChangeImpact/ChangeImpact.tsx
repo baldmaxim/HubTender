@@ -385,7 +385,11 @@ export default function ChangeImpact() {
             {tenderId && detail.status !== 'REMOVED' && detail.status !== 'AMBIGUOUS_GROUP' && detail.current_item_id && (
               <Button type="primary" icon={<RightOutlined />} onClick={() => {
                 const nav = buildDiffItemNavigation(detail, tenderId);
-                if (nav) navigate(nav.url);
+                if (!nav) return;
+                // Drawer живёт в портале body: под keep-alive страница остаётся смонтированной
+                // скрытой вкладкой, и открытый drawer повис бы поверх страницы-цели.
+                setDetail(null);
+                navigate(nav.url);
               }}>
                 К текущей строке
               </Button>

@@ -18,7 +18,9 @@ import {
 } from '../../../lib/api/projects';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useWorkspaceTabActions } from '../../../contexts/WorkspaceTabsContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useTabKey } from '../../../hooks/useIsTabActive';
 import { ProjectSettings } from './components/ProjectSettings';
 import { MonthlyCompletion, type OptimisticCompletion } from './components/MonthlyCompletion';
 import { AdditionalAgreements } from './components/AdditionalAgreements';
@@ -83,6 +85,14 @@ const ProjectDetail: React.FC = () => {
   const [project, setProject] = useState<ProjectFull | null>(null);
   const [completionData, setCompletionData] = useState<ProjectCompletion[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Вкладки разных объектов различаются подписью: имя объекта вместо «Детали объекта».
+  const tabKey = useTabKey();
+  const { setTabTitle } = useWorkspaceTabActions();
+  const projectName = project?.name;
+  useEffect(() => {
+    if (tabKey && projectName) setTabTitle(tabKey, projectName);
+  }, [tabKey, projectName, setTabTitle]);
 
   // Единый рефреш: один проход за project + agreements + completion.
   // silent=true — без полноэкранного спиннера (карточка и таблица не размонтируются).

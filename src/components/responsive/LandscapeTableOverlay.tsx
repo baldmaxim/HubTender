@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useFitScale } from '../../hooks/useFitScale';
+import { useIsTabActive } from '../../hooks/useIsTabActive';
 
 interface LandscapeTableOverlayProps {
   /** 'light' | 'dark' — фон оверлея, чтобы страница не просвечивала. */
@@ -57,8 +58,12 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
   const [availW, setAvailW] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth : width,
   );
+  // Страница на скрытой keep-alive вкладке ресайз не слушает (иначе перерисовывалась бы
+  // таблица невидимой страницы); при показе ширина берётся заново — окно могли повернуть.
+  const isTabActive = useIsTabActive();
   useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
+    if (typeof window === 'undefined' || !isTabActive) return undefined;
+    setAvailW(window.innerWidth);
     // Поворот шлёт пачку resize-событий — коалесим в один кадр (rAF), один setState.
     let frame = 0;
     const apply = () => {
@@ -76,7 +81,7 @@ export const LandscapeTableOverlay: React.FC<LandscapeTableOverlayProps> = ({
       window.removeEventListener('resize', onChange);
       window.removeEventListener('orientationchange', onChange);
     };
-  }, []);
+  }, [isTabActive]);
 
   if (fit === 'zoom') {
     const PAD = 4;

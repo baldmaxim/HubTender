@@ -21,6 +21,7 @@ import { isWorkspacePath } from './workspacePages';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { LogoIcon } from '../Icons';
 import { IconSwap } from '../transitions';
 import { type Notification } from '../../lib/types';
@@ -225,6 +226,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   const [telegramOpen, setTelegramOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { resolveTabPath } = useWorkspaceTabActions();
 
   // Название текущей страницы для шапки (на телефонах). /path → PAGE_LABELS,
   // c учётом параметрических роутов (паттерн как в hasPageAccess).
@@ -291,7 +293,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     // (клик колесом обрабатывается браузером нативно через Link)
     if (e.domEvent && 'button' in e.domEvent && !e.domEvent.button) {
       e.domEvent.preventDefault();
-      navigate(e.key);
+      // Открытая страница возвращается на свой последний URL (с query: ?tenderId=…)
+      navigate(resolveTabPath(e.key));
       // В оверлее (телефон) сворачиваем — иначе выбранная страница остаётся под затемнением.
       // В push-режиме меню — часть интерфейса и остаётся таким, каким его оставил пользователь.
       if (isMenuOverlay) toggleSidebar(true, false);
@@ -563,11 +566,10 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
             overflow: 'auto',
           }}
         >
-          {/* «Рабочий стол» (Позиции / Форма КП / Затраты / Элементы позиции) рендерится через
-              keep-alive контейнер (открытые страницы смонтированы одновременно), остальные роуты —
-              обычный Outlet. Suspense — граница для lazy-страниц из App.tsx: при навигации
-              react-router v7 держит старый экран (startTransition), фолбэк виден только
-              на прямой загрузке URL. */}
+          {/* Все страницы приложения рендерятся через keep-alive контейнер (открытые страницы
+              смонтированы одновременно, у каждой свой Suspense для lazy-чанка). Он смонтирован
+              всегда; Outlet нужен только путям вне реестра (редиректы) — иначе переходный рендер
+              снёс бы все вкладки. */}
           <Suspense
             fallback={
               <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 80 }}>
@@ -575,7 +577,8 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               </div>
             }
           >
-            {isWorkspacePath(location.pathname) ? <WorkspaceKeepAlive /> : <Outlet />}
+            <WorkspaceKeepAlive />
+            {!isWorkspacePath(location.pathname) && <Outlet />}
           </Suspense>
         </Content>
       </Layout>

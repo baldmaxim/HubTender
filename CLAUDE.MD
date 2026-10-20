@@ -65,6 +65,8 @@ ThemeProvider → AuthProvider → ConfigProvider (Ant Design) → AntApp → Ro
 ### Структура роутинга
 Все аутентифицированные маршруты обёрнуты в `<ProtectedRoute>` внутри `<MainLayout>`. Маршруты определены в `src/App.tsx`. Публичные маршруты: `/login`, `/register`, `/forgot-password`, `/reset-password`. Боковое меню в MainLayout фильтруется через `hasPageAccess()` по полю `allowed_pages` пользователя.
 
+**Страницы = вкладки.** Страницы приложения перечислены в реестре `WORKSPACE_PAGES` (`src/components/Layout/workspacePages.ts`: путь, подпись, компонент — lazy-чанк; новая страница = запись в реестре, роуты в `App.tsx` строятся из него). Каждая открытая страница — закрываемая вкладка в шапке (`WorkspaceKeepAlive` + `TabHost`, список вкладок — `WorkspaceTabsContext` в sessionStorage): неактивные скрыты `display:none` и сохраняют состояние, закрытие размонтирует. У скрытой вкладки router-контексты заморожены (нет перерисовок на навигацию и чужого URL), активность — `useIsTabActive()`, а не сравнение `pathname`; realtime скрытой вкладки откладывается до показа (`useRealtimeTopic`). Страницы, читающие `?tenderId` при монтировании, помечены `identityParam`: ссылка с другим значением пересоздаёт уже открытую вкладку.
+
 ### Аутентификация и контроль доступа
 - **AuthContext** (`src/contexts/AuthContext.tsx`): хук `useAuth()` даёт `user`, `loading`, `signOut`, `refreshUser`
 - **App-auth client** (`src/lib/auth/client.ts`): POST `/api/v1/auth/login` → RS256 JWT от Go BFF, refresh-token rotation, cross-tab Web Locks sync, `onAuthStateChange` event bus

@@ -1,5 +1,15 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
-import { WORKSPACE_PAGES } from '../components/Layout/workspacePages';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  ReactNode,
+} from 'react';
+import { pathnameOf, resolveWorkspacePage } from '../components/Layout/workspacePages';
 import {
   type WorkspaceTab,
   buildPositionTabPath,
@@ -11,9 +21,13 @@ export type { WorkspaceTab, WorkspacePageTab, WorkspacePositionTab } from '../li
 
 /** Стабильные действия над вкладками (без меняющегося списка tabs). */
 export interface WorkspaceTabsActions {
-  /** Открыть/сфокусировать вкладку-якорь по её path из WORKSPACE_PAGES. Дедуп по path,
-   *  title всегда берётся из реестра. No-op на неизвестном path. */
-  openPageTab: (path: string) => void;
+  /** Открыть вкладку страницы реестра по URL (pathname + search) либо обновить сохранённый URL
+   *  уже открытой вкладки. Дедуп по key (pathname страницы), title берётся из реестра.
+   *  Провайдер НЕ навигирует. No-op на пути вне реестра. */
+  openPageTab: (url: string) => void;
+  /** URL, на который вести при клике по вкладке/пункту меню: последний URL открытой страницы
+   *  (с query) либо сам key, если вкладки нет. Стабилен — читает актуальный список по ref. */
+  resolveTabPath: (key: string) => string;
   /**
    * Открыть/сфокусировать вкладку позиции (дедуп по positionId). Провайдер НЕ навигирует —
    * навигация остаётся на call-site/панели вкладок (URL = источник истины для активной вкладки).
@@ -52,14 +66,30 @@ export const WorkspaceTabsProvider: React.FC<WorkspaceTabsProviderProps> = ({ ch
     writeWorkspaceTabs(tabs);
   }, [tabs]);
 
-  const openPageTab = useCallback((path: string) => {
-    const page = WORKSPACE_PAGES.find((p) => p.path === path);
-    if (!page) return;
+  // Актуальный список для стабильных геттеров (resolveTabPath читают из обработчиков событий).
+  const tabsRef = useRef(tabs);
+  useLayoutEffect(() => {
+    tabsRef.current = tabs;
+  });
+
+  const openPageTab = useCallback((url: string) => {
+    const resolved = resolveWorkspacePage(pathnameOf(url));
+    if (!resolved) return;
+    const { page, key } = resolved;
     setTabs((prev) => {
-      if (prev.some((t) => t.key === path)) return prev;
-      return [...prev, { key: path, kind: 'page', title: page.title, path: page.path }];
+      const idx = prev.findIndex((t) => t.key === key);
+      if (idx === -1) return [...prev, { key, kind: 'page', title: page.title, path: url }];
+      if (prev[idx].path === url) return prev;
+      const next = [...prev];
+      next[idx] = { ...prev[idx], path: url };
+      return next;
     });
   }, []);
+
+  const resolveTabPath = useCallback(
+    (key: string) => tabsRef.current.find((t) => t.key === key && t.kind === 'page')?.path ?? key,
+    [],
+  );
 
   // opts (background) не влияет на стейт — навигацию решает caller; параметр опускаем.
   const openPositionTab = useCallback(
@@ -113,8 +143,8 @@ export const WorkspaceTabsProvider: React.FC<WorkspaceTabsProviderProps> = ({ ch
   }, []);
 
   const actions = useMemo<WorkspaceTabsActions>(
-    () => ({ openPageTab, openPositionTab, closeTab, setTabTitle }),
-    [openPageTab, openPositionTab, closeTab, setTabTitle],
+    () => ({ openPageTab, resolveTabPath, openPositionTab, closeTab, setTabTitle }),
+    [openPageTab, resolveTabPath, openPositionTab, closeTab, setTabTitle],
   );
 
   return (

@@ -103,14 +103,11 @@ export const useTendersData = () => {
   // row payload — we just refetch the list on any tenders event. The broker's
   // 200ms debounce collapses bulk mutations.
   // Native WS hub broadcasts to the global `tenders` topic on any row
-  // change. DELETE strips the row in-place; everything else triggers a
-  // refetch (the broker debounces bulk mutations 200 ms).
-  useRealtimeTopic('tenders', (ev) => {
-    if (ev.op === 'DELETE') {
-      setTendersData((prev) => prev.filter((t) => t.id !== ev.id));
-    } else {
-      void fetchTenders();
-    }
+  // change. Every event (DELETE included) triggers a refetch (the broker
+  // debounces bulk mutations 200 ms): on a hidden workspace tab only the last
+  // event is replayed, so an in-place DELETE strip would lose earlier changes.
+  useRealtimeTopic('tenders', () => {
+    void fetchTenders();
   });
 
   useEffect(() => {

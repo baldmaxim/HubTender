@@ -1,20 +1,21 @@
-import React, { useMemo } from 'react';
+import React, { startTransition } from 'react';
 import { ConfigProvider, Tabs, theme } from 'antd';
 import type { TabsProps } from 'antd';
-import { useNavigate, useMatch, useLocation } from 'react-router-dom';
-import { useWorkspaceTabs, type WorkspaceTab } from '../../contexts/WorkspaceTabsContext';
-import { WORKSPACE_PAGES } from './workspacePages';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useWorkspaceTabs } from '../../contexts/WorkspaceTabsContext';
+import { resolveTabKey } from './workspacePages';
 import { PAGE_LABELS } from '../../lib/types/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 /**
- * Панель вкладок «рабочего стола»: по вкладке на каждую открытую страницу-якорь
- * + по вкладке на каждую открытую позицию — все закрываемые, симметрично.
- * activeKey выводится ИЗ URL (источник истины). Рендерится в ШАПКЕ MainLayout
- * (через HeaderTitleOrTabs) на workspace-роутах — вместо названия страницы.
- * Подписи page-вкладок берутся из PAGE_LABELS в рендере (а не из хранимого title),
- * поэтому протухшие записи sessionStorage не влияют на отображение.
+ * Панель вкладок «рабочего стола»: по вкладке на каждую открытую страницу приложения
+ * + по вкладке на каждую открытую позицию — все закрываемые (кроме единственной), в порядке
+ * открытия. activeKey выводится ИЗ URL (источник истины). Рендерится в ШАПКЕ MainLayout
+ * (через HeaderTitleOrTabs) на всех страницах — вместо названия страницы.
+ * Подписи статических page-вкладок берутся из PAGE_LABELS в рендере (а не из хранимого title),
+ * поэтому протухшие записи sessionStorage не влияют на отображение; у параметризованных
+ * страниц (объект) подпись — сохранённый title (имя объекта).
  */
 const WorkspaceTabsBar: React.FC = () => {
   const { tabs, closeTab } = useWorkspaceTabs();
@@ -23,28 +24,18 @@ const WorkspaceTabsBar: React.FC = () => {
   const { theme: currentTheme } = useTheme();
   const { token } = theme.useToken();
   const { isPhoneDevice } = useIsMobile();
-  const match = useMatch('/positions/:positionId/items');
-  const currentPositionId = match?.params.positionId;
-
-  // Порядок отображения (не влияет на порядок хранения): якоря — в порядке реестра,
-  // затем позиции — в порядке открытия.
-  const ordered = useMemo(() => {
-    const pages = tabs
-      .filter((t): t is Extract<WorkspaceTab, { kind: 'page' }> => t.kind === 'page')
-      .sort((a, b) => WORKSPACE_PAGES.findIndex((p) => p.path === a.key) - WORKSPACE_PAGES.findIndex((p) => p.path === b.key));
-    const positions = tabs.filter((t) => t.kind === 'position');
-    return [...pages, ...positions];
-  }, [tabs]);
 
   // Пока нет ни одной открытой вкладки — панель не показываем.
-  if (ordered.length === 0) return null;
+  if (tabs.length === 0) return null;
 
-  const activeKey = currentPositionId ?? location.pathname;
+  // '' (а не undefined) на путях без вкладки: с undefined Tabs неуправляемый и подсветил бы первую.
+  const activeKey = resolveTabKey(location.pathname) ?? '';
 
-  const items: TabsProps['items'] = ordered.map((t) => ({
+  const items: TabsProps['items'] = tabs.map((t) => ({
     key: t.key,
     label: t.kind === 'page' ? (PAGE_LABELS[t.key] ?? t.title) : t.title,
-    closable: true,
+    // Последнюю вкладку не закрываем: пустая панель = пустая страница.
+    closable: tabs.length > 1,
   }));
 
   const onChange = (key: string) => {
@@ -54,17 +45,17 @@ const WorkspaceTabsBar: React.FC = () => {
 
   const onEdit: TabsProps['onEdit'] = (targetKey, action) => {
     if (action !== 'remove' || typeof targetKey !== 'string') return;
-    const wasActive = targetKey === activeKey;
-    // Навигируем ДО закрытия: уводим URL с закрываемой вкладки прежде, чем она исчезнет из
-    // tabs, чтобы не оставить промежуточный рендер «URL = закрытая вкладка, но её уже нет в
-    // tabs» (на нём deep-link эффект вернул бы вкладку).
-    if (wasActive) {
-      const idx = ordered.findIndex((t) => t.key === targetKey);
-      const remaining = ordered.filter((t) => t.key !== targetKey);
+    // Закрытие активной: уводим URL на соседнюю вкладку и убираем закрываемую В ОДНОМ коммите —
+    // navigate у react-router идёт через startTransition, а голый closeTab (срочное обновление)
+    // закоммитился бы первым, пока URL ещё на закрываемой вкладке (пустой кадр, а при lazy-чанке
+    // соседней — пустой экран до его загрузки). replace: «Назад» не должно возвращать закрытую.
+    if (targetKey === activeKey) {
+      const idx = tabs.findIndex((t) => t.key === targetKey);
+      const remaining = tabs.filter((t) => t.key !== targetKey);
       const next = remaining[idx - 1] ?? remaining[idx] ?? null;
-      navigate(next ? next.path : '/dashboard');
+      navigate(next ? next.path : '/dashboard', { replace: true });
     }
-    closeTab(targetKey);
+    startTransition(() => closeTab(targetKey));
   };
 
   return (

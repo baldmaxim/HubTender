@@ -5,7 +5,7 @@
 import { Card, Spin, Empty, Alert, message } from 'antd';
 import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { missingFXMessage } from '../../utils/boq/currencyGuard';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { buildPositionTabPath } from '../../lib/cache/workspaceTabsStorage';
 import { setRow as seedPositionRow } from '../../lib/cache/positionRowCache';
@@ -16,6 +16,7 @@ import { exportCommerceToExcel } from './utils/exportToExcel';
 import { resolveFinancialCalculationState, LAST_CALCULATED_TOTAL_LABEL } from '../../lib/financial/calculationState';
 import { computeCommerceTotals } from './utils/computeCommerceTotals';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useIsTabActive } from '../../hooks/useIsTabActive';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
 
@@ -25,11 +26,10 @@ export default function Commerce() {
   // чтобы обработчик оставался стабильным пропом для мемоизированного CommerceCards.
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
-  const location = useLocation();
-  // Под keep-alive страница остаётся смонтированной, когда открыта вкладка позиции
-  // (WorkspaceKeepAlive скрывает через display:none, а не размонтирует). URL — источник
-  // истины активной вкладки; Commerce рендерится только на этом якоре.
-  const isTabActive = location.pathname === '/commerce/proposal';
+  // Под keep-alive страница остаётся смонтированной, когда открыта другая вкладка
+  // (WorkspaceKeepAlive скрывает через display:none, а не размонтирует). По pathname активность
+  // не определить: у скрытой вкладки router-контекст заморожен (TabHost) и показывает её же путь.
+  const isTabActive = useIsTabActive();
   const { openPositionTab } = useWorkspaceTabActions();
   const { isPhone, isLandscapePhone } = useIsMobile();
   const { theme: currentTheme } = useTheme();
