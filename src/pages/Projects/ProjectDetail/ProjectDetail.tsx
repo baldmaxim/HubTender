@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { startTransition, useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -20,7 +20,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useWorkspaceTabActions } from '../../../contexts/WorkspaceTabsContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
-import { useTabKey } from '../../../hooks/useIsTabActive';
+import { useIsTabActive, useTabKey } from '../../../hooks/useIsTabActive';
 import { ProjectSettings } from './components/ProjectSettings';
 import { MonthlyCompletion, type OptimisticCompletion } from './components/MonthlyCompletion';
 import { AdditionalAgreements } from './components/AdditionalAgreements';
@@ -88,7 +88,10 @@ const ProjectDetail: React.FC = () => {
 
   // Вкладки разных объектов различаются подписью: имя объекта вместо «Детали объекта».
   const tabKey = useTabKey();
-  const { setTabTitle } = useWorkspaceTabActions();
+  const { setTabTitle, closeTab } = useWorkspaceTabActions();
+  const isTabActive = useIsTabActive();
+  const isTabActiveRef = useRef(isTabActive);
+  isTabActiveRef.current = isTabActive;
   const projectName = project?.name;
   useEffect(() => {
     if (tabKey && projectName) setTabTitle(tabKey, projectName);
@@ -123,12 +126,17 @@ const ProjectDetail: React.FC = () => {
       } catch (error) {
         console.error('Error loading project:', error);
         message.error('Ошибка загрузки объекта');
-        if (!opts?.silent) navigate('/projects');
+        if (!opts?.silent) {
+          // Объект удалён/недоступен: вкладка бесполезна (после F5 она падала бы снова) — закрываем.
+          // На список уходим, только если вкладка активна: скрытая не должна менять адрес.
+          if (isTabActiveRef.current) navigate('/projects', { replace: true });
+          if (tabKey) startTransition(() => closeTab(tabKey));
+        }
       } finally {
         if (!opts?.silent) setLoading(false);
       }
     },
-    [projectId, navigate],
+    [projectId, navigate, tabKey, closeTab],
   );
 
   // Оптимистично отразить сохранённые строки сразу, до фоновой сверки.

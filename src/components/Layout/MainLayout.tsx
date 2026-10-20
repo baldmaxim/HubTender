@@ -87,7 +87,10 @@ const renderMenuItem = (item: MenuItem) => {
   const key = mi.key != null ? String(mi.key) : undefined;
   const label = (mi as { label?: React.ReactNode }).label;
   if (key && key.startsWith('/')) {
-    return <Link to={key}>{label}</Link>;
+    // Левый клик ведёт handleMenuClick (на последний URL вкладки): без preventDefault Link сделал бы
+    // второй переход — на «голый» путь — и лишнюю запись истории. Колесо/модификаторы — нативно.
+    const isPlainClick = (e: React.MouseEvent) => e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
+    return <Link to={key} onClick={(e) => isPlainClick(e) && e.preventDefault()}>{label}</Link>;
   }
   return label;
 };

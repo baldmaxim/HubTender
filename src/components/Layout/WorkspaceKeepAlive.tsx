@@ -54,7 +54,8 @@ const TabSlot = memo(({ tab, active, deepLinkItemId }: TabSlotProps) => {
 });
 
 interface Instance {
-  /** Счётчик пересозданий страницы — часть React key слота. */
+  /** Уникальный номер экземпляра страницы (растёт при каждом создании/пересоздании) — часть React
+   *  key слота и ключ прокрутки: закрытая и снова открытая вкладка не наследует чужую прокрутку. */
   rev: number;
   /** Последнее известное значение identityParam страницы (tenderId), '' — не задано. */
   identity: string;
@@ -68,6 +69,8 @@ interface KeepAliveState {
   pending: ReadonlySet<string>;
   /** Смонтированные вкладки (key → экземпляр). */
   instances: Record<string, Instance>;
+  /** Следующий номер экземпляра (счётчик в state, а не в модуле: derive чистая). */
+  nextRev: number;
 }
 
 interface DeriveInput {
@@ -86,34 +89,38 @@ interface DeriveInput {
  *  - закрытые вкладки уходят; активная, а также созданные в сессии (в т.ч. фоновая вкладка
  *    позиции) монтируются сразу; восстановленные из sessionStorage ждут первого показа;
  *  - приход из ДРУГОЙ вкладки по ссылке с другим identity (tenderId): страница читает его один
- *    раз при монтировании, поэтому пересоздаём (rev+1). Пустой identity (клик по вкладке/меню),
- *    тот же identity и вкладки позиций — просто показ;
- *  - внутри вкладки identity только обновляется (страница сама сменила тендер).
+ *    раз при монтировании, поэтому пересоздаём (новый rev). Пустой identity (клик по вкладке/меню,
+ *    редирект), тот же identity и вкладки позиций — просто показ;
+ *  - внутри вкладки (навигация без смены вкладки) identity обновляется, только если страница сама
+ *    сменила тендер — непустой другой параметр. Пустой не затирает: «страница сбросила тендер» от
+ *    «вернулись по вкладке без query» не отличить. Смена одного лишь списка вкладок (upsert URL
+ *    сразу после прихода) identity не трогает.
  */
 const deriveInstances = (prev: KeepAliveState, { tabs, locKey, activeKey, identity }: DeriveInput): KeepAliveState => {
   const instances: Record<string, Instance> = {};
   const pending = new Set<string>();
+  let nextRev = prev.nextRev;
   for (const tab of tabs) {
     const existing = prev.instances[tab.key];
     if (existing) {
       instances[tab.key] = existing;
     } else if (tab.key === activeKey || !prev.pending.has(tab.key)) {
-      instances[tab.key] = { rev: 0, identity: tab.key === activeKey ? identity : '' };
+      instances[tab.key] = { rev: nextRev++, identity: tab.key === activeKey ? identity : '' };
     } else {
       pending.add(tab.key);
     }
   }
 
   const before = activeKey ? prev.instances[activeKey] : undefined;
-  if (activeKey && before && instances[activeKey] === before) {
+  if (activeKey && before && instances[activeKey] === before && identity && before.identity !== identity) {
     if (prev.activeKey !== activeKey) {
-      if (identity && before.identity !== identity) instances[activeKey] = { rev: before.rev + 1, identity };
-    } else if (before.identity !== identity) {
+      instances[activeKey] = { rev: nextRev++, identity };
+    } else if (prev.locKey !== locKey) {
       instances[activeKey] = { ...before, identity };
     }
   }
 
-  return { tabs, locKey, activeKey, pending, instances };
+  return { tabs, locKey, activeKey, pending, instances, nextRev };
 };
 
 /**
@@ -138,7 +145,7 @@ const WorkspaceKeepAlive: React.FC = () => {
 
   const [state, setState] = useState(() =>
     deriveInstances(
-      { tabs: [], locKey: '', activeKey: null, pending: new Set(tabs.map((t) => t.key)), instances: {} },
+      { tabs: [], locKey: '', activeKey: null, pending: new Set(tabs.map((t) => t.key)), instances: {}, nextRev: 0 },
       { tabs, locKey: location.key, activeKey, identity },
     ),
   );

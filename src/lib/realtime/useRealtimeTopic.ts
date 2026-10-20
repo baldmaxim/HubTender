@@ -61,8 +61,14 @@ export function useDeferWhileHidden<T>(fn: (event: T) => void): (event: T) => vo
   }, [active]);
 
   return useCallback((event: T) => {
-    if (activeRef.current) runAsRealtime(() => fnRef.current(event));
-    else pendingRef.current = { event };
+    if (activeRef.current) {
+      // A live event supersedes the deferred one (it can arrive between the layout and the
+      // passive effect of the show): otherwise the stale replay would run a second time.
+      pendingRef.current = null;
+      runAsRealtime(() => fnRef.current(event));
+    } else {
+      pendingRef.current = { event };
+    }
   }, []);
 }
 
