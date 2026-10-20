@@ -254,3 +254,116 @@
     height: calc(100dvh - 64px - env(safe-area-inset-top) - 16px);
   }
 }
+
+/* ── Окно тендера: кнопки в стиле кнопок страницы (сортировка, «Позвонить» на карточке) ──
+   Цвета — переменные --tm-btn-*, --tm-accent*, --tm-danger* из палитры (TenderMonitorModal). */
+.tm-modal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--tm-btn-border);
+  background: var(--tm-btn-bg);
+  color: var(--tm-btn-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+
+.tm-modal-btn:focus-visible {
+  outline: 2px solid var(--tm-accent);
+  outline-offset: 2px;
+}
+
+.tm-modal-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Основное действие — золотой акцент окна, как активная вкладка и сортировка. */
+.tm-modal-btn--accent {
+  border-color: var(--tm-accent);
+  background: var(--tm-accent-bg);
+  color: var(--tm-accent);
+}
+
+.tm-modal-btn--danger {
+  border-color: var(--tm-danger-border);
+  background: var(--tm-danger-bg);
+  color: var(--tm-danger);
+}
+
+.tm-modal-btn--small {
+  min-height: 26px;
+  padding: 0 10px;
+  font-weight: 500;
+}
+
+/* Только иконка (закрыть окно). */
+.tm-modal-btn--icon {
+  width: 30px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--tm-btn-muted);
+  font-size: 14px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tm-modal-btn:hover:not(:disabled) {
+    border-color: var(--tm-accent);
+    color: var(--tm-accent);
+  }
+
+  /* Акцент при наведении — заливка вдвое плотнее (тот же полупрозрачный тон поверх). */
+  .tm-modal-btn--accent:hover:not(:disabled) {
+    box-shadow: inset 0 0 0 999px var(--tm-accent-bg);
+  }
+
+  .tm-modal-btn--danger:hover:not(:disabled) {
+    border-color: var(--tm-danger);
+    color: var(--tm-danger);
+  }
+
+  .tm-modal-btn--icon:hover:not(:disabled) {
+    border-color: transparent;
+  }
+}
+
+/* Сенсорные экраны: тап-цель не меньше 44px. */
+@media (pointer: coarse) {
+  .tm-modal-btn {
+    min-height: 44px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+
+  .tm-modal-btn--icon {
+    width: 44px;
+    padding: 0;
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-modal-btn {
+    transition: none;
+  }
+}
+
+/* Скрытая вкладка окна тендера: переходы antd (transition: all) задерживали бы visibility: hidden. */
+.tm-modal-panel--inactive,
+.tm-modal-panel--inactive * {
+  transition: none !important;
+}

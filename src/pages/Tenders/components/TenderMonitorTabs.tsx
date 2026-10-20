@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, DatePicker, Input, Select, Tag, Typography } from 'antd';
+import { DatePicker, Input, Select, Tag, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { ChronologyItem, TenderPackageItem } from '../../../lib/types';
@@ -37,9 +37,10 @@ const toPickerValue = (value: string | null) => {
 function EditorFooter({ hint, palette, onAdd }: { hint: string; palette: TenderMonitorPalette; onAdd: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-      <Button size="small" icon={<PlusOutlined />} onClick={onAdd}>
+      <button type="button" className="tm-modal-btn tm-modal-btn--small" onClick={onAdd}>
+        <PlusOutlined aria-hidden />
         Добавить строку
-      </Button>
+      </button>
       <Text style={{ color: palette.muted, fontSize: 11 }}>{hint}</Text>
     </div>
   );

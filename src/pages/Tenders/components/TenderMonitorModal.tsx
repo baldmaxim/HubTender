@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, ConfigProvider, Modal, Space, Tag, Typography } from 'antd';
-import { CloseOutlined, EditOutlined, PhoneOutlined, SaveOutlined } from '@ant-design/icons';
+import { ConfigProvider, Modal, Space, Tag, Typography } from 'antd';
+import { CloseOutlined, EditOutlined, LoadingOutlined, PhoneOutlined, SaveOutlined } from '@ant-design/icons';
 import type {
   ConstructionScope,
   TenderRegistryWithRelations,
@@ -32,7 +32,7 @@ const { Text } = Typography;
 
 type ModalTab = 'info' | 'timeline' | 'package';
 
-// iPad и другие сенсорные экраны: крупные кнопки и поля (шрифт полей 16px — Safari не зумит форму).
+// iPad и другие сенсорные экраны: крупные поля (шрифт 16px — Safari не зумит форму); кнопки окна увеличивает CSS.
 const isCoarsePointer = () =>
   typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 
@@ -100,7 +100,6 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
   const statusStyle = getStatusBadgeStyle(dashboardStatus);
   const canQuickCall = shouldShowCallAction(tender);
   const coarsePointer = isCoarsePointer();
-  const actionSize = coarsePointer ? 'large' : 'small';
 
   const scopeOptions = constructionScopes.map((scope) => ({
     value: scope.id,
@@ -135,6 +134,9 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
   };
   const submit = () => void handleSave();
 
+  // Скрытая вкладка — без CSS-переходов: у antd-полей transition: all, и visibility: hidden
+  // иначе срабатывает через 0,2 с — поля прошлой вкладки мелькают поверх новой.
+  const panelClassName = (tab: ModalTab) => (activeTab === tab ? undefined : 'tm-modal-panel--inactive');
   const panelStyle = (tab: ModalTab): React.CSSProperties => ({
     gridArea: '1 / 1',
     minWidth: 0,
@@ -169,7 +171,24 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
         },
       }}
     >
-      <div style={{ padding: '18px 18px 14px', borderRight: `3px solid ${palette.warning}` }}>
+      <div
+        style={
+          {
+            padding: '18px 18px 14px',
+            borderRight: `3px solid ${palette.warning}`,
+            // Кнопки окна (.tm-modal-btn) — как кнопки страницы: фон секции, тонкая рамка, золотой акцент.
+            '--tm-btn-bg': palette.sectionBg,
+            '--tm-btn-border': palette.border,
+            '--tm-btn-text': palette.textSecondary,
+            '--tm-btn-muted': palette.muted,
+            '--tm-accent': palette.warning,
+            '--tm-accent-bg': palette.warningBg,
+            '--tm-danger': palette.danger,
+            '--tm-danger-bg': palette.dangerBg,
+            '--tm-danger-border': palette.dangerBorder,
+          } as React.CSSProperties
+        }
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -196,35 +215,39 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
           <Space size={6}>
             {editing ? (
               <>
-                <Button size={actionSize} onClick={cancelEdit} disabled={edit.saving}>
+                <button type="button" className="tm-modal-btn" onClick={cancelEdit} disabled={edit.saving}>
                   Отмена
-                </Button>
-                <Button type="primary" size={actionSize} icon={<SaveOutlined />} loading={edit.saving} onClick={submit}>
+                </button>
+                <button
+                  type="button"
+                  className="tm-modal-btn tm-modal-btn--accent"
+                  onClick={submit}
+                  disabled={edit.saving}
+                  aria-busy={edit.saving || undefined}
+                >
+                  {edit.saving ? <LoadingOutlined aria-hidden /> : <SaveOutlined aria-hidden />}
                   Сохранить
-                </Button>
+                </button>
               </>
             ) : (
               <>
                 {canQuickCall && onQuickCall && !readOnly ? (
-                  <Button type="primary" danger icon={<PhoneOutlined />} size={actionSize} onClick={() => void onQuickCall(tender)}>
+                  <button type="button" className="tm-modal-btn tm-modal-btn--danger" onClick={() => void onQuickCall(tender)}>
+                    <PhoneOutlined aria-hidden />
                     Позвонить
-                  </Button>
+                  </button>
                 ) : null}
                 {!readOnly ? (
-                  <Button size={actionSize} icon={<EditOutlined />} onClick={startEdit}>
+                  <button type="button" className="tm-modal-btn" onClick={startEdit}>
+                    <EditOutlined aria-hidden />
                     Редактировать
-                  </Button>
+                  </button>
                 ) : null}
               </>
             )}
-            <Button
-              type="text"
-              icon={<CloseOutlined />}
-              size={actionSize}
-              onClick={handleClose}
-              aria-label="Закрыть"
-              style={{ color: palette.muted }}
-            />
+            <button type="button" className="tm-modal-btn tm-modal-btn--icon" onClick={handleClose} aria-label="Закрыть">
+              <CloseOutlined aria-hidden />
+            </button>
           </Space>
         </div>
 
@@ -267,7 +290,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
               className={animateMode ? 'tm-view-enter' : undefined}
               style={{ display: 'grid', gridTemplateColumns: '1fr', alignItems: 'start' }}
             >
-              <div style={panelStyle('info')}>
+              <div className={panelClassName('info')} style={panelStyle('info')}>
                 <TenderMonitorInfo
                   tender={tender}
                   palette={palette}
@@ -280,7 +303,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 />
               </div>
 
-              <div style={panelStyle('timeline')}>
+              <div className={panelClassName('timeline')} style={panelStyle('timeline')}>
                 {draft ? (
                   <ChronologyEditor rows={draft.chronology} palette={palette} onChange={edit.updateChronology} onSubmit={submit} />
                 ) : (
@@ -288,7 +311,7 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
                 )}
               </div>
 
-              <div style={panelStyle('package')}>
+              <div className={panelClassName('package')} style={panelStyle('package')}>
                 {draft ? (
                   <PackageEditor rows={draft.packageItems} palette={palette} onChange={edit.updatePackageItems} onSubmit={submit} />
                 ) : (
