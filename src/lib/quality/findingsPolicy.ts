@@ -6,15 +6,21 @@
 import type { QualityFinding, QualityRule } from '../api/quality';
 
 /**
- * Ссылка на строку расчёта для находки.
+ * Ссылка на позицию для находки.
  *
- * Тип сущности приходит с сервера (фронтматтер правила). Открыть можно только
- * позицию: маршрут строк BOQ адресуется id позиции, а не id строки.
+ * Находка по строке расчёта открывает её позицию и подсвечивает строку
+ * (itemId); находка по позиции — открывает позицию. У материала справочника
+ * и тендера ссылки нет. Маршрут адресуется id позиции; у ответа старого
+ * бэкенда нет position_id — тогда позиция берётся из entity_id находки
+ * по позиции.
  */
 export function findingLink(finding: QualityFinding): string | null {
-  return finding.entity_type === 'client_position'
-    ? `/positions/${finding.entity_id}/items`
-    : null;
+  const positionId = finding.position_id
+    ?? (finding.entity_type === 'client_position' ? finding.entity_id : null);
+  if (!positionId) return null;
+  const params = new URLSearchParams({ tenderId: finding.tender_id, positionId });
+  if (finding.entity_type === 'boq_item') params.set('itemId', finding.entity_id);
+  return `/positions/${positionId}/items?${params.toString()}`;
 }
 
 /** Сколько активных (не принятых) находок появилось после отметки проверки. */

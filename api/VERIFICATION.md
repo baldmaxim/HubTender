@@ -53,7 +53,9 @@
 **Поля находки:** `rule_code`, `rule_title`, `severity` (`error`/`warning`/`info`),
 `summary`, `position_number`, `item_no`, `entity_type` (`boq_item` — строка сметы,
 `client_position` — позиция, `material_name` — наименование материала, `tender` —
-тендер целиком), `entity_id`, `fingerprint`, `detail` (что не так, с
+тендер целиком), `entity_id`, `position_id` (позиция заказчика, к которой ведёт ссылка
+«к строке»: для находки по позиции — она сама, по строке — позиция строки; `null` — у
+находки нет позиции), `fingerprint`, `detail` (что не так, с
 числами), `money_delta`, `verdict` (`accepted`/`error`/`null`), `note`, `finding_id`,
 `first_seen_at`, `is_new`. Поле `summary` одинаково у всех находок правила — для
 экономии контекста берите его из `/quality/rules`.

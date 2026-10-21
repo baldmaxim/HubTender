@@ -22,8 +22,12 @@ type Finding struct {
 	ItemNo         *string  `json:"item_no"`
 	// EntityType — пространство id в EntityID (из фронтматтера правила):
 	// boq_item | client_position | material_name | tender.
-	EntityType  string   `json:"entity_type"`
-	EntityID    string   `json:"entity_id"`
+	EntityType string `json:"entity_type"`
+	EntityID   string `json:"entity_id"`
+	// PositionID — позиция заказчика, к которой ведёт ссылка «к строке» на странице:
+	// для находки по позиции — она сама, для находки по строке — позиция строки.
+	// nil — у находки нет позиции (материал справочника, тендер).
+	PositionID  *string  `json:"position_id"`
 	Fingerprint string   `json:"fingerprint"`
 	Detail      string   `json:"detail"`
 	MoneyDelta  *float64 `json:"money_delta"`
@@ -131,7 +135,65 @@ func runCatalogTx(ctx context.Context, tx pgx.Tx, tenderID string) (*QualityRepo
 		okRules = append(okRules, rule.Code)
 	}
 
+	if err := attachPositionIDs(ctx, tx, tenderID, report.Findings); err != nil {
+		return nil, nil, fmt.Errorf("позиции находок: %w", err)
+	}
 	return report, okRules, nil
+}
+
+// attachPositionIDs проставляет находкам позицию заказчика, чтобы страница вела по
+// ссылке «к строке» без догадок о том, что лежит в entity_id. SQL правил позицию не
+// отдаёт (контракт колонок не меняем): для строк она берётся одним запросом на все
+// находки разом, для находок по позиции совпадает с entity_id. Находки по материалам
+// справочника и по тендеру позиции не имеют — остаются nil.
+func attachPositionIDs(ctx context.Context, q rowQuerier, tenderID string, findings []Finding) error {
+	itemIDs := make([]string, 0, len(findings))
+	for i := range findings {
+		switch findings[i].EntityType {
+		case quality.EntityClientPosition:
+			id := findings[i].EntityID
+			findings[i].PositionID = &id
+		case quality.EntityBoqItem:
+			itemIDs = append(itemIDs, findings[i].EntityID)
+		}
+	}
+	if len(itemIDs) == 0 {
+		return nil
+	}
+
+	rows, err := q.Query(ctx, `
+		SELECT id::text, client_position_id::text
+		FROM public.boq_items
+		WHERE tender_id = $1 AND id = ANY($2::uuid[])`, tenderID, itemIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	positionByItem := make(map[string]string, len(itemIDs))
+	for rows.Next() {
+		var itemID string
+		var positionID *string
+		if scanErr := rows.Scan(&itemID, &positionID); scanErr != nil {
+			return scanErr
+		}
+		if positionID != nil {
+			positionByItem[itemID] = *positionID
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for i := range findings {
+		if findings[i].EntityType != quality.EntityBoqItem {
+			continue
+		}
+		if positionID, ok := positionByItem[findings[i].EntityID]; ok {
+			findings[i].PositionID = &positionID
+		}
+	}
+	return nil
 }
 
 func runRule(ctx context.Context, q rowQuerier, rule quality.Rule, tenderID string) ([]Finding, error) {

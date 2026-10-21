@@ -21,6 +21,12 @@ export interface QualityFinding {
   /** Пространство id в entity_id — из фронтматтера правила. */
   entity_type: QualityEntityType;
   entity_id: string;
+  /**
+   * Id позиции заказчика: для находки по позиции — сама позиция, для находки
+   * по строке расчёта — позиция этой строки; null — позиции нет (материал
+   * справочника, тендер). Нет поля — ответ старого бэкенда.
+   */
+  position_id?: string | null;
   /** md5 значимых значений; изменились данные — вердикт перестаёт действовать. */
   fingerprint: string;
   detail: string;

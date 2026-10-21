@@ -26,11 +26,20 @@ const rule = (code, status) => ({
   Status: status, Summary: '', SQL: '',
 });
 
-// Ссылка строится только для позиций
+// Ссылка ведёт на позицию; у находки по строке добавляется itemId
 check('ссылка на позицию',
-  findingLink(finding({ entity_type: 'client_position', entity_id: 'pos-9' })) === '/positions/pos-9/items');
-check('для находки по строке ссылки нет',
+  findingLink(finding({ entity_type: 'client_position', entity_id: 'pos-9', position_id: 'pos-9' }))
+    === '/positions/pos-9/items?tenderId=t&positionId=pos-9');
+check('позиция без position_id — фолбэк на entity_id (старый бэкенд)',
+  findingLink(finding({ entity_type: 'client_position', entity_id: 'pos-9' }))
+    === '/positions/pos-9/items?tenderId=t&positionId=pos-9');
+check('строка с position_id — ссылка на позицию с itemId',
+  findingLink(finding({ entity_type: 'boq_item', entity_id: 'item-9', position_id: 'pos-3' }))
+    === '/positions/pos-3/items?tenderId=t&positionId=pos-3&itemId=item-9');
+check('строка без position_id — ссылки нет',
   findingLink(finding({ entity_type: 'boq_item', entity_id: 'item-9' })) === null);
+check('строка с position_id=null — ссылки нет',
+  findingLink(finding({ entity_type: 'boq_item', entity_id: 'item-9', position_id: null })) === null);
 check('для номенклатуры ссылки нет',
   findingLink(finding({ entity_type: 'material_name', entity_id: 'mn-1' })) === null);
 

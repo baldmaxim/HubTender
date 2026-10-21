@@ -27,8 +27,8 @@ const positionLabel = (f: QualityFinding): string => {
 };
 
 /**
- * Номер позиции со ссылкой на её строки, если правило вообще указывает на
- * позицию. Для находок по строке или по номенклатуре маршрута нет — тогда
+ * Номер позиции со ссылкой на позицию (у находки по строке — с подсветкой
+ * строки). Для находок по номенклатуре и тендеру маршрута нет — тогда
  * остаётся обычный текст.
  */
 const PositionCell: React.FC<{ f: QualityFinding }> = ({ f }) => {
@@ -36,7 +36,11 @@ const PositionCell: React.FC<{ f: QualityFinding }> = ({ f }) => {
   const label = positionLabel(f);
   if (!to) return <Text strong>{label}</Text>;
   return (
-    <Tooltip title="Открыть работы и материалы позиции">
+    <Tooltip
+      title={f.entity_type === 'boq_item'
+        ? 'Открыть позицию — строка будет подсвечена'
+        : 'Открыть работы и материалы позиции'}
+    >
       <Link to={to}>{label}</Link>
     </Tooltip>
   );

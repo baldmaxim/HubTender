@@ -75,6 +75,10 @@ entity_type: boq_item | client_position | material_name | tender
 подтверждённая находка всплывает заново, как только значения в строке изменились.
 Включайте в отпечаток ровно те поля, изменение которых должно снимать подтверждение.
 
+`position_id` в находке (позиция заказчика, к которой ведёт ссылка «к строке») бэкенд
+добавляет сам: для `client_position` это `entity_id`, для `boq_item` — позиция строки.
+В SQL эту колонку отдавать не нужно.
+
 ## Как добавить правило
 
 1. Заведите `rules/<code>-<slug>.md` по формату выше. Код — свободная буква/слово,
@@ -286,9 +290,9 @@ entity_type: boq_item | client_position | material_name | tender
 | [N](../../backend/internal/quality/rules/N-no-cost-category.md) | Строка без категории затрат | info | 43 |
 | [B](../../backend/internal/quality/rules/B-mixed-binding.md) | В позиции и привязанные, и непривязанные материалы той же единицы | warning | 1 543; 1 066 в 77 тендерах (2026-09-16) |
 | [H](../../backend/internal/quality/rules/H-position-zero-gp.md) | Позиция со строками без денег при Кол-ве ГП = 0 (сужено 2026-09-15) | warning | 86 (2026-09-15) |
-| [R](../../backend/internal/quality/rules/R-work-qty-one.md) | Работа кол-во = 1 при объёме позиции > 10 | warning | 1 874 |
+| [R](../../backend/internal/quality/rules/R-work-qty-one.md) | Работа кол-во = 1 при Кол-ве ГП позиции > 10 в той же единице (с 2026-10-21) | warning | 1 874 (до сужения) |
 | [M](../../backend/internal/quality/rules/M-conversion-extreme.md) | Коэфф. перевода не согласуется с единицей работы | warning | 158 |
-| [S](../../backend/internal/quality/rules/S-quantity-outlier.md) | ГП материала > 100× объёма позиции при той же единице (счётные единицы — > 1000×) | warning | 104; 87 в 18 тендерах (2026-09-16) |
+| [S](../../backend/internal/quality/rules/S-quantity-outlier.md) | ГП материала > 100× Кол-ва ГП позиции в той же измеряемой единице (м, м2, м3, км, т, кг, л); штучные и комплектные не сравниваются (с 2026-10-21) | warning | 104; 87 в 18 тендерах (2026-09-16, до сужения) |
 | [P](../../backend/internal/quality/rules/P-price-divergence.md) | Один материал по ценам, различающимся > 2× | warning | 757 |
 
 ### Правила конвейера проверки (включены 2026-09-15)
