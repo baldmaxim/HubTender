@@ -70,7 +70,7 @@ Production env-файл живёт на prod-сервере: `/srv/sites/tender.
 ### Бот рассылки замечаний «Проверки данных»
 
 Настроек на бэкенде нет. Бот работает на офисном ПК
-([bots/verification-bot/README.md](../bots/verification-bot/README.md)) и ходит в API
+(в репозитории её нет — исходник в истории git, коммит 21cf1a8) и ходит в API
 по машинному ключу с областью `verification:telegram`. `APP_BASE_URL` нужен для
 кнопки «Открыть в TenderHUB» в сообщениях (прод — `https://gp.su10.ru`).
 

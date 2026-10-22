@@ -209,8 +209,3 @@ authorized_key.json
 # Загрузчик выгрузки 1С: отчёты, решения, манифест (коммерческие данные)
 scripts/import-1c/out/
 scripts/import-gsheet/out/
-
-# Бот рассылки замечаний (bots/verification-bot): секреты, логи, кэш Python.
-bots/verification-bot/bot.env
-bots/verification-bot/*.log*
-bots/verification-bot/**/__pycache__/
