@@ -11,7 +11,7 @@ import {
   type TenderMonitorSortField,
   type TenderMonitorTab,
 } from '../utils/tenderMonitor';
-import { getTenderMonitorPalette, type TenderMonitorPalette } from '../utils/tenderMonitorTheme';
+import { getTenderMonitorPalette } from '../utils/tenderMonitorTheme';
 import { TenderMonitorCards } from './TenderMonitorCards';
 import { DesktopTableHeader, SectionHeader, TenderRow } from './TenderMonitorDesktopRows';
 
@@ -54,28 +54,14 @@ function SortButton({
   label,
   direction,
   onClick,
-  palette,
 }: {
   active: boolean;
   label: string;
   direction?: TenderMonitorSortDirection;
   onClick: () => void;
-  palette: TenderMonitorPalette;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        padding: '7px 12px',
-        borderRadius: 8,
-        border: `1px solid ${active ? palette.warning : palette.border}`,
-        background: palette.sectionBg,
-        color: active ? palette.warning : palette.muted,
-        cursor: 'pointer',
-        fontSize: 12,
-      }}
-    >
+    <button type="button" className={active ? 'tm-btn tm-btn--accent' : 'tm-btn'} aria-pressed={active} onClick={onClick}>
       {label} {active ? (direction === 'asc' ? '↑' : '↓') : '↕'}
     </button>
   );
@@ -159,38 +145,17 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   });
 
   const tabsBlock = (
-    <div style={{ display: 'flex', gap: 14, borderBottom: `1px solid ${palette.border}`, marginBottom: 16, flexWrap: 'wrap' }}>
+    <div className="tm-tabs tm-tabs--list">
       {tabs.map((tab) => (
         <button
           key={tab.key}
           type="button"
+          className={activeTab === tab.key ? 'tm-tab tm-tab--active' : 'tm-tab'}
+          aria-pressed={activeTab === tab.key}
           onClick={() => onTabChange(tab.key)}
-          style={{
-            padding: '0 0 8px',
-            border: 'none',
-            borderBottom: activeTab === tab.key ? `2px solid ${palette.warning}` : '2px solid transparent',
-            background: 'transparent',
-            color: activeTab === tab.key ? palette.warning : palette.muted,
-            fontSize: 12,
-            cursor: 'pointer',
-          }}
         >
-          {tab.label}{' '}
-          <span
-            style={{
-              display: 'inline-flex',
-              minWidth: 18,
-              height: 18,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 999,
-              background: activeTab === tab.key ? palette.warningBg : palette.tabBadgeBg,
-              color: activeTab === tab.key ? palette.warning : palette.muted,
-              fontSize: 10,
-            }}
-          >
-            {counts[tab.key]}
-          </span>
+          {tab.label}
+          <span className="tm-tab__count">{counts[tab.key]}</span>
         </button>
       ))}
     </div>
@@ -221,7 +186,6 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
         >
           <Space wrap size={12}>
             <Segmented
-              size="small"
               aria-label="Режим просмотра"
               options={VIEW_MODE_OPTIONS}
               value={viewMode}
@@ -233,28 +197,24 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="Поиск по ЖК или заказчику..."
               style={{ width: 220 }}
-              size="small"
             />
             <SortButton
               active={sortField === 'submission_date'}
               label="По дате"
               direction={sortField === 'submission_date' ? sortDirection : undefined}
               onClick={() => onSortChange('submission_date')}
-              palette={palette}
             />
             <SortButton
               active={sortField === 'area'}
               label="По площади"
               direction={sortField === 'area' ? sortDirection : undefined}
               onClick={() => onSortChange('area')}
-              palette={palette}
             />
             <SortButton
               active={sortField === 'total_cost'}
               label="По сумме"
               direction={sortField === 'total_cost' ? sortDirection : undefined}
               onClick={() => onSortChange('total_cost')}
-              palette={palette}
             />
           </Space>
         </div>
@@ -283,27 +243,31 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
               />
             </div>
           ) : (
-            sections.map((section) => (
-              <div key={section.key}>
-                <SectionHeader title={section.title} tenders={section.items} palette={palette} />
-                <DesktopTableHeader palette={palette} />
-                {section.items.length > 0 ? (
-                  section.items.map((tender) => (
-                    <TenderRow
-                      key={tender.id}
-                      tender={tender}
-                      onOpenTender={onOpenTender}
-                      onOpenTimeline={onOpenTimeline}
-                      onQuickCall={onQuickCall}
-                      palette={palette}
-                      readOnly={readOnly}
-                    />
-                  ))
-                ) : (
-                  <div style={{ padding: 36, color: palette.muted, textAlign: 'center' }}>Нет тендеров</div>
-                )}
+            <div className="tm-table__scroll">
+              <div className="tm-table__rows">
+                {sections.map((section) => (
+                  <div key={section.key}>
+                    <SectionHeader title={section.title} tenders={section.items} palette={palette} />
+                    <DesktopTableHeader palette={palette} />
+                    {section.items.length > 0 ? (
+                      section.items.map((tender) => (
+                        <TenderRow
+                          key={tender.id}
+                          tender={tender}
+                          onOpenTender={onOpenTender}
+                          onOpenTimeline={onOpenTimeline}
+                          onQuickCall={onQuickCall}
+                          palette={palette}
+                          readOnly={readOnly}
+                        />
+                      ))
+                    ) : (
+                      <div style={{ padding: 36, color: palette.muted, textAlign: 'center' }}>Нет тендеров</div>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))
+            </div>
           )}
         </div>
       </div>

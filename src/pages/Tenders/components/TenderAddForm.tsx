@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Form, Input, InputNumber, AutoComplete, Select, DatePicker, Row, Col, Button, message, theme } from 'antd';
-import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
+import { App, Form, Input, InputNumber, AutoComplete, Select, DatePicker } from 'antd';
+import { CheckOutlined, LoadingOutlined } from '@ant-design/icons';
 import type {
   TenderStatus,
   ConstructionScope,
@@ -12,9 +12,8 @@ import {
   createTenderRegistry,
 } from '../../../lib/api/tenderRegistry';
 import { ChronologyList, TenderPackageList } from './DynamicList';
-import { getDashboardStatusByStatusName } from '../utils/tenderMonitor';
-
-const { useToken } = theme;
+import { DATE_INPUT_FORMATS, getDashboardStatusByStatusName } from '../utils/tenderMonitor';
+import './TenderAddForm.css';
 
 interface TenderAddFormProps {
   statuses: TenderStatus[];
@@ -32,9 +31,10 @@ export const TenderAddForm: React.FC<TenderAddFormProps> = ({
   onCancel,
 }) => {
   const [form] = Form.useForm();
-  const { token } = useToken();
+  const { message } = App.useApp();
   const [clientNames, setClientNames] = useState<string[]>([]);
   const [titles, setTitles] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -49,6 +49,7 @@ export const TenderAddForm: React.FC<TenderAddFormProps> = ({
   }, []);
 
   const handleSubmit = async () => {
+    setSubmitting(true);
     try {
       const values = await form.validateFields();
 
@@ -102,6 +103,8 @@ export const TenderAddForm: React.FC<TenderAddFormProps> = ({
       onSuccess();
     } catch {
       // validation handled by antd
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -110,166 +113,123 @@ export const TenderAddForm: React.FC<TenderAddFormProps> = ({
     onCancel();
   };
 
+  const filterByInput = (input: string, option?: { value?: string | number }) =>
+    String(option?.value || '').toLowerCase().includes(input.toLowerCase());
+
   return (
-    <div
-      style={{
-        marginBottom: 16,
-        padding: '16px',
-        border: '2px solid #10b981',
-        borderRadius: '6px',
-        backgroundColor: token.colorBgContainer,
-      }}
-    >
+    <section className="tm-add-form" aria-label="Новый тендер">
+      <div className="tm-add-form__title">Новый тендер</div>
       <Form form={form} layout="vertical" onFinish={() => void handleSubmit()}>
-        <Row gutter={8}>
-          <Col span={12}>
-            <Form.Item name="object_coordinates" label="Координаты объекта">
-              <Input placeholder="55.7558, 37.6173" />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item name="commission_date" label="Ввод в эксплуатацию">
-              <DatePicker style={{ width: '100%' }} format="DD.MM.YYYY" placeholder="Дата" />
-            </Form.Item>
-          </Col>
-        </Row>
+        <div className="tm-add-form__grid">
+          <Form.Item
+            name="title"
+            label="Наименование"
+            rules={[{ required: true, message: 'Обязательное поле' }]}
+          >
+            <AutoComplete
+              options={titles.map((title) => ({ value: title }))}
+              placeholder="Наименование ЖК"
+              filterOption={filterByInput}
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item
+            name="client_name"
+            label="Заказчик"
+            rules={[{ required: true, message: 'Обязательное поле' }]}
+          >
+            <AutoComplete
+              options={clientNames.map((client) => ({ value: client }))}
+              placeholder="Заказчик"
+              filterOption={filterByInput}
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item name="construction_scope_id" label="Объем строительства">
+            <Select allowClear placeholder="Выберите">
+              {constructionScopes.map((scope) => (
+                <Select.Option key={scope.id} value={scope.id}>
+                  {scope.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item name="status_id" label="Статус">
+            <Select allowClear placeholder="Выберите">
+              <Select.Option value="__sent__">Направлено</Select.Option>
+              {statuses.map((status) => (
+                <Select.Option key={status.id} value={status.id}>
+                  {status.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item name="tender_number" label="Номер тендера">
+            <AutoComplete
+              options={tenderNumbers.map((tenderNumber) => ({ value: tenderNumber }))}
+              placeholder="Номер"
+              filterOption={filterByInput}
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item name="area" label="Площадь по СП">
+            <InputNumber decimalSeparator="," min={0} precision={2} placeholder="0,00" />
+          </Form.Item>
+          <Form.Item name="submission_date" label="Дата подачи КП">
+            <DatePicker
+              showTime={{ format: 'HH:mm' }}
+              format="DD.MM.YYYY HH:mm"
+              placeholder="Выберите дату и время"
+            />
+          </Form.Item>
+          <Form.Item name="commission_date" label="Ввод в эксплуатацию">
+            <DatePicker format={DATE_INPUT_FORMATS} placeholder="Выберите дату" />
+          </Form.Item>
+          <Form.Item name="construction_start_date" label="Выход на площадку">
+            <DatePicker format={DATE_INPUT_FORMATS} placeholder="Выберите дату" />
+          </Form.Item>
+          <Form.Item name="invitation_date" label="Поступило приглашение">
+            <DatePicker format={DATE_INPUT_FORMATS} placeholder="Выберите дату" />
+          </Form.Item>
+          <Form.Item name="site_visit_date" label="Дата посещения">
+            <DatePicker format={DATE_INPUT_FORMATS} placeholder="Выберите дату" />
+          </Form.Item>
+          <Form.Item name="object_address" label="Адрес объекта">
+            <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} allowClear placeholder="Адрес" />
+          </Form.Item>
+          <Form.Item name="object_coordinates" label="Координаты">
+            <Input allowClear placeholder="55.7558, 37.6173" />
+          </Form.Item>
+          <Form.Item className="tm-add-form__wide" name="site_visit_photo_url" label="Ссылка на посещение площадки">
+            <Input allowClear placeholder="https://..." />
+          </Form.Item>
+        </div>
 
-        <Row gutter={8}>
-          <Col span={3}>
-            <Form.Item name="tender_number" label="Номер тендера">
-              <AutoComplete
-                options={tenderNumbers.map((tenderNumber) => ({ value: tenderNumber }))}
-                placeholder="Номер"
-                filterOption={(input, option) =>
-                  String(option?.value || '').toLowerCase().includes(input.toLowerCase())
-                }
-                allowClear
-              />
-            </Form.Item>
-          </Col>
-          <Col span={6}>
-            <Form.Item
-              name="title"
-              label="Наименование"
-              rules={[{ required: true, message: 'Обязательное поле' }]}
-            >
-              <AutoComplete
-                options={titles.map((title) => ({ value: title }))}
-                placeholder="Наименование ЖК"
-                filterOption={(input, option) =>
-                  String(option?.value || '').toLowerCase().includes(input.toLowerCase())
-                }
-              />
-            </Form.Item>
-          </Col>
-          <Col span={5}>
-            <Form.Item
-              name="client_name"
-              label="Заказчик"
-              rules={[{ required: true, message: 'Обязательное поле' }]}
-            >
-              <AutoComplete
-                options={clientNames.map((client) => ({ value: client }))}
-                placeholder="Заказчик"
-                filterOption={(input, option) =>
-                  String(option?.value || '').toLowerCase().includes(input.toLowerCase())
-                }
-              />
-            </Form.Item>
-          </Col>
-          <Col span={5}>
-            <Form.Item name="object_address" label="Адрес объекта">
-              <Input placeholder="Адрес" />
-            </Form.Item>
-          </Col>
-          <Col span={5}>
-            <Form.Item name="construction_scope_id" label="Объем строительства">
-              <Select allowClear placeholder="Выберите">
-                {constructionScopes.map((scope) => (
-                  <Select.Option key={scope.id} value={scope.id}>
-                    {scope.name}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Col>
-        </Row>
+        <Form.Item label="Хронология">
+          <ChronologyList editable form={form} fieldName="chronology_items" />
+        </Form.Item>
 
-        <Row gutter={8}>
-          <Col span={3}>
-            <Form.Item name="area" label="Площадь, м2">
-              <InputNumber decimalSeparator="," style={{ width: '100%' }} min={0} precision={2} placeholder="0.00" />
-            </Form.Item>
-          </Col>
-          <Col span={5}>
-            <Form.Item name="status_id" label="Статус">
-              <Select allowClear placeholder="Выберите">
-                <Select.Option value="__sent__">Направлено</Select.Option>
-                {statuses.map((status) => (
-                  <Select.Option key={status.id} value={status.id}>
-                    {status.name}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Col>
-          <Col span={4}>
-            <Form.Item name="submission_date" label="Дата подачи КП">
-              <DatePicker style={{ width: '100%' }} showTime={{ format: 'HH:mm' }} format="DD.MM.YYYY HH:mm" placeholder="Дата и время" />
-            </Form.Item>
-          </Col>
-          <Col span={4}>
-            <Form.Item name="construction_start_date" label="Дата выхода">
-              <DatePicker style={{ width: '100%' }} format="DD.MM.YYYY" placeholder="Дата" />
-            </Form.Item>
-          </Col>
-          <Col span={4}>
-            <Form.Item name="site_visit_date" label="Дата посещения">
-              <DatePicker style={{ width: '100%' }} format="DD.MM.YYYY" placeholder="Дата" />
-            </Form.Item>
-          </Col>
-          <Col span={4}>
-            <Form.Item name="invitation_date" label="Дата приглашения">
-              <DatePicker style={{ width: '100%' }} format="DD.MM.YYYY" placeholder="Дата" />
-            </Form.Item>
-          </Col>
-        </Row>
+        <Form.Item label="Тендерный пакет">
+          <TenderPackageList editable form={form} fieldName="tender_package_items" />
+        </Form.Item>
 
-        <Row gutter={8}>
-          <Col span={24}>
-            <Form.Item name="site_visit_photo_url" label="Ссылка на фото посещения">
-              <Input placeholder="https://..." />
-            </Form.Item>
-          </Col>
-        </Row>
-
-        <Row gutter={8}>
-          <Col span={24}>
-            <Form.Item label="Хронология">
-              <ChronologyList editable form={form} fieldName="chronology_items" />
-            </Form.Item>
-          </Col>
-        </Row>
-
-        <Row gutter={8}>
-          <Col span={24}>
-            <Form.Item label="Тендерный пакет">
-              <TenderPackageList editable form={form} fieldName="tender_package_items" />
-            </Form.Item>
-          </Col>
-        </Row>
-
-        <Row gutter={8}>
-          <Col span={24} style={{ textAlign: 'right' }}>
-            <Button type="primary" icon={<CheckOutlined />} onClick={handleSubmit} style={{ marginRight: 8 }}>
-              Добавить
-            </Button>
-            <Button icon={<CloseOutlined />} onClick={handleCancel}>
-              Отмена
-            </Button>
-          </Col>
-        </Row>
+        <div className="tm-add-form__actions">
+          <button type="button" className="tm-btn" onClick={handleCancel} disabled={submitting}>
+            Отмена
+          </button>
+          {/* Не submit: иначе Enter в поле (и выбор подсказки AutoComplete) сразу отправлял бы форму. */}
+          <button
+            type="button"
+            className="tm-btn tm-btn--accent"
+            onClick={() => form.submit()}
+            disabled={submitting}
+            aria-busy={submitting || undefined}
+          >
+            {submitting ? <LoadingOutlined aria-hidden /> : <CheckOutlined aria-hidden />}
+            Добавить
+          </button>
+        </div>
       </Form>
-    </div>
+    </section>
   );
 };

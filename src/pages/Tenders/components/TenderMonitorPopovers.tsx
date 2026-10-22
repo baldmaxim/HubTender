@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Popover, Tag, Modal } from 'antd';
+import { Popover, Modal } from 'antd';
 import { EnvironmentFilled, FileTextOutlined, FolderOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import type { TenderRegistryWithRelations } from '../../../lib/types';
 import {
   formatDate,
+  getCallBadgeStyle,
   getChronologyItems,
   getPackageItems,
   getPackageLinkHref,
@@ -148,8 +149,17 @@ export function MapPopover({ tender, palette }: { tender: TenderRegistryWithRela
           footer={null}
           centered
           width={320}
-          styles={{ body: { padding: 0 } }}
-          maskStyle={{ background: 'rgba(0, 0, 0, 0.45)' }}
+          styles={{
+            content: {
+              background: palette.cardBg,
+              border: `1px solid ${palette.border}`,
+              borderRadius: 14,
+              padding: 0,
+              overflow: 'hidden',
+            },
+            body: { padding: 0 },
+            mask: { backdropFilter: 'blur(4px)' },
+          }}
         >
           <div style={{ padding: 16 }}>{renderMapContent('100%')}</div>
         </Modal>
@@ -210,7 +220,7 @@ export function ChronologyPopover({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                     <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDate(item.date)}</span>
-                    {item.type === 'call_follow_up' ? <Tag color="error" style={{ marginInlineEnd: 0 }}>Звонок</Tag> : null}
+                    {item.type === 'call_follow_up' ? <span className="tm-badge" style={getCallBadgeStyle(palette)}>Звонок</span> : null}
                   </div>
                   <div style={{ color: palette.textSecondary, fontSize: 12, lineHeight: 1.35 }}>{item.text}</div>
                 </div>

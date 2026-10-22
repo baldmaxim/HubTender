@@ -425,13 +425,14 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 9px;
-  border-radius: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
   border: 1px solid var(--kb-danger-border);
   background: var(--kb-danger-bg);
   color: var(--kb-danger);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   touch-action: manipulation;
 }

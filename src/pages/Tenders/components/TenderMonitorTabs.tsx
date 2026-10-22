@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { DatePicker, Input, Select, Tag, Typography } from 'antd';
+import { DatePicker, Input, Select, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { ChronologyItem, TenderPackageItem } from '../../../lib/types';
-import { DATE_INPUT_FORMATS, formatDate, getPackageLinkHref } from '../utils/tenderMonitor';
+import { DATE_INPUT_FORMATS, formatDate, getCallBadgeStyle, getPackageLinkHref } from '../utils/tenderMonitor';
 import type { TenderMonitorPalette } from '../utils/tenderMonitorTheme';
 import { nextDraftRowKey, type ChronologyDraftRow, type PackageDraftRow } from '../utils/tenderMonitorDraft';
 import { inputEnterToSave, textareaEnterToSave } from '../../../utils/keyboardSave';
@@ -123,9 +123,9 @@ export function ReadOnlyChronologySection({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
             <span style={{ color: palette.warning, fontSize: 11, fontWeight: 700 }}>{formatDate(item.date)}</span>
             {item.type === 'call_follow_up' ? (
-              <Tag color="error" style={{ marginInlineEnd: 0 }}>
+              <span className="tm-badge" style={getCallBadgeStyle(palette)}>
                 Звонок
-              </Tag>
+              </span>
             ) : null}
           </div>
           <div style={{ color: palette.textSecondary, fontSize: 12, lineHeight: 1.35, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>

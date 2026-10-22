@@ -5,6 +5,7 @@ import type {
   TenderPackageItem,
   TenderRegistryWithRelations,
 } from '../../../lib/types';
+import type { TenderMonitorPalette } from './tenderMonitorTheme';
 
 export type TenderMonitorTab = 'all' | DashboardStatus;
 export type TenderMonitorSortField = 'submission_date' | 'area' | 'total_cost';
@@ -89,33 +90,35 @@ export function getTenderStatusDisplayLabel(tender: TenderRegistryWithRelations)
   return getDashboardStatusLabel(getDashboardStatus(tender));
 }
 
-export function getStatusBadgeStyle(status: DashboardStatus) {
+/** Цвета бейджа одного тона: текст, заливка 12% и рамка 28% (цвет — #rrggbb из палитры). */
+export function getToneBadgeStyle(color: string) {
+  return {
+    color,
+    background: `${color}1f`,
+    border: `1px solid ${color}47`,
+  };
+}
+
+export function getStatusBadgeStyle(status: DashboardStatus, palette: TenderMonitorPalette) {
   switch (status) {
     case 'sent':
-      return {
-        color: '#ef9f27',
-        background: 'rgba(239,159,39,0.12)',
-        border: '1px solid rgba(239,159,39,0.28)',
-      };
+      return getToneBadgeStyle(palette.sent);
     case 'waiting_pd':
-      return {
-        color: '#a78bfa',
-        background: 'rgba(167,139,250,0.12)',
-        border: '1px solid rgba(167,139,250,0.24)',
-      };
+      return getToneBadgeStyle(palette.pending);
     case 'archive':
-      return {
-        color: '#8b93a7',
-        background: 'rgba(139,147,167,0.12)',
-        border: '1px solid rgba(139,147,167,0.22)',
-      };
+      return getToneBadgeStyle(palette.muted);
     default:
-      return {
-        color: '#4a90e2',
-        background: 'rgba(74,144,226,0.12)',
-        border: '1px solid rgba(74,144,226,0.24)',
-      };
+      return getToneBadgeStyle(palette.info);
   }
+}
+
+/** Бейдж «Звонок» в хронологии — тон кнопок «Позвонить». */
+export function getCallBadgeStyle(palette: TenderMonitorPalette) {
+  return {
+    color: palette.danger,
+    background: palette.dangerBg,
+    border: `1px solid ${palette.dangerBorder}`,
+  };
 }
 
 export function formatMoney(value?: number | null): string {

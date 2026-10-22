@@ -45,32 +45,21 @@ interface TenderMonitorCardsProps {
 
 function CallButton({
   tender,
-  palette,
   onQuickCall,
 }: {
   tender: TenderRegistryWithRelations;
-  palette: TenderMonitorPalette;
   onQuickCall: (tender: TenderRegistryWithRelations) => Promise<void> | void;
 }) {
   return (
     <button
       type="button"
-      className="tender-monitor-call-button"
+      className="tm-btn tm-btn--danger tm-btn--small tender-monitor-call-button"
       onClick={(event) => {
         event.stopPropagation();
         void onQuickCall(tender);
       }}
-      style={{
-        border: `1px solid ${palette.dangerBorder}`,
-        background: palette.dangerBg,
-        color: palette.danger,
-        borderRadius: 6,
-        padding: '2px 7px',
-        fontSize: 11,
-        cursor: 'pointer',
-      }}
     >
-      <PhoneOutlined style={{ marginRight: 6 }} />
+      <PhoneOutlined />
       Позвонить
     </button>
   );
@@ -119,7 +108,7 @@ function TenderCard({
   borderColor: string;
 }) {
   const dashboardStatus = getDashboardStatus(tender);
-  const badgeStyle = getStatusBadgeStyle(dashboardStatus);
+  const badgeStyle = getStatusBadgeStyle(dashboardStatus, palette);
   const daysToSubmission = getDaysToSubmission(tender);
   const daysSinceControl = getDaysSinceControl(tender);
   const controlDate = getControlDate(tender);
@@ -199,7 +188,7 @@ function TenderCard({
                   dashboardStatus === 'sent' && daysSinceControl != null ? (
                     <span style={{ color: palette.danger }}>{daysSinceControl}д</span>
                   ) : dashboardStatus === 'calc' && daysToSubmission != null ? (
-                    <span style={{ color: daysToSubmission < 0 && controlDate ? palette.success : '#ff9f43' }}>
+                    <span style={{ color: daysToSubmission < 0 && controlDate ? palette.success : palette.sent }}>
                       {daysToSubmission < 0 && controlDate ? `${daysSinceControl ?? 0}/7 дн` : `${daysToSubmission} дн`}
                     </span>
                   ) : (
@@ -230,13 +219,14 @@ function TenderCard({
             style={{
               width: 28,
               height: 28,
-              borderRadius: 6,
+              borderRadius: 8,
               border: `1px solid ${tender.site_visit_photo_url ? `${palette.info}55` : palette.border}`,
               background: tender.site_visit_photo_url ? `${palette.info}1f` : palette.disabledBg,
               color: tender.site_visit_photo_url ? palette.info : palette.disabledText,
               cursor: tender.site_visit_photo_url ? 'pointer' : 'not-allowed',
             }}
             title="Посещение площадки"
+            aria-label="Посещение площадки"
           >
             <LinkOutlined />
           </button>
@@ -244,7 +234,7 @@ function TenderCard({
           <PackagePopover tender={tender} palette={palette} onOpenPackage={onOpenPackage} />
         </Space>
         {!readOnly && (canQuickCall || canSubmissionCall) ? (
-          <CallButton tender={tender} palette={palette} onQuickCall={onQuickCall} />
+          <CallButton tender={tender} onQuickCall={onQuickCall} />
         ) : null}
       </div>
     </div>

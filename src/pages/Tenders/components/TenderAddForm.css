@@ -1,0 +1,100 @@
+/* Форма «Добавить тендер» и её списки — в стиле окна тендера.
+   Цвета — переменные --tm-* с корня .tender-monitor-page. */
+.tm-add-form {
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--tm-accent-border);
+  border-radius: 14px;
+  background: var(--tm-panel-bg);
+}
+
+.tm-add-form__title {
+  margin-bottom: 12px;
+  color: var(--tm-text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* Подписи полей — как в окне тендера. */
+.tm-add-form .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.tm-add-form .ant-form-item-label {
+  padding-bottom: 6px;
+}
+
+.tm-add-form .ant-form-item .ant-form-item-label > label {
+  height: auto;
+  color: var(--tm-btn-muted);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tm-add-form .ant-form-item .ant-form-item-label > label.ant-form-item-required::before {
+  color: var(--tm-danger);
+  font-size: inherit;
+}
+
+/* Поля занимают всю ширину ячейки. */
+.tm-add-form .ant-select,
+.tm-add-form .ant-picker,
+.tm-add-form .ant-input-number {
+  width: 100%;
+}
+
+.tm-add-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  column-gap: 12px;
+}
+
+.tm-add-form__grid > * {
+  min-width: 0;
+}
+
+.tm-add-form__wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 575px) {
+  .tm-add-form__wide {
+    grid-column: auto;
+  }
+}
+
+.tm-add-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Строки хронологии и тендерного пакета — как блоки полей окна тендера. */
+.tm-dyn-row {
+  display: grid;
+  align-items: start;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--tm-border-soft);
+  border-radius: 10px;
+  background: var(--tm-section-bg);
+}
+
+.tm-dyn-row > * {
+  min-width: 0;
+}
+
+.tm-dyn-row .ant-form-item {
+  margin-bottom: 0;
+}
+
+.tm-dyn-row--chronology {
+  grid-template-columns: 120px 140px minmax(0, 1fr) auto;
+}
+
+.tm-dyn-row--package {
+  grid-template-columns: 140px minmax(0, 1fr) minmax(0, 0.8fr) auto;
+}

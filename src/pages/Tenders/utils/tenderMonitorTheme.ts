@@ -1,3 +1,5 @@
+import type { ThemeConfig } from 'antd';
+
 export interface TenderMonitorPalette {
   pageBg: string;
   pageGlowPrimary: string;
@@ -7,6 +9,8 @@ export interface TenderMonitorPalette {
   sectionBg: string;
   panelBg: string;
   fieldBg: string;
+  /** Рамка полей ввода: заметнее border, иначе поле теряется на фоне блока. */
+  fieldBorder: string;
   border: string;
   borderSoft: string;
   text: string;
@@ -24,6 +28,8 @@ export interface TenderMonitorPalette {
   success: string;
   successStrong: string;
   info: string;
+  /** «Ожидание ПД»: бейдж статуса и колонка канбана. */
+  pending: string;
   marker: string;
   disabledBg: string;
   disabledText: string;
@@ -51,6 +57,7 @@ export function getTenderMonitorPalette(isDark: boolean): TenderMonitorPalette {
       sectionBg: '#0f1017',
       panelBg: '#1b1f2d',
       fieldBg: '#11141d',
+      fieldBorder: 'rgba(255,255,255,0.14)',
       border: 'rgba(255,255,255,0.08)',
       borderSoft: 'rgba(255,255,255,0.06)',
       text: '#f5efe4',
@@ -68,6 +75,7 @@ export function getTenderMonitorPalette(isDark: boolean): TenderMonitorPalette {
       success: '#3db87a',
       successStrong: '#49d28c',
       info: '#4a90e2',
+      pending: '#a78bfa',
       marker: '#ff4db8',
       disabledBg: 'rgba(255,255,255,0.05)',
       disabledText: '#5f6578',
@@ -89,6 +97,7 @@ export function getTenderMonitorPalette(isDark: boolean): TenderMonitorPalette {
     sectionBg: '#f8fafc',
     panelBg: '#ffffff',
     fieldBg: '#f8fafc',
+    fieldBorder: 'rgba(15,23,42,0.16)',
     border: 'rgba(15,23,42,0.10)',
     borderSoft: 'rgba(15,23,42,0.08)',
     text: '#172033',
@@ -106,6 +115,7 @@ export function getTenderMonitorPalette(isDark: boolean): TenderMonitorPalette {
     success: '#16a34a',
     successStrong: '#15803d',
     info: '#2563eb',
+    pending: '#7c3aed',
     marker: '#d946ef',
     disabledBg: 'rgba(15,23,42,0.04)',
     disabledText: '#94a3b8',
@@ -128,6 +138,10 @@ export function getTenderControlVars(palette: TenderMonitorPalette): Record<stri
     '--tm-text': palette.text,
     '--tm-accent': palette.warning,
     '--tm-accent-bg': palette.warningBg,
+    '--tm-accent-border': palette.warningBorder,
+    '--tm-section-bg': palette.sectionBg,
+    '--tm-border-soft': palette.borderSoft,
+    '--tm-tab-badge-bg': palette.tabBadgeBg,
     '--tm-danger': palette.danger,
     '--tm-danger-bg': palette.dangerBg,
     '--tm-danger-border': palette.dangerBorder,
@@ -135,5 +149,56 @@ export function getTenderControlVars(palette: TenderMonitorPalette): Record<stri
     '--tm-panel-shadow': palette.floatingShadow,
     '--tm-check-mark': palette.cardBg,
     '--tm-scroll-thumb': palette.scrollThumb,
+  };
+}
+
+/** Сенсорный экран: поля antd крупнее (44px, шрифт 16px — без автозума iOS), как .tm-btn. */
+export const isCoarsePointer = (): boolean =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+
+/**
+ * Тема antd внутри страницы: поля, списки, календари, переключатель и таблица — в палитре страницы,
+ * акцент золотой (как .tm-btn--accent), высоты совпадают с .tm-btn: 30 / 26 (small) / 44 (large, сенсор).
+ * Алгоритм светлой/тёмной темы наследуется от ConfigProvider приложения.
+ */
+export function getTenderAntdTheme(palette: TenderMonitorPalette, isDark: boolean): ThemeConfig {
+  // Тёмное золото светлое — белый текст на нём не читается (выбранный день в календаре, «Ок»).
+  const onAccent = isDark ? palette.pageBg : '#ffffff';
+  return {
+    token: {
+      colorPrimary: palette.warning,
+      colorBgContainer: palette.fieldBg,
+      colorBgElevated: palette.panelBg,
+      colorBorder: palette.fieldBorder,
+      colorBorderSecondary: palette.borderSoft,
+      colorText: palette.text,
+      colorTextPlaceholder: palette.subtleText,
+      colorTextDescription: palette.muted,
+      borderRadius: 8,
+      borderRadiusSM: 6,
+      borderRadiusLG: 12,
+      controlHeight: 30,
+      controlHeightSM: 26,
+      controlHeightLG: 44,
+    },
+    components: {
+      Segmented: {
+        trackBg: palette.sectionBg,
+        itemColor: palette.muted,
+        itemHoverColor: palette.text,
+        itemHoverBg: 'transparent',
+        itemSelectedBg: palette.warningBg,
+        itemSelectedColor: palette.warning,
+      },
+      DatePicker: { colorTextLightSolid: onAccent },
+      Button: { primaryColor: onAccent },
+      Table: {
+        colorBgContainer: palette.cardBg,
+        headerBg: palette.sectionBg,
+        headerColor: palette.muted,
+        borderColor: palette.borderSoft,
+        rowHoverBg: palette.disabledBg,
+      },
+    },
   };
 }

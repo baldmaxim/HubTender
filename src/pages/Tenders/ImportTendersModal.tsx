@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, Upload, message, Table, Alert, Tag, Space, Typography } from 'antd';
+import { App, Modal, Upload, Table, Space, Typography } from 'antd';
 import type { UploadFile } from 'antd/es/upload';
-import { InboxOutlined } from '@ant-design/icons';
+import { CloseOutlined, InboxOutlined, LoadingOutlined, UploadOutlined } from '@ant-design/icons';
 import * as XLSX from 'xlsx';
 import type {
   ChronologyItem,
@@ -15,6 +15,8 @@ import {
   getNextTenderRegistrySortOrder,
   patchTenderRegistryFields,
 } from '../../lib/api/tenderRegistry';
+import { getTenderControlVars, type TenderMonitorPalette } from './utils/tenderMonitorTheme';
+import { getToneBadgeStyle } from './utils/tenderMonitor';
 import dayjs from 'dayjs';
 import {
   mergeChronologyItems,
@@ -25,6 +27,7 @@ import {
   type ImportRowAction,
   type ParsedTender,
 } from './utils/importTenders';
+import './ImportTendersModal.css';
 
 const { Text } = Typography;
 
@@ -35,6 +38,7 @@ interface ImportTendersModalProps {
   constructionScopes: ConstructionScope[];
   statuses: TenderStatus[];
   existingTenders: TenderRegistryWithRelations[];
+  palette: TenderMonitorPalette;
 }
 
 interface ClassifiedRow {
@@ -52,7 +56,9 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
   constructionScopes,
   statuses,
   existingTenders,
+  palette,
 }) => {
+  const { message } = App.useApp();
   const [parsedData, setParsedData] = useState<ParsedTender[]>([]);
   const [loading, setLoading] = useState(false);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
@@ -249,9 +255,13 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
       width: 120,
       fixed: 'left' as const,
       render: (_: unknown, record: ClassifiedRow) => {
-        if (record.action === 'update') return <Tag color="green">Обновление</Tag>;
-        if (record.action === 'create') return <Tag color="blue">Новый</Tag>;
-        return <Tag color="orange">Пропуск</Tag>;
+        if (record.action === 'update') {
+          return <span className="tm-badge" style={getToneBadgeStyle(palette.success)}>Обновление</span>;
+        }
+        if (record.action === 'create') {
+          return <span className="tm-badge" style={getToneBadgeStyle(palette.info)}>Новый</span>;
+        }
+        return <span className="tm-badge" style={getToneBadgeStyle(palette.sent)}>Пропуск</span>;
       },
     },
     {
@@ -364,67 +374,101 @@ const ImportTendersModal: React.FC<ImportTendersModalProps> = ({
     },
   ];
 
+  const canImport = summary.create + summary.update > 0;
+
   return (
     <Modal
-      title="Импорт тендеров из Excel"
       open={open}
       onCancel={handleCancel}
-      onOk={handleImport}
-      okText="Импортировать"
-      cancelText="Отмена"
+      footer={null}
+      closeIcon={null}
       width="95vw"
       style={{ top: 20, maxWidth: 1600 }}
-      confirmLoading={loading}
-      okButtonProps={{ disabled: summary.create + summary.update === 0 }}
+      styles={{
+        content: {
+          background: palette.cardBg,
+          border: `1px solid ${palette.warningBorder}`,
+          borderRadius: 14,
+          padding: 0,
+        },
+        body: { padding: 0 },
+        mask: { backdropFilter: 'blur(4px)' },
+      }}
     >
-      <Alert
-        message="Формат Excel файла"
-        description="Файл должен содержать следующие колонки: Номер тендера, Наименование ЖК, Заказчик, Адрес объекта, Работа, Площадь по СП м2, Дата подачи КП, Хронологии тендеров (дата выхода на площадку), Дата выхода на строительную площадку, Дата посещения площадки, Фото посещения площадки, Наличие тендерного пакета, Когда поступило приглашение, Статус"
-        type="info"
-        style={{ marginBottom: 16 }}
-      />
-
-      <Upload.Dragger
-        fileList={fileList}
-        beforeUpload={handleFileUpload}
-        onRemove={() => {
-          setFileList([]);
-          setParsedData([]);
-        }}
-        accept=".xlsx,.xls"
-        maxCount={1}
-      >
-        <p className="ant-upload-drag-icon">
-          <InboxOutlined />
-        </p>
-        <p className="ant-upload-text">Нажмите или перетащите файл Excel для загрузки</p>
-        <p className="ant-upload-hint">Поддерживаются файлы форматов .xlsx и .xls</p>
-      </Upload.Dragger>
-
-      {parsedData.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <Alert
-            type={summary.skip > 0 ? 'warning' : 'info'}
-            showIcon
-            style={{ marginBottom: 12 }}
-            message={`Новых: ${summary.create}, обновлений: ${summary.update}, пропущено: ${summary.skip}`}
-            description={
-              summary.skip > 0
-                ? 'Строки без номера тендера не будут загружены — заполните номер тендера в файле.'
-                : 'Сопоставление выполнено по номеру тендера.'
-            }
-          />
-          <h4>Предварительный просмотр ({parsedData.length} записей)</h4>
-          <Table
-            dataSource={rows}
-            columns={previewColumns}
-            rowKey={(_, index) => index?.toString() || '0'}
-            pagination={{ pageSize: 10 }}
-            scroll={{ x: 'max-content' }}
-            size="small"
-          />
+      <div className="tm-import" style={getTenderControlVars(palette)}>
+        <div className="tm-import__head">
+          <div className="tm-import__title">Импорт тендеров из Excel</div>
+          <button
+            type="button"
+            className="tm-btn tm-btn--icon"
+            aria-label="Закрыть"
+            onClick={handleCancel}
+            disabled={loading}
+          >
+            <CloseOutlined aria-hidden />
+          </button>
         </div>
-      )}
+
+        <div className="tm-import__note">
+          <div className="tm-import__note-title">Формат Excel файла</div>
+          Файл должен содержать следующие колонки: Номер тендера, Наименование ЖК, Заказчик, Адрес объекта, Работа, Площадь по СП м2, Дата подачи КП, Хронологии тендеров (дата выхода на площадку), Дата выхода на строительную площадку, Дата посещения площадки, Фото посещения площадки, Наличие тендерного пакета, Когда поступило приглашение, Статус
+        </div>
+
+        <Upload.Dragger
+          fileList={fileList}
+          beforeUpload={handleFileUpload}
+          onRemove={() => {
+            setFileList([]);
+            setParsedData([]);
+          }}
+          accept=".xlsx,.xls"
+          maxCount={1}
+        >
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined />
+          </p>
+          <p className="ant-upload-text">Нажмите или перетащите файл Excel для загрузки</p>
+          <p className="ant-upload-hint">Поддерживаются файлы форматов .xlsx и .xls</p>
+        </Upload.Dragger>
+
+        {parsedData.length > 0 && (
+          <div>
+            <div className={summary.skip > 0 ? 'tm-import__note tm-import__note--warn' : 'tm-import__note'}>
+              <div className="tm-import__note-title">
+                {`Новых: ${summary.create}, обновлений: ${summary.update}, пропущено: ${summary.skip}`}
+              </div>
+              {summary.skip > 0
+                ? 'Строки без номера тендера не будут загружены — заполните номер тендера в файле.'
+                : 'Сопоставление выполнено по номеру тендера.'}
+            </div>
+            <div className="tm-import__subtitle">Предварительный просмотр ({parsedData.length} записей)</div>
+            <Table
+              dataSource={rows}
+              columns={previewColumns}
+              rowKey={(_, index) => index?.toString() || '0'}
+              pagination={{ pageSize: 10 }}
+              scroll={{ x: 'max-content' }}
+              size="small"
+            />
+          </div>
+        )}
+
+        <div className="tm-import__actions">
+          <button type="button" className="tm-btn" onClick={handleCancel} disabled={loading}>
+            Отмена
+          </button>
+          <button
+            type="button"
+            className="tm-btn tm-btn--accent"
+            onClick={handleImport}
+            disabled={loading || !canImport}
+            aria-busy={loading || undefined}
+          >
+            {loading ? <LoadingOutlined aria-hidden /> : <UploadOutlined aria-hidden />}
+            Импортировать
+          </button>
+        </div>
+      </div>
     </Modal>
   );
 };

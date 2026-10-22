@@ -1,5 +1,5 @@
 import type { DashboardStatus, TenderRegistryWithRelations, TenderStatus } from '../../../lib/types';
-import { getDashboardStatus, getStatusBadgeStyle } from './tenderMonitor';
+import { getDashboardStatus } from './tenderMonitor';
 import type { TenderMonitorPalette } from './tenderMonitorTheme';
 
 export type KanbanColumnKey = 'waiting_pd' | 'calc' | 'sent' | 'lost' | 'won';
@@ -103,7 +103,7 @@ export function snapshotStatusPatch(tender: TenderRegistryWithRelations, column:
 export function getKanbanAccent(key: KanbanColumnKey, palette: TenderMonitorPalette): string {
   switch (key) {
     case 'waiting_pd':
-      return getStatusBadgeStyle('waiting_pd').color;
+      return palette.pending;
     case 'calc':
       return palette.info;
     case 'sent':

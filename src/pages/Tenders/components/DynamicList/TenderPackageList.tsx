@@ -1,10 +1,10 @@
 import React from 'react';
-import { Form, DatePicker, Input, Button, Space, List, Typography } from 'antd';
+import { Form, DatePicker, Input, Space, List, Typography } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { FormInstance } from 'antd';
 import type { TenderPackageItem } from '../../../../lib/types';
-import { getPackageLinkHref } from '../../utils/tenderMonitor';
+import { DATE_INPUT_FORMATS, getPackageLinkHref } from '../../utils/tenderMonitor';
 
 const { Text } = Typography;
 
@@ -62,60 +62,48 @@ export const TenderPackageList: React.FC<TenderPackageListProps> = ({
       {(fields, { add, remove }) => (
         <>
           {fields.map(({ key, name, ...restField }) => (
-            <div
-              key={key}
-              style={{
-                display: 'flex',
-                gap: 8,
-                marginBottom: 8,
-                alignItems: 'flex-start',
-              }}
-            >
-              <Form.Item
-                {...restField}
-                name={[name, 'date']}
-                style={{ marginBottom: 0, width: 150, flexShrink: 0 }}
-              >
-                <DatePicker format="DD.MM.YYYY" placeholder="Дата" />
+            <div key={key} className="tm-dyn-row tm-dyn-row--package">
+              <Form.Item {...restField} name={[name, 'date']}>
+                <DatePicker format={DATE_INPUT_FORMATS} placeholder="Выберите дату" aria-label="Дата" />
               </Form.Item>
 
               <Form.Item
                 {...restField}
                 name={[name, 'text']}
                 rules={[{ required: true, message: 'Введите наименование' }]}
-                style={{ marginBottom: 0, flex: 1 }}
               >
-                <Input placeholder="Наименование" />
+                <Input.TextArea
+                  placeholder="Наименование"
+                  autoSize={{ minRows: 1, maxRows: 6 }}
+                  allowClear
+                  aria-label="Наименование"
+                />
               </Form.Item>
 
-              <Form.Item
-                {...restField}
-                name={[name, 'link']}
-                style={{ marginBottom: 0, width: 220, flexShrink: 0 }}
-              >
-                <Input placeholder="Ссылка" />
+              <Form.Item {...restField} name={[name, 'link']}>
+                <Input allowClear placeholder="Ссылка" aria-label="Ссылка" />
               </Form.Item>
 
-              <Button
-                type="text"
-                danger
-                icon={<DeleteOutlined />}
+              <button
+                type="button"
+                className="tm-btn tm-btn--icon tm-btn--delete"
                 onClick={() => remove(name)}
-                title="Удалить"
-                style={{ flexShrink: 0 }}
-              />
+                aria-label="Удалить строку"
+                title="Удалить строку"
+              >
+                <DeleteOutlined aria-hidden />
+              </button>
             </div>
           ))}
 
-          <Button
-            type="dashed"
+          <button
+            type="button"
+            className="tm-btn tm-btn--small"
             onClick={() => add({ date: null, text: '', link: '' })}
-            icon={<PlusOutlined />}
-            block
-            style={{ marginTop: 8 }}
           >
-            Добавить запись
-          </Button>
+            <PlusOutlined aria-hidden />
+            Добавить строку
+          </button>
         </>
       )}
     </Form.List>

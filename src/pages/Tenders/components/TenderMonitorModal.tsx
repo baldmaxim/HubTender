@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ConfigProvider, Modal, Space, Tag, Typography } from 'antd';
+import { Modal, Space, Tag, Typography } from 'antd';
 import { CloseOutlined, EditOutlined, LoadingOutlined, PhoneOutlined, SaveOutlined } from '@ant-design/icons';
 import type {
   ConstructionScope,
@@ -31,10 +31,6 @@ import {
 const { Text } = Typography;
 
 type ModalTab = 'info' | 'timeline' | 'package';
-
-// iPad и другие сенсорные экраны: крупные поля (шрифт 16px — Safari не зумит форму); кнопки окна увеличивает CSS.
-const isCoarsePointer = () =>
-  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 
 interface TenderMonitorModalProps {
   open: boolean;
@@ -97,9 +93,8 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
   }
 
   const dashboardStatus = getDashboardStatus(tender);
-  const statusStyle = getStatusBadgeStyle(dashboardStatus);
+  const statusStyle = getStatusBadgeStyle(dashboardStatus, palette);
   const canQuickCall = shouldShowCallAction(tender);
-  const coarsePointer = isCoarsePointer();
 
   const scopeOptions = constructionScopes.map((scope) => ({
     value: scope.id,
@@ -243,29 +238,21 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
           </Space>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 14, borderBottom: `1px solid ${palette.border}`, flexWrap: 'wrap' }}>
+        <div className="tm-tabs tm-tabs--modal">
           {[
-            { key: 'info' as const, label: 'Информация' },
-            { key: 'timeline' as const, label: `Хронология (${chronologyItems.length})` },
-            { key: 'package' as const, label: `Тендерный пакет (${packageItems.length})` },
+            { key: 'info' as const, label: 'Информация', count: null },
+            { key: 'timeline' as const, label: 'Хронология', count: chronologyItems.length },
+            { key: 'package' as const, label: 'Тендерный пакет', count: packageItems.length },
           ].map((tab) => (
             <button
               key={tab.key}
               type="button"
+              className={activeTab === tab.key ? 'tm-tab tm-tab--active' : 'tm-tab'}
+              aria-pressed={activeTab === tab.key}
               onClick={() => setActiveTab(tab.key)}
-              style={{
-                border: 'none',
-                borderBottom: activeTab === tab.key ? `2px solid ${palette.warning}` : '2px solid transparent',
-                background: 'transparent',
-                color: activeTab === tab.key ? palette.warning : palette.muted,
-                padding: '0 0 8px',
-                marginRight: 14,
-                cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: 600,
-              }}
             >
               {tab.label}
+              {tab.count !== null ? <span className="tm-tab__count">{tab.count}</span> : null}
             </button>
           ))}
         </div>
@@ -274,44 +261,42 @@ export const TenderMonitorModal: React.FC<TenderMonitorModalProps> = ({
           {...(isPhoneDevice ? contentSwipe : {})}
           style={{ paddingTop: 14, ...(isPhoneDevice ? { touchAction: 'pan-y' as const } : {}) }}
         >
-          <ConfigProvider componentSize={coarsePointer ? 'large' : undefined}>
-            {/* Все три панели рендерятся всегда и накладываются в одну grid-ячейку:
-                высота окна = самой высокой (Информация), активная видна и прижата к верху — окно не «прыгает». */}
-            <div
-              key={editing ? 'edit' : 'view'}
-              className={animateMode ? 'tm-view-enter' : undefined}
-              style={{ display: 'grid', gridTemplateColumns: '1fr', alignItems: 'start' }}
-            >
-              <div className={panelClassName('info')} style={panelStyle('info')}>
-                <TenderMonitorInfo
-                  tender={tender}
-                  palette={palette}
-                  isPhone={isPhoneDevice}
-                  draft={draft?.info ?? null}
-                  scopeOptions={scopeOptions}
-                  statusOptions={statusOptions}
-                  onChange={edit.updateInfo}
-                  onSubmit={submit}
-                />
-              </div>
-
-              <div className={panelClassName('timeline')} style={panelStyle('timeline')}>
-                {draft ? (
-                  <ChronologyEditor rows={draft.chronology} palette={palette} onChange={edit.updateChronology} onSubmit={submit} />
-                ) : (
-                  <ReadOnlyChronologySection items={chronologyItems} palette={palette} />
-                )}
-              </div>
-
-              <div className={panelClassName('package')} style={panelStyle('package')}>
-                {draft ? (
-                  <PackageEditor rows={draft.packageItems} palette={palette} onChange={edit.updatePackageItems} onSubmit={submit} />
-                ) : (
-                  <ReadOnlyPackageSection items={packageItems} palette={palette} />
-                )}
-              </div>
+          {/* Все три панели рендерятся всегда и накладываются в одну grid-ячейку:
+              высота окна = самой высокой (Информация), активная видна и прижата к верху — окно не «прыгает». */}
+          <div
+            key={editing ? 'edit' : 'view'}
+            className={animateMode ? 'tm-view-enter' : undefined}
+            style={{ display: 'grid', gridTemplateColumns: '1fr', alignItems: 'start' }}
+          >
+            <div className={panelClassName('info')} style={panelStyle('info')}>
+              <TenderMonitorInfo
+                tender={tender}
+                palette={palette}
+                isPhone={isPhoneDevice}
+                draft={draft?.info ?? null}
+                scopeOptions={scopeOptions}
+                statusOptions={statusOptions}
+                onChange={edit.updateInfo}
+                onSubmit={submit}
+              />
             </div>
-          </ConfigProvider>
+
+            <div className={panelClassName('timeline')} style={panelStyle('timeline')}>
+              {draft ? (
+                <ChronologyEditor rows={draft.chronology} palette={palette} onChange={edit.updateChronology} onSubmit={submit} />
+              ) : (
+                <ReadOnlyChronologySection items={chronologyItems} palette={palette} />
+              )}
+            </div>
+
+            <div className={panelClassName('package')} style={panelStyle('package')}>
+              {draft ? (
+                <PackageEditor rows={draft.packageItems} palette={palette} onChange={edit.updatePackageItems} onSubmit={submit} />
+              ) : (
+                <ReadOnlyPackageSection items={packageItems} palette={palette} />
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </Modal>

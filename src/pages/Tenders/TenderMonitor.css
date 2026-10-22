@@ -382,6 +382,112 @@
   }
 }
 
+/* Рамка уже сетки таблицы (узкий экран при раскрытом меню) — строки листаются вбок, а не обрезаются. */
+.tm-table__scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tm-scroll-thumb) transparent;
+}
+
+/* = минимальной ширине GRID_COLUMNS (TenderMonitorDesktopRows.tsx): шапки секций тянутся вместе со строками. */
+.tm-table__rows {
+  min-width: 1092px;
+}
+
+/* ── Вкладки перечня и окна тендера: активная — подчёркивание и текст акцентом, счётчик — плашкой ── */
+.tm-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  border-bottom: 1px solid var(--tm-btn-border);
+}
+
+.tm-tabs--list {
+  margin-bottom: 16px;
+}
+
+.tm-tabs--modal {
+  margin-top: 14px;
+}
+
+.tm-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--tm-btn-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+.tm-tab--active {
+  border-bottom-color: var(--tm-accent);
+  color: var(--tm-accent);
+}
+
+.tm-tab:focus-visible {
+  outline: 2px solid var(--tm-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.tm-tab__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--tm-tab-badge-bg);
+  color: var(--tm-btn-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tm-tab--active .tm-tab__count {
+  background: var(--tm-accent-bg);
+  color: var(--tm-accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tm-tab:hover:not(.tm-tab--active) {
+    color: var(--tm-text);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-tab {
+    transition: none;
+  }
+}
+
+/* ── Бейдж: статус, «Звонок», действие импорта. Цвета — из палитры (getToneBadgeStyle и соседи). ── */
+.tm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 /* Скрытая вкладка окна тендера: переходы antd (transition: all) задерживали бы visibility: hidden. */
 .tm-modal-panel--inactive,
 .tm-modal-panel--inactive * {

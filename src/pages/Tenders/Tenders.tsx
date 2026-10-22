@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { App } from 'antd';
+import { App, ConfigProvider } from 'antd';
 import dayjs from 'dayjs';
 import { patchTenderRegistryFields } from '../../lib/api/tenderRegistry';
 import type { TenderRegistryWithRelations } from '../../lib/types';
@@ -32,7 +32,14 @@ import {
   type TenderMonitorSortField,
   type TenderMonitorTab,
 } from './utils/tenderMonitor';
-import { getTenderControlVars, getTenderMonitorPalette, mixHex, type TenderMonitorPalette } from './utils/tenderMonitorTheme';
+import {
+  getTenderAntdTheme,
+  getTenderControlVars,
+  getTenderMonitorPalette,
+  isCoarsePointer,
+  mixHex,
+  type TenderMonitorPalette,
+} from './utils/tenderMonitorTheme';
 import './Tenders.css';
 import './TendersModern.css';
 import './TenderMonitor.css';
@@ -97,6 +104,7 @@ const Tenders: React.FC = () => {
   const isDirector = user?.role_code === 'director' || user?.role_code === 'general_director';
   const isGeneralDirector = user?.role_code === 'general_director';
   const palette = getTenderMonitorPalette(theme === 'dark');
+  const antdTheme = useMemo(() => getTenderAntdTheme(getTenderMonitorPalette(theme === 'dark'), theme === 'dark'), [theme]);
 
   const [activeTab, setActiveTab] = useState<TenderMonitorTab>('all');
   const [searchValue, setSearchValue] = useState('');
@@ -249,208 +257,212 @@ const Tenders: React.FC = () => {
   };
 
   return (
-    <div
-      // Канбан — страница ровно в экран: прокручиваются только колонки доски.
-      className={[
-        'tender-monitor-page',
-        viewMode === 'kanban' && 'tender-monitor-page--fit',
-        deleteMode.active && 'tender-monitor-page--selecting',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      style={
-        {
-          '--tm-page-bg': palette.pageBg,
-          '--tm-page-glow-primary': palette.pageGlowPrimary,
-          '--tm-page-glow-secondary': palette.pageGlowSecondary,
-          '--tm-card-border': palette.border,
-          '--tm-call-pulse-shadow': palette.callPulseShadow,
-          '--tm-alert-pulse-shadow': palette.alertPulseShadow,
-          '--tm-alert-pulse-border': palette.alertPulseBorder,
-          ...getTenderControlVars(palette),
-        } as React.CSSProperties
-      }
-    >
-      <div className="tm-page-body">
-        {/* Описание и кнопки управления — скрыты на телефонах (заголовок страницы — в общей шапке, здесь режим просмотра).
-            В ландшафте телефона isMobile=false, поэтому добавляем !isLandscapePhone, чтобы не дублировать шапку. */}
-        {!isMobile && !isLandscapePhone && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ color: palette.muted, fontSize: 14 }}>
-                Реестр с контролем подачи КП, звонков и общей хронологии тендера.
+    // Тема antd страницы: поля, списки и окна (они рендерятся порталом, но контекст доходит) — в палитре.
+    <ConfigProvider theme={antdTheme} componentSize={isCoarsePointer() ? 'large' : undefined}>
+      <div
+        // Канбан — страница ровно в экран: прокручиваются только колонки доски.
+        className={[
+          'tender-monitor-page',
+          viewMode === 'kanban' && 'tender-monitor-page--fit',
+          deleteMode.active && 'tender-monitor-page--selecting',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        style={
+          {
+            '--tm-page-bg': palette.pageBg,
+            '--tm-page-glow-primary': palette.pageGlowPrimary,
+            '--tm-page-glow-secondary': palette.pageGlowSecondary,
+            '--tm-card-border': palette.border,
+            '--tm-call-pulse-shadow': palette.callPulseShadow,
+            '--tm-alert-pulse-shadow': palette.alertPulseShadow,
+            '--tm-alert-pulse-border': palette.alertPulseBorder,
+            ...getTenderControlVars(palette),
+          } as React.CSSProperties
+        }
+      >
+        <div className="tm-page-body">
+          {/* Описание и кнопки управления — скрыты на телефонах (заголовок страницы — в общей шапке, здесь режим просмотра).
+              В ландшафте телефона isMobile=false, поэтому добавляем !isLandscapePhone, чтобы не дублировать шапку. */}
+          {!isMobile && !isLandscapePhone && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ color: palette.muted, fontSize: 14 }}>
+                  Реестр с контролем подачи КП, звонков и общей хронологии тендера.
+                </div>
               </div>
-            </div>
 
-            {!isDirector ? (
-              <TenderPageActions
-                showAddForm={showAddForm}
-                selecting={deleteMode.active}
-                onToggleSelect={deleteMode.active ? deleteMode.cancel : deleteMode.start}
-                onToggleAddForm={() => setShowAddForm((prev) => !prev)}
-                onImport={() => setImportModalOpen(true)}
-              />
-            ) : null}
-          </div>
-        )}
-
-        <div className={isPhoneDevice ? 'tm-metrics tm-metrics--phone' : 'tm-metrics'}>
-          <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} isPhone={isPhoneDevice} />
-          <MetricCard title="В расчете" value={counts.calc} caption="готовятся КП" accent={palette.info} palette={palette} isPhone={isPhoneDevice} />
-          <MetricCard title="Направлено" value={counts.sent} caption="ожидает ответа" accent="#ef9f27" palette={palette} isPhone={isPhoneDevice} />
-          {needCallCount > 0 ? (
-            <CallListPopover
-              tenders={callTenders}
-              palette={palette}
-              readOnly={isGeneralDirector || isMobile}
-              placement="bottom"
-              onOpenTender={(tender) => handleOpenTender(tender, 'info')}
-              onQuickCall={handleQuickCall}
-            >
-              <div
-                role="button"
-                tabIndex={0}
-                className="tm-metric-trigger"
-                aria-label={`Требуют звонка: ${needCallCount}. Показать, кому позвонить`}
-                aria-haspopup="dialog"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    event.currentTarget.click();
-                  }
-                }}
-              >
-                <MetricCard
-                  title="Требуют звонка"
-                  value={needCallCount}
-                  caption="более 7 дней без контроля"
-                  accent={palette.danger}
-                  blinking
-                  palette={palette}
-                  isPhone={isPhoneDevice}
+              {!isDirector ? (
+                <TenderPageActions
+                  showAddForm={showAddForm}
+                  selecting={deleteMode.active}
+                  onToggleSelect={deleteMode.active ? deleteMode.cancel : deleteMode.start}
+                  onToggleAddForm={() => setShowAddForm((prev) => !prev)}
+                  onImport={() => setImportModalOpen(true)}
                 />
-              </div>
-            </CallListPopover>
-          ) : (
+              ) : null}
+            </div>
+          )}
+
+          <div className={isPhoneDevice ? 'tm-metrics tm-metrics--phone' : 'tm-metrics'}>
+            <MetricCard title="Всего тендеров" value={counts.all} caption="активных позиций" accent={palette.title} palette={palette} isPhone={isPhoneDevice} />
+            <MetricCard title="В расчете" value={counts.calc} caption="готовятся КП" accent={palette.info} palette={palette} isPhone={isPhoneDevice} />
+            <MetricCard title="Направлено" value={counts.sent} caption="ожидает ответа" accent={palette.sent} palette={palette} isPhone={isPhoneDevice} />
+            {needCallCount > 0 ? (
+              <CallListPopover
+                tenders={callTenders}
+                palette={palette}
+                readOnly={isGeneralDirector || isMobile}
+                placement="bottom"
+                onOpenTender={(tender) => handleOpenTender(tender, 'info')}
+                onQuickCall={handleQuickCall}
+              >
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="tm-metric-trigger"
+                  aria-label={`Требуют звонка: ${needCallCount}. Показать, кому позвонить`}
+                  aria-haspopup="dialog"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      event.currentTarget.click();
+                    }
+                  }}
+                >
+                  <MetricCard
+                    title="Требуют звонка"
+                    value={needCallCount}
+                    caption="более 7 дней без контроля"
+                    accent={palette.danger}
+                    blinking
+                    palette={palette}
+                    isPhone={isPhoneDevice}
+                  />
+                </div>
+              </CallListPopover>
+            ) : (
+              <MetricCard
+                title="Требуют звонка"
+                value={0}
+                caption="более 7 дней без контроля"
+                accent={palette.success}
+                palette={palette}
+                isPhone={isPhoneDevice}
+              />
+            )}
             <MetricCard
-              title="Требуют звонка"
-              value={0}
-              caption="более 7 дней без контроля"
+              title="Сумма КП"
+              value={formatMoney(totalCost)}
+              caption={`${formatArea(totalArea)} в работе`}
               accent={palette.success}
               palette={palette}
               isPhone={isPhoneDevice}
             />
-          )}
-          <MetricCard
-            title="Сумма КП"
-            value={formatMoney(totalCost)}
-            caption={`${formatArea(totalArea)} в работе`}
-            accent={palette.success}
-            palette={palette}
-            isPhone={isPhoneDevice}
-          />
+          </div>
+
+          {showAddForm && !isDirector ? (
+            <TenderAddForm
+              statuses={statuses}
+              constructionScopes={constructionScopes}
+              tenderNumbers={tenderNumbers}
+              onSuccess={async () => {
+                setShowAddForm(false);
+                await refetch();
+              }}
+              onCancel={() => setShowAddForm(false)}
+            />
+          ) : null}
+
+          <TenderSelectionContext.Provider value={deleteMode.selection}>
+            <TenderMonitorTable
+              tenders={visibleTenders}
+              loading={loading && (viewMode === 'list' || tenders.length === 0)}
+              activeTab={activeTab}
+              searchValue={searchValue}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              counts={counts}
+              onTabChange={setActiveTab}
+              onSearchChange={setSearchValue}
+              onSortChange={handleSortChange}
+              onOpenTender={(tender) => handleOpenTender(tender, 'info')}
+              onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
+              onOpenPackage={(tender) => handleOpenTender(tender, 'package')}
+              onQuickCall={handleQuickCall}
+              onUpdate={refetch}
+              readOnly={isGeneralDirector || isMobile}
+              viewMode={viewMode}
+              onViewModeChange={handleViewModeChange}
+              kanban={
+                <TenderKanbanBoard
+                  tenders={boardTenders}
+                  statuses={statuses}
+                  dragEnabled={!isGeneralDirector && !isPhoneDevice && !deleteMode.active}
+                  readOnly={isGeneralDirector || isMobile}
+                  onOpenTender={(tender) => handleOpenTender(tender, 'info')}
+                  onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
+                  onOpenPackage={(tender) => handleOpenTender(tender, 'package')}
+                  onQuickCall={handleQuickCall}
+                  onUpdate={refetch}
+                />
+              }
+            />
+          </TenderSelectionContext.Provider>
         </div>
 
-        {showAddForm && !isDirector ? (
-          <TenderAddForm
-            statuses={statuses}
-            constructionScopes={constructionScopes}
-            tenderNumbers={tenderNumbers}
-            onSuccess={async () => {
-              setShowAddForm(false);
-              await refetch();
-            }}
-            onCancel={() => setShowAddForm(false)}
+        {deleteMode.active ? (
+          <TenderSelectionBar
+            count={deleteMode.selectedTenders.length}
+            onCancel={deleteMode.cancel}
+            onDelete={deleteMode.openConfirm}
           />
         ) : null}
 
-        <TenderSelectionContext.Provider value={deleteMode.selection}>
-          <TenderMonitorTable
-            tenders={visibleTenders}
-            loading={loading && (viewMode === 'list' || tenders.length === 0)}
-            activeTab={activeTab}
-            searchValue={searchValue}
-            sortField={sortField}
-            sortDirection={sortDirection}
-            counts={counts}
-            onTabChange={setActiveTab}
-            onSearchChange={setSearchValue}
-            onSortChange={handleSortChange}
-            onOpenTender={(tender) => handleOpenTender(tender, 'info')}
-            onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
-            onOpenPackage={(tender) => handleOpenTender(tender, 'package')}
-            onQuickCall={handleQuickCall}
-            onUpdate={refetch}
-            readOnly={isGeneralDirector || isMobile}
-            viewMode={viewMode}
-            onViewModeChange={handleViewModeChange}
-            kanban={
-              <TenderKanbanBoard
-                tenders={boardTenders}
-                statuses={statuses}
-                dragEnabled={!isGeneralDirector && !isPhoneDevice && !deleteMode.active}
-                readOnly={isGeneralDirector || isMobile}
-                onOpenTender={(tender) => handleOpenTender(tender, 'info')}
-                onOpenTimeline={(tender) => handleOpenTender(tender, 'timeline')}
-                onOpenPackage={(tender) => handleOpenTender(tender, 'package')}
-                onQuickCall={handleQuickCall}
-                onUpdate={refetch}
-              />
-            }
-          />
-        </TenderSelectionContext.Provider>
-      </div>
-
-      {deleteMode.active ? (
-        <TenderSelectionBar
-          count={deleteMode.selectedTenders.length}
-          onCancel={deleteMode.cancel}
-          onDelete={deleteMode.openConfirm}
+        <TenderDeleteConfirm
+          open={deleteMode.confirmOpen}
+          tenders={deleteMode.selectedTenders}
+          deleting={deleteMode.deleting}
+          palette={palette}
+          onCancel={deleteMode.closeConfirm}
+          onConfirm={() => void deleteMode.confirmDelete()}
         />
-      ) : null}
 
-      <TenderDeleteConfirm
-        open={deleteMode.confirmOpen}
-        tenders={deleteMode.selectedTenders}
-        deleting={deleteMode.deleting}
-        palette={palette}
-        onCancel={deleteMode.closeConfirm}
-        onConfirm={() => void deleteMode.confirmDelete()}
-      />
+        <TenderMonitorModal
+          open={detailOpen}
+          tender={selectedTender}
+          initialTab={detailInitialTab}
+          statuses={statuses}
+          constructionScopes={constructionScopes}
+          onClose={() => setDetailOpen(false)}
+          onQuickCall={handleQuickCall}
+          onUpdate={refetch}
+          readOnly={isGeneralDirector || isPhoneDevice}
+        />
 
-      <TenderMonitorModal
-        open={detailOpen}
-        tender={selectedTender}
-        initialTab={detailInitialTab}
-        statuses={statuses}
-        constructionScopes={constructionScopes}
-        onClose={() => setDetailOpen(false)}
-        onQuickCall={handleQuickCall}
-        onUpdate={refetch}
-        readOnly={isGeneralDirector || isPhoneDevice}
-      />
+        <CallNoteDialog
+          open={callDialogOpen}
+          tender={callTender}
+          saving={callSaving}
+          palette={palette}
+          onCancel={() => setCallDialogOpen(false)}
+          onSave={(text) => void handleCallSave(text)}
+        />
 
-      <CallNoteDialog
-        open={callDialogOpen}
-        tender={callTender}
-        saving={callSaving}
-        palette={palette}
-        onCancel={() => setCallDialogOpen(false)}
-        onSave={(text) => void handleCallSave(text)}
-      />
-
-      <ImportTendersModal
-        open={importModalOpen}
-        onCancel={() => setImportModalOpen(false)}
-        onSuccess={async () => {
-          setImportModalOpen(false);
-          await refetch();
-        }}
-        constructionScopes={constructionScopes}
-        statuses={statuses}
-        existingTenders={tenders}
-      />
-    </div>
+        <ImportTendersModal
+          open={importModalOpen}
+          onCancel={() => setImportModalOpen(false)}
+          onSuccess={async () => {
+            setImportModalOpen(false);
+            await refetch();
+          }}
+          constructionScopes={constructionScopes}
+          statuses={statuses}
+          existingTenders={tenders}
+          palette={palette}
+        />
+      </div>
+    </ConfigProvider>
   );
 };
 

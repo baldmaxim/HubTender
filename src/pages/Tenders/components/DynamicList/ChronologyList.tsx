@@ -1,10 +1,11 @@
 import React from 'react';
-import { Form, DatePicker, Input, Button, Space, List, Select, Tag, Typography } from 'antd';
+import { Form, DatePicker, Input, Space, List, Select, Tag, Typography } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { FormInstance } from 'antd';
 import type { ChronologyItem } from '../../../../lib/types';
 import { textareaEnterToSave } from '../../../../utils/keyboardSave';
+import { DATE_INPUT_FORMATS } from '../../utils/tenderMonitor';
 
 const { Text } = Typography;
 
@@ -53,46 +54,30 @@ export const ChronologyList: React.FC<ChronologyListProps> = ({
       {(fields, { add, remove }) => (
         <>
           {fields.map(({ key, name, ...restField }) => (
-            <div
-              key={key}
-              style={{
-                display: 'flex',
-                gap: 8,
-                marginBottom: 8,
-                alignItems: 'flex-start',
-              }}
-            >
-              <Form.Item
-                {...restField}
-                name={[name, 'type']}
-                initialValue="default"
-                style={{ marginBottom: 0, width: 150, flexShrink: 0 }}
-              >
+            <div key={key} className="tm-dyn-row tm-dyn-row--chronology">
+              <Form.Item {...restField} name={[name, 'type']} initialValue="default">
                 <Select
                   options={[
                     { value: 'default', label: 'Событие' },
                     { value: 'call_follow_up', label: 'Звонок' },
                   ]}
+                  aria-label="Тип события"
                 />
               </Form.Item>
 
-              <Form.Item
-                {...restField}
-                name={[name, 'date']}
-                style={{ marginBottom: 0, width: 150, flexShrink: 0 }}
-              >
-                <DatePicker format="DD.MM.YYYY" placeholder="Дата" />
+              <Form.Item {...restField} name={[name, 'date']}>
+                <DatePicker format={DATE_INPUT_FORMATS} placeholder="Выберите дату" aria-label="Дата события" />
               </Form.Item>
 
               <Form.Item
                 {...restField}
                 name={[name, 'text']}
                 rules={[{ required: true, message: 'Введите текст события' }]}
-                style={{ marginBottom: 0, flex: 1 }}
               >
                 <Input.TextArea
                   placeholder="Описание события"
                   autoSize={{ minRows: 1, maxRows: 6 }}
+                  allowClear
                   onKeyDown={textareaEnterToSave(
                     () => form?.submit(),
                     (v) => form?.setFieldValue([fieldName, name, 'text'], v)
@@ -100,26 +85,26 @@ export const ChronologyList: React.FC<ChronologyListProps> = ({
                 />
               </Form.Item>
 
-              <Button
-                type="text"
-                danger
-                icon={<DeleteOutlined />}
+              <button
+                type="button"
+                className="tm-btn tm-btn--icon tm-btn--delete"
                 onClick={() => remove(name)}
-                title="Удалить"
-                style={{ flexShrink: 0 }}
-              />
+                aria-label="Удалить строку"
+                title="Удалить строку"
+              >
+                <DeleteOutlined aria-hidden />
+              </button>
             </div>
           ))}
 
-          <Button
-            type="dashed"
+          <button
+            type="button"
+            className="tm-btn tm-btn--small"
             onClick={() => add({ date: null, text: '', type: 'default' })}
-            icon={<PlusOutlined />}
-            block
-            style={{ marginTop: 8 }}
           >
-            Добавить событие
-          </Button>
+            <PlusOutlined aria-hidden />
+            Добавить строку
+          </button>
         </>
       )}
     </Form.List>
