@@ -252,18 +252,19 @@ export const prepareBatch = (items) => {
 /**
  * Делит позиции на группы по бюджету токенов и числу находок, сохраняя порядок.
  * Позиция, которая одна больше бюджета или maxFindings, идёт отдельной группой.
+ * perFindingTokens — резерв под ответ: прибавляется к оценке позиции за каждую её находку.
  * @param {Item[]} items
- * @param {{ budgetTokens?: number, maxFindings?: number }} [opts]
+ * @param {{ budgetTokens?: number, maxFindings?: number, perFindingTokens?: number }} [opts]
  * @returns {Item[][]}
  */
-export const packBatches = (items, { budgetTokens = 20000, maxFindings = Infinity } = {}) => {
+export const packBatches = (items, { budgetTokens = 20000, maxFindings = Infinity, perFindingTokens = 0 } = {}) => {
   const groups = [];
   let group = [];
   let tokens = 0;
   let count = 0;
   for (const item of items) {
-    const est = prepareBatch([item]).estimatedTokens;
     const n = item.findings.length;
+    const est = prepareBatch([item]).estimatedTokens + perFindingTokens * n;
     if (group.length > 0 && (tokens + est > budgetTokens || count + n > maxFindings)) {
       groups.push(group);
       group = [];

@@ -204,3 +204,32 @@ test('нормализация baseUrl', () => {
   assert.equal(normalizeBaseUrl('http://pc:11434/'), 'http://pc:11434/v1');
   assert.equal(normalizeBaseUrl('https://openrouter.ai/api/v1/'), 'https://openrouter.ai/api/v1');
 });
+
+test('think: thinkExtra вливается поверх extra только при think=true', async () => {
+  const srv = await startServer((_b, _r, res) => reply(res, 200, completion({ content: 'ok' })));
+  try {
+    const profile = makeProfile(srv.baseUrl, {
+      extra: { chat_template_kwargs: { enable_thinking: false }, top_k: 5 },
+      thinkExtra: { chat_template_kwargs: { enable_thinking: true } },
+    });
+    const client = createLlmClient(profile, FAST);
+    await client.chat({ messages: MESSAGES });
+    await client.chat({ messages: MESSAGES, think: true });
+    assert.deepEqual(srv.calls[0].body.chat_template_kwargs, { enable_thinking: false });
+    assert.deepEqual(srv.calls[1].body.chat_template_kwargs, { enable_thinking: true });
+    assert.equal(srv.calls[1].body.top_k, 5);
+  } finally {
+    srv.close();
+  }
+});
+
+test('think=true без thinkExtra в профиле — тело как обычно', async () => {
+  const srv = await startServer((_b, _r, res) => reply(res, 200, completion({ content: 'ok' })));
+  try {
+    const client = createLlmClient(makeProfile(srv.baseUrl), FAST);
+    await client.chat({ messages: MESSAGES, think: true });
+    assert.equal(srv.calls[0].body.chat_template_kwargs, undefined);
+  } finally {
+    srv.close();
+  }
+});

@@ -222,3 +222,20 @@ test('estimateTokens: цифры по одной, остальное по 3 си
   assert.equal(estimateTokens('abcd'), 2);
   assert.equal(estimateTokens('a1'), 2);
 });
+
+test('packBatches: perFindingTokens добавляется к оценке позиции за каждую находку', () => {
+  const mk = (n, findings) => ({
+    position: { id: `s${n}`, customerName: `Позиция ${n}`, rows: [{ id: `r${n}`, type: 'мат', name: 'Материал' }] },
+    findings: Array.from({ length: findings }, (_, i) => ({ id: `f${n}-${i}`, ruleCode: 'QA', detail: 'без цены', entityType: 'boq_item', entityId: `r${n}` })),
+  });
+  const items = [mk(1, 1), mk(2, 1), mk(3, 1)];
+  const one = prepareBatch([items[0]]).estimatedTokens;
+  const budget = one * 2 + 1;
+  assert.deepEqual(packBatches(items, { budgetTokens: budget }).map((g) => g.length), [2, 1]);
+  // С резервом 200 на находку две позиции уже не помещаются в тот же бюджет.
+  assert.deepEqual(packBatches(items, { budgetTokens: budget, perFindingTokens: 200 }).map((g) => g.length), [1, 1, 1]);
+  // Позиция с тремя находками стоит втрое больше резерва.
+  const heavy = [mk(1, 3), mk(2, 1)];
+  const est = prepareBatch([heavy[0]]).estimatedTokens;
+  assert.deepEqual(packBatches(heavy, { budgetTokens: est + 600, perFindingTokens: 200 }).map((g) => g.length), [1, 1]);
+});

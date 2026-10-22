@@ -143,7 +143,7 @@ export const createPortal = ({
     return { status: res.status, text: await res.text() };
   };
 
-  const request = async (method, path, query, body) => {
+  const request = async (method, path, query, body, raw = false) => {
     let retries429 = 0;
     let retriesNet = 0;
     for (;;) {
@@ -174,11 +174,11 @@ export const createPortal = ({
         await sleep(RETRY_NETWORK_DELAYS_MS[retriesNet++]);
         continue;
       }
-      return interpret(method, path, status, text);
+      return interpret(method, path, status, text, raw);
     }
   };
 
-  const interpret = (method, path, status, text) => {
+  const interpret = (method, path, status, text, raw) => {
     const ok = status >= 200 && status < 300;
     if (ok && (status === 204 || !text.trim())) return null;
 
@@ -192,6 +192,7 @@ export const createPortal = ({
       );
     }
     if (ok) {
+      if (raw) return parsed;
       return parsed !== null && typeof parsed === 'object' && 'data' in parsed ? parsed.data : parsed;
     }
 
@@ -207,7 +208,8 @@ export const createPortal = ({
 
   return {
     baseUrl,
-    get: (path, query) => request('GET', path, query, undefined),
+    // { raw: true } — весь разобранный ответ, а не только data (нужен next_cursor постраничных списков).
+    get: (path, query, { raw = false } = {}) => request('GET', path, query, undefined, raw),
     post: (path, body) => request('POST', path, undefined, body),
     put: (path, body) => request('PUT', path, undefined, body),
   };

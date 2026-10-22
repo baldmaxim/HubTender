@@ -25,6 +25,7 @@ export const DEFAULT_ENV_PATH = fileURLToPath(new URL('../ai-review.env', import
 const DEFAULT_CONTEXT_TOKENS = 16384;
 const DEFAULT_TIMEOUT_SEC = 900;
 const DEFAULT_MAX_TOKENS = 8192;
+const DEFAULT_BATCH_FINDINGS = 60;
 const MODEL_NAME_RE = /^[a-z0-9_]+$/;
 
 /**
@@ -100,7 +101,9 @@ const readJsonObject = (values, key) => {
  * @property {number} contextTokens
  * @property {number} timeoutMs
  * @property {number} maxTokens
- * @property {Record<string, unknown> | undefined} extra
+ * @property {Record<string, unknown> | undefined} extra       вливается в тело каждого запроса
+ * @property {Record<string, unknown> | undefined} thinkExtra  вливается поверх extra во втором проходе --think
+ * @property {number} batchFindings  максимум находок в одной пачке
  */
 
 /**
@@ -140,6 +143,8 @@ const buildProfile = (values, name) => {
     timeoutMs: readPositiveInt(values, key('TIMEOUT_SEC'), DEFAULT_TIMEOUT_SEC) * 1000,
     maxTokens: readPositiveInt(values, key('MAX_TOKENS'), DEFAULT_MAX_TOKENS),
     extra: readJsonObject(values, key('EXTRA')),
+    thinkExtra: readJsonObject(values, key('THINK_EXTRA')),
+    batchFindings: readPositiveInt(values, key('BATCH_FINDINGS'), DEFAULT_BATCH_FINDINGS),
   };
 };
 

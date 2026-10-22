@@ -150,3 +150,15 @@ test('интервал между стартами запросов при rpm',
 test('maskKey', () => {
   assert.equal(maskKey('thk_abcdefghij'), 'thk_ab***');
 });
+
+test('get с { raw: true } возвращает весь ответ (next_cursor), без raw — только data', async () => {
+  const srv = await startServer((_req, res) => json(res, 200, { data: [1], next_cursor: 'abc' }));
+  try {
+    const portal = createPortal({ url: srv.url, key: 'k', sleep: noSleep });
+    assert.deepEqual(await portal.get('/p'), [1]);
+    assert.deepEqual(await portal.get('/p', { limit: 200 }, { raw: true }), { data: [1], next_cursor: 'abc' });
+    assert.equal(srv.requests[1].url, '/p?limit=200');
+  } finally {
+    srv.close();
+  }
+});

@@ -3,41 +3,115 @@
  * ИИ-проверка находок «Проверки данных» скриптом на ПК, который видит офисную модель.
  *
  *   node scripts/ai-review/review.mjs help
- *   node scripts/ai-review/review.mjs ping [--models=qwen,minimax] [--quick] [--no-portal]
+ *   node scripts/ai-review/review.mjs ping [--models=qwen,minimax] [--quick] [--no-portal] [--bench=<тендер>]
+ *   node scripts/ai-review/review.mjs run <тендер> [--models=a,b] [--rule=U,V] [--new] [--max=N] [--think] [--refresh] [--no-cache]
+ *   node scripts/ai-review/review.mjs apply <путь к review.md> [--dry-run] [--brief]
  *
  * Настройки — только в scripts/ai-review/ai-review.env (см. README.md).
  */
 
 import { parseArgs } from 'node:util';
+import { runApply } from './lib/apply.mjs';
+import { runBench } from './lib/bench.mjs';
 import { ConfigError, loadConfig } from './lib/env.mjs';
+import { LlmError } from './lib/llm.mjs';
 import { runPing } from './lib/ping.mjs';
+import { PortalError } from './lib/portal.mjs';
+import { runReview } from './lib/run.mjs';
 
 const HELP = `ИИ-проверка находок «Проверки данных»
 
 Использование: node scripts/ai-review/review.mjs <команда> [флаги]
 
 Команды:
+  run <тендер>   Разобрать открытые находки моделью и собрать review.md для разметки
+                 <тендер>: номер (256 — последняя версия), 256v3 или uuid
+           --models=a,b   профили (по умолчанию — первая из AI_REVIEW_MODELS)
+           --rule=U,V     только эти правила
+           --new          только новые находки
+           --max=N        первые N позиций по сумме Δ
+           --think        второй проход с рассуждениями (нужен AI_REVIEW_<ИМЯ>_THINK_EXTRA)
+           --refresh      пересчитать отчёт портала перед разбором
+           --no-cache     не читать кэш ответов моделей
+  apply <review.md>   Отправить отметки ([+] ошибка, [-] норма) в портал
+           --dry-run      показать, что ушло бы, ничего не отправлять и не писать
+           --brief        записать краткий итог в выжимку тендера
   ping   Проверить связь с порталом и моделями
            --models=a,b   профили (по умолчанию — все из AI_REVIEW_MODELS)
            --quick        без проверки контекста (быстро)
            --no-portal    не обращаться к порталу
+           --bench=<тендер>   замер скорости на 20 позициях тендера и прогноз времени
   help   Эта справка
 
 Настройки читаются только из scripts/ai-review/ai-review.env
-(образец — ai-review.env.example).`;
+(образец — ai-review.env.example). Подробности — README.md.`;
+
+/** Список через запятую → массив; пусто → undefined. */
+const splitList = (value, transform = (item) => item) => {
+  if (!value) return undefined;
+  const items = value.split(',').map((item) => transform(item.trim())).filter(Boolean);
+  return items.length > 0 ? items : undefined;
+};
+
+const positional = (positionals, usage) => {
+  if (positionals.length !== 1) throw new ConfigError(`Ожидается один аргумент.\nИспользование: ${usage}`);
+  return positionals[0];
+};
 
 /** Набор флагов каждой команды. */
 const COMMANDS = {
+  run: {
+    options: {
+      models: { type: 'string' },
+      rule: { type: 'string' },
+      new: { type: 'boolean' },
+      max: { type: 'string' },
+      think: { type: 'boolean' },
+      refresh: { type: 'boolean' },
+      'no-cache': { type: 'boolean' },
+    },
+    positionals: true,
+    run: async ({ values, positionals }) => {
+      const tender = positional(positionals, 'node scripts/ai-review/review.mjs run <тендер> [флаги] (тендер: 256, 256v3 или uuid)');
+      let max;
+      if (values.max !== undefined) {
+        max = Number(values.max);
+        if (!Number.isInteger(max) || max <= 0) throw new ConfigError(`--max: ожидается положительное целое, указано «${values.max}»`);
+      }
+      const result = await runReview(loadConfig(), {
+        tender,
+        models: splitList(values.models, (item) => item.toLowerCase()),
+        rules: splitList(values.rule, (item) => item.toUpperCase()),
+        onlyNew: values.new,
+        max,
+        think: values.think,
+        refresh: values.refresh,
+        noCache: values['no-cache'],
+      });
+      return result.code;
+    },
+  },
+  apply: {
+    options: {
+      'dry-run': { type: 'boolean' },
+      brief: { type: 'boolean' },
+    },
+    positionals: true,
+    run: async ({ values, positionals }) => {
+      const file = positional(positionals, 'node scripts/ai-review/review.mjs apply <путь к review.md> [--dry-run] [--brief]');
+      return runApply(loadConfig(), { file, dryRun: values['dry-run'], brief: values.brief });
+    },
+  },
   ping: {
     options: {
       models: { type: 'string' },
       quick: { type: 'boolean' },
       'no-portal': { type: 'boolean' },
+      bench: { type: 'string' },
     },
     run: async ({ values }) => {
-      const models = values.models
-        ? values.models.split(',').map((item) => item.trim().toLowerCase()).filter(Boolean)
-        : undefined;
+      const models = splitList(values.models, (item) => item.toLowerCase());
+      if (values.bench !== undefined) return runBench(loadConfig(), { tender: values.bench, models });
       return runPing(loadConfig(), { models, quick: values.quick, noPortal: values['no-portal'] });
     },
   },
@@ -65,7 +139,7 @@ const main = async (argv) => {
 
   let parsed;
   try {
-    parsed = parseArgs({ args: rest, options: spec.options, allowPositionals: false, strict: true });
+    parsed = parseArgs({ args: rest, options: spec.options, allowPositionals: Boolean(spec.positionals), strict: true });
   } catch (err) {
     if (String(err?.code).startsWith('ERR_PARSE_ARGS')) {
       console.error(`${err.message}\nСправка: node scripts/ai-review/review.mjs help`);
@@ -80,6 +154,10 @@ const main = async (argv) => {
     if (err instanceof ConfigError) {
       console.error(err.message);
       return 2;
+    }
+    if (err instanceof PortalError || err instanceof LlmError) {
+      console.error(`Ошибка: ${err.message}`);
+      return 1;
     }
     throw err;
   }

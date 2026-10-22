@@ -251,7 +251,7 @@ export const createLlmClient = (profile, { sleep = defaultSleep, retryDelaysMs =
     return copy;
   };
 
-  const buildBody = ({ messages, schema, schemaName, maxTokens, temperature }, format) => {
+  const buildBody = ({ messages, schema, schemaName, maxTokens, temperature, think }, format) => {
     const body = {
       model: profile.model,
       messages: format === 'json_schema' || !schema ? messages : withSchemaPrompt(messages, schema),
@@ -259,6 +259,7 @@ export const createLlmClient = (profile, { sleep = defaultSleep, retryDelaysMs =
       max_tokens: maxTokens,
       stream: false,
       ...profile.extra,
+      ...(think ? profile.thinkExtra : {}),
     };
     if (schema && format === 'json_schema') {
       body.response_format = { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } };
@@ -313,10 +314,18 @@ export const createLlmClient = (profile, { sleep = defaultSleep, retryDelaysMs =
   };
 
   /**
-   * @param {{ messages: Array<{ role: string, content: string }>, schema?: object, schemaName?: string, maxTokens?: number, temperature?: number }} opts
+   * think — режим рассуждений: в тело дополнительно вливается profile.thinkExtra.
+   * @param {{ messages: Array<{ role: string, content: string }>, schema?: object, schemaName?: string, maxTokens?: number, temperature?: number, think?: boolean }} opts
    */
-  const chat = async ({ messages, schema, schemaName = 'answer', maxTokens = profile.maxTokens, temperature = 0 }) => {
-    const params = { messages, schema, schemaName, maxTokens, temperature };
+  const chat = async ({
+    messages,
+    schema,
+    schemaName = 'answer',
+    maxTokens = profile.maxTokens,
+    temperature = 0,
+    think = false,
+  }) => {
+    const params = { messages, schema, schemaName, maxTokens, temperature, think };
     const chain = schema ? FORMATS.slice(formatIndex) : ['none'];
     let lastError;
     for (const format of chain) {

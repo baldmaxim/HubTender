@@ -88,3 +88,24 @@ test('process.env не влияет на результат', () => {
     else process.env.TENDERHUB_API_URL = prev;
   }
 });
+
+test('THINK_EXTRA и BATCH_FINDINGS: значения и умолчания', () => {
+  const base = 'AI_REVIEW_MODELS=qwen\nAI_REVIEW_QWEN_BASE_URL=http://h/v1\nAI_REVIEW_QWEN_MODEL=m\n';
+  withEnvFile(base, (file) => {
+    const qwen = getProfile(loadConfig(file), 'qwen');
+    assert.equal(qwen.thinkExtra, undefined);
+    assert.equal(qwen.batchFindings, 60);
+  });
+  const text = `${base}AI_REVIEW_QWEN_THINK_EXTRA={"chat_template_kwargs":{"enable_thinking":true}}\nAI_REVIEW_QWEN_BATCH_FINDINGS=25\n`;
+  withEnvFile(text, (file) => {
+    const qwen = getProfile(loadConfig(file), 'qwen');
+    assert.deepEqual(qwen.thinkExtra, { chat_template_kwargs: { enable_thinking: true } });
+    assert.equal(qwen.batchFindings, 25);
+  });
+  withEnvFile(`${base}AI_REVIEW_QWEN_BATCH_FINDINGS=0\n`, (file) => {
+    assert.throws(() => loadConfig(file), /AI_REVIEW_QWEN_BATCH_FINDINGS/);
+  });
+  withEnvFile(`${base}AI_REVIEW_QWEN_THINK_EXTRA=[1]\n`, (file) => {
+    assert.throws(() => loadConfig(file), /AI_REVIEW_QWEN_THINK_EXTRA/);
+  });
+});
