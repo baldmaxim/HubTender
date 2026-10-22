@@ -209,3 +209,7 @@ authorized_key.json
 # Загрузчик выгрузки 1С: отчёты, решения, манифест (коммерческие данные)
 scripts/import-1c/out/
 scripts/import-gsheet/out/
+
+# ИИ-проверка скриптом: настройки с ключами и результаты прогонов
+scripts/ai-review/ai-review.env
+scripts/ai-review/out/
