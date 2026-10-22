@@ -77,7 +77,7 @@
 ## Сценарий: найти аналог → проба → запись
 
 ```bash
-BASE=https://tender.su10.ru
+BASE=https://gp.su10.ru
 H="X-API-Key: $TENDERHUB_API_KEY"
 ```
 

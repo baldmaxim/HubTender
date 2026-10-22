@@ -27,7 +27,7 @@ CLI для терминала и агентов: [`scripts/archive-api.mjs`](../
 
 | Среда | Base URL |
 |---|---|
-| Прод | `https://tender.su10.ru` |
+| Прод | `https://gp.su10.ru` |
 | Локальный Go BFF | `http://localhost:3005` |
 
 Все пути ниже — относительно base URL. Ответы — JSON в конверте `{"data": …}`,
@@ -66,13 +66,13 @@ CLI для терминала и агентов: [`scripts/archive-api.mjs`](../
 ```powershell
 # Windows, постоянно (перезапустить терминал/редактор после setx)
 setx TENDERHUB_API_KEY "thk_..."
-setx TENDERHUB_API_URL "https://tender.su10.ru"
+setx TENDERHUB_API_URL "https://gp.su10.ru"
 ```
 
 ```bash
 # bash / zsh
 echo 'export TENDERHUB_API_KEY="thk_..."' >> ~/.bashrc
-echo 'export TENDERHUB_API_URL="https://tender.su10.ru"' >> ~/.bashrc
+echo 'export TENDERHUB_API_URL="https://gp.su10.ru"' >> ~/.bashrc
 ```
 
 ## Шаг 3. Проверить связь

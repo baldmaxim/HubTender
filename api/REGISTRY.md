@@ -8,7 +8,7 @@ API для бота, который работает в чате команды 
 Правила сроков, тексты и склонения живут в TenderHUB. API отдаёт **готовые сообщения**
 (HTML и кнопки), бот только отправляет их в чат и передаёт ответы пользователей обратно.
 
-Base URL: `https://tender.su10.ru`. Все пути ниже начинаются с `/api/v1`. Ответы
+Base URL: `https://gp.su10.ru`. Все пути ниже начинаются с `/api/v1`. Ответы
 приходят в конверте `{"data": …}`. Ошибки — RFC 7807 с полем `code`.
 
 ## Ключ
@@ -34,7 +34,7 @@ Base URL: `https://tender.su10.ru`. Все пути ниже начинаютс�
   "parse_mode": "HTML",
   "reply_markup": {"inline_keyboard": [
     [{"text": "📞 Звонок", "callback_data": "tc:0f8fad5b-…"}, {"text": "📝 Событие", "callback_data": "te:0f8fad5b-…"}],
-    [{"text": "Открыть перечень", "url": "https://tender.su10.ru/tenders"}]
+    [{"text": "Открыть перечень", "url": "https://gp.su10.ru/tenders"}]
   ]}
 }
 ```
@@ -181,9 +181,9 @@ Base URL: `https://tender.su10.ru`. Все пути ниже начинаютс�
 
 ```bash
 KEY=thk_…   # не оставляйте ключ в истории оболочки
-curl -s -H "X-API-Key: $KEY" "https://tender.su10.ru/api/v1/tender-registry/search?q=330"
+curl -s -H "X-API-Key: $KEY" "https://gp.su10.ru/api/v1/tender-registry/search?q=330"
 curl -s -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
-  -d '{"chat_id": -1001234567890}' https://tender.su10.ru/api/v1/tender-registry/reminders/claim
+  -d '{"chat_id": -1001234567890}' https://gp.su10.ru/api/v1/tender-registry/reminders/claim
 ```
 
 Первый `claim` для **тестового** чата помечает напоминания выданными только этому чату.

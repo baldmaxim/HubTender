@@ -68,6 +68,12 @@ class TenderHubClient:
                 "ключ TenderHUB отклонён (HTTP " + str(status) + "): "
                 "проверьте TENDERHUB_API_KEY и область verification:telegram"
             )
+        elif status in (404, 405) and code != "VERIFICATION_BOT_NOT_FOUND":
+            # Маршрута нет: чужой сервер, адрес без /api/v1 или бэкенд без API бота.
+            message = (
+                "по адресу " + self._base_url + " нет API бота (HTTP " + str(status) + "): "
+                "проверьте TENDERHUB_API_URL в bot.env — https://gp.su10.ru/api/v1"
+            )
         else:
             message = "TenderHUB: HTTP " + str(status)
         if extra:

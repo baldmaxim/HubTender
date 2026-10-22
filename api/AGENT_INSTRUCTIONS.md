@@ -45,7 +45,7 @@ node scripts/archive-api.mjs position <position_id>
 node scripts/archive-api.mjs spec
 ```
 
-Прямой HTTP: base `https://tender.su10.ru`, заголовок `X-API-Key`, ответы в
+Прямой HTTP: base `https://gp.su10.ru`, заголовок `X-API-Key`, ответы в
 `{"data": …}`. Маршруты чтения: `GET /api/v1/tenders/brief`,
 `/api/v1/tenders/{id}/overview`, `/api/v1/tenders/{id}/positions/with-costs`,
 `/api/v1/tenders/{id}/positions`, `/api/v1/tenders/{id}/boq-items-full`,

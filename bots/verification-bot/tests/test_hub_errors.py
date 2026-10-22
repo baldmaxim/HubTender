@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+import helpers
 from helpers import NETWORK_DOWN, FakeTransport, make_clients
 from verification_bot.tenderhub_api import TenderHubError
 
@@ -38,6 +39,20 @@ class HubErrorsTest(unittest.TestCase):
             self.assertIn("verification:telegram", str(err))
             self.assertIn("unauthorized", str(err))
             self.assertIn("bad key", str(err))
+
+    def test_wrong_address_404_405(self) -> None:
+        # Чужой сервер или адрес без /api/v1: POST на статику — 405, нет маршрута — 404.
+        for status in (404, 405):
+            err = self.call((status, b"<html>405 Not Allowed</html>"))
+            self.assertEqual(err.status, status)
+            self.assertIn("нет API бота (HTTP %d)" % status, str(err))
+            self.assertIn(helpers.HUB_BASE, str(err))
+            self.assertIn("TENDERHUB_API_URL", str(err))
+
+    def test_notification_not_found_is_not_address_error(self) -> None:
+        err = self.call((404, {"code": "VERIFICATION_BOT_NOT_FOUND", "detail": "Сообщения нет в очереди."}))
+        self.assertEqual(err.code, "VERIFICATION_BOT_NOT_FOUND")
+        self.assertNotIn("нет API бота", str(err))
 
     def test_other_error_has_status_and_code(self) -> None:
         err = self.call((422, {"code": "bad_update", "detail": "нет поля"}))

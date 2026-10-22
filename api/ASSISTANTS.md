@@ -43,14 +43,14 @@ MCP-мост поверх OpenAPI (`node scripts/archive-api.mjs spec > tenderhu
    [AGENT_INSTRUCTIONS.md](AGENT_INSTRUCTIONS.md) (Codex читает `AGENTS.md` из корня
    репозитория и родительских каталогов; для всех проектов — `~/.codex/AGENTS.md`).
 3. Codex выполняет команды в песочнице: при первом сетевом вызове подтвердите доступ к
-   `tender.su10.ru` либо запустите с разрешённой сетью для этой команды.
+   `gp.su10.ru` либо запустите с разрешённой сетью для этой команды.
 
 **Codex Cloud** (задачи в облаке):
 
 1. В настройках окружения задачи добавить секрет `TENDERHUB_API_KEY` и переменную
-   `TENDERHUB_API_URL=https://tender.su10.ru`.
+   `TENDERHUB_API_URL=https://gp.su10.ru`.
 2. Включить сетевой доступ в фазе выполнения агента (по умолчанию он выключен) и
-   ограничить его хостом `tender.su10.ru`.
+   ограничить его хостом `gp.su10.ru`.
 3. `AGENTS.md` — как выше.
 
 ## Claude Code
@@ -65,7 +65,7 @@ MCP-мост поверх OpenAPI (`node scripts/archive-api.mjs spec > tenderhu
 ## Любой другой клиент (curl, Python, генератор клиентов)
 
 ```bash
-BASE=https://tender.su10.ru
+BASE=https://gp.su10.ru
 H="X-API-Key: $TENDERHUB_API_KEY"
 
 curl -s --compressed -H "$H" "$BASE/api/v1/tenders/brief?search=Север"
@@ -78,7 +78,7 @@ curl -s --compressed -H "$H" "$BASE/api/v1/tenders/<id>/boq-items-full"
 import os, requests
 s = requests.Session()
 s.headers["X-API-Key"] = os.environ["TENDERHUB_API_KEY"]
-base = os.environ.get("TENDERHUB_API_URL", "https://tender.su10.ru")
+base = os.environ.get("TENDERHUB_API_URL", "https://gp.su10.ru")
 tenders = s.get(f"{base}/api/v1/tenders/brief", params={"search": "Север"}).json()["data"]
 rows = s.get(f"{base}/api/v1/tenders/{tenders[0]['id']}/boq-items-full").json()["data"]
 ```

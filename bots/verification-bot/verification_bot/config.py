@@ -1,14 +1,20 @@
-"""Настройки бота: файл bot.env рядом с программой + переменные окружения (они главнее)."""
+"""Настройки бота — только из файла bot.env рядом с программой.
+
+Переменные окружения не читаются: на ПК для других агентов (Cursor, бот перечня)
+бывают заданы TENDERHUB_API_URL / TENDERHUB_API_KEY с другим смыслом — базовый
+адрес без /api/v1 и ключ без области verification:telegram.
+"""
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Dict, Mapping, Optional
+from typing import Dict, Optional
 
 BOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE_NAME = "bot.env"
 
-DEFAULT_API_URL = "https://gp.su10.ru/api/v1"
+API_PATH = "/api/v1"
+DEFAULT_API_URL = "https://gp.su10.ru" + API_PATH
 DEFAULT_TELEGRAM_BASE_URL = "https://api.telegram.org"
 DEFAULT_CLAIM_INTERVAL = 30.0
 DEFAULT_LOG_NAME = "bot.log"
@@ -55,19 +61,19 @@ def parse_env_file(path: str) -> Dict[str, str]:
     return result
 
 
-def load_config(
-    environ: Optional[Mapping[str, str]] = None,
-    env_file: Optional[str] = None,
-    base_dir: str = BOT_DIR,
-) -> Config:
-    """Собирает настройки. Окружение приоритетнее файла; пустое значение считается незаданным."""
-    env = os.environ if environ is None else environ
+def normalize_api_url(value: str) -> str:
+    """Адрес API с /api/v1 на конце: принимается и базовый адрес портала (https://gp.su10.ru)."""
+    url = value.strip().rstrip("/")
+    if not url.lower().endswith(API_PATH):
+        url += API_PATH
+    return url
+
+
+def load_config(env_file: Optional[str] = None, base_dir: str = BOT_DIR) -> Config:
+    """Собирает настройки из bot.env; пустое значение считается незаданным."""
     file_values = parse_env_file(env_file if env_file is not None else os.path.join(base_dir, ENV_FILE_NAME))
 
     def get(key: str) -> str:
-        value = (env.get(key) or "").strip()
-        if value:
-            return value
         return (file_values.get(key) or "").strip()
 
     missing = [key for key in REQUIRED_KEYS if not get(key)]
@@ -75,10 +81,10 @@ def load_config(
         raise ConfigError(
             "Не заданы обязательные настройки: "
             + ", ".join(missing)
-            + ". Заполните файл bot.env (образец — bot.env.example) или переменные окружения."
+            + ". Заполните файл bot.env рядом с программой (образец — bot.env.example)."
         )
 
-    api_url = (get("TENDERHUB_API_URL") or DEFAULT_API_URL).rstrip("/")
+    api_url = normalize_api_url(get("TENDERHUB_API_URL") or DEFAULT_API_URL)
     if not api_url.lower().startswith(("http://", "https://")):
         raise ConfigError("TENDERHUB_API_URL: адрес должен начинаться с https:// (например, " + DEFAULT_API_URL + ")")
 

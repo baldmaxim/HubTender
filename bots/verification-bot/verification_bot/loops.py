@@ -13,7 +13,9 @@ from .tenderhub_api import TenderHubClient, TenderHubError
 Sleep = Callable[[float], bool]
 
 RETRY_DELAYS = (5, 10, 20, 40, 60)
-SKIP_STATUSES = (400, 404, 413, 422)
+# 404 не пропускаем: у /updates его не бывает, значит адрес не тот — обновление
+# держим до исправления настройки, а не теряем.
+SKIP_STATUSES = (400, 413, 422)
 MAX_SERVER_ERROR_ATTEMPTS = 5
 LOG_THROTTLE_SECONDS = 60.0
 CLAIM_LIMIT = 20

@@ -99,6 +99,16 @@ class ErrorPolicyTest(unittest.TestCase):
         self.assertEqual(len(t.bodies("updates")), 2)
         self.assertEqual(sleep.calls, [])
 
+    def test_404_wrong_address_retries_not_skips(self) -> None:
+        # Неверный адрес API не должен съедать обновления (Start, кнопки).
+        t = FakeTransport()
+        t.route("updates", (404, b"not found"), (405, b"<html></html>"), hub_ok({"actions": []}))
+        loop, sleep, _ = make_loop(t)
+        with self.assertLogs("verification_bot", level="WARNING"):
+            self.assertTrue(loop.handle_update(UPDATE))
+        self.assertEqual(len(t.bodies("updates")), 3)
+        self.assertEqual(sleep.calls, [5, 10])
+
     def test_503_retries_same_update_with_backoff(self) -> None:
         t = FakeTransport()
         t.route("updates", (503, b"x"), (503, b"x"), (503, b"x"), hub_ok({"actions": []}))
