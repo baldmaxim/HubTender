@@ -93,7 +93,7 @@ func (r *VerificationDispatchRepo) LoadPayload(ctx context.Context, notification
 	if chat != nil {
 		p.ChatID = *chat
 	}
-	if version != nil && *version > 1 {
+	if version != nil {
 		p.TenderTitle += " (версия " + strconv.Itoa(*version) + ")"
 	}
 	rows, err := r.pool.Query(ctx, `

@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/su10/hubtender/backend/internal/quality"
 )
 
 // VerificationDispatchRepo — адресация находок и очередь сообщений в Telegram.
@@ -24,7 +27,11 @@ const (
 	ResolverItemAuthor     = "item_author"
 	ResolverPositionAuthor = "position_author"
 	ResolverSender         = "sender"
+	ResolverTeam           = "team"
 )
+
+// ruleTeamBroadcast — правило, находки которого уходят всей команде раздела.
+const ruleTeamBroadcast = "U"
 
 // MaxDispatchFindings — предел одной отправки.
 const MaxDispatchFindings = 500
@@ -42,17 +49,19 @@ var ErrDispatchEmpty = errors.New("dispatch: нет открытых наход�
 
 // ResolveRecipients находит адресата каждой открытой находки: автор последней
 // правки строки, иначе самый частый автор строк позиции, иначе отправивший.
-// Правки без автора (changed_by NULL) не учитываются.
+// Правки без автора (changed_by NULL) не учитываются. Находки правила U уходят
+// всем участникам команды раздела позиции (см. resolveTeamRecipients); если у
+// команды нет состава — прежним порядком.
 func (r *VerificationDispatchRepo) ResolveRecipients(
 	ctx context.Context, tenderID string, findingIDs []string, senderID string,
 ) ([]DispatchTarget, error) {
 	rows, err := r.pool.Query(ctx, `
 		WITH f AS (
-			SELECT vf.id, vf.entity_type, vf.entity_id, vf.client_position_id, vf.fingerprint
+			SELECT vf.id, vf.entity_type, vf.entity_id, vf.client_position_id, vf.fingerprint, vf.rule_code
 			FROM public.verification_findings vf
 			WHERE vf.tender_id = $1 AND vf.id = ANY($2::uuid[]) AND vf.resolved_at IS NULL
 		)
-		SELECT f.id::text, f.fingerprint,
+		SELECT f.id::text, f.fingerprint, f.rule_code, f.client_position_id::text,
 		       ia.changed_by::text, pa.changed_by::text
 		FROM f
 		LEFT JOIN LATERAL (
@@ -80,11 +89,17 @@ func (r *VerificationDispatchRepo) ResolveRecipients(
 		return nil, fmt.Errorf("dispatchRepo.ResolveRecipients: %w", err)
 	}
 	defer rows.Close()
-	var out []DispatchTarget
+	type resolved struct {
+		target   DispatchTarget
+		position string // позиция U-находки, по которой выбирается команда
+	}
+	var found []resolved
+	var teamPositions []string
 	for rows.Next() {
 		var t DispatchTarget
-		var item, pos *string
-		if err := rows.Scan(&t.FindingID, &t.Fingerprint, &item, &pos); err != nil {
+		var rule string
+		var position, item, pos *string
+		if err := rows.Scan(&t.FindingID, &t.Fingerprint, &rule, &position, &item, &pos); err != nil {
 			return nil, fmt.Errorf("dispatchRepo.ResolveRecipients: scan: %w", err)
 		}
 		switch {
@@ -95,9 +110,131 @@ func (r *VerificationDispatchRepo) ResolveRecipients(
 		default:
 			t.UserID, t.Resolver = senderID, ResolverSender
 		}
-		out = append(out, t)
+		res := resolved{target: t}
+		if rule == ruleTeamBroadcast && position != nil && *position != "" {
+			res.position = *position
+			teamPositions = append(teamPositions, *position)
+		}
+		found = append(found, res)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+
+	var teamUsers map[string][]string
+	if len(teamPositions) > 0 {
+		teamUsers, err = r.resolveTeamRecipients(ctx, tenderID, teamPositions)
+		if err != nil {
+			return nil, err
+		}
+	}
+	out := make([]DispatchTarget, 0, len(found))
+	for _, f := range found {
+		users := teamUsers[f.position]
+		if f.position == "" || len(users) == 0 {
+			out = append(out, f.target)
+			continue
+		}
+		for _, uid := range users {
+			out = append(out, DispatchTarget{
+				FindingID: f.target.FindingID, Fingerprint: f.target.Fingerprint,
+				UserID: uid, Resolver: ResolverTeam,
+			})
+		}
+	}
+	return out, nil
+}
+
+// resolveTeamRecipients — участники команд по каждой позиции из positionIDs
+// (отсортированы по user id). Команду даёт ClassifyTeam по разделу позиции,
+// нераспознанный раздел — все команды. Состав команды берётся из группы
+// «Хронологии» этого тендера; если в нём такой группы с участниками нет — из
+// одноимённой группы самого свежего тендера, где участники есть. Позиции без
+// участников в результате отсутствуют.
+func (r *VerificationDispatchRepo) resolveTeamRecipients(
+	ctx context.Context, tenderID string, positionIDs []string,
+) (map[string][]string, error) {
+	prows, err := r.pool.Query(ctx, `
+		SELECT id::text, btrim(work_name), COALESCE(hierarchy_level, 0),
+		       COALESCE(is_additional, false), COALESCE(parent_position_id::text, '')
+		FROM public.client_positions
+		WHERE tender_id = $1
+		ORDER BY position_number, id`, tenderID)
+	if err != nil {
+		return nil, fmt.Errorf("dispatchRepo.resolveTeamRecipients: positions: %w", err)
+	}
+	var positions []teamPosition
+	for prows.Next() {
+		var p teamPosition
+		if err := prows.Scan(&p.ID, &p.Name, &p.Level, &p.Additional, &p.ParentID); err != nil {
+			prows.Close()
+			return nil, fmt.Errorf("dispatchRepo.resolveTeamRecipients: scan positions: %w", err)
+		}
+		positions = append(positions, p)
+	}
+	prows.Close()
+	if err := prows.Err(); err != nil {
+		return nil, err
+	}
+
+	mrows, err := r.pool.Query(ctx, `
+		WITH g AS (
+			SELECT g.id, g.name, (g.tender_id = $1) AS own, t.created_at
+			FROM public.tender_groups g JOIN public.tenders t ON t.id = g.tender_id
+			WHERE g.name = ANY($2::text[])
+			  AND EXISTS (SELECT 1 FROM public.tender_group_members m WHERE m.group_id = g.id)
+		), pick AS (
+			SELECT DISTINCT ON (name) id, name FROM g ORDER BY name, own DESC, created_at DESC
+		)
+		SELECT p.name, m.user_id::text
+		FROM pick p JOIN public.tender_group_members m ON m.group_id = p.id`,
+		tenderID, quality.Teams)
+	if err != nil {
+		return nil, fmt.Errorf("dispatchRepo.resolveTeamRecipients: members: %w", err)
+	}
+	members := map[string][]string{}
+	for mrows.Next() {
+		var team, uid string
+		if err := mrows.Scan(&team, &uid); err != nil {
+			mrows.Close()
+			return nil, fmt.Errorf("dispatchRepo.resolveTeamRecipients: scan members: %w", err)
+		}
+		members[team] = append(members[team], uid)
+	}
+	mrows.Close()
+	if err := mrows.Err(); err != nil {
+		return nil, err
+	}
+
+	headers := positionHeaders(positions)
+	names := make(map[string]string, len(positions))
+	for _, p := range positions {
+		names[p.ID] = p.Name
+	}
+	out := make(map[string][]string, len(positionIDs))
+	for _, id := range positionIDs {
+		if _, done := out[id]; done {
+			continue
+		}
+		teams := quality.Teams
+		if team, ok := quality.ClassifyTeam(headers[id], names[id]); ok {
+			teams = []string{team}
+		}
+		seen := map[string]bool{}
+		var users []string
+		for _, team := range teams {
+			for _, uid := range members[team] {
+				if !seen[uid] {
+					seen[uid] = true
+					users = append(users, uid)
+				}
+			}
+		}
+		sort.Strings(users)
+		out[id] = users
+	}
+	return out, nil
 }
 
 // DispatchRecipient — сводка по адресату для предпросмотра.

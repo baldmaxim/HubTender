@@ -727,7 +727,7 @@ CREATE INDEX IF NOT EXISTS verification_notifications_tender_idx
 
 ALTER TABLE public.verification_notification_items ADD CONSTRAINT verification_notification_items_pkey PRIMARY KEY (id);
 ALTER TABLE public.verification_notification_items ADD CONSTRAINT verification_notification_items_resolver_check
-    CHECK (resolver IN ('item_author', 'position_author', 'sender'));
+    CHECK (resolver IN ('item_author', 'position_author', 'sender', 'team'));
 ALTER TABLE public.verification_notification_items ADD CONSTRAINT verification_notification_items_verdict_check
     CHECK (verdict IS NULL OR verdict IN ('accepted', 'error'));
 ALTER TABLE public.verification_notification_items ADD CONSTRAINT verification_notification_items_notification_fkey

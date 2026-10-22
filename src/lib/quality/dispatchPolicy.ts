@@ -21,6 +21,7 @@ export function dispatchableIds(findings: QualityFinding[]): string[] {
 const RESOLVER_LABEL: Record<DispatchResolver, string> = {
   item_author: 'правил строку',
   position_author: 'правил позицию',
+  team: 'команда раздела',
   sender: 'автор не найден — вам',
 };
 

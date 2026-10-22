@@ -22,7 +22,7 @@ export interface TelegramLinkToken {
   expires_at: string;
 }
 
-export type DispatchResolver = 'item_author' | 'position_author' | 'sender';
+export type DispatchResolver = 'item_author' | 'position_author' | 'team' | 'sender';
 
 export interface DispatchRecipient {
   user_id: string;
