@@ -24,6 +24,13 @@ type MessagePayload struct {
 	Text        string          `json:"text"`
 	ParseMode   string          `json:"parse_mode"`
 	ReplyMarkup *InlineKeyboard `json:"reply_markup,omitempty"`
+	// LinkPreview — параметры превью ссылок (Bot API link_preview_options).
+	LinkPreview *LinkPreviewOptions `json:"link_preview_options,omitempty"`
+}
+
+// LinkPreviewOptions — link_preview_options Bot API.
+type LinkPreviewOptions struct {
+	IsDisabled bool `json:"is_disabled"`
 }
 
 // Payload — HTML-сообщение; без кнопок reply_markup не выводится.

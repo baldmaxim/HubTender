@@ -46,9 +46,11 @@ func TestRenderNoticeEscapesAndButtons(t *testing.T) {
 	text, kb := RenderNotice(Notice{
 		TenderTitle: "ЖК <Парк>",
 		SenderName:  "Иванов & Ко",
-		Link:        "https://tender.example/data-quality?tenderId=1",
 		Items: []NoticeItem{
-			{ItemID: "0f8fad5b-d9cb-469f-a165-70867728950e", RuleCode: "U", RuleTitle: "Нет ГП", Position: "5.2", Detail: "<b>x</b>"},
+			{
+				ItemID: "0f8fad5b-d9cb-469f-a165-70867728950e", RuleCode: "U", RuleTitle: "Нет ГП", Position: "5.2", Detail: "<b>x</b>",
+				Link: "https://tender.example/positions/p1/items?itemId=i1&positionId=p1&tenderId=t1",
+			},
 			{ItemID: "1f8fad5b-d9cb-469f-a165-70867728950e", RuleCode: "Q", Detail: strings.Repeat("я", 1000)},
 		},
 	})
@@ -58,11 +60,42 @@ func TestRenderNoticeEscapesAndButtons(t *testing.T) {
 	if len([]rune(text)) > 4096 {
 		t.Fatal("сообщение длиннее лимита Telegram")
 	}
-	if len(kb) != 3 || kb[0][0].CallbackData != "a:0f8fad5b-d9cb-469f-a165-70867728950e" || kb[2][0].URL == "" {
+	const wantLink = `<a href="https://tender.example/positions/p1/items?itemId=i1&amp;positionId=p1&amp;tenderId=t1">Позиция 5.2</a>`
+	if !strings.Contains(text, wantLink) {
+		t.Fatalf("нет ссылки на строку: %s", text)
+	}
+	if strings.Count(text, "<a ") != 1 {
+		t.Fatalf("ссылка должна быть только у первой находки: %s", text)
+	}
+	if len(kb) != 2 || kb[0][0].CallbackData != "a:0f8fad5b-d9cb-469f-a165-70867728950e" {
 		t.Fatalf("клавиатура: %+v", kb)
 	}
-	_, kb = RenderNotice(Notice{Link: "javascript:alert(1)", Items: []NoticeItem{{ItemID: "0f8fad5b-d9cb-469f-a165-70867728950e"}}})
-	if len(kb) != 1 {
-		t.Fatal("небезопасная ссылка попала в кнопку")
+	for _, row := range kb {
+		for _, btn := range row {
+			if btn.URL != "" {
+				t.Fatalf("у кнопки не должно быть URL: %+v", btn)
+			}
+		}
+	}
+
+	text, kb = RenderNotice(Notice{Items: []NoticeItem{
+		{ItemID: "0f8fad5b-d9cb-469f-a165-70867728950e", Position: "7", Link: "javascript:alert(1)"},
+	}})
+	if strings.Contains(text, "<a ") || strings.Contains(text, "javascript") || !strings.Contains(text, "Позиция 7") || len(kb) != 1 {
+		t.Fatalf("небезопасная ссылка: %s %+v", text, kb)
+	}
+
+	text, _ = RenderNotice(Notice{Items: []NoticeItem{
+		{ItemID: "0f8fad5b-d9cb-469f-a165-70867728950e", Position: "<i>1</i>", Link: "https://tender.example/p"},
+	}})
+	if strings.Contains(text, "<i>") || !strings.Contains(text, `">Позиция &lt;i&gt;1&lt;/i&gt;</a>`) {
+		t.Fatalf("метка ссылки не экранирована: %s", text)
+	}
+
+	text, _ = RenderNotice(Notice{Items: []NoticeItem{
+		{ItemID: "0f8fad5b-d9cb-469f-a165-70867728950e", Link: "https://tender.example/p"},
+	}})
+	if !strings.Contains(text, `<a href="https://tender.example/p">Открыть в TenderHUB</a>`) {
+		t.Fatalf("метка по умолчанию: %s", text)
 	}
 }

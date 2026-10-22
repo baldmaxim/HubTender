@@ -238,10 +238,37 @@ func TestVerificationBotMessages(t *testing.T) {
 	}
 }
 
+func TestRowLink(t *testing.T) {
+	const app = "https://gp.su10.ru"
+	cases := []struct {
+		name   string
+		appURL string
+		it     repository.NotificationPayloadItem
+		want   string
+	}{
+		{"строка расчёта", app, repository.NotificationPayloadItem{PositionID: "p1", EntityType: "boq_item", EntityID: "i1"},
+			app + "/positions/p1/items?itemId=i1&positionId=p1&tenderId=t1"},
+		{"позиция", app, repository.NotificationPayloadItem{PositionID: "p1", EntityType: "client_position", EntityID: "p1"},
+			app + "/positions/p1/items?positionId=p1&tenderId=t1"},
+		{"материал без позиции", app, repository.NotificationPayloadItem{EntityType: "material_name", EntityID: "m1"}, ""},
+		{"пустой адрес портала", "", repository.NotificationPayloadItem{PositionID: "p1", EntityType: "boq_item", EntityID: "i1"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := rowLink(tc.appURL, "t1", tc.it); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestVerificationBotClaim(t *testing.T) {
 	payload := &repository.NotificationPayload{
 		TenderID: "t", ChatID: 5, TenderTitle: "ЖК",
-		Items: []repository.NotificationPayloadItem{{ItemID: itemID, RuleCode: "Q", Detail: "нулевая цена"}},
+		Items: []repository.NotificationPayloadItem{{
+			ItemID: itemID, RuleCode: "Q", Detail: "нулевая цена", Position: "5.2",
+			PositionID: "p1", EntityType: "boq_item", EntityID: "i1",
+		}},
 	}
 	cases := []struct {
 		name    string
@@ -272,6 +299,20 @@ func TestVerificationBotClaim(t *testing.T) {
 				if m.ID != "n" || m.ChatID != 5 || m.Message.ParseMode != "HTML" || m.Message.ReplyMarkup == nil ||
 					!strings.Contains(m.Message.Text, "ЖК") {
 					t.Fatalf("сообщение: %+v", m)
+				}
+				const wantLink = `<a href="https://gp.su10.ru/positions/p1/items?itemId=i1&amp;positionId=p1&amp;tenderId=t">Позиция 5.2</a>`
+				if !strings.Contains(m.Message.Text, wantLink) {
+					t.Fatalf("нет ссылки на строку: %s", m.Message.Text)
+				}
+				if m.Message.LinkPreview == nil || !m.Message.LinkPreview.IsDisabled {
+					t.Fatalf("превью ссылок не отключено: %+v", m.Message.LinkPreview)
+				}
+				for _, row := range m.Message.ReplyMarkup.InlineKeyboard {
+					for _, btn := range row {
+						if btn.URL != "" {
+							t.Fatalf("у кнопки не должно быть URL: %+v", btn)
+						}
+					}
 				}
 			}
 		})

@@ -1,4 +1,4 @@
-import { useState, useMemo, memo, useEffect } from 'react';
+import { useState, useMemo, memo, useEffect, useRef } from 'react';
 import { Card, Tabs, Alert, Skeleton } from 'antd';
 import { missingFXMessage } from '../../utils/boq/currencyGuard';
 import WorkEditForm from './WorkEditForm';
@@ -53,21 +53,6 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId, deepLinkItemI
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
 
-  // Deep-link подсветка: после загрузки строк прокручиваем к itemId из query
-  // и временно подсвечиваем строку (Ant Table рендерит data-row-key на <tr>).
-  useEffect(() => {
-    if (!deepLinkItemId) return;
-    const t = setTimeout(() => {
-      const row = document.querySelector(`[data-row-key="${deepLinkItemId}"]`);
-      if (row) {
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        row.classList.add('boq-row-deeplink-highlight');
-        setTimeout(() => row.classList.remove('boq-row-deeplink-highlight'), 4000);
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [deepLinkItemId]);
-
   const {
     position,
     items,
@@ -103,6 +88,33 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId, deepLinkItemI
     // Справочники на телефоне пропущены skipEditData — догружаем по первому тапу.
     void loadEditData();
   };
+
+  // Deep-link к строке (?itemId=…: «К строке» страниц проверки, ссылки бота замечаний).
+  // Ждём строку в items: на холодной загрузке список приходит заметно позже монтирования.
+  // Телефон открывает лист строки, как по тапу: у карточек нет data-row-key, и не все
+  // они отрисованы. Таблица прокручивает к <tr data-row-key> и временно его подсвечивает.
+  const deepLinkDoneRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkItemId) {
+      deepLinkDoneRef.current = null;
+      return;
+    }
+    if (deepLinkDoneRef.current === deepLinkItemId || !position) return;
+    if (!items.some((it) => it.id === deepLinkItemId)) return;
+    deepLinkDoneRef.current = deepLinkItemId;
+    if (isPhoneDevice) {
+      setSheetItemId(deepLinkItemId);
+      void loadEditData();
+      return;
+    }
+    requestAnimationFrame(() => {
+      const row = document.querySelector(`[data-row-key="${deepLinkItemId}"]`);
+      if (!row) return;
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.classList.add('boq-row-deeplink-highlight');
+      setTimeout(() => row.classList.remove('boq-row-deeplink-highlight'), 4000);
+    });
+  }, [deepLinkItemId, items, position, isPhoneDevice, loadEditData]);
 
   // Обновление заголовка вкладки приложения для этой позиции
   usePositionTabTitle(positionId, position);

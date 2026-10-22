@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -271,9 +272,6 @@ func (s *VerificationBotService) prepare(ctx context.Context, n repository.Pendi
 		return BotOutMessage{}, false
 	}
 	notice := telegram.Notice{TenderTitle: p.TenderTitle, SenderName: p.SenderName}
-	if s.appURL != "" {
-		notice.Link = s.appURL + "/data-quality?tenderId=" + p.TenderID
-	}
 	for _, it := range p.Items {
 		title := ""
 		if r, ok := quality.ByCode(it.RuleCode); ok {
@@ -281,10 +279,29 @@ func (s *VerificationBotService) prepare(ctx context.Context, n repository.Pendi
 		}
 		notice.Items = append(notice.Items, telegram.NoticeItem{
 			ItemID: it.ItemID, RuleCode: it.RuleCode, RuleTitle: title, Position: it.Position, Detail: it.Detail,
+			Link: rowLink(s.appURL, p.TenderID, it),
 		})
 	}
 	text, keyboard := telegram.RenderNotice(notice)
-	return BotOutMessage{ID: n.ID, ChatID: p.ChatID, Message: telegram.Payload(text, keyboard)}, true
+	msg := telegram.Payload(text, keyboard)
+	// Ссылки на строки лежат в тексте — без этого Telegram подклеит превью первой.
+	msg.LinkPreview = &telegram.LinkPreviewOptions{IsDisabled: true}
+	return BotOutMessage{ID: n.ID, ChatID: p.ChatID, Message: msg}, true
+}
+
+// rowLink — ссылка «к строке», как findingLink на странице «Проверка данных»
+// (src/lib/quality/findingsPolicy.ts): находка по строке расчёта открывает её позицию
+// и подсвечивает строку (itemId), находка по позиции — позицию. У находок по
+// материалу справочника и по тендеру позиции нет — и ссылки нет.
+func rowLink(appURL, tenderID string, it repository.NotificationPayloadItem) string {
+	if appURL == "" || it.PositionID == "" {
+		return ""
+	}
+	q := url.Values{"tenderId": {tenderID}, "positionId": {it.PositionID}}
+	if it.EntityType == quality.EntityBoqItem {
+		q.Set("itemId", it.EntityID)
+	}
+	return appURL + "/positions/" + it.PositionID + "/items?" + q.Encode()
 }
 
 // ReportResult применяет итог отправки: доставлено, закрыто навсегда или

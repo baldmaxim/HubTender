@@ -68,13 +68,13 @@ type NoticeItem struct {
 	RuleTitle string
 	Position  string
 	Detail    string
+	Link      string // ссылка на строку в TenderHUB; пусто — без ссылки
 }
 
 // Notice — одно сообщение адресату.
 type Notice struct {
 	TenderTitle string
 	SenderName  string
-	Link        string
 	Items       []NoticeItem
 }
 
@@ -93,7 +93,7 @@ func RenderNotice(n Notice) (string, [][]InlineButton) {
 	if n.SenderName != "" {
 		fmt.Fprintf(&b, "Отправил: %s\n", html.EscapeString(n.SenderName))
 	}
-	keyboard := make([][]InlineButton, 0, len(n.Items)+1)
+	keyboard := make([][]InlineButton, 0, len(n.Items))
 	for i, it := range n.Items {
 		num := i + 1
 		title := it.RuleCode
@@ -101,8 +101,18 @@ func RenderNotice(n Notice) (string, [][]InlineButton) {
 			title += " · " + it.RuleTitle
 		}
 		fmt.Fprintf(&b, "\n<b>%d.</b> %s\n", num, html.EscapeString(title))
+		label := ""
 		if it.Position != "" {
-			fmt.Fprintf(&b, "Позиция %s\n", html.EscapeString(it.Position))
+			label = "Позиция " + it.Position
+		}
+		if strings.HasPrefix(it.Link, "https://") {
+			if label == "" {
+				label = "Открыть в TenderHUB"
+			}
+			fmt.Fprintf(&b, "<a href=\"%s\">%s</a>\n", html.EscapeString(it.Link), html.EscapeString(label))
+		} else if label != "" {
+			b.WriteString(html.EscapeString(label))
+			b.WriteString("\n")
 		}
 		b.WriteString(html.EscapeString(truncateRunes(it.Detail, maxDetailRunes)))
 		b.WriteString("\n")
@@ -110,9 +120,6 @@ func RenderNotice(n Notice) (string, [][]InlineButton) {
 			{Text: fmt.Sprintf("%d ✅ Норма", num), CallbackData: CallbackData(ActionAccept, it.ItemID)},
 			{Text: fmt.Sprintf("%d ❗ Ошибка, исправлю", num), CallbackData: CallbackData(ActionError, it.ItemID)},
 		})
-	}
-	if strings.HasPrefix(n.Link, "https://") {
-		keyboard = append(keyboard, []InlineButton{{Text: "Открыть в TenderHUB", URL: n.Link}})
 	}
 	return b.String(), keyboard
 }

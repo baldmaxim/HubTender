@@ -141,6 +141,9 @@ func TestDispatchIntegration_ResolveEnqueueSend(t *testing.T) {
 		}
 		if p.ChatID == 9000000 {
 			sentToAuthor = n.ID
+			if it := p.Items[0]; it.PositionID != f.p2 || it.EntityID != f.r2 || it.EntityType != q.EntityType {
+				t.Fatalf("ссылочные поля находки: %+v", it)
+			}
 			if err := repo.MarkSent(ctx, n.ID, 42); err != nil {
 				t.Fatal(err)
 			}

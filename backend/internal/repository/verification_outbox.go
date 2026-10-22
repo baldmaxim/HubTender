@@ -63,6 +63,11 @@ type NotificationPayloadItem struct {
 	RuleCode string
 	Position string
 	Detail   string
+	// PositionID — позиция заказчика находки; пусто — позиции нет (материал справочника, тендер).
+	PositionID string
+	// EntityType — boq_item | client_position | material_name | tender.
+	EntityType string
+	EntityID   string
 }
 
 // LoadPayload — содержимое сообщения. В него идут только находки, которые всё
@@ -91,7 +96,8 @@ func (r *VerificationDispatchRepo) LoadPayload(ctx context.Context, notification
 	rows, err := r.pool.Query(ctx, `
 		SELECT i.id::text, f.rule_code,
 		       COALESCE(NULLIF(btrim(f.item_no), ''), trim_scale(f.position_number)::text, ''),
-		       f.detail
+		       f.detail,
+		       COALESCE(f.client_position_id::text, ''), f.entity_type, f.entity_id::text
 		FROM public.verification_notification_items i
 		JOIN public.verification_findings f ON f.id = i.finding_id
 		WHERE i.notification_id = $1 AND f.resolved_at IS NULL AND f.fingerprint = i.fingerprint
@@ -102,7 +108,8 @@ func (r *VerificationDispatchRepo) LoadPayload(ctx context.Context, notification
 	defer rows.Close()
 	for rows.Next() {
 		var it NotificationPayloadItem
-		if err := rows.Scan(&it.ItemID, &it.RuleCode, &it.Position, &it.Detail); err != nil {
+		if err := rows.Scan(&it.ItemID, &it.RuleCode, &it.Position, &it.Detail,
+			&it.PositionID, &it.EntityType, &it.EntityID); err != nil {
 			return nil, err
 		}
 		p.Items = append(p.Items, it)

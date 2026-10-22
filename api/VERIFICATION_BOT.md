@@ -32,8 +32,10 @@ Base URL: `https://gp.su10.ru`. Все пути ниже начинаются с
 ## Готовое сообщение `message`
 
 Поле `message` — параметры метода Bot API `sendMessage` без `chat_id`
-(`text` в HTML, `parse_mode: "HTML"`, при наличии кнопок `reply_markup`). Отправка:
-`sendMessage({chat_id, ...message})`. Текст уже экранирован и умещается в лимит Telegram.
+(`text` в HTML, `parse_mode: "HTML"`, при наличии кнопок `reply_markup`, может быть
+`link_preview_options` — бот передаёт как есть). Отправка: `sendMessage({chat_id, ...message})`.
+Текст уже экранирован и умещается в лимит Telegram. Номер позиции у каждой находки — ссылка
+на строку расчёта.
 
 Кнопки под замечаниями несут `callback_data` вида `a:<uuid>` («норма») и `e:<uuid>`
 («ошибка, исправлю»). Бот не разбирает их, а пересылает как есть в `updates`.
