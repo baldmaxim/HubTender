@@ -14,7 +14,7 @@ import (
 type findingBatch struct {
 	codes, types, entities, prints, sevs, details []string
 	money, posNums                                []*float64
-	itemNos                                       []*string
+	itemNos, itemIDs                              []*string
 }
 
 func newFindingBatch(n int) findingBatch {
@@ -22,6 +22,7 @@ func newFindingBatch(n int) findingBatch {
 		codes: make([]string, n), types: make([]string, n), entities: make([]string, n),
 		prints: make([]string, n), sevs: make([]string, n), details: make([]string, n),
 		money: make([]*float64, n), posNums: make([]*float64, n), itemNos: make([]*string, n),
+		itemIDs: make([]*string, n),
 	}
 }
 
@@ -33,29 +34,30 @@ func newFindingBatch(n int) findingBatch {
 // старую строку, поэтому CASE сравнивает прежние значения с EXCLUDED.
 //
 // client_position_id для строк BOQ берётся джойном: он нужен для группировки по
-// разделам и адресации автору правки, а в контракте правила его нет.
+// разделам и адресации автору правки, а в контракте правила его нет. item_id —
+// строка для ссылки «к строке» — приходит от движка как есть.
 const upsertFindingsSQL = `
 WITH incoming AS (
 	SELECT x.rule_code, x.entity_type, x.entity_id, x.fingerprint, x.severity,
-	       x.detail, x.money_delta, x.position_number, x.item_no,
+	       x.detail, x.money_delta, x.position_number, x.item_no, x.item_id,
 	       CASE x.entity_type
 	            WHEN 'client_position' THEN x.entity_id
 	            WHEN 'boq_item' THEN b.client_position_id
 	       END AS client_position_id
 	FROM unnest($3::text[], $4::text[], $5::uuid[], $6::text[], $7::text[],
-	            $8::text[], $9::numeric[], $10::numeric[], $11::text[])
+	            $8::text[], $9::numeric[], $10::numeric[], $11::text[], $12::uuid[])
 	     AS x(rule_code, entity_type, entity_id, fingerprint, severity,
-	          detail, money_delta, position_number, item_no)
+	          detail, money_delta, position_number, item_no, item_id)
 	LEFT JOIN public.boq_items b
 	       ON x.entity_type = 'boq_item' AND b.id = x.entity_id
 ),
 up AS (
 	INSERT INTO public.verification_findings AS f
 		(tender_id, source, rule_code, entity_type, entity_id, client_position_id,
-		 position_number, item_no, severity, detail, money_delta, fingerprint,
+		 position_number, item_no, item_id, severity, detail, money_delta, fingerprint,
 		 first_seen_run_id, last_seen_run_id, first_seen_at, last_seen_at)
 	SELECT $1::uuid, 'rules', rule_code, entity_type, entity_id, client_position_id,
-	       position_number, item_no, severity, detail, money_delta, fingerprint,
+	       position_number, item_no, item_id, severity, detail, money_delta, fingerprint,
 	       $2::uuid, $2::uuid, now(), now()
 	FROM incoming
 	ON CONFLICT (tender_id, source, rule_code, entity_type, entity_id) DO UPDATE
@@ -72,6 +74,7 @@ up AS (
 	    money_delta = EXCLUDED.money_delta,
 	    position_number = EXCLUDED.position_number,
 	    item_no = EXCLUDED.item_no,
+	    item_id = EXCLUDED.item_id,
 	    client_position_id = EXCLUDED.client_position_id,
 	    last_seen_run_id = EXCLUDED.last_seen_run_id,
 	    last_seen_at = now(),
@@ -99,7 +102,7 @@ func upsertFindings(
 	}
 	rows, err := tx.Query(ctx, upsertFindingsSQL, tenderID, runID,
 		batch.codes, batch.types, batch.entities, batch.prints, batch.sevs,
-		batch.details, batch.money, batch.posNums, batch.itemNos)
+		batch.details, batch.money, batch.posNums, batch.itemNos, batch.itemIDs)
 	if err != nil {
 		return 0, 0, fmt.Errorf("verification_findings upsert: %w", err)
 	}

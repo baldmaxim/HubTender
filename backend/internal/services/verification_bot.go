@@ -291,14 +291,19 @@ func (s *VerificationBotService) prepare(ctx context.Context, n repository.Pendi
 
 // rowLink — ссылка «к строке», как findingLink на странице «Проверка данных»
 // (src/lib/quality/findingsPolicy.ts): находка по строке расчёта открывает её позицию
-// и подсвечивает строку (itemId), находка по позиции — позицию. У находок по
-// материалу справочника и по тендеру позиции нет — и ссылки нет.
+// и подсвечивает строку (itemId), находка по позиции — позицию. Строка берётся из
+// сохранённого item_id (у правил по материалу справочника — колонка item_id правила);
+// для находок, сохранённых до появления item_id, — EntityID строки BOQ. У находок
+// без позиции (материал без строки, тендер) ссылки нет.
 func rowLink(appURL, tenderID string, it repository.NotificationPayloadItem) string {
 	if appURL == "" || it.PositionID == "" {
 		return ""
 	}
 	q := url.Values{"tenderId": {tenderID}, "positionId": {it.PositionID}}
-	if it.EntityType == quality.EntityBoqItem {
+	switch {
+	case it.RowItemID != "":
+		q.Set("itemId", it.RowItemID)
+	case it.EntityType == quality.EntityBoqItem:
 		q.Set("itemId", it.EntityID)
 	}
 	return appURL + "/positions/" + it.PositionID + "/items?" + q.Encode()

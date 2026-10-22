@@ -172,6 +172,7 @@ func persistRun(
 		batch.codes[j], batch.types[j], batch.entities[j] = f.RuleCode, f.EntityType, f.EntityID
 		batch.prints[j], batch.sevs[j], batch.details[j] = f.Fingerprint, f.Severity, f.Detail
 		batch.money[j], batch.posNums[j], batch.itemNos[j] = f.MoneyDelta, f.PositionNumber, f.ItemNo
+		batch.itemIDs[j] = f.ItemID
 	}
 
 	opened, reopened, err := upsertFindings(ctx, tx, tenderID, runID, batch, report)

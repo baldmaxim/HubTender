@@ -248,6 +248,10 @@ func TestRowLink(t *testing.T) {
 	}{
 		{"строка расчёта", app, repository.NotificationPayloadItem{PositionID: "p1", EntityType: "boq_item", EntityID: "i1"},
 			app + "/positions/p1/items?itemId=i1&positionId=p1&tenderId=t1"},
+		{"материал со строкой", app, repository.NotificationPayloadItem{PositionID: "p1", EntityType: "material_name", EntityID: "m1", RowItemID: "i9"},
+			app + "/positions/p1/items?itemId=i9&positionId=p1&tenderId=t1"},
+		{"строка расчёта до item_id", app, repository.NotificationPayloadItem{PositionID: "p1", EntityType: "boq_item", EntityID: "i1"},
+			app + "/positions/p1/items?itemId=i1&positionId=p1&tenderId=t1"},
 		{"позиция", app, repository.NotificationPayloadItem{PositionID: "p1", EntityType: "client_position", EntityID: "p1"},
 			app + "/positions/p1/items?positionId=p1&tenderId=t1"},
 		{"материал без позиции", app, repository.NotificationPayloadItem{EntityType: "material_name", EntityID: "m1"}, ""},

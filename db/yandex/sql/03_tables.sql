@@ -920,6 +920,7 @@ CREATE TABLE IF NOT EXISTS public.verification_findings (
     entity_type text NOT NULL,
     entity_id uuid NOT NULL,
     client_position_id uuid,
+    item_id uuid,
     position_number numeric,
     item_no text,
     severity text NOT NULL,

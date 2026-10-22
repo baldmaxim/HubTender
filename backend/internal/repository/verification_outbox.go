@@ -68,6 +68,9 @@ type NotificationPayloadItem struct {
 	// EntityType — boq_item | client_position | material_name | tender.
 	EntityType string
 	EntityID   string
+	// RowItemID — строка расчёта для подсветки по ссылке; пусто — строки нет.
+	// (ItemID выше — элемент сообщения в очереди, а не строка расчёта.)
+	RowItemID string
 }
 
 // LoadPayload — содержимое сообщения. В него идут только находки, которые всё
@@ -97,9 +100,11 @@ func (r *VerificationDispatchRepo) LoadPayload(ctx context.Context, notification
 		SELECT i.id::text, f.rule_code,
 		       COALESCE(NULLIF(btrim(f.item_no), ''), trim_scale(f.position_number)::text, ''),
 		       f.detail,
-		       COALESCE(f.client_position_id::text, ''), f.entity_type, f.entity_id::text
+		       COALESCE(COALESCE(f.client_position_id, bi.client_position_id)::text, ''),
+		       f.entity_type, f.entity_id::text, COALESCE(f.item_id::text, '')
 		FROM public.verification_notification_items i
 		JOIN public.verification_findings f ON f.id = i.finding_id
+		LEFT JOIN public.boq_items bi ON bi.id = f.item_id
 		WHERE i.notification_id = $1 AND f.resolved_at IS NULL AND f.fingerprint = i.fingerprint
 		ORDER BY f.rule_code, f.position_number NULLS LAST, i.id`, notificationID)
 	if err != nil {
@@ -109,7 +114,7 @@ func (r *VerificationDispatchRepo) LoadPayload(ctx context.Context, notification
 	for rows.Next() {
 		var it NotificationPayloadItem
 		if err := rows.Scan(&it.ItemID, &it.RuleCode, &it.Position, &it.Detail,
-			&it.PositionID, &it.EntityType, &it.EntityID); err != nil {
+			&it.PositionID, &it.EntityType, &it.EntityID, &it.RowItemID); err != nil {
 			return nil, err
 		}
 		p.Items = append(p.Items, it)
