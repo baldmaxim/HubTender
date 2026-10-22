@@ -225,6 +225,7 @@ func (r Rule) validate() error {
 // requiredColumns — контракт выдачи правила (см. docs/data-quality/README.md).
 // Проверка грубая (вхождение подстроки), но ловит самое частое: забытую колонку
 // при копировании соседнего правила. Точную форму проверяет уже сканирование строк.
+// Необязательная восьмая колонка item_id допустима (см. docs/data-quality/README.md).
 var requiredColumns = []string{
 	"tender_id", "position_number", "item_no",
 	"entity_id", "fingerprint", "detail", "money_delta",

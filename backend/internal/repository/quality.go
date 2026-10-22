@@ -25,9 +25,14 @@ type Finding struct {
 	EntityType string `json:"entity_type"`
 	EntityID   string `json:"entity_id"`
 	// PositionID — позиция заказчика, к которой ведёт ссылка «к строке» на странице:
-	// для находки по позиции — она сама, для находки по строке — позиция строки.
-	// nil — у находки нет позиции (материал справочника, тендер).
-	PositionID  *string  `json:"position_id"`
+	// для находки по позиции — она сама, для находки по строке (и любой находки с
+	// ItemID) — позиция этой строки. nil — у находки нет позиции (тендер или материал
+	// справочника без ItemID).
+	PositionID *string `json:"position_id"`
+	// ItemID — строка расчёта, которую подсвечивает ссылка «к строке»: у находки по
+	// строке — она сама, у правил по позиции/материалу — из необязательной колонки
+	// `item_id` SQL правила; nil — ссылка открывает позицию целиком.
+	ItemID      *string  `json:"item_id"`
 	Fingerprint string   `json:"fingerprint"`
 	Detail      string   `json:"detail"`
 	MoneyDelta  *float64 `json:"money_delta"`
@@ -143,18 +148,19 @@ func runCatalogTx(ctx context.Context, tx pgx.Tx, tenderID string) (*QualityRepo
 
 // attachPositionIDs проставляет находкам позицию заказчика, чтобы страница вела по
 // ссылке «к строке» без догадок о том, что лежит в entity_id. SQL правил позицию не
-// отдаёт (контракт колонок не меняем): для строк она берётся одним запросом на все
-// находки разом, для находок по позиции совпадает с entity_id. Находки по материалам
-// справочника и по тендеру позиции не имеют — остаются nil.
+// отдаёт: для находок по позиции она совпадает с entity_id, а для находок со строкой
+// (ItemID — собственная строка либо колонка item_id правила; так материал справочника
+// получает позицию) берётся одним запросом на все строки разом. Находки по тендеру
+// и без строки позиции не имеют — остаются nil.
 func attachPositionIDs(ctx context.Context, q rowQuerier, tenderID string, findings []Finding) error {
 	itemIDs := make([]string, 0, len(findings))
 	for i := range findings {
-		switch findings[i].EntityType {
-		case quality.EntityClientPosition:
+		if findings[i].EntityType == quality.EntityClientPosition {
 			id := findings[i].EntityID
 			findings[i].PositionID = &id
-		case quality.EntityBoqItem:
-			itemIDs = append(itemIDs, findings[i].EntityID)
+		}
+		if findings[i].ItemID != nil {
+			itemIDs = append(itemIDs, *findings[i].ItemID)
 		}
 	}
 	if len(itemIDs) == 0 {
@@ -186,10 +192,10 @@ func attachPositionIDs(ctx context.Context, q rowQuerier, tenderID string, findi
 	}
 
 	for i := range findings {
-		if findings[i].EntityType != quality.EntityBoqItem {
+		if findings[i].ItemID == nil {
 			continue
 		}
-		if positionID, ok := positionByItem[findings[i].EntityID]; ok {
+		if positionID, ok := positionByItem[*findings[i].ItemID]; ok {
 			findings[i].PositionID = &positionID
 		}
 	}
@@ -203,6 +209,18 @@ func runRule(ctx context.Context, q rowQuerier, rule quality.Rule, tenderID stri
 	}
 	defer rows.Close()
 
+	// Форма выдачи одна на правило: 7 обязательных колонок и, необязательно, восьмая
+	// item_id (см. docs/data-quality/README.md). Любая другая — ошибка контракта.
+	fields := rows.FieldDescriptions()
+	withItemID := false
+	switch {
+	case len(fields) == 7:
+	case len(fields) == 8 && fields[7].Name == "item_id":
+		withItemID = true
+	default:
+		return nil, fmt.Errorf("несовпадение контракта колонок: получено %d, ожидается 7 или 8 (восьмая — item_id)", len(fields))
+	}
+
 	out := make([]Finding, 0, 16)
 	for rows.Next() {
 		f := Finding{
@@ -212,11 +230,19 @@ func runRule(ctx context.Context, q rowQuerier, rule quality.Rule, tenderID stri
 			Summary:    rule.Summary,
 			EntityType: rule.EntityType,
 		}
-		if scanErr := rows.Scan(
+		dest := []any{
 			&f.TenderID, &f.PositionNumber, &f.ItemNo,
 			&f.EntityID, &f.Fingerprint, &f.Detail, &f.MoneyDelta,
-		); scanErr != nil {
+		}
+		if withItemID {
+			dest = append(dest, &f.ItemID)
+		}
+		if scanErr := rows.Scan(dest...); scanErr != nil {
 			return nil, fmt.Errorf("несовпадение контракта колонок: %w", scanErr)
+		}
+		if rule.EntityType == quality.EntityBoqItem && f.ItemID == nil {
+			id := f.EntityID
+			f.ItemID = &id
 		}
 		out = append(out, f)
 	}

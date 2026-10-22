@@ -194,7 +194,13 @@ func runDirectPricingChecksTx(ctx context.Context, tx pgx.Tx, tenderID, position
 			var pos *float64
 			var itemNo *string
 			var delta *float64
-			if err := found.Scan(&tid, &pos, &itemNo, &entityID, &fingerprint, &detail, &delta); err != nil {
+			dest := []any{&tid, &pos, &itemNo, &entityID, &fingerprint, &detail, &delta}
+			if len(found.FieldDescriptions()) > 7 {
+				// Колонка item_id нужна только странице, проверке расценки — нет.
+				var skippedItemID *string
+				dest = append(dest, &skippedItemID)
+			}
+			if err := found.Scan(dest...); err != nil {
 				found.Close()
 				return nil, err
 			}

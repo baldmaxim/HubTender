@@ -1,6 +1,6 @@
 ---
 code: E
-title: Строка в валюте, у которой нет курса в тендере
+title: В тендере не задан курс валюты строки
 severity: error
 money: no
 status: active

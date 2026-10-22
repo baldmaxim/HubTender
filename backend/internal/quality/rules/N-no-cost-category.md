@@ -1,6 +1,6 @@
 ---
 code: N
-title: Строка не отнесена к категории затрат
+title: Строка без категории затрат
 severity: info
 money: no
 status: active

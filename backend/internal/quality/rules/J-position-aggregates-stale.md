@@ -1,6 +1,6 @@
 ---
 code: J
-title: Агрегаты позиции не совпадают с суммой её строк
+title: Сохранённые итоги позиции отличаются от суммы строк
 severity: error
 money: yes
 status: active

@@ -1,6 +1,6 @@
 ---
 code: H
-title: В позиции есть строки без денег, и не задано Количество ГП
+title: Позиция со строками без цен и без Кол-ва ГП
 severity: warning
 money: no
 status: active

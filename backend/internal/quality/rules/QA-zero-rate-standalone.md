@@ -1,6 +1,6 @@
 ---
 code: QA
-title: Нулевая цена у строки без роли носителя
+title: Нулевая цена, стоимость нигде не учтена
 severity: warning
 money: no
 status: active

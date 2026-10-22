@@ -1,6 +1,6 @@
 ---
 code: V
-title: Позиция не расценена и без обоснования в расценённом разделе
+title: Нерасценённая позиция без Примечания ГП
 severity: warning
 money: no
 status: active

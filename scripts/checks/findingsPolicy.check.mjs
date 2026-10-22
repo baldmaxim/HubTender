@@ -4,7 +4,7 @@
 // Без React и DOM: только src/lib/quality/findingsPolicy.ts.
 
 import {
-  findingLink, countNewActive, PROPOSAL_CHECKS, computeProposalReadiness,
+  findingLink, findingItemId, countNewActive, PROPOSAL_CHECKS, computeProposalReadiness,
 } from '../../src/lib/quality/findingsPolicy.ts';
 
 const failures = [];
@@ -40,8 +40,22 @@ check('строка без position_id — ссылки нет',
   findingLink(finding({ entity_type: 'boq_item', entity_id: 'item-9' })) === null);
 check('строка с position_id=null — ссылки нет',
   findingLink(finding({ entity_type: 'boq_item', entity_id: 'item-9', position_id: null })) === null);
-check('для номенклатуры ссылки нет',
+check('материал без position_id — ссылки нет',
   findingLink(finding({ entity_type: 'material_name', entity_id: 'mn-1' })) === null);
+check('материал с position_id и item_id — ссылка с itemId строки',
+  findingLink(finding({
+    entity_type: 'material_name', entity_id: 'mn-1', position_id: 'pos-4', item_id: 'item-7',
+  })) === '/positions/pos-4/items?tenderId=t&positionId=pos-4&itemId=item-7');
+check('позиция с item_id — ссылка с itemId строки',
+  findingLink(finding({
+    entity_type: 'client_position', entity_id: 'pos-9', position_id: 'pos-9', item_id: 'item-2',
+  })) === '/positions/pos-9/items?tenderId=t&positionId=pos-9&itemId=item-2');
+check('findingItemId: строка без item_id — её entity_id',
+  findingItemId(finding({ entity_type: 'boq_item', entity_id: 'item-9' })) === 'item-9');
+check('findingItemId: позиция без item_id — null',
+  findingItemId(finding({ entity_type: 'client_position', entity_id: 'pos-9' })) === null);
+check('findingItemId: item_id имеет приоритет',
+  findingItemId(finding({ entity_type: 'boq_item', entity_id: 'a', item_id: 'b' })) === 'b');
 
 // Новые: считаются только не принятые
 check('новые без принятых', countNewActive([

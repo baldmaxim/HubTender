@@ -6,20 +6,29 @@
 import type { QualityFinding, QualityRule } from '../api/quality';
 
 /**
+ * Строка расчёта, которую подсвечивает ссылка находки: item_id от бэкенда,
+ * а у ответа старого бэкенда — сама строка для находки по строке.
+ */
+export function findingItemId(finding: QualityFinding): string | null {
+  return finding.item_id ?? (finding.entity_type === 'boq_item' ? finding.entity_id : null);
+}
+
+/**
  * Ссылка на позицию для находки.
  *
- * Находка по строке расчёта открывает её позицию и подсвечивает строку
- * (itemId); находка по позиции — открывает позицию. У материала справочника
- * и тендера ссылки нет. Маршрут адресуется id позиции; у ответа старого
- * бэкенда нет position_id — тогда позиция берётся из entity_id находки
- * по позиции.
+ * Открывает позицию и, если у находки есть конкретная строка (findingItemId),
+ * подсвечивает её (itemId). Ссылки нет только когда у находки нет позиции
+ * (тендер, материал справочника без строки). Маршрут адресуется id позиции;
+ * у ответа старого бэкенда нет position_id — тогда позиция берётся из
+ * entity_id находки по позиции.
  */
 export function findingLink(finding: QualityFinding): string | null {
   const positionId = finding.position_id
     ?? (finding.entity_type === 'client_position' ? finding.entity_id : null);
   if (!positionId) return null;
   const params = new URLSearchParams({ tenderId: finding.tender_id, positionId });
-  if (finding.entity_type === 'boq_item') params.set('itemId', finding.entity_id);
+  const itemId = findingItemId(finding);
+  if (itemId) params.set('itemId', itemId);
   return `/positions/${positionId}/items?${params.toString()}`;
 }
 

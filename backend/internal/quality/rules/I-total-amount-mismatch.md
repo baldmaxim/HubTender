@@ -1,6 +1,6 @@
 ---
 code: I
-title: Итоговая сумма строки не совпадает с пересчётом
+title: Сохранённая сумма строки отличается от пересчёта
 severity: error
 money: yes
 status: active

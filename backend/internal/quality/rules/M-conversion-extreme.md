@@ -1,6 +1,6 @@
 ---
 code: M
-title: Коэффициент перевода не согласуется с единицей работы
+title: Неправдоподобный коэффициент перевода
 severity: warning
 money: no
 status: active

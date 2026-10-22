@@ -1,6 +1,6 @@
 ---
 code: U
-title: Позиция расценена, но Количество ГП не задано
+title: Расценённая позиция без Кол-ва ГП
 severity: error
 money: no
 status: active

@@ -1,6 +1,6 @@
 ---
 code: GA
-title: Дубль материала при той же работе и той же категории затрат
+title: Дубль материала с той же работой и категорией затрат
 severity: warning
 money: yes
 status: active

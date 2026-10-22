@@ -4,7 +4,7 @@ import { Table, Button, Space, Tag, Typography, Card, Tooltip } from 'antd';
 import { CheckOutlined, WarningOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { QualityFinding, QualityVerdict } from '../../../lib/api/quality';
-import { findingLink } from '../../../lib/quality/findingsPolicy';
+import { findingLink, findingItemId } from '../../../lib/quality/findingsPolicy';
 import type { AIAssessment } from '../../../lib/api/verificationAI';
 import { AIAssessmentTag } from './AIAssessmentTag';
 
@@ -27,9 +27,8 @@ const positionLabel = (f: QualityFinding): string => {
 };
 
 /**
- * Номер позиции со ссылкой на позицию (у находки по строке — с подсветкой
- * строки). Для находок по номенклатуре и тендеру маршрута нет — тогда
- * остаётся обычный текст.
+ * Номер позиции со ссылкой на позицию (у находки со строкой — с подсветкой
+ * этой строки). Без позиции (тендер) маршрута нет — тогда остаётся обычный текст.
  */
 const PositionCell: React.FC<{ f: QualityFinding }> = ({ f }) => {
   const to = findingLink(f);
@@ -37,7 +36,7 @@ const PositionCell: React.FC<{ f: QualityFinding }> = ({ f }) => {
   if (!to) return <Text strong>{label}</Text>;
   return (
     <Tooltip
-      title={f.entity_type === 'boq_item'
+      title={findingItemId(f)
         ? 'Открыть позицию — строка будет подсвечена'
         : 'Открыть работы и материалы позиции'}
     >

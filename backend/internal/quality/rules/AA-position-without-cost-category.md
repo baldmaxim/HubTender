@@ -1,6 +1,6 @@
 ---
 code: AA
-title: В позиции ни у одной строки нет категории затрат
+title: Позиция целиком без категории затрат
 severity: warning
 money: yes
 status: active

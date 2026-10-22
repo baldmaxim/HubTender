@@ -1,6 +1,6 @@
 ---
 code: B
-title: В позиции материалы привязаны частично
+title: Часть материалов позиции не привязана к работам
 severity: warning
 money: no
 status: active
@@ -24,13 +24,15 @@ entity_type: client_position
 работой (насосы — все «шт»). Расходники в кг рядом с бетоном и арматурой под работами —
 обычная раскладка монолита. Раньше на эту же ситуацию с другой стороны указывало правило **T**, но оно
 выключено — оказалось, что оно не отличает такую смесь от нормального комплекта
-разных материалов под одной работой.
+разных материалов под одной работой. Номер позиции ведёт на первый непривязанный материал той же единицы.
 
 ## SQL
 
 ```sql
 WITH m AS (
   SELECT
+    b.id,
+    b.sort_number,
     b.client_position_id,
     b.parent_work_item_id,
     lower(btrim(b.unit_code, E' \t\r\n')) AS unit
@@ -55,6 +57,20 @@ s AS (
       AND l.parent_work_item_id IS NOT NULL
       AND l.unit = m.unit
   ))
+),
+-- Строка для ссылки «к строке»: первый по порядку в позиции непривязанный материал
+-- той же единицы, что и привязанные, — именно он мог стоять под работой.
+target AS (
+  SELECT DISTINCT ON (u.client_position_id) u.client_position_id, u.id
+  FROM m u
+  WHERE u.parent_work_item_id IS NULL
+    AND EXISTS (
+      SELECT 1 FROM m l
+      WHERE l.client_position_id = u.client_position_id
+        AND l.parent_work_item_id IS NOT NULL
+        AND l.unit = u.unit
+    )
+  ORDER BY u.client_position_id, u.sort_number, u.id
 )
 SELECT
   cp.tender_id,
@@ -65,9 +81,11 @@ SELECT
   concat_ws(' ',
     'Материалов привязано к работам:', s.linked::text,
     ', без привязки:', s.unlinked::text) AS detail,
-  NULL::numeric AS money_delta
+  NULL::numeric AS money_delta,
+  target.id AS item_id
 FROM public.client_positions cp
 JOIN s ON s.client_position_id = cp.id
+LEFT JOIN target ON target.client_position_id = cp.id
 WHERE cp.tender_id = $1
   AND s.linked > 0
   AND s.unlinked > 0
