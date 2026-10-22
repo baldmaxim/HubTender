@@ -93,7 +93,11 @@ export const CallListPopover: FC<ICallListPopoverProps> = ({
                   className="tm-calls__call"
                   aria-label={`Отметить звонок: ${tender.title}`}
                   title="Отметить звонок в хронологии"
-                  onClick={() => void onQuickCall(tender)}
+                  onClick={() => {
+                    // Список закрываем, как при открытии тендера: иначе он висит поверх окна описания звонка.
+                    setOpen(false);
+                    void onQuickCall(tender);
+                  }}
                 >
                   <PhoneOutlined />
                 </button>

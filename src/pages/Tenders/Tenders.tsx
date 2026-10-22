@@ -15,6 +15,7 @@ import TenderMonitorModal from './components/TenderMonitorModal';
 import TenderMonitorTable, { type TenderViewMode } from './components/TenderMonitorTable';
 import { TenderKanbanBoard } from './components/kanban/TenderKanbanBoard';
 import { CallListPopover } from './components/CallListPopover';
+import { CallNoteDialog } from './components/CallNoteDialog';
 import { TenderPageActions } from './components/TenderPageActions';
 import { TenderSelectionContext } from './components/selection/tenderSelection';
 import { TenderSelectionBar } from './components/selection/TenderSelectionBar';
@@ -107,6 +108,9 @@ const Tenders: React.FC = () => {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [viewMode, setViewMode] = useState<TenderViewMode>(readViewMode);
+  const [callTender, setCallTender] = useState<TenderRegistryWithRelations | null>(null);
+  const [callDialogOpen, setCallDialogOpen] = useState(false);
+  const [callSaving, setCallSaving] = useState(false);
 
   const { tenders, statuses, constructionScopes, tenderNumbers, loading, refetch } = useTenderData();
   const deleteMode = useTenderDeleteMode({ tenders, onDeleted: refetch });
@@ -214,18 +218,33 @@ const Tenders: React.FC = () => {
     setDetailOpen(true);
   };
 
-  const handleQuickCall = async (tender: TenderRegistryWithRelations) => {
-    const chronologyItems = tender.chronology_items || [];
-    const updatedItems = [...chronologyItems, buildCallFollowUpItem(dayjs().toISOString())];
+  // «Позвонить» открывает окно описания — без текста звонок в хронологию не записывается.
+  const handleQuickCall = (tender: TenderRegistryWithRelations) => {
+    setCallTender(tender);
+    setCallDialogOpen(true);
+  };
 
+  const handleCallSave = async (text: string) => {
+    if (!callTender) {
+      return;
+    }
+
+    // Пока писали описание, список мог обновиться по realtime — дописываем к свежей хронологии.
+    const tender = tenders.find((item) => item.id === callTender.id) ?? callTender;
+    const updatedItems = [...(tender.chronology_items || []), buildCallFollowUpItem(dayjs().toISOString(), text)];
+
+    setCallSaving(true);
     try {
       await patchTenderRegistryFields(tender.id, { chronology_items: updatedItems });
     } catch (err) {
       message.error((err as Error).message);
       return;
+    } finally {
+      setCallSaving(false);
     }
 
-    message.success(`В хронологию "${tender.title}" добавлено событие звонка`);
+    setCallDialogOpen(false);
+    message.success(`В хронологию "${tender.title}" добавлен звонок`);
     await refetch();
   };
 
@@ -409,6 +428,15 @@ const Tenders: React.FC = () => {
         onQuickCall={handleQuickCall}
         onUpdate={refetch}
         readOnly={isGeneralDirector || isPhoneDevice}
+      />
+
+      <CallNoteDialog
+        open={callDialogOpen}
+        tender={callTender}
+        saving={callSaving}
+        palette={palette}
+        onCancel={() => setCallDialogOpen(false)}
+        onSave={(text) => void handleCallSave(text)}
       />
 
       <ImportTendersModal

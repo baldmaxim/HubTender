@@ -398,10 +398,10 @@ export function getTenderSearchText(tender: TenderRegistryWithRelations): string
     .toLocaleLowerCase('ru-RU');
 }
 
-export function buildCallFollowUpItem(nowIso: string): ChronologyItem {
+export function buildCallFollowUpItem(nowIso: string, text: string): ChronologyItem {
   return {
     date: nowIso,
-    text: 'Позвонили заказчику',
+    text,
     type: 'call_follow_up',
   };
 }
