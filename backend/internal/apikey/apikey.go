@@ -55,12 +55,18 @@ const (
 	// выдано) и запись звонка/события в хронологию. Ключ, ограниченный списком
 	// тендеров, к перечню не допускается: у перечня нет связи с тендерами.
 	ScopeRegistryWrite = "registry:write"
+	// ScopeVerificationTelegram — Telegram-бот рассылки замечаний «Проверки
+	// данных» на офисном ПК: ретрансляция обновлений, выдача очереди сообщений,
+	// итог отправки (api/VERIFICATION_BOT.md). Ключ, ограниченный списком
+	// тендеров, не допускается: бот рассылает замечания по всем тендерам.
+	ScopeVerificationTelegram = "verification:telegram"
 )
 
 // KnownScopes — все допустимые области.
 var KnownScopes = []string{
 	ScopeArchiveRead, ScopeArchiveWrite, ScopeTendersRead, ScopeTendersWrite,
 	ScopeVerificationRead, ScopeVerificationWrite, ScopeRegistryRead, ScopeRegistryWrite,
+	ScopeVerificationTelegram,
 }
 
 func isKnownScope(s string) bool {

@@ -7,14 +7,23 @@ import (
 	"errors"
 	"time"
 
-	"github.com/su10/hubtender/backend/internal/notify/telegram"
 	"github.com/su10/hubtender/backend/internal/repository"
 )
 
-// ErrTelegramDisabled — бот не настроен (нет TELEGRAM_BOT_TOKEN / USERNAME).
-var ErrTelegramDisabled = errors.New("telegram: бот не настроен")
+// ErrTelegramDisabled — бот не подключён: внешний бот ещё ни разу не обращался
+// к API, имя бота неизвестно.
+var ErrTelegramDisabled = errors.New("telegram: бот не подключён")
 
-const telegramLinkTTL = 15 * time.Minute
+const (
+	telegramLinkTTL = 15 * time.Minute
+	// telegramBotOnlineWindow — «бот в сети», если claim был не позже.
+	telegramBotOnlineWindow = 90 * time.Second
+)
+
+// telegramBotStater — состояние внешнего бота (имя и время последнего вызова).
+type telegramBotStater interface {
+	BotState(ctx context.Context) (*repository.TelegramBotState, error)
+}
 
 type telegramLinkRepo interface {
 	GetLink(ctx context.Context, userID string) (*repository.TelegramLink, error)
@@ -25,28 +34,42 @@ type telegramLinkRepo interface {
 // TelegramLinkService — привязка аккаунта к личному чату с ботом.
 type TelegramLinkService struct {
 	repo telegramLinkRepo
-	cfg  telegram.Config
+	bot  telegramBotStater
+	now  func() time.Time
 }
 
-func NewTelegramLinkService(repo telegramLinkRepo, cfg telegram.Config) *TelegramLinkService {
-	return &TelegramLinkService{repo: repo, cfg: cfg}
+// NewTelegramLinkService — repo обслуживает и привязки, и состояние бота
+// (repository.TelegramRepo).
+func NewTelegramLinkService(repo interface {
+	telegramLinkRepo
+	telegramBotStater
+}) *TelegramLinkService {
+	return &TelegramLinkService{repo: repo, bot: repo, now: time.Now}
 }
 
 // TelegramStatus — состояние привязки для интерфейса.
 type TelegramStatus struct {
 	Enabled          bool       `json:"enabled"`
 	BotUsername      string     `json:"bot_username,omitempty"`
+	BotOnline        bool       `json:"bot_online"`
+	BotLastSeenAt    *time.Time `json:"bot_last_seen_at"`
 	Linked           bool       `json:"linked"`
 	TelegramUsername *string    `json:"telegram_username"`
 	LinkedAt         *time.Time `json:"linked_at"`
 }
 
 func (s *TelegramLinkService) Status(ctx context.Context, userID string) (*TelegramStatus, error) {
-	st := &TelegramStatus{Enabled: s.cfg.Enabled()}
+	bot, err := s.bot.BotState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	st := &TelegramStatus{Enabled: bot.Username != ""}
 	if !st.Enabled {
 		return st, nil
 	}
-	st.BotUsername = s.cfg.BotUsername
+	st.BotUsername = bot.Username
+	st.BotLastSeenAt = bot.LastSeenAt
+	st.BotOnline = bot.LastSeenAt != nil && s.now().Sub(*bot.LastSeenAt) < telegramBotOnlineWindow
 	link, err := s.repo.GetLink(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -66,7 +89,11 @@ type TelegramLinkToken struct {
 // CreateLink выпускает одноразовый токен. Привязка — только через /start с этим
 // токеном в личном чате: сопоставление по e-mail или username подделывается.
 func (s *TelegramLinkService) CreateLink(ctx context.Context, userID string) (*TelegramLinkToken, error) {
-	if !s.cfg.Enabled() {
+	bot, err := s.bot.BotState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if bot.Username == "" {
 		return nil, ErrTelegramDisabled
 	}
 	raw := make([]byte, 24)
@@ -80,7 +107,7 @@ func (s *TelegramLinkService) CreateLink(ctx context.Context, userID string) (*T
 		return nil, err
 	}
 	return &TelegramLinkToken{
-		DeepLink:  "https://t.me/" + s.cfg.BotUsername + "?start=" + token,
+		DeepLink:  "https://t.me/" + bot.Username + "?start=" + token,
 		ExpiresAt: expires,
 	}, nil
 }

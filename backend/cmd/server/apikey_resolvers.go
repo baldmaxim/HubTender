@@ -37,3 +37,14 @@ var errRegistryNotTenderScoped = errors.New("перечень тендеров �
 func registryDeniesRestrictedKey(*http.Request) (string, error) {
 	return "", errRegistryNotTenderScoped
 }
+
+// errVerificationBotNotTenderScoped — бот рассылки замечаний работает со всей
+// очередью, а не с отдельными тендерами.
+var errVerificationBotNotTenderScoped = errors.New(
+	"Telegram-бот рассылает замечания по всем тендерам — ключ с ограничением по тендерам не подходит")
+
+// verificationBotDeniesRestrictedKey — резолвер маршрутов бота рассылки: как
+// registryDeniesRestrictedKey, всегда отказывает ключу со списком тендеров.
+func verificationBotDeniesRestrictedKey(*http.Request) (string, error) {
+	return "", errVerificationBotNotTenderScoped
+}

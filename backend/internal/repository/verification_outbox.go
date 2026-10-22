@@ -110,6 +110,26 @@ func (r *VerificationDispatchRepo) LoadPayload(ctx context.Context, notification
 	return p, rows.Err()
 }
 
+// ErrNotificationNotFound — сообщения нет в очереди.
+var ErrNotificationNotFound = errors.New("dispatch: сообщение не найдено")
+
+// NotificationState — статус и число попыток сообщения: по ним итог отправки,
+// присланный внешним ботом, применяется идемпотентно.
+func (r *VerificationDispatchRepo) NotificationState(ctx context.Context, id string) (string, int, error) {
+	var status string
+	var attempts int
+	err := r.pool.QueryRow(ctx, `
+		SELECT status, attempts FROM public.verification_notifications WHERE id = $1`, id).
+		Scan(&status, &attempts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", 0, ErrNotificationNotFound
+	}
+	if err != nil {
+		return "", 0, fmt.Errorf("dispatchRepo.NotificationState: %w", err)
+	}
+	return status, attempts, nil
+}
+
 // MarkSent — сообщение доставлено.
 func (r *VerificationDispatchRepo) MarkSent(ctx context.Context, id string, messageID int64) error {
 	_, err := r.pool.Exec(ctx, `

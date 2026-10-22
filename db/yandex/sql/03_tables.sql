@@ -1018,7 +1018,8 @@ CREATE TABLE IF NOT EXISTS public.telegram_link_tokens (
 
 CREATE TABLE IF NOT EXISTS public.telegram_bot_state (
     id smallint NOT NULL DEFAULT 1,
-    update_offset bigint NOT NULL DEFAULT 0,
+    bot_username text,
+    last_seen_at timestamp with time zone,
     updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
 

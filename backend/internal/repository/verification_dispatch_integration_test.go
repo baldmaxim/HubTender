@@ -105,11 +105,11 @@ func TestDispatchIntegration_ResolveEnqueueSend(t *testing.T) {
 		if _, err := tg.CreateLinkToken(ctx, uid, "tok-"+uid, time.Minute); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := tg.ConsumeLinkToken(ctx, "tok-"+uid, 9000000+int64(i), "u"); err != nil {
+		if _, err := tg.ConsumeLinkToken(ctx, "tok-"+uid, 9000000+int64(i), "u", time.Now()); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := tg.ConsumeLinkToken(ctx, "tok-"+author, 1, ""); err != ErrTelegramTokenInvalid {
+	if _, err := tg.ConsumeLinkToken(ctx, "tok-"+author, 1, "", time.Now()); err != ErrTelegramTokenInvalid {
 		t.Fatalf("токен сработал повторно: %v", err)
 	}
 

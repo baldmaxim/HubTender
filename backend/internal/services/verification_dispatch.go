@@ -18,18 +18,23 @@ type dispatchRepoer interface {
 }
 
 // VerificationDispatchService — рассылка замечаний исполнителям по кнопке
-// проверяющего. Сама отправка идёт фоном из очереди (TelegramBot.RunSender).
+// проверяющего. Сама отправка — внешний бот, забирающий очередь
+// (VerificationBotService.Claim).
 type VerificationDispatchService struct {
-	repo    dispatchRepoer
-	enabled bool
+	repo dispatchRepoer
+	bot  telegramBotStater
 }
 
-func NewVerificationDispatchService(repo dispatchRepoer, cfg telegram.Config) *VerificationDispatchService {
-	return &VerificationDispatchService{repo: repo, enabled: cfg.Enabled()}
+func NewVerificationDispatchService(repo dispatchRepoer, bot telegramBotStater) *VerificationDispatchService {
+	return &VerificationDispatchService{repo: repo, bot: bot}
 }
 
 func (s *VerificationDispatchService) targets(ctx context.Context, tenderID string, ids []string, sender string) ([]repository.DispatchTarget, error) {
-	if !s.enabled {
+	bot, err := s.bot.BotState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if bot.Username == "" {
 		return nil, ErrTelegramDisabled
 	}
 	if len(ids) > repository.MaxDispatchFindings {

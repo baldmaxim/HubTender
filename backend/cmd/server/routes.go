@@ -152,8 +152,10 @@ func newRouter(
 
 		// Проверка данных: чтение, вердикты, разделы, эталоны и выжимка — в
 		// машинной группе выше (области verification:*). Здесь остаётся то, что
-		// ключу не открывается: рассылка в Telegram, правка справочника эталонов
-		// (роли BenchmarkRangeEditorRoles) и выгрузка вердиктов по всей базе.
+		// ключу не открывается: постановка рассылки в очередь (кнопка — только
+		// JWT; доставку делает внешний бот по области verification:telegram),
+		// правка справочника эталонов (роли BenchmarkRangeEditorRoles) и выгрузка
+		// вердиктов по всей базе.
 		r.Post("/api/v1/tenders/{id}/verification/dispatch/preview", d.telegramH.PostPreview)
 		r.Post("/api/v1/tenders/{id}/verification/dispatch", d.telegramH.PostDispatch)
 		r.Group(func(r chi.Router) {

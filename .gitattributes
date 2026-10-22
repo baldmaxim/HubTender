@@ -18,6 +18,8 @@
 
 # PowerShell — единственное исключение: он нативно CRLF на Windows.
 *.ps1 text eol=crlf
+# Windows-батники — тоже CRLF (cmd.exe ломается на LF в метках и многострочных блоках).
+*.bat text eol=crlf
 
 # Бинарники: конвертации быть не должно ни при каких настройках.
 *.xlsx binary

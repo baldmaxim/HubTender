@@ -66,14 +66,3 @@ func TestRenderNoticeEscapesAndButtons(t *testing.T) {
 		t.Fatal("небезопасная ссылка попала в кнопку")
 	}
 }
-
-func TestAPIErrorHidesNothingSecret(t *testing.T) {
-	c, err := NewClient(Config{Token: "123:SECRET", APIBaseURL: "http://127.0.0.1:1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = c.SendMessage(t.Context(), 1, "x", nil)
-	if err == nil || strings.Contains(err.Error(), "SECRET") {
-		t.Fatalf("ошибка раскрывает токен или отсутствует: %v", err)
-	}
-}

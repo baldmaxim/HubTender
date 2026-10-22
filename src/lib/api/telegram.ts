@@ -1,15 +1,20 @@
 // Конвейер проверки: привязка Telegram и рассылка замечаний исполнителям.
-// Бот живёт в Go BFF (backend/internal/notify/telegram); отправка — только по
-// кнопке проверяющего, адресат находки определяется по истории правок строк.
+// Бот — отдельная программа на офисном ПК (bots/verification-bot); бэкенд держит
+// очередь сообщений и привязки. Отправка — только по кнопке проверяющего, адресат
+// находки определяется по истории правок строк.
 import { apiFetch } from './client';
 
 export interface TelegramStatus {
-  /** false — на сервере не задан бот, привязка и рассылка недоступны. */
+  /** false — бот на офисном ПК ещё ни разу не выходил на связь, привязка и рассылка недоступны. */
   enabled: boolean;
   bot_username?: string;
   linked: boolean;
   telegram_username: string | null;
   linked_at: string | null;
+  /** Бот опрашивал сервер за последние 90 секунд. */
+  bot_online: boolean;
+  /** ISO-время последнего опроса сервера ботом; null — не выходил на связь. */
+  bot_last_seen_at: string | null;
 }
 
 export interface TelegramLinkToken {

@@ -1,5 +1,6 @@
 // Отправка замечаний исполнителям в Telegram: предпросмотр адресатов → отправка.
 import { FC, useEffect, useState } from 'react';
+import dayjs from 'dayjs';
 import { Alert, List, Modal, Space, Spin, Tag, Typography, message } from 'antd';
 import { dispatchFindings, previewDispatch, type DispatchRecipient } from '../../../lib/api/telegram';
 import { dispatchResultText, resolverText, willSend } from '../../../lib/quality/dispatchPolicy';
@@ -11,10 +12,12 @@ interface IDispatchModalProps {
   open: boolean;
   tenderId: string;
   findingIds: string[];
+  botOnline: boolean;
+  botLastSeenAt: string | null;
   onClose: () => void;
 }
 
-export const DispatchModal: FC<IDispatchModalProps> = ({ open, tenderId, findingIds, onClose }) => {
+export const DispatchModal: FC<IDispatchModalProps> = ({ open, tenderId, findingIds, botOnline, botLastSeenAt, onClose }) => {
   const [recipients, setRecipients] = useState<DispatchRecipient[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -67,6 +70,13 @@ export const DispatchModal: FC<IDispatchModalProps> = ({ open, tenderId, finding
           Адресат — кто последним правил строку или чаще всех правил позицию. Замечание с теми же данными
           повторно тому же человеку не уходит. Ответить можно кнопками прямо в Telegram.
         </Text>
+        {!botOnline && (
+          <Alert
+            type="warning"
+            showIcon
+            message={`Бот не в сети${botLastSeenAt ? ` с ${dayjs(botLastSeenAt).format('DD.MM HH:mm')}` : ''}: сообщения встанут в очередь и уйдут, когда включат офисный ПК.`}
+          />
+        )}
         {error && <Alert type="error" showIcon message={error} />}
         {!recipients && !error && <Spin />}
         {recipients && (

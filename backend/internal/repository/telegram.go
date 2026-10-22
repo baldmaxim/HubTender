@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TelegramRepo — привязка пользователей к чату с ботом и состояние поллера.
+// TelegramRepo — привязка пользователей к чату с ботом и состояние внешнего бота.
 type TelegramRepo struct {
 	pool *pgxpool.Pool
 }
@@ -79,7 +79,12 @@ func (r *TelegramRepo) CreateLinkToken(ctx context.Context, userID, token string
 
 // ConsumeLinkToken гасит токен и привязывает чат к его владельцу. Чат, ранее
 // привязанный к другому пользователю, отвязывается от него. Возвращает ФИО.
-func (r *TelegramRepo) ConsumeLinkToken(ctx context.Context, token string, chatID int64, username string) (string, error) {
+// at — момент нажатия Start: бот на офисном ПК мог получить обновление позже,
+// а срок жизни токена считается по времени нажатия, не обработки.
+//
+// Повтор того же обновления (бот не получил ответ и прислал снова) — успех:
+// токен уже погашен, и его владелец привязан к этому же чату.
+func (r *TelegramRepo) ConsumeLinkToken(ctx context.Context, token string, chatID int64, username string, at time.Time) (string, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("telegramRepo.ConsumeLinkToken: begin: %w", err)
@@ -89,10 +94,10 @@ func (r *TelegramRepo) ConsumeLinkToken(ctx context.Context, token string, chatI
 	var userID string
 	err = tx.QueryRow(ctx, `
 		UPDATE public.telegram_link_tokens SET used_at = now()
-		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
-		RETURNING user_id::text`, HashLinkToken(token)).Scan(&userID)
+		WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
+		RETURNING user_id::text`, HashLinkToken(token), at).Scan(&userID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", ErrTelegramTokenInvalid
+		return r.repeatedConsume(ctx, tx, token, chatID)
 	}
 	if err != nil {
 		return "", fmt.Errorf("telegramRepo.ConsumeLinkToken: token: %w", err)
@@ -119,6 +124,26 @@ func (r *TelegramRepo) ConsumeLinkToken(ctx context.Context, token string, chatI
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("telegramRepo.ConsumeLinkToken: commit: %w", err)
+	}
+	return name, nil
+}
+
+// repeatedConsume — токен не подошёл: если он уже погашен и его владелец
+// привязан к этому же чату, это повтор обработанного обновления.
+func (r *TelegramRepo) repeatedConsume(ctx context.Context, tx pgx.Tx, token string, chatID int64) (string, error) {
+	var name string
+	err := tx.QueryRow(ctx, `
+		SELECT COALESCE(u.full_name, '')
+		FROM public.telegram_link_tokens t
+		JOIN public.telegram_links l ON l.user_id = t.user_id
+		JOIN public.users u ON u.id = t.user_id
+		WHERE t.token_hash = $1 AND t.used_at IS NOT NULL AND l.chat_id = $2`,
+		HashLinkToken(token), chatID).Scan(&name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrTelegramTokenInvalid
+	}
+	if err != nil {
+		return "", fmt.Errorf("telegramRepo.ConsumeLinkToken: repeat: %w", err)
 	}
 	return name, nil
 }
@@ -153,26 +178,42 @@ func (r *TelegramRepo) UserByChat(ctx context.Context, chatID int64) (string, er
 	return id, nil
 }
 
-// GetOffset — offset getUpdates; 0 — поллер ещё не запускался.
-func (r *TelegramRepo) GetOffset(ctx context.Context) (int64, error) {
-	var off int64
-	err := r.pool.QueryRow(ctx, `SELECT update_offset FROM public.telegram_bot_state WHERE id = 1`).Scan(&off)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, fmt.Errorf("telegramRepo.GetOffset: %w", err)
-	}
-	return off, nil
+// TelegramBotState — что известно о внешнем боте: имя из его последнего вызова
+// и время этого вызова.
+type TelegramBotState struct {
+	Username   string
+	LastSeenAt *time.Time
 }
 
-// SetOffset сохраняет offset: обработанные обновления не придут повторно после рестарта.
-func (r *TelegramRepo) SetOffset(ctx context.Context, offset int64) error {
+// BotState — состояние бота; нет строки или имени — пустая структура.
+func (r *TelegramRepo) BotState(ctx context.Context) (*TelegramBotState, error) {
+	var name *string
+	var seen *time.Time
+	err := r.pool.QueryRow(ctx, `
+		SELECT bot_username, last_seen_at FROM public.telegram_bot_state WHERE id = 1`).Scan(&name, &seen)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return &TelegramBotState{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("telegramRepo.BotState: %w", err)
+	}
+	st := &TelegramBotState{LastSeenAt: seen}
+	if name != nil {
+		st.Username = *name
+	}
+	return st, nil
+}
+
+// TouchBot запоминает имя бота и время обращения: по нему интерфейс собирает
+// ссылку привязки и показывает «бот в сети».
+func (r *TelegramRepo) TouchBot(ctx context.Context, username string) error {
 	if _, err := r.pool.Exec(ctx, `
-		INSERT INTO public.telegram_bot_state (id, update_offset, updated_at) VALUES (1, $1, now())
-		ON CONFLICT (id) DO UPDATE SET update_offset = EXCLUDED.update_offset, updated_at = now()`,
-		offset); err != nil {
-		return fmt.Errorf("telegramRepo.SetOffset: %w", err)
+		INSERT INTO public.telegram_bot_state (id, bot_username, last_seen_at, updated_at)
+		VALUES (1, $1, now(), now())
+		ON CONFLICT (id) DO UPDATE
+		SET bot_username = EXCLUDED.bot_username, last_seen_at = now(), updated_at = now()`,
+		username); err != nil {
+		return fmt.Errorf("telegramRepo.TouchBot: %w", err)
 	}
 	return nil
 }

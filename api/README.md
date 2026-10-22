@@ -12,6 +12,7 @@ TenderHUB по ключу `thk_…` и дать ему **просмотр тен
 | [AGENT_INSTRUCTIONS.md](AGENT_INSTRUCTIONS.md) | готовый текст инструкции для агента — копировать в `AGENTS.md` / правило Cursor / `CLAUDE.md` |
 | [VERIFICATION.md](VERIFICATION.md) | «Проверка данных» по ключу: находки, вердикты, разделы |
 | [REGISTRY.md](REGISTRY.md) | «Перечень тендеров» для Telegram-бота: поиск, карточка, напоминания, запись в хронологию |
+| [VERIFICATION_BOT.md](VERIFICATION_BOT.md) | Telegram-бот рассылки замечаний «Проверки данных»: обновления, очередь сообщений, итог отправки |
 
 Живая спецификация OpenAPI 3.1: `GET /api/v1/archive/openapi.yaml` (с заголовком
 `X-API-Key`; в комплекте документации она лежит файлом `openapi/archive.yaml`).
@@ -141,9 +142,11 @@ node scripts/archive-api.mjs estimate x --position=<position_id>   # одна п
 | `tenders:write` | прямое создание/правка строк BOQ и пересчёт итогов позиции — запись в тендер |
 | `verification:read` / `verification:write` | «Проверка данных»: находки и вердикты — см. [VERIFICATION.md](VERIFICATION.md) |
 | `registry:read` / `registry:write` | «Перечень тендеров» для Telegram-бота: поиск и карточка / напоминания и запись в хронологию — см. [REGISTRY.md](REGISTRY.md) |
+| `verification:telegram` | Telegram-бот рассылки замечаний «Проверки данных»: ретрансляция обновлений, выдача очереди, итог отправки — см. [VERIFICATION_BOT.md](VERIFICATION_BOT.md) |
 
-Ограничение по списку тендеров действует для всех областей, кроме `registry:*`: у
-перечня нет связи с тендерами, и ключ со списком тендеров к нему не допускается. Управление ключами и
+Ограничение по списку тендеров действует для всех областей, кроме `registry:*` и
+`verification:telegram`: у перечня нет связи с тендерами, а бот рассылки работает со всей
+очередью, и ключ со списком тендеров к ним не допускается. Управление ключами и
 настройками (`/api/v1/admin/api-access/*`) и остальные эндпоинты портала ключу
 недоступны — только JWT пользователя.
 

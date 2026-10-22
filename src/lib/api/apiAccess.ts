@@ -13,7 +13,8 @@ export type ApiKeyScope =
   | 'verification:read'
   | 'verification:write'
   | 'registry:read'
-  | 'registry:write';
+  | 'registry:write'
+  | 'verification:telegram';
 export type ApiKeyStatus = 'active' | 'revoked' | 'expired';
 
 export interface ApiKey {

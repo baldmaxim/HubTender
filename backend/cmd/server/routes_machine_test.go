@@ -153,3 +153,105 @@ func TestRegistryHandlerResponses(t *testing.T) {
 		})
 	}
 }
+
+type fakeVerificationBot struct{ resultErr error }
+
+func (f *fakeVerificationBot) HandleUpdate(context.Context, telegram.Update) ([]services.BotAction, error) {
+	return []services.BotAction{}, nil
+}
+func (f *fakeVerificationBot) Claim(_ context.Context, name string, _ int) ([]services.BotOutMessage, error) {
+	if name == "bad" {
+		return nil, services.ErrBotUsernameInvalid
+	}
+	return []services.BotOutMessage{}, nil
+}
+func (f *fakeVerificationBot) ReportResult(context.Context, string, services.SendResult) (string, error) {
+	if f.resultErr != nil {
+		return "", f.resultErr
+	}
+	return "sent", nil
+}
+
+func verificationBotRouter(bot *fakeVerificationBot, principal *middleware.APIKeyPrincipal) *chi.Mux {
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if principal != nil {
+				req = req.WithContext(context.WithValue(req.Context(), middleware.CtxAPIKey, principal))
+			}
+			next.ServeHTTP(w, req)
+		})
+	})
+	registerVerificationBotRoutes(r, handlers.NewVerificationBotHandler(bot))
+	return r
+}
+
+func TestVerificationBotRoutesGate(t *testing.T) {
+	bot := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"verification:telegram"}}
+	other := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"verification:read", "verification:write", "registry:write"}}
+	restricted := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"verification:telegram"},
+		AllowedTenderIDs: []string{"11111111-1111-1111-1111-111111111111"}}
+	paths := []struct{ name, path, body string }{
+		{"updates", "/api/v1/verification-bot/updates", `{"update":{"update_id":1}}`},
+		{"claim", "/api/v1/verification-bot/claim", `{"bot_username":"hub_bot"}`},
+		{"result", "/api/v1/verification-bot/notifications/" + regID + "/result", `{"ok":true,"message_id":7}`},
+	}
+	cases := []struct {
+		name      string
+		principal *middleware.APIKeyPrincipal
+		status    int
+		code      string
+	}{
+		{"человек с JWT", nil, 403, "API_KEY_REQUIRED"},
+		{"ключ без области", other, 403, "API_KEY_SCOPE_DENIED"},
+		{"ключ со списком тендеров", restricted, 403, "API_KEY_TENDER_DENIED"},
+		{"ключ с областью", bot, 200, ""},
+	}
+	for _, p := range paths {
+		for _, c := range cases {
+			t.Run(p.name+": "+c.name, func(t *testing.T) {
+				w, m := callRegistry(t, verificationBotRouter(&fakeVerificationBot{}, c.principal), "POST", p.path, p.body)
+				if w.Code != c.status || (c.code != "" && m["code"] != c.code) {
+					t.Fatalf("status %d code %v, ожидалось %d %s: %.300s", w.Code, m["code"], c.status, c.code, w.Body.String())
+				}
+			})
+		}
+	}
+}
+
+func TestVerificationBotHandlerResponses(t *testing.T) {
+	key := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"verification:telegram"}}
+	result := "/api/v1/verification-bot/notifications/" + regID + "/result"
+	cases := []struct {
+		name   string
+		bot    *fakeVerificationBot
+		path   string
+		body   string
+		status int
+		code   string
+	}{
+		{"updates: без update", &fakeVerificationBot{}, "/api/v1/verification-bot/updates", `{}`, 400, "VERIFICATION_BOT_INVALID_REQUEST"},
+		{"updates: битое тело", &fakeVerificationBot{}, "/api/v1/verification-bot/updates", `x`, 400, "VERIFICATION_BOT_INVALID_REQUEST"},
+		{"claim: плохое имя", &fakeVerificationBot{}, "/api/v1/verification-bot/claim", `{"bot_username":"bad"}`, 400, "VERIFICATION_BOT_INVALID_REQUEST"},
+		{"result: не uuid", &fakeVerificationBot{}, "/api/v1/verification-bot/notifications/abc/result", `{}`, 400, "VERIFICATION_BOT_INVALID_REQUEST"},
+		{"result: нет сообщения", &fakeVerificationBot{resultErr: repository.ErrNotificationNotFound}, result, `{"ok":true}`, 404, "VERIFICATION_BOT_NOT_FOUND"},
+		{"result: тело больше 64 КБ", &fakeVerificationBot{}, result, `{"description":"` + strings.Repeat("я", 40000) + `"}`, 400, "VERIFICATION_BOT_INVALID_REQUEST"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w, m := callRegistry(t, verificationBotRouter(c.bot, key), "POST", c.path, c.body)
+			if w.Code != c.status || (c.code != "" && m["code"] != c.code) {
+				t.Fatalf("status %d code %v, ожидалось %d %s: %.300s", w.Code, m["code"], c.status, c.code, w.Body.String())
+			}
+		})
+	}
+
+	w, m := callRegistry(t, verificationBotRouter(&fakeVerificationBot{}, key), "POST", "/api/v1/verification-bot/claim", `{"bot_username":"hub_bot"}`)
+	if data, _ := m["data"].(map[string]any); w.Header().Get("Cache-Control") != "no-store" || data["messages"] == nil {
+		t.Fatalf("claim: %s", w.Body.String())
+	}
+	_, m = callRegistry(t, verificationBotRouter(&fakeVerificationBot{}, key), "POST", result, `{"ok":true}`)
+	if data, _ := m["data"].(map[string]any); data["status"] != "sent" {
+		t.Fatalf("result: %v", m)
+	}
+}

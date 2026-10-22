@@ -9,7 +9,7 @@ import { CheckpointBar } from './components/CheckpointBar';
 import { SectionsPanel } from './components/SectionsPanel';
 import { CostBenchmarkPanel } from './components/CostBenchmarkPanel';
 import { DispatchModal } from './components/DispatchModal';
-import { fetchTelegramStatus } from '../../lib/api/telegram';
+import { fetchTelegramStatus, type TelegramStatus } from '../../lib/api/telegram';
 import { dispatchableIds } from '../../lib/quality/dispatchPolicy';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAITriage } from './hooks/useAITriage';
@@ -47,13 +47,14 @@ const DataQuality: React.FC = () => {
     submitGroupVerdict,
   } = useQualityReport();
 
-  // Рассылка в Telegram — только если бот настроен на сервере.
-  const [telegramEnabled, setTelegramEnabled] = useState(false);
+  // Рассылка в Telegram — только если бот на офисном ПК хотя бы раз выходил на связь.
+  const [telegram, setTelegram] = useState<TelegramStatus | null>(null);
+  const telegramEnabled = telegram?.enabled ?? false;
   const [dispatchIds, setDispatchIds] = useState<string[] | null>(null);
   useEffect(() => {
     fetchTelegramStatus()
-      .then((s) => setTelegramEnabled(s.enabled))
-      .catch(() => setTelegramEnabled(false));
+      .then(setTelegram)
+      .catch(() => setTelegram(null));
   }, []);
   const allDispatchable = dispatchableIds(groups.flatMap((g) => g.findings));
 
@@ -312,6 +313,8 @@ const DataQuality: React.FC = () => {
           open
           tenderId={selectedTenderId}
           findingIds={dispatchIds}
+          botOnline={telegram?.bot_online ?? false}
+          botLastSeenAt={telegram?.bot_last_seen_at ?? null}
           onClose={() => setDispatchIds(null)}
         />
       )}

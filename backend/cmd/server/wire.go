@@ -23,7 +23,6 @@ import (
 	"github.com/su10/hubtender/backend/internal/mcpauth"
 	"github.com/su10/hubtender/backend/internal/mcpserver"
 	"github.com/su10/hubtender/backend/internal/middleware"
-	"github.com/su10/hubtender/backend/internal/notify/telegram"
 	"github.com/su10/hubtender/backend/internal/realtime"
 	"github.com/su10/hubtender/backend/internal/repository"
 	"github.com/su10/hubtender/backend/internal/services"
@@ -36,7 +35,6 @@ type deps struct {
 	recalcRecovery *services.FinancialCalculationRecoveryService
 	verifQueue     *services.RecalcQueue
 	verifRetention *services.VerificationRetentionService
-	telegramBot    *services.TelegramBot
 	telegramH      *handlers.TelegramHandler
 	aiTriageQueue  *services.RecalcQueue
 	verifAIH       *handlers.VerificationAIHandler
@@ -82,6 +80,7 @@ type deps struct {
 	notificationsH    *handlers.NotificationsHandler
 	tenderRegistryH   *handlers.TenderRegistryHandler
 	registryBotH      *handlers.TenderRegistryBotHandler
+	verifBotH         *handlers.VerificationBotHandler
 	costsH            *handlers.CostsHandler
 	nomenclaturesH    *handlers.NomenclaturesHandler
 	importLogH        *handlers.ImportLogHandler
@@ -223,25 +222,17 @@ func buildDeps(
 		verifRetentionCfg.Enabled = false
 	}
 	verifRetention := services.NewVerificationRetentionService(qualityRepo, verifRetentionCfg, logger)
-	// Telegram: рассылка замечаний проверки по кнопке. Без TELEGRAM_BOT_TOKEN и
-	// TELEGRAM_BOT_USERNAME бот не стартует, эндпоинты отвечают «не настроен».
-	telegramCfg := telegram.ConfigFromEnv()
+	// Telegram: рассылка замечаний проверки по кнопке. Сам бот — внешняя
+	// программа на офисном ПК (api/VERIFICATION_BOT.md): сервер ведёт очередь,
+	// выбирает адресатов и формирует тексты, в Telegram не ходит.
 	telegramRepo := repository.NewTelegramRepo(pool)
 	dispatchRepo := repository.NewVerificationDispatchRepo(pool)
-	var telegramBot *services.TelegramBot
-	if telegramCfg.Enabled() {
-		tgClient, tgErr := telegram.NewClient(telegramCfg)
-		if tgErr != nil {
-			logger.Error().Err(tgErr).Msg("telegram bot disabled")
-			telegramCfg.Token = ""
-		} else {
-			telegramBot = services.NewTelegramBot(tgClient, telegramRepo, dispatchRepo, qualitySvc, telegramCfg, logger)
-		}
-	}
 	telegramH := handlers.NewTelegramHandler(
-		services.NewTelegramLinkService(telegramRepo, telegramCfg),
-		services.NewVerificationDispatchService(dispatchRepo, telegramCfg),
+		services.NewTelegramLinkService(telegramRepo),
+		services.NewVerificationDispatchService(dispatchRepo, telegramRepo),
 	)
+	verifBotH := handlers.NewVerificationBotHandler(
+		services.NewVerificationBotService(telegramRepo, dispatchRepo, qualitySvc, cfg.AppBaseURL, logger))
 	boqSvc := services.NewBoqService(boqRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	bulkBoqSvc := services.NewBulkBoqService(bulkBoqRepo, inMemCache)
 	importBoqSvc := services.NewImportBoqService(importBoqRepo, inMemCache).WithRecalcQueue(recalcQueue)
@@ -467,8 +458,8 @@ func buildDeps(
 		recalcRecovery: recalcRecovery,
 		verifQueue:     verifQueue,
 		verifRetention: verifRetention,
-		telegramBot:    telegramBot,
 		telegramH:      telegramH,
+		verifBotH:      verifBotH,
 		aiTriageQueue:  aiTriageQueue,
 		verifAIH:       verifAIH,
 		recalcHealthH:  handlers.NewRecalcHealthHandler(recalcRecovery),

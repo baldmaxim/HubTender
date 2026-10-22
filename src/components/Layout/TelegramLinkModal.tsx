@@ -8,6 +8,8 @@ import { getErrorMessage } from '../../utils/errors';
 
 const { Text, Paragraph } = Typography;
 
+const formatSeen = (iso: string | null): string => (iso ? ` — был ${dayjs(iso).format('DD.MM HH:mm')}` : '');
+
 interface ITelegramLinkModalProps {
   open: boolean;
   onClose: () => void;
@@ -66,7 +68,7 @@ export const TelegramLinkModal: FC<ITelegramLinkModalProps> = ({ open, onClose }
       {error && <Alert type="error" showIcon message={error} />}
       {!status && !error && <Spin />}
       {status && !status.enabled && (
-        <Alert type="info" showIcon message="Telegram-бот на сервере ещё не настроен" />
+        <Alert type="info" showIcon message="Бот рассылки ещё не подключён: его запускают на офисном ПК. Обратитесь к администратору." />
       )}
       {status?.enabled && (
         <Space direction="vertical" size={12} className="telegram-link-modal">
@@ -74,6 +76,17 @@ export const TelegramLinkModal: FC<ITelegramLinkModalProps> = ({ open, onClose }
             Сюда будут приходить замечания проверки расчёта по строкам, которые вы правили. Отвечать
             «Норма» или «Ошибка, исправлю» можно кнопками прямо в чате.
           </Paragraph>
+          {!status.bot_online && (
+            <Alert
+              type="warning"
+              showIcon
+              message={
+                status.linked
+                  ? `Бот сейчас не в сети${formatSeen(status.bot_last_seen_at)}: уведомления придут, когда включат офисный ПК.`
+                  : `Бот сейчас не в сети${formatSeen(status.bot_last_seen_at)}. Он работает, пока включён офисный ПК. Откройте ссылку и нажмите Start в течение 15 минут — привязка завершится, когда бот снова будет в сети.`
+              }
+            />
+          )}
           {status.linked ? (
             <>
               <Text>

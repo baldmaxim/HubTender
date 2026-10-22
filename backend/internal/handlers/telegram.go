@@ -66,7 +66,7 @@ func (h *TelegramHandler) PostLink(w http.ResponseWriter, r *http.Request) {
 	tok, err := h.links.CreateLink(r.Context(), u.ID)
 	switch {
 	case errors.Is(err, services.ErrTelegramDisabled):
-		apierr.ServiceUnavailable("Telegram-бот не настроен").Render(w)
+		apierr.ServiceUnavailable("Telegram-бот ещё не подключён").Render(w)
 	case err != nil:
 		apierr.InternalFromErr(w, r, err, "telegram link failed")
 	default:
@@ -117,7 +117,7 @@ func (h *TelegramHandler) decodeDispatch(w http.ResponseWriter, r *http.Request)
 func renderDispatchErr(w http.ResponseWriter, r *http.Request, err error, tenderID string) {
 	switch {
 	case errors.Is(err, services.ErrTelegramDisabled):
-		apierr.ServiceUnavailable("Telegram-бот не настроен").Render(w)
+		apierr.ServiceUnavailable("Telegram-бот ещё не подключён").Render(w)
 	case errors.Is(err, services.ErrDispatchTooMany):
 		apierr.BadRequest("за одну отправку — не больше 500 находок").Render(w)
 	case errors.Is(err, repository.ErrDispatchEmpty):

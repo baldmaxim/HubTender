@@ -100,6 +100,7 @@ func registerMachineRoutes(r chi.Router, d *deps, verifyCfg middleware.VerifyCon
 		r.With(writeV).Post("/api/v1/tenders/{id}/verification/ai-triage", d.verifAIH.PostTriage)
 
 		registerRegistryBotRoutes(r, d.registryBotH)
+		registerVerificationBotRoutes(r, d.verifBotH)
 	})
 }
 
@@ -114,6 +115,17 @@ func registerRegistryBotRoutes(r chi.Router, h *handlers.TenderRegistryBotHandle
 	r.With(requireAPIKey, regRead).Get("/api/v1/tender-registry/{id}/card", h.Card)
 	r.With(requireAPIKey, regWrite).Post("/api/v1/tender-registry/reminders/claim", h.ClaimReminders)
 	r.With(requireAPIKey, regWrite).Post("/api/v1/tender-registry/{id}/chronology", h.AppendChronology)
+}
+
+// registerVerificationBotRoutes — бот рассылки замечаний «Проверки данных» для
+// внешней программы на офисном ПК (api/VERIFICATION_BOT.md): ретрансляция
+// обновлений Telegram, выдача очереди сообщений и итог отправки. Только по
+// ключу с областью verification:telegram, без ограничения по тендерам.
+func registerVerificationBotRoutes(r chi.Router, h *handlers.VerificationBotHandler) {
+	gate := middleware.RequireAPIKeyScopeResolved(apikey.ScopeVerificationTelegram, verificationBotDeniesRestrictedKey)
+	r.With(requireAPIKey, gate).Post("/api/v1/verification-bot/updates", h.PostUpdates)
+	r.With(requireAPIKey, gate).Post("/api/v1/verification-bot/claim", h.PostClaim)
+	r.With(requireAPIKey, gate).Post("/api/v1/verification-bot/notifications/{id}/result", h.PostResult)
 }
 
 // requireAPIKey — маршрут только для машинного ключа: людям с JWT он не нужен
