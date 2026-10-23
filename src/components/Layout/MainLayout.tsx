@@ -18,6 +18,7 @@ import { TelegramLinkModal } from './TelegramLinkModal';
 import WorkspaceKeepAlive from './WorkspaceKeepAlive';
 import HeaderTitleOrTabs from './HeaderTitleOrTabs';
 import { isWorkspacePath } from './workspacePages';
+import { usePageViewTracking } from './usePageViewTracking';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -255,6 +256,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     : null;
   const { theme: currentTheme, toggleTheme } = useTheme();
   const { user, signOut } = useAuth();
+  usePageViewTracking();
   const isGeneralDirector = user?.role_code === 'general_director';
   const {
     token: { colorBgContainer },
@@ -389,7 +391,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               const p = location.pathname;
               if (['/library', '/library/templates', '/admin/nomenclatures', '/admin/construction_cost'].includes(p)) return ['library'];
               if (['/costs', '/bsm', '/projects', '/objects'].includes(p) || p.startsWith('/analytics')) return ['analytics'];
-              if (['/settings', '/settings/agents', '/admin/import-log', '/admin/insurance'].includes(p)) return ['settings-group'];
+              if (['/settings', '/settings/agents', '/admin/import-log', '/admin/insurance', '/admin/usage'].includes(p)) return ['settings-group'];
               if (p.startsWith('/admin')) return ['admin'];
               return [];
             })()}

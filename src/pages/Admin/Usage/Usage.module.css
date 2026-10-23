@@ -1,0 +1,183 @@
+/* Цвета приходят из токенов antd через CSS-переменные --usage-* (см. utils/cssVars.ts). */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 8px 8px;
+  color: var(--usage-text);
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--usage-muted);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  min-width: 0;
+}
+
+.switchLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.summary {
+  color: var(--usage-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Горизонтальный скролл только внутри карты: сама страница на 360px не ездит. */
+.scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--usage-border);
+  border-radius: var(--usage-radius);
+  background: var(--usage-bg);
+}
+
+.table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--usage-border);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.headCell {
+  background: var(--usage-head-bg);
+  color: var(--usage-muted);
+  font-weight: 600;
+}
+
+.num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Первая колонка закреплена слева, чтобы подпись страницы была видна при скролле. */
+.stickyCol {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
+  background: var(--usage-bg);
+  border-right: 1px solid var(--usage-border);
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+}
+
+thead .stickyCol {
+  background: var(--usage-head-bg);
+  z-index: 2;
+}
+
+.pageLabel {
+  display: block;
+  font-weight: 500;
+}
+
+.pagePath {
+  display: block;
+  color: var(--usage-muted);
+  font-size: 11px;
+}
+
+.rowUnused > td {
+  background: var(--usage-warn-bg);
+}
+
+.unusedTag {
+  color: var(--usage-warn);
+  font-weight: 600;
+}
+
+.bucketHead {
+  min-width: 18px;
+  padding-right: 2px !important;
+  padding-left: 2px !important;
+  text-align: center !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ячейка карты: подложка + слой акцента, прозрачность слоя = интенсивность. */
+.cell {
+  position: relative;
+  min-width: 18px;
+  height: 28px;
+  padding: 0 !important;
+}
+
+.cell::before,
+.cell::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 3px;
+}
+
+.cell::before {
+  background: var(--usage-empty);
+}
+
+.cell::after {
+  background: var(--usage-accent);
+  opacity: var(--usage-level, 0);
+}
+
+@media (min-width: 768px) {
+  .page {
+    padding: 0 16px 16px;
+  }
+
+  .table {
+    font-size: 13px;
+  }
+
+  .stickyCol {
+    width: 240px;
+    min-width: 240px;
+    max-width: 240px;
+  }
+
+  .bucketHead,
+  .cell {
+    min-width: 22px;
+  }
+}

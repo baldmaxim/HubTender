@@ -851,3 +851,12 @@ ALTER TABLE public.construction_objects ADD CONSTRAINT construction_objects_proj
     FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_construction_objects_project_id
     ON public.construction_objects (project_id);
+
+-- page_views
+ALTER TABLE public.page_views ADD CONSTRAINT page_views_pkey PRIMARY KEY (id);
+ALTER TABLE public.page_views ADD CONSTRAINT page_views_page_check
+    CHECK (length(page) BETWEEN 1 AND 200);
+ALTER TABLE public.page_views ADD CONSTRAINT page_views_user_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_page_views_viewed_at
+    ON public.page_views (viewed_at);

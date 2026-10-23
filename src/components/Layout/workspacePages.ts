@@ -68,12 +68,13 @@ export const WORKSPACE_PAGES: WorkspacePage[] = [
   page('/admin/insurance', lazy(() => import('../../pages/Admin/Insurance/Insurance'))),
   page('/admin/ai-settings', lazy(() => import('../../pages/AdminAiSettings/AdminAiSettings'))),
   page('/admin/api-access', lazy(() => import('../../pages/AdminApiAccess/AdminApiAccess'))),
+  page('/admin/usage', lazy(() => import('../../pages/Admin/Usage/Usage'))),
   page('/users', lazy(() => import('../../pages/Users/Users'))),
   page('/settings/agents', lazy(() => import('../../pages/AgentConnections/AgentConnections'))),
 ];
 
 /** Вкладка позиции (не страница реестра): key = positionId. */
-const POSITION_ITEMS_PATTERN = '/positions/:positionId/items';
+export const POSITION_ITEMS_PATTERN = '/positions/:positionId/items';
 
 export interface ResolvedPage {
   page: WorkspacePage;

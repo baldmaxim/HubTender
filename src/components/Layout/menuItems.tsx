@@ -27,6 +27,7 @@ import {
   RobotOutlined,
   ApiOutlined,
   EnvironmentOutlined,
+  HeatMapOutlined,
 } from '@ant-design/icons';
 
 /** Статическое дерево бокового меню. Фильтрация по правам/устройству — в MainLayout. */
@@ -242,6 +243,11 @@ export const menuItems: NonNullable<MenuProps['items']> = [
         icon: <ApiOutlined />,
         label: 'Доступ к API',
       },
+      {
+        key: '/admin/usage',
+        icon: <HeatMapOutlined />,
+        label: 'Использование портала',
+      },
     ],
   },
 ];
@@ -267,4 +273,5 @@ export const MOBILE_HIDDEN_KEYS = new Set<string>([
   '/admin/import-log',
   '/admin/insurance',
   '/admin/api-access',
+  '/admin/usage',
 ]);

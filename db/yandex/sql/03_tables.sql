@@ -1193,3 +1193,14 @@ COMMENT ON COLUMN public.construction_objects.project_id IS 'Связанный 
 COMMENT ON COLUMN public.construction_objects.commissioning_date IS 'Дата ввода в эксплуатацию';
 COMMENT ON COLUMN public.construction_objects.sort_order IS 'Порядок в списке внутри статуса';
 COMMENT ON COLUMN public.construction_objects.created_by IS 'Пользователь, создавший запись';
+
+-- Просмотры страниц портала для статистики использования
+-- (см. 2026_10_page_views.sql).
+CREATE TABLE IF NOT EXISTS public.page_views (
+    id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+    user_id uuid NOT NULL,
+    page text NOT NULL,
+    viewed_at timestamp with time zone NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE public.page_views IS 'Просмотры страниц портала (для статистики использования)';
+COMMENT ON COLUMN public.page_views.page IS 'Путь-шаблон страницы без query и id, например /positions/:id';

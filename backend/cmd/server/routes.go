@@ -242,6 +242,11 @@ func newRouter(
 			r.Get("/api/v1/admin/api-access/calls", d.apiAccessH.ListCallLog)
 		})
 
+		// Учёт просмотров страниц: пишет любой вошедший пользователь, читают
+		// только администраторы/разработчики/директора («Использование портала»).
+		r.Post("/api/v1/usage/page-view", d.pageViewsH.Record)
+		r.With(middleware.RequireRoles(handlers.UsageAdminRoles)).Get("/api/v1/admin/usage/page-stats", d.pageViewsH.Stats)
+
 		// Phase 5: tender notes (per-user; privileged roles see all).
 		r.Get("/api/v1/tenders/{id}/notes", d.tenderNotesH.List)
 		r.Put("/api/v1/tenders/{id}/notes", d.tenderNotesH.Save)

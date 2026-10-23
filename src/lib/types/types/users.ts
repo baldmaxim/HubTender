@@ -102,6 +102,7 @@ export const ALL_PAGES = [
   '/admin/insurance',
   '/admin/ai-settings',
   '/admin/api-access',
+  '/admin/usage',
   '/data-quality',
 ] as const;
 
@@ -168,6 +169,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/admin/import-log': 'Журнал импортов строк',
   '/admin/insurance': 'Страхование от судимостей',
   '/admin/api-access': 'Доступ к API',
+  '/admin/usage': 'Использование портала',
   '/users': 'Пользователи',
   '/settings': 'Настройки',
   '/settings/agents': 'Подключённые агенты',
@@ -223,7 +225,7 @@ export const PAGES_STRUCTURE = [
   },
   {
     title: 'Настройки',
-    pages: ['/settings/agents', '/admin/import-log', '/admin/insurance', '/admin/api-access'],
+    pages: ['/settings/agents', '/admin/import-log', '/admin/insurance', '/admin/api-access', '/admin/usage'],
   },
 ] as const;
 
