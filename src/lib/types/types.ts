@@ -8,6 +8,7 @@
 //   boq.ts      — boq_items, client_positions, notifications, import sessions
 //   users.ts    — пользователи, роли, ALL_PAGES/PAGE_LABELS, hasPageAccess и хелперы доступа
 //   projects.ts — текущие объекты
+//   constructionObjects.ts — объекты компании на карте
 // Обычный `export *` (не `export type *`): реэкспортируются и runtime-значения
 // (calcInsuranceTotal, TAB_TO_BOQ_TYPE, mapBoqItemTypeToPricingType, hasPageAccess и др.).
 // НЕ создавать ./types/index.ts — путь './types' станет неоднозначным (файл vs папка).
@@ -21,3 +22,4 @@ export * from './types/markup';
 export * from './types/boq';
 export * from './types/users';
 export * from './types/projects';
+export * from './types/constructionObjects';

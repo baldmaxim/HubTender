@@ -296,3 +296,9 @@ DROP TRIGGER IF EXISTS tender_briefs_updated_at ON public.tender_briefs;
 CREATE TRIGGER tender_briefs_updated_at
   BEFORE UPDATE ON public.tender_briefs
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- ----- construction_objects -------------------------------------------------
+DROP TRIGGER IF EXISTS update_construction_objects_updated_at ON public.construction_objects;
+CREATE TRIGGER update_construction_objects_updated_at
+  BEFORE UPDATE ON public.construction_objects
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

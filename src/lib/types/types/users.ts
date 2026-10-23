@@ -94,6 +94,7 @@ export const ALL_PAGES = [
   '/financial-indicators',
   '/projects',
   '/projects/:projectId',
+  '/objects',
   '/settings',
   '/settings/agents',
   '/users',
@@ -158,6 +159,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/analytics/comparison': 'Сравнение объектов',
   '/projects': 'Текущие объекты',
   '/projects/:projectId': 'Детали объекта',
+  '/objects': 'Объекты на карте',
   '/admin/nomenclatures': 'Номенклатуры',
   '/admin/construction_cost': 'Справочник затрат',
   '/admin/tenders': 'Тендеры',
@@ -209,7 +211,7 @@ export const PAGES_STRUCTURE = [
   },
   {
     title: 'Аналитика',
-    pages: ['/costs', '/analytics/comparison', '/bsm', '/projects'],
+    pages: ['/costs', '/analytics/comparison', '/bsm', '/projects', '/objects'],
   },
   {
     title: 'Администрирование',

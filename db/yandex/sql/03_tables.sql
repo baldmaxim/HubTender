@@ -1165,3 +1165,31 @@ CREATE TABLE IF NOT EXISTS public.verification_ai_assessments (
     request_id uuid,
     created_at timestamp with time zone NOT NULL DEFAULT now()
 );
+
+-- Объекты строительства (архивные и текущие) с адресом и координатами для карты
+-- (см. 2026_10_construction_objects.sql).
+CREATE TABLE IF NOT EXISTS public.construction_objects (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    name text NOT NULL,
+    area numeric,
+    address text NOT NULL,
+    latitude double precision,
+    longitude double precision,
+    status text NOT NULL DEFAULT 'archive',
+    project_id uuid,
+    commissioning_date date,
+    sort_order integer NOT NULL DEFAULT 0,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    updated_at timestamp with time zone NOT NULL DEFAULT now(),
+    created_by uuid
+);
+COMMENT ON COLUMN public.construction_objects.name IS 'Название объекта';
+COMMENT ON COLUMN public.construction_objects.area IS 'Фактическая общая площадь, м²';
+COMMENT ON COLUMN public.construction_objects.address IS 'Адрес объекта';
+COMMENT ON COLUMN public.construction_objects.latitude IS 'Широта для карты; задаётся вместе с долготой';
+COMMENT ON COLUMN public.construction_objects.longitude IS 'Долгота для карты; задаётся вместе с широтой';
+COMMENT ON COLUMN public.construction_objects.status IS 'Состояние: archive — построен, current — текущий объект';
+COMMENT ON COLUMN public.construction_objects.project_id IS 'Связанный проект (projects); при удалении проекта обнуляется';
+COMMENT ON COLUMN public.construction_objects.commissioning_date IS 'Дата ввода в эксплуатацию';
+COMMENT ON COLUMN public.construction_objects.sort_order IS 'Порядок в списке внутри статуса';
+COMMENT ON COLUMN public.construction_objects.created_by IS 'Пользователь, создавший запись';

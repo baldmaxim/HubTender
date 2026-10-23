@@ -39,6 +39,7 @@ var AllPages = []string{
 	"/tasks",
 	"/tender-timeline",
 	"/projects",
+	"/objects",
 	"/settings/agents",
 }
 

@@ -58,6 +58,7 @@ export const WORKSPACE_PAGES: WorkspacePage[] = [
   page('/analytics/review-pack', lazy(() => import('../../pages/ReviewPack/ReviewPack')), 'tenderId'),
   page('/projects', lazy(() => import('../../pages/Projects'))),
   page('/projects/:projectId', lazy(() => import('../../pages/Projects/ProjectDetail'))),
+  page('/objects', lazy(() => import('../../pages/Objects'))),
   page('/admin/nomenclatures', lazy(() => import('../../pages/Admin/Nomenclatures/Nomenclatures'))),
   page('/admin/construction_cost', lazy(() => import('../../pages/Admin/ConstructionCost/ConstructionCost'))),
   page('/admin/tenders', lazy(() => import('../../pages/Admin/Tenders/Tenders'))),

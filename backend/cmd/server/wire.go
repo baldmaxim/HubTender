@@ -85,6 +85,7 @@ type deps struct {
 	nomenclaturesH    *handlers.NomenclaturesHandler
 	importLogH        *handlers.ImportLogHandler
 	projectsH         *handlers.ProjectsHandler
+	objectsH          *handlers.ConstructionObjectsHandler
 	userAdminH        *handlers.UserAdminHandler
 	markupH           *handlers.MarkupHandler
 	fiH               *handlers.FIHandler
@@ -153,6 +154,7 @@ func buildDeps(
 	nomenclaturesRepo := repository.NewNomenclaturesRepo(pool)
 	importLogRepo := repository.NewImportLogRepo(pool)
 	projectsRepo := repository.NewProjectsRepo(pool)
+	constructionObjectsRepo := repository.NewConstructionObjectsRepo(pool)
 	userAdminRepo := repository.NewUserAdminRepo(pool)
 	markupRepo := repository.NewMarkupRepo(pool)
 	fiRepo := repository.NewFIRepo(pool)
@@ -256,6 +258,7 @@ func buildDeps(
 	nomenclaturesSvc := services.NewNomenclaturesService(nomenclaturesRepo, inMemCache)
 	importLogSvc := services.NewImportLogService(importLogRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	projectsSvc := services.NewProjectsService(projectsRepo)
+	constructionObjectsSvc := services.NewConstructionObjectsService(constructionObjectsRepo)
 	userAdminSvc := services.NewUserAdminService(userAdminRepo, inMemCache)
 	markupSvc := services.NewMarkupService(markupRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	fiSvc := services.NewFIService(fiRepo)
@@ -512,6 +515,7 @@ func buildDeps(
 		nomenclaturesH:    handlers.NewNomenclaturesHandler(nomenclaturesSvc),
 		importLogH:        handlers.NewImportLogHandler(importLogSvc),
 		projectsH:         handlers.NewProjectsHandler(projectsSvc),
+		objectsH:          handlers.NewConstructionObjectsHandler(constructionObjectsSvc),
 		userAdminH:        handlers.NewUserAdminHandler(userAdminSvc),
 		markupH:           handlers.NewMarkupHandler(markupSvc),
 		fiH:               handlers.NewFIHandler(fiSvc),

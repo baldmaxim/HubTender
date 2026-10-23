@@ -397,6 +397,12 @@ func newRouter(
 		r.Post("/api/v1/project-monthly-completion", d.projectsH.CreateMonthlyCompletion)
 		r.Patch("/api/v1/project-monthly-completion/{id}", d.projectsH.UpdateMonthlyCompletion)
 
+		// Объекты строительства (таблица «Объекты»).
+		r.Get("/api/v1/construction-objects", d.objectsH.List)
+		r.Post("/api/v1/construction-objects", d.objectsH.Create)
+		r.Patch("/api/v1/construction-objects/{id}", d.objectsH.Update)
+		r.Delete("/api/v1/construction-objects/{id}", d.objectsH.Delete)
+
 		// Этап 2.5: AI-администрирование OpenRouter — настоящий server-side
 		// role-гейт (RequireRoles), не только frontend page-ACL. Non-admin
 		// получает 403 на все /api/v1/admin/ai/*.

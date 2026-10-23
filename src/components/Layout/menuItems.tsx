@@ -26,6 +26,7 @@ import {
   SafetyOutlined,
   RobotOutlined,
   ApiOutlined,
+  EnvironmentOutlined,
 } from '@ant-design/icons';
 
 /** Статическое дерево бокового меню. Фильтрация по правам/устройству — в MainLayout. */
@@ -170,6 +171,11 @@ export const menuItems: NonNullable<MenuProps['items']> = [
         key: '/projects',
         icon: <BuildOutlined />,
         label: 'Текущие объекты',
+      },
+      {
+        key: '/objects',
+        icon: <EnvironmentOutlined />,
+        label: 'Объекты на карте',
       },
     ],
   },

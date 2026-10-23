@@ -840,3 +840,14 @@ ALTER TABLE public.verification_ai_assessments ADD CONSTRAINT verification_ai_as
     FOREIGN KEY (request_id) REFERENCES public.verification_ai_requests(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS verification_ai_assessments_tender_idx
     ON public.verification_ai_assessments (tender_id);
+
+-- construction_objects
+ALTER TABLE public.construction_objects ADD CONSTRAINT construction_objects_pkey PRIMARY KEY (id);
+ALTER TABLE public.construction_objects ADD CONSTRAINT construction_objects_status_check
+    CHECK (status IN ('archive', 'current'));
+ALTER TABLE public.construction_objects ADD CONSTRAINT construction_objects_coords_check
+    CHECK ((latitude IS NULL) = (longitude IS NULL));
+ALTER TABLE public.construction_objects ADD CONSTRAINT construction_objects_project_fkey
+    FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_construction_objects_project_id
+    ON public.construction_objects (project_id);
