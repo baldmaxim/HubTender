@@ -17,16 +17,18 @@ export const cacheKey = ({ promptVersion, skillsRev, model, think, text, fingerp
 const cachePath = (dir, profileName, key) => join(dir, 'cache', profileName, `${key}.json`);
 
 /**
- * Записанные оценки позиции либо undefined (нет файла / файл повреждён).
+ * Записанный ответ по позиции: { assessments, remarks } либо undefined (нет файла / файл повреждён).
+ * Запись старого формата (только оценки) отдаётся без remarks — вызывающий считает её промахом.
  * @param {string} dir
  * @param {string} profileName
  * @param {string} key
- * @returns {Array<object> | undefined}
+ * @returns {{ assessments: Array<object>, remarks?: Array<object> } | undefined}
  */
 export const readCache = (dir, profileName, key) => {
   try {
     const data = JSON.parse(readFileSync(cachePath(dir, profileName, key), 'utf8'));
-    return Array.isArray(data?.assessments) ? data.assessments : undefined;
+    if (!Array.isArray(data?.assessments)) return undefined;
+    return { assessments: data.assessments, remarks: Array.isArray(data.remarks) ? data.remarks : undefined };
   } catch {
     return undefined;
   }
@@ -37,14 +39,14 @@ export const readCache = (dir, profileName, key) => {
  * @param {string} dir
  * @param {string} profileName
  * @param {string} key
- * @param {Array<object>} assessments
+ * @param {{ assessments: Array<object>, remarks: Array<object> }} entry оценки находок позиции и её замечания
  */
-export const writeCache = (dir, profileName, key, assessments) => {
+export const writeCache = (dir, profileName, key, entry) => {
   const target = cachePath(dir, profileName, key);
   const tmp = `${target}.${process.pid}.tmp`;
   try {
     mkdirSync(join(dir, 'cache', profileName), { recursive: true });
-    writeFileSync(tmp, JSON.stringify({ v: 1, assessments }), 'utf8');
+    writeFileSync(tmp, JSON.stringify({ v: 2, assessments: entry.assessments, remarks: entry.remarks }), 'utf8');
     renameSync(tmp, target);
   } catch {
     rmSync(tmp, { force: true });

@@ -11,9 +11,10 @@ import { LlmError } from './llm.mjs';
 import { estimateTokens, packBatches, prepareBatch } from './payload.mjs';
 import { cacheKey, readCache, writeCache } from './cache.mjs';
 import { clipText } from './format.mjs';
-import { InvalidResponseError, LABEL_UNSURE, validateAnswer } from './validate.mjs';
+import { InvalidResponseError, LABEL_UNSURE, validateAnswer, validateRemarks } from './validate.mjs';
 
 const PER_FINDING_TOKENS = 200;
+const PER_POSITION_TOKENS = 300;
 const BASE_ANSWER_TOKENS = 1000;
 const THINK_RESERVE = 3000;
 const CONTEXT_RESERVE = 1024;
@@ -50,8 +51,32 @@ export const RESPONSE_SCHEMA = {
         additionalProperties: false,
       },
     },
+    remarks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          position: { type: 'string' },
+          row: { type: 'string' },
+          type: { type: 'string' },
+          title: { type: 'string' },
+          detail: { type: 'string' },
+          evidence: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { ref: { type: 'string' }, value: { type: 'string' } },
+              required: ['ref', 'value'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['position', 'row', 'type', 'title', 'detail', 'evidence'],
+        additionalProperties: false,
+      },
+    },
   },
-  required: ['assessments'],
+  required: ['assessments', 'remarks'],
   additionalProperties: false,
 };
 
@@ -65,6 +90,14 @@ export const RESPONSE_SCHEMA = {
  * @property {boolean} downgraded
  * @property {'ok' | 'error' | 'missing'} status
  * @property {boolean} think
+ *
+ * @typedef {object} Remark собственное замечание модели по позиции
+ * @property {string} type код типа из навыков («AI-002») либо «NEW»
+ * @property {string} title название нового типа (для «NEW»), иначе ''
+ * @property {string} positionId
+ * @property {string | null} rowId
+ * @property {string} detail
+ * @property {Array<{ ref: string, field: string, entity: string, entityId: string, value: string, label: string }>} evidence
  */
 
 export const newUsage = () => ({
@@ -75,6 +108,9 @@ export const newUsage = () => ({
   elapsedMs: 0,
   cachedPositions: 0,
   askedPositions: 0,
+  remarks: 0,
+  remarksDropped: 0,
+  remarkPositionsFailed: 0,
 });
 
 /** Прибавляет part к total (на месте) и возвращает total. */
@@ -98,11 +134,20 @@ export const planLimits = (profile, system, think) => {
   }
   const byAnswer = Math.floor((profile.maxTokens - BASE_ANSWER_TOKENS - thinkReserve) / PER_FINDING_TOKENS);
   const maxFindings = Math.max(1, Math.min(profile.batchFindings ?? DEFAULT_BATCH_FINDINGS, byAnswer));
-  return { budgetTokens, maxFindings, perFindingTokens: PER_FINDING_TOKENS };
+  return {
+    budgetTokens,
+    maxFindings,
+    perFindingTokens: PER_FINDING_TOKENS,
+    perPositionTokens: PER_POSITION_TOKENS,
+    maxAnswerTokens: profile.maxTokens - BASE_ANSWER_TOKENS - thinkReserve,
+  };
 };
 
-const maxTokensFor = (profile, findingsCount, think) =>
-  Math.min(profile.maxTokens, PER_FINDING_TOKENS * findingsCount + BASE_ANSWER_TOKENS + (think ? THINK_RESERVE : 0));
+const maxTokensFor = (profile, findingsCount, positionsCount, think) =>
+  Math.min(
+    profile.maxTokens,
+    PER_FINDING_TOKENS * findingsCount + PER_POSITION_TOKENS * positionsCount + BASE_ANSWER_TOKENS + (think ? THINK_RESERVE : 0),
+  );
 
 /** @returns {Assessment} */
 const failedAssessment = (findingId, status, reason, think) => ({
@@ -149,6 +194,16 @@ const toAssessment = (validated, prepared, rowNames, think) => ({
   think,
 });
 
+/** Замечание модели → устойчивый вид (id позиции и строки, факты со ссылкой на сущность). */
+const toRemark = (validated, prepared, rowNames) => ({
+  type: validated.type,
+  title: validated.title,
+  positionId: validated.positionId,
+  rowId: validated.rowId,
+  detail: validated.detail,
+  evidence: validated.evidence.map((e) => stableEvidence(e, prepared, rowNames)),
+});
+
 /** Подпись «~9 тыс.» для прогресса. */
 const thousands = (tokens) => `~${Math.max(1, Math.round(tokens / 1000))} тыс.`;
 
@@ -161,11 +216,14 @@ const thousands = (tokens) => `~${Math.max(1, Math.round(tokens / 1000))} тыс
  * @param {string} opts.promptVersion
  * @param {string} opts.skillsRev
  * @param {Set<string>} [opts.knownBasis]
- * @param {Array<{ position: object, findings: object[] }>} opts.items
+ * @param {Array<{ position: object, findings: object[] }>} opts.items позиции; у части findings может быть пустым (только для замечаний)
  * @param {boolean} [opts.think]
+ * @param {Set<string>} [opts.remarkCodes] активные коды типов замечаний из навыков
+ * @param {Set<string>} [opts.ruleCodes] коды скриптовых правил (замечание с таким типом — дубль, отбрасывается)
+ * @param {boolean} [opts.takeRemarks] брать замечания из ответа (второй проход --think их не берёт)
  * @param {{ read: boolean, write: boolean, dir: string }} [opts.cache]
  * @param {(line: string) => void} [opts.onProgress]
- * @returns {Promise<{ results: Map<string, Assessment>, usage: ReturnType<typeof newUsage> }>}
+ * @returns {Promise<{ results: Map<string, Assessment>, remarks: Map<string, Remark[]>, usage: ReturnType<typeof newUsage> }>}
  */
 export const reviewPass = async ({
   client,
@@ -176,11 +234,17 @@ export const reviewPass = async ({
   knownBasis,
   items,
   think = false,
+  remarkCodes = new Set(),
+  ruleCodes = new Set(),
+  takeRemarks = true,
   cache = { read: false, write: false, dir: '' },
   onProgress = () => {},
 }) => {
   /** @type {Map<string, Assessment>} */
   const results = new Map();
+  /** @type {Map<string, Remark[]>} позиция → её замечания */
+  const remarks = new Map();
+  const answered = new Set(); // позиции, чья пачка получила разобранный ответ
   const usage = newUsage();
   const keys = new Map(); // position.id → ключ кэша
   const misses = [];
@@ -196,10 +260,13 @@ export const reviewPass = async ({
     });
     keys.set(item.position.id, key);
     const stored = cache.read ? readCache(cache.dir, profile.name, key) : undefined;
-    const byId = new Map((stored ?? []).map((a) => [a.findingId, a]));
-    const complete = stored && item.findings.every((f) => byId.get(f.id)?.status === 'ok');
+    const byId = new Map((Array.isArray(stored?.assessments) ? stored.assessments : []).map((a) => [a.findingId, a]));
+    // Запись старого формата (нет remarks) — промах: замечания по ней не спрашивались.
+    const complete =
+      stored && Array.isArray(stored.assessments) && Array.isArray(stored.remarks) && item.findings.every((f) => byId.get(f.id)?.status === 'ok');
     if (complete) {
       for (const f of item.findings) results.set(f.id, { ...byId.get(f.id), think });
+      if (takeRemarks && stored.remarks.length > 0) remarks.set(item.position.id, stored.remarks);
       usage.cachedPositions += 1;
     } else {
       misses.push(item);
@@ -213,7 +280,7 @@ export const reviewPass = async ({
   const limits = misses.length > 0 ? planLimits(profile, system, think) : undefined;
   const batches = limits ? packBatches(misses, limits) : [];
 
-  const chat = async (prepared, findingsCount) => {
+  const chat = async (prepared, findingsCount, positionsCount) => {
     const res = await client.chat({
       messages: [
         { role: 'system', content: system },
@@ -221,7 +288,7 @@ export const reviewPass = async ({
       ],
       schema: RESPONSE_SCHEMA,
       schemaName: 'finding_review',
-      maxTokens: maxTokensFor(profile, findingsCount, think),
+      maxTokens: maxTokensFor(profile, findingsCount, positionsCount, think),
       think,
     });
     usage.requests += 1;
@@ -237,10 +304,10 @@ export const reviewPass = async ({
     const prepared = prepareBatch(batch);
     const count = batch.reduce((sum, it) => sum + it.findings.length, 0);
     for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
-      const res = await chat(prepared, count);
+      const res = await chat(prepared, count, batch.length);
       if (!res.json) continue;
       try {
-        return { prepared, ...validateAnswer(res.json, prepared, { knownBasis }) };
+        return { prepared, rawRemarks: res.json?.remarks, ...validateAnswer(res.json, prepared, { knownBasis }) };
       } catch (err) {
         if (!(err instanceof InvalidResponseError)) throw err;
       }
@@ -270,7 +337,18 @@ export const reviewPass = async ({
     }
 
     const names = rowNamesOf(batch);
+    for (const it of batch) answered.add(it.position.id);
     for (const a of outcome.assessments) results.set(a.findingId, toAssessment(a, outcome.prepared, names, think));
+    if (takeRemarks) {
+      // Замечания берутся только из основного ответа на пачку (не из дозапроса пропущенных находок).
+      const checked = validateRemarks(outcome.rawRemarks, outcome.prepared, { remarkCodes, ruleCodes });
+      usage.remarksDropped += checked.dropped;
+      for (const r of checked.remarks) {
+        const list = remarks.get(r.positionId) ?? [];
+        list.push(toRemark(r, outcome.prepared, names));
+        remarks.set(r.positionId, list);
+      }
+    }
     if (outcome.missing.length === 0) return;
 
     // Один дозапрос только по пропущенным.
@@ -280,7 +358,7 @@ export const reviewPass = async ({
       .filter((it) => it.findings.length > 0);
     const subPrepared = prepareBatch(subItems);
     let again = null;
-    const res = await chat(subPrepared, lost.size);
+    const res = await chat(subPrepared, lost.size, subItems.length);
     if (res.json) {
       try {
         again = validateAnswer(res.json, subPrepared, { knownBasis });
@@ -297,8 +375,14 @@ export const reviewPass = async ({
   const flush = (batch) => {
     if (!cache.write) return;
     for (const item of batch) {
+      if (!answered.has(item.position.id)) continue;
       const found = item.findings.map((f) => results.get(f.id));
-      if (found.every((a) => a?.status === 'ok')) writeCache(cache.dir, profile.name, keys.get(item.position.id), found);
+      if (found.every((a) => a?.status === 'ok')) {
+        writeCache(cache.dir, profile.name, keys.get(item.position.id), {
+          assessments: found,
+          remarks: remarks.get(item.position.id) ?? [],
+        });
+      }
     }
   };
 
@@ -329,7 +413,11 @@ export const reviewPass = async ({
       }
     }
   }
-  return { results, usage };
+  if (takeRemarks) {
+    for (const list of remarks.values()) usage.remarks += list.length;
+    usage.remarkPositionsFailed = misses.filter((item) => item.findings.length === 0 && !answered.has(item.position.id)).length;
+  }
+  return { results, remarks, usage };
 };
 
 /** Находки для второго прохода: неуверенные + самые дорогие по |Δ| (кроме сбойных). */
@@ -370,9 +458,10 @@ export const reviewItems = async (opts) => {
   const targets = selectThinkTargets(opts.items, first.results);
   if (targets.length === 0) return first;
   onProgress(`${profile.name}: второй проход с рассуждениями, находок ${targets.reduce((n, it) => n + it.findings.length, 0)}`);
-  const second = await reviewPass({ ...opts, items: targets, think: true });
+  // Замечания второго прохода не берутся: они уже есть в первом.
+  const second = await reviewPass({ ...opts, items: targets, think: true, takeRemarks: false });
   for (const [id, a] of second.results) {
     if (a.status === 'ok' && a.label !== LABEL_UNSURE) first.results.set(id, { ...a, think: true });
   }
-  return { results: first.results, usage: addUsage(first.usage, second.usage) };
+  return { results: first.results, remarks: first.remarks, usage: addUsage(first.usage, second.usage) };
 };

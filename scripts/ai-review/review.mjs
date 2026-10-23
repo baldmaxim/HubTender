@@ -4,7 +4,7 @@
  *
  *   node scripts/ai-review/review.mjs help
  *   node scripts/ai-review/review.mjs ping [--models=qwen,minimax] [--quick] [--no-portal] [--bench=<тендер>]
- *   node scripts/ai-review/review.mjs run <тендер> [--models=a,b] [--rule=U,V] [--new] [--max=N] [--think] [--refresh] [--no-cache]
+ *   node scripts/ai-review/review.mjs run <тендер> [--models=a,b] [--rule=U,V] [--new] [--max=N] [--remarks=N | --all] [--think] [--refresh] [--no-cache]
  *   node scripts/ai-review/review.mjs apply <путь к review.md> [--dry-run] [--brief]
  *
  * Настройки — только в scripts/ai-review/ai-review.env (см. README.md).
@@ -30,6 +30,9 @@ const HELP = `ИИ-проверка находок «Проверки данны
            --rule=U,V     только эти правила
            --new          только новые находки
            --max=N        первые N позиций по сумме Δ
+           --remarks=N    позиций без находок для своих замечаний ИИ, самых дорогих (по умолчанию 150;
+                          при --rule и --new — 0)
+           --all          свои замечания ИИ по всем позициям со строками (несовместимо с --remarks)
            --think        второй проход с рассуждениями (нужен AI_REVIEW_<ИМЯ>_THINK_EXTRA)
            --refresh      пересчитать отчёт портала перед разбором
            --no-cache     не читать кэш ответов моделей
@@ -66,6 +69,8 @@ const COMMANDS = {
       rule: { type: 'string' },
       new: { type: 'boolean' },
       max: { type: 'string' },
+      remarks: { type: 'string' },
+      all: { type: 'boolean' },
       think: { type: 'boolean' },
       refresh: { type: 'boolean' },
       'no-cache': { type: 'boolean' },
@@ -78,12 +83,22 @@ const COMMANDS = {
         max = Number(values.max);
         if (!Number.isInteger(max) || max <= 0) throw new ConfigError(`--max: ожидается положительное целое, указано «${values.max}»`);
       }
+      let remarks;
+      if (values.remarks !== undefined) {
+        remarks = Number(values.remarks);
+        if (!/^\d+$/.test(values.remarks.trim()) || !Number.isInteger(remarks)) {
+          throw new ConfigError(`--remarks: ожидается целое число не меньше 0, указано «${values.remarks}»`);
+        }
+        if (values.all) throw new ConfigError('--all и --remarks=N несовместимы: --all берёт все позиции со строками');
+      }
       const result = await runReview(loadConfig(), {
         tender,
         models: splitList(values.models, (item) => item.toLowerCase()),
         rules: splitList(values.rule, (item) => item.toUpperCase()),
         onlyNew: values.new,
         max,
+        remarks,
+        all: values.all,
         think: values.think,
         refresh: values.refresh,
         noCache: values['no-cache'],

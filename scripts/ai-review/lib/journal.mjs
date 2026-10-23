@@ -6,6 +6,7 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { byMoneyDesc, formatDateTime, formatMoney, oneLine } from './format.mjs';
+import { compareRemarks } from './review-md.mjs';
 
 export const JOURNAL_FILE = 'decisions.jsonl';
 const APPLIED_FILE = 'applied.json';
@@ -16,7 +17,10 @@ export const buildNote = (comment, bulk) => {
   return comment ? `${head}: ${comment}` : head;
 };
 
-/** Что уже применено из этого прогона: key → { decision, fingerprint, at, comment, bulk }. */
+/**
+ * Что уже применено из этого прогона: key → { decision, fingerprint, at, comment, bulk };
+ * у замечаний ИИ (ключ n…) — { decision: 'confirmed' | 'rejected', at, comment, bulk }.
+ */
 export const readApplied = (runDir) => {
   const file = join(runDir, APPLIED_FILE);
   if (!existsSync(file)) return {};
@@ -66,6 +70,32 @@ export const buildJournalLine = ({ state, item, decision, comment, bulk, at, run
   snapshot: item.positionId ? `${runRel}/positions.json#${item.positionId}` : null,
 });
 
+/**
+ * Строка журнала решений по собственному замечанию ИИ (в портал не отправляется).
+ * @param {{ state: any, remark: any, decision: string, comment: string, bulk: boolean, at: string, runRel: string }} p
+ */
+export const buildRemarkJournalLine = ({ state, remark, decision, comment, bulk, at, runRel }) => ({
+  at,
+  tender_id: state.tender.id,
+  tender: `${state.tender.number}${state.tender.version ? ` v${state.tender.version}` : ''}`,
+  kind: 'remark',
+  code: remark.type || 'NEW',
+  title: remark.title,
+  position_id: remark.positionId,
+  item_id: remark.rowId,
+  ai_reason: remark.detail,
+  ai_model: remark.model,
+  decision,
+  note: comment,
+  bulk,
+  origin: 'review',
+  models: state.models.map((m) => m.name),
+  prompt_version: state.promptVersion,
+  skills_rev: state.skillsRev,
+  run: runRel,
+  snapshot: remark.positionId ? `${runRel}/positions.json#${remark.positionId}` : null,
+});
+
 /** Дописывает строки JSON в журнал. */
 export const appendJournal = (outDir, lines) => {
   if (lines.length === 0) return;
@@ -82,11 +112,15 @@ export const confirmedItems = (state, applied) =>
 export const renderItog = (state, applied) => {
   const confirmed = confirmedItems(state, applied);
   const rejected = state.items.filter((item) => applied[item.key]?.decision === 'accepted').length;
+  const remarks = state.remarks ?? [];
+  const confirmedRemarks = remarks.filter((r) => applied[r.key]?.decision === 'confirmed').sort(compareRemarks);
+  const rejectedRemarks = remarks.filter((r) => applied[r.key]?.decision === 'rejected').length;
   const version = state.tender.version ? ` v${state.tender.version}` : '';
   const lines = [
     `# Итог ИИ-проверки · тендер ${state.tender.number}${version} «${oneLine(state.tender.title)}» · ${formatDateTime(new Date(state.createdAt))}`,
     '',
     `Подтверждено ошибок: ${confirmed.length} · отклонено (норма): ${rejected}`,
+    ...(remarks.length > 0 ? [`Замечаний ИИ подтверждено: ${confirmedRemarks.length} · отклонено: ${rejectedRemarks}`] : []),
     '',
   ];
   if (confirmed.length > 0) lines.push('## Подтверждено', '');
@@ -97,5 +131,19 @@ export const renderItog = (state, applied) => {
       .join(' · ');
     lines.push(`${i + 1}. ${head}${comment ? ` — ${oneLine(comment)}` : ''}`);
   });
+  if (confirmedRemarks.length > 0) {
+    lines.push('', '## Замечания ИИ — подтверждено', '');
+    confirmedRemarks.forEach((remark, i) => {
+      const comment = applied[remark.key].comment;
+      const head = [
+        remark.type === 'NEW' ? `Новый тип «${oneLine(remark.title)}»` : remark.type,
+        oneLine(remark.where),
+        remark.link ? `[открыть](${remark.link})` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      lines.push(`${i + 1}. ${head}${comment ? ` — ${oneLine(comment)}` : ''}`);
+    });
+  }
   return `${lines.join('\n')}\n`;
 };

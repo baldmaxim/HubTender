@@ -69,9 +69,26 @@ test('формат text: правила один раз, шапка колоно
   ].join('\n'));
 });
 
-test('пустой пакет и позиция без находок — ошибка', () => {
+test('пустой пакет — ошибка; позиция без находок допустима: строки findings: нет', () => {
   assert.throws(() => prepareBatch([]), /пустой пакет/);
-  assert.throws(() => prepareBatch([{ ...insulation(), findings: [] }]), /пустой пакет/);
+  const p = prepareBatch([{ ...insulation(), findings: [] }]);
+  assert.ok(!p.text.includes('findings:'));
+  assert.ok(!p.text.startsWith('Правила:'));
+  assert.deepEqual(p.findingRefs, {});
+  assert.deepEqual(p.positionRefs, { p1: 'pos-1' });
+  assert.equal(p.facts['r2.conversion_coefficient'], '0.05');
+  // Рядом с позицией с находками нумерация сквозная, а строка findings: только у второй.
+  const mixed = prepareBatch([{ ...insulation(), findings: [] }, insulation()]);
+  assert.equal(mixed.text.split('findings:').length - 1, 1);
+  assert.deepEqual(mixed.findingRefs, { f1: 'find-1', f2: 'find-2' });
+  assert.deepEqual(mixed.positionRefs, { p1: 'pos-1', p2: 'pos-1' });
+});
+
+test('rowPosition: какой позиции принадлежит строка', () => {
+  const second = { position: { id: 'pos-2', rows: [{ id: 'z1', type: 'мат', name: 'Смесь' }] }, findings: [] };
+  const p = prepareBatch([insulation(), second]);
+  assert.deepEqual(p.rowPosition, { r1: 'p1', r2: 'p1', r3: 'p1', r4: 'p2' });
+  assert.deepEqual(Object.keys(p.rowPosition), Object.keys(p.rowRefs));
 });
 
 test('усечение > 60 строк сохраняет строку находки и её работу', () => {
@@ -238,4 +255,33 @@ test('packBatches: perFindingTokens добавляется к оценке по�
   const heavy = [mk(1, 3), mk(2, 1)];
   const est = prepareBatch([heavy[0]]).estimatedTokens;
   assert.deepEqual(packBatches(heavy, { budgetTokens: est + 600, perFindingTokens: 200 }).map((g) => g.length), [1, 1]);
+});
+
+test('packBatches: perPositionTokens прибавляется к оценке позиции, в том числе без находок', () => {
+  const mk = (n) => ({
+    position: { id: `s${n}`, customerName: `Позиция ${n}`, rows: [{ id: `r${n}`, type: 'мат', name: 'Материал' }] },
+    findings: [],
+  });
+  const items = [mk(1), mk(2), mk(3)];
+  const one = prepareBatch([items[0]]).estimatedTokens;
+  const budget = one * 2 + 1;
+  assert.deepEqual(packBatches(items, { budgetTokens: budget }).map((g) => g.length), [2, 1]);
+  assert.deepEqual(packBatches(items, { budgetTokens: budget, perPositionTokens: 300 }).map((g) => g.length), [1, 1, 1]);
+});
+
+test('packBatches: maxAnswerTokens ограничивает резерв ответа группы (находки и позиции)', () => {
+  const mk = (n, findings) => ({
+    position: { id: `s${n}`, customerName: `Позиция ${n}`, rows: [{ id: `r${n}`, type: 'мат', name: 'Материал' }] },
+    findings: Array.from({ length: findings }, (_, i) => ({ id: `f${n}-${i}`, ruleCode: 'QA', detail: 'без цены', entityType: 'boq_item', entityId: `r${n}` })),
+  });
+  const opts = { perFindingTokens: 200, perPositionTokens: 300 };
+  // Позиция без находок стоит 300, с одной находкой — 500: три по 500 не влезают в 1200.
+  const items = [mk(1, 1), mk(2, 1), mk(3, 1)];
+  assert.deepEqual(packBatches(items, { ...opts, maxAnswerTokens: 1200 }).map((g) => g.length), [2, 1]);
+  assert.deepEqual(packBatches(items, { ...opts, maxAnswerTokens: 1500 }).map((g) => g.length), [3]);
+  const bare = [mk(1, 0), mk(2, 0), mk(3, 0), mk(4, 0)];
+  assert.deepEqual(packBatches(bare, { ...opts, maxAnswerTokens: 900 }).map((g) => g.length), [3, 1]);
+  // Позиция, которая одна больше лимита, — отдельной группой.
+  assert.deepEqual(packBatches([mk(1, 0), mk(2, 5), mk(3, 0)], { ...opts, maxAnswerTokens: 900 }).map((g) => g.length), [1, 1, 1]);
+  assert.deepEqual(packBatches(items, { ...opts, maxAnswerTokens: -5 }).map((g) => g.length), [1, 1, 1]);
 });

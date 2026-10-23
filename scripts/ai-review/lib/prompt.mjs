@@ -37,6 +37,7 @@ export const buildSystemPrompt = (template, skillsText) => {
 /**
  * Промпт и навыки прогона: навыки отбираются по кодам правил всех находок прогона,
  * поэтому системный промпт один на весь прогон (сервер модели кэширует префикс).
+ * Типы собственных замечаний (remark) идут в промпт всегда: модель в любой момент может написать замечание.
  * @param {{ ruleCodes: string[], skills: { loadSkills: Function, renderSkillsForPrompt: Function, activeCodes: Function }, promptPath?: string, skillsPath?: string }} opts
  */
 export const prepareSystem = ({ ruleCodes, skills, promptPath, skillsPath }) => {
@@ -50,12 +51,13 @@ export const prepareSystem = ({ ruleCodes, skills, promptPath, skillsPath }) => 
       `docs/data-quality/AI-SKILLS.md не разобран: ${err.message}. Поправьте файл или откатите правку (git diff docs/data-quality/AI-SKILLS.md)`,
     );
   }
-  const skillsText = skills.renderSkillsForPrompt(loaded.entries, ruleCodes);
+  const skillsText = skills.renderSkillsForPrompt(loaded.entries, ruleCodes, { includeRemarks: true });
   return {
     system: buildSystemPrompt(template, skillsText),
     promptVersion: version,
     skillsRev: loaded.rev,
     knownBasis: skills.activeCodes(loaded.entries),
+    remarkCodes: new Set(loaded.entries.filter((e) => e.kind === 'remark' && e.status !== 'retired').map((e) => e.code)),
   };
 };
 

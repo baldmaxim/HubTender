@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatMoney } from '../lib/format.mjs';
 import { parseReview, renderReview } from '../lib/review-md.mjs';
-import { makeState } from './helpers.mjs';
+import { makeState, withRemarks } from './helpers.mjs';
 
-const KNOWN = new Set(['f1', 'f2', 'f3', 'f4']);
+const KNOWN = new Set(['f1', 'f2', 'f3', 'f4', 'n1', 'n2', 'n3']);
 
 test('render: разделы, шапка, строки моделей, расхождение, деньги, ссылка', () => {
   const text = renderReview(makeState());
@@ -125,4 +125,68 @@ test('parse: чужой ключ — предупреждение и отмет�
 test('parse: BOM и CRLF', () => {
   const { marks } = parseReview('﻿## [+] Раздел\r\n- [ ] A ‹f1› // ок\r\n');
   assert.deepEqual(marks.get('f1'), { mark: '+', comment: 'ок', bulk: true });
+});
+
+test('render: раздел «Новые замечания ИИ» — после «По делу», до «Похоже на шум»; порядок и строки', () => {
+  const text = renderReview(withRemarks());
+  const at = (re) => text.search(re);
+  assert.ok(at(/^## \[ \] По делу/m) < at(/^## \[ \] Новые замечания ИИ \(3\)$/m));
+  assert.ok(at(/^## \[ \] Новые замечания ИИ/m) < at(/^## \[ \] Похоже на шум/m));
+  assert.match(text, /^Отметка: .*Для замечаний ИИ: \[\+\] — замечание по делу, \[-\] — нет; в портал они не уходят, только в журнал\.$/m);
+  // порядок: дорогая позиция (n2, n3 — по ключу), затем n1
+  const keys = [...text.matchAll(/‹(n\d+)›/g)].map((m) => m[1]);
+  assert.deepEqual(keys, ['n2', 'n3', 'n1']);
+  assert.match(text, /^- \[ \] AI-002 · поз\. 13 «Кладка» · \[открыть\]\(https:\/\/gp\.su10\.ru\/positions\/pos-2\/items\?[^)]*\) ‹n1›$/m);
+  assert.match(text, /^- \[ \] Новый тип «Лишний слой» · поз\. 12\.3 «Утеплитель ПСБ-С 25» · \[открыть\]\([^)]*\) ‹n2›$/m);
+  assert.match(text, /^- \[ \] AI-001 · поз\. 12\.3 «Утеплитель ПСБ-С 25» ‹n3›$/m); // без ссылки
+  // две модели в прогоне — подпись модели вместо «ИИ:»
+  assert.match(text, /^ {2}qwen: Работа кладки без материала\.$/m);
+  assert.match(text, /^ {2}minimax: Толщина не та\.$/m);
+  assert.match(text, /^ {2}Данные: «Кладка стен» наим\. Кладка стен; позиция: ед\. м3$/m);
+  assert.match(text, /^ {2}Данные: позиция: наим\. заказчика Утепление$/m);
+});
+
+test('render: одна модель — «ИИ:»; без замечаний раздела нет; замечания при пустом «По делу»', () => {
+  const state = withRemarks();
+  state.models = [state.models[0]];
+  assert.match(renderReview(state), /^ {2}ИИ: Работа кладки без материала\.$/m);
+
+  const plain = renderReview(makeState());
+  assert.ok(!plain.includes('Новые замечания ИИ'));
+  const old = makeState();
+  old.remarks = [];
+  assert.ok(!renderReview(old).includes('Новые замечания ИИ'));
+
+  const noError = withRemarks();
+  noError.items = noError.items.filter((i) => i.combined?.label !== 'likely_error');
+  const text = renderReview(noError);
+  assert.ok(!text.includes('По делу'));
+  assert.ok(text.indexOf('Новые замечания ИИ') < text.indexOf('Похоже на шум'));
+});
+
+test('render → parse: нетронутый файл с замечаниями не даёт отметок', () => {
+  const { marks, warnings } = parseReview(renderReview(withRemarks()), { knownKeys: KNOWN });
+  assert.equal(marks.size, 0);
+  assert.deepEqual(warnings, []);
+});
+
+test('parse: ключи n…, отметка раздела замечаний (bulk) и собственная отметка, комментарий', () => {
+  const text = [
+    '## [-] Новые замечания ИИ (3)',
+    '- [ ] AI-002 · поз. 13 ‹n1›',
+    '- [+] Новый тип «Лишний слой» · поз. 12 ‹n2› // верно',
+    '- [ ] AI-001 · поз. 12 ‹n3›',
+    '',
+    '## [ ] Похоже на шум (1)',
+    '- [ ] GA · поз. 13 ‹f2›',
+  ].join('\n');
+  const { marks, warnings } = parseReview(text, { knownKeys: KNOWN });
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(marks.get('n1'), { mark: '-', comment: '', bulk: true });
+  assert.deepEqual(marks.get('n2'), { mark: '+', comment: 'верно', bulk: false });
+  assert.deepEqual(marks.get('n3'), { mark: '-', comment: '', bulk: true });
+  assert.equal(marks.has('f2'), false);
+  const foreign = parseReview('- [+] AI-001 ‹n9›', { knownKeys: KNOWN });
+  assert.equal(foreign.marks.size, 0);
+  assert.match(foreign.warnings[0], /n9 не из этого прогона/);
 });

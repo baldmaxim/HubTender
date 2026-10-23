@@ -4,9 +4,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { composeBrief } from '../lib/brief.mjs';
-import { planApply, runApply } from '../lib/apply.mjs';
+import { planApply, planRemarks, runApply } from '../lib/apply.mjs';
 import { renderReview } from '../lib/review-md.mjs';
-import { makeState } from './helpers.mjs';
+import { makeState, withRemarks } from './helpers.mjs';
 
 const TENDER = 't-1';
 
@@ -58,12 +58,12 @@ const fakePortal = ({ findings = freshFindings(), brief, failPost = false } = {}
 };
 
 /** Папка прогона во временном outDir; marks — функция правки текста review.md. */
-const withRun = async (edit, fn) => {
+const withRun = async (edit, fn, { remarks = false } = {}) => {
   const outDir = mkdtempSync(join(tmpdir(), 'ai-review-apply-'));
   try {
     const runDir = join(outDir, '256-v3', '2026-10-23_1405');
     mkdirSync(runDir, { recursive: true });
-    const state = buildState();
+    const state = remarks ? withRemarks(buildState()) : buildState();
     writeFileSync(join(runDir, 'run.json'), JSON.stringify(state), 'utf8');
     writeFileSync(join(runDir, 'positions.json'), '{}', 'utf8');
     const reviewPath = join(runDir, 'review.md');
@@ -254,4 +254,138 @@ test('planApply: отметка изменена после apply — пропу
   assert.equal(plan.done, 1);
   assert.equal(plan.skipped.length, 1);
   assert.match(plan.skipped[0].reason, /изменена после apply/);
+});
+
+// --- замечания ИИ ---------------------------------------------------------------
+
+/** Подтверждено n1 (с комментарием); n2 и n3 — отметкой раздела «отклонено»; f1 — как обычно. */
+const MARKED_REMARKS = (text) => {
+  let out = mark(text, 'f1', '+');
+  out = mark(out, 'n1', '+', 'материала нет');
+  return out.replace(/^## \[ \] Новые замечания ИИ/m, '## [-] Новые замечания ИИ');
+};
+
+test('apply: замечания ИИ пишутся только в журнал и applied.json, портал для n… не вызывается', async () => {
+  await withRun(MARKED_REMARKS, async ({ outDir, runDir, reviewPath }) => {
+    const portal = fakePortal();
+    const { lines, log } = quiet();
+    const now = () => new Date('2026-10-23T11:30:00.000Z');
+    assert.equal(await runApply({}, { file: reviewPath }, { portal, outDir, now, log }), 0);
+
+    // в портал ушёл только вердикт по f1
+    assert.equal(portal.calls.post.length, 1);
+    assert.deepEqual(portal.calls.post[0].body.items.map((i) => i.entity_id), ['row-1']);
+    assert.ok(!JSON.stringify(portal.calls).includes('"n1"'));
+
+    const applied = JSON.parse(readFileSync(join(runDir, 'applied.json'), 'utf8'));
+    assert.deepEqual(applied.n1, { decision: 'confirmed', at: '2026-10-23T11:30:00.000Z', comment: 'материала нет', bulk: false });
+    assert.deepEqual(applied.n2, { decision: 'rejected', at: '2026-10-23T11:30:00.000Z', comment: '', bulk: true });
+    assert.deepEqual(applied.n3, { decision: 'rejected', at: '2026-10-23T11:30:00.000Z', comment: '', bulk: true });
+
+    const journal = readJsonl(join(outDir, 'decisions.jsonl'));
+    const remarks = journal.filter((l) => l.kind === 'remark');
+    assert.equal(journal.length, 4); // f1 + три замечания
+    assert.deepEqual(remarks[0], {
+      at: '2026-10-23T11:30:00.000Z', tender_id: 't-1', tender: '256 v3', kind: 'remark', code: 'AI-002', title: '',
+      position_id: 'pos-2', item_id: 'row-2', ai_reason: 'Работа кладки без материала', ai_model: 'qwen',
+      decision: 'confirmed', note: 'материала нет', bulk: false, origin: 'review', models: ['qwen', 'minimax'],
+      prompt_version: 'review-v1@1a2b3c4d', skills_rev: 'a1b2c3d', run: '256-v3/2026-10-23_1405',
+      snapshot: '256-v3/2026-10-23_1405/positions.json#pos-2',
+    });
+    const fresh = remarks.find((l) => l.code === 'NEW');
+    assert.equal(fresh.title, 'Лишний слой');
+    assert.equal(fresh.item_id, null);
+    assert.equal(fresh.decision, 'rejected');
+    assert.equal(fresh.bulk, true);
+
+    const text = lines.join('\n');
+    assert.match(text, /Замечания ИИ \(в портал не отправляются, только в журнал\):/);
+    assert.match(text, /n1 {2}AI-002 {2}поз\. 13 «Кладка» {2}→ подтверждено {2}«ИИ-проверка: материала нет»/);
+    assert.match(text, /Отправлено: 1, пропущено: \d+, замечаний записано: 3\./);
+
+    const itog = readFileSync(join(runDir, 'itog.md'), 'utf8');
+    assert.match(itog, /^Замечаний ИИ подтверждено: 1 · отклонено: 2$/m);
+    assert.match(itog, /^## Замечания ИИ — подтверждено$/m);
+    assert.match(itog, /^1\. AI-002 · поз\. 13 «Кладка» · \[открыть\]\([^)]*\) — материала нет$/m);
+    assert.ok(!itog.includes('Лишний слой')); // отклонённое в итог не идёт
+
+    // повторный apply: ничего не пишет и не дублирует журнал
+    const again = quiet();
+    assert.equal(await runApply({}, { file: reviewPath }, { portal: fakePortal(), outDir, now, log: again.log }), 0);
+    assert.equal(readJsonl(join(outDir, 'decisions.jsonl')).length, 4);
+    assert.match(again.lines.join('\n'), /Уже записано ранее: 3/);
+    assert.match(again.lines.join('\n'), /замечаний записано: 0/);
+  }, { remarks: true });
+});
+
+test('apply: замечание, отметка которого изменена после apply, пропускается с причиной', async () => {
+  await withRun((t) => mark(t, 'n1', '+'), async ({ outDir, reviewPath }) => {
+    const quietLog = quiet();
+    await runApply({}, { file: reviewPath }, { portal: fakePortal(), outDir, log: quietLog.log });
+    writeFileSync(reviewPath, readFileSync(reviewPath, 'utf8').replace(/^- \[\+\](.*‹n1›)/m, '- [-]$1'), 'utf8');
+    const second = quiet();
+    await runApply({}, { file: reviewPath }, { portal: fakePortal(), outDir, log: second.log });
+    assert.match(second.lines.join('\n'), /ПРОПУЩЕНО n1 \(AI-002, поз\. 13 «Кладка»\): отметка изменена после apply — решение уже в журнале/);
+    assert.equal(readJsonl(join(outDir, 'decisions.jsonl')).length, 1);
+  }, { remarks: true });
+});
+
+test('apply --dry-run: замечания показываются, но ничего не пишется', async () => {
+  await withRun((t) => mark(t, 'n1', '+', 'да'), async ({ outDir, runDir, reviewPath }) => {
+    const portal = fakePortal();
+    const { lines, log } = quiet();
+    assert.equal(await runApply({}, { file: reviewPath, dryRun: true }, { portal, outDir, log }), 0);
+    assert.equal(portal.calls.post.length, 0);
+    assert.equal(existsSync(join(runDir, 'applied.json')), false);
+    assert.equal(existsSync(join(runDir, 'itog.md')), false);
+    assert.equal(existsSync(join(outDir, 'decisions.jsonl')), false);
+    const text = lines.join('\n');
+    assert.match(text, /Замечания ИИ \(в портал не отправляются, только в журнал\):/);
+    assert.match(text, /Было бы записано:/);
+    assert.match(text, /n1 .*→ подтверждено/);
+    assert.match(text, /замечаний ИИ к записи: 1/);
+  }, { remarks: true });
+});
+
+test('apply: сбой отправки вердиктов не отменяет запись замечаний', async () => {
+  await withRun((t) => mark(mark(t, 'f1', '+'), 'n1', '+'), async ({ outDir, runDir, reviewPath }) => {
+    const { lines, log } = quiet();
+    assert.equal(await runApply({}, { file: reviewPath }, { portal: fakePortal({ failPost: true }), outDir, log }), 1);
+    assert.match(lines.join('\n'), /ОШИБКА отправки: HTTP 500/);
+    const applied = JSON.parse(readFileSync(join(runDir, 'applied.json'), 'utf8'));
+    assert.deepEqual(Object.keys(applied), ['n1']);
+    assert.deepEqual(readJsonl(join(outDir, 'decisions.jsonl')).map((l) => l.kind), ['remark']);
+  }, { remarks: true });
+});
+
+test('apply: run.json без remarks (старый) работает; ключ n… в нём — чужой', async () => {
+  await withRun((t) => `${mark(t, 'f1', '+')}\n- [+] AI-001 ‹n1›\n`, async ({ outDir, reviewPath }) => {
+    const { lines, log } = quiet();
+    assert.equal(await runApply({}, { file: reviewPath }, { portal: fakePortal(), outDir, log }), 0);
+    assert.match(lines.join('\n'), /ВНИМАНИЕ: строка \d+: ключ n1 не из этого прогона/);
+    assert.match(lines.join('\n'), /замечаний записано: 0/);
+    assert.ok(!readFileSync(join(reviewPath, '..', 'itog.md'), 'utf8').includes('Замечаний ИИ'));
+  });
+});
+
+test('planRemarks: подтверждено/отклонено, повтор — done, изменение — skipped', () => {
+  const remark = (key) => ({ key, type: 'AI-001', title: '', where: 'поз. 1' });
+  const state = { remarks: [remark('n1'), remark('n2'), remark('n3'), remark('n4')] };
+  const marks = new Map([
+    ['n1', { mark: '+', comment: 'да', bulk: false }],
+    ['n2', { mark: '-', comment: '', bulk: true }],
+    ['n3', { mark: '+', comment: '', bulk: false }],
+    ['n4', { mark: '-', comment: '', bulk: false }],
+    ['f1', { mark: '+', comment: '', bulk: false }],
+  ]);
+  const applied = { n3: { decision: 'confirmed' }, n4: { decision: 'confirmed' } };
+  const plan = planRemarks({ state, marks, applied });
+  assert.deepEqual(plan.record.map((r) => `${r.key}:${r.decision}`), ['n1:confirmed', 'n2:rejected']);
+  assert.equal(plan.record[0].comment, 'да');
+  assert.equal(plan.record[1].bulk, true);
+  assert.equal(plan.done, 1);
+  assert.equal(plan.skipped.length, 1);
+  assert.equal(plan.skipped[0].key, 'n4');
+  assert.match(plan.skipped[0].reason, /отметка изменена после apply — решение уже в журнале/);
+  assert.deepEqual(planRemarks({ state: {}, marks, applied }), { record: [], skipped: [], done: 0 });
 });

@@ -323,3 +323,18 @@ test('loadSkills: временный файл — записи и rev из 7 hex
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('настоящий AI-SKILLS.md разбирается; четыре стартовых типа замечаний AI-001…AI-004 уходят в промпт', () => {
+  const { entries } = loadSkills();
+  const remarks = entries.filter((e) => e.kind === 'remark');
+  assert.deepEqual(remarks.map((e) => e.code), ['AI-001', 'AI-002', 'AI-003', 'AI-004']);
+  assert.ok(remarks.every((e) => e.status === 'active' && e.auto === 'no' && e.rule === null));
+  for (const e of remarks) {
+    assert.match(e.body, /^\*\*Признак:\*\*/);
+    assert.match(e.body, /\*\*Норма, если:\*\*/);
+    assert.match(e.body, /\*\*Как проверить:\*\*/);
+  }
+  const text = renderSkillsForPrompt(entries, [], { includeRemarks: true });
+  assert.equal((text.match(/^### AI-\d{3} · /gm) ?? []).length, 4);
+  assert.ok(!/^### AI-/m.test(renderSkillsForPrompt(entries, ['GA'])));
+});

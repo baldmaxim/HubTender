@@ -1,7 +1,10 @@
 /**
  * Команда run: разбор открытых находок «Проверки данных» моделями → review.md для разметки.
  *
- *   run <тендер> [--models=a,b] [--rule=U,V] [--new] [--max=N] [--think] [--refresh] [--no-cache]
+ *   run <тендер> [--models=a,b] [--rule=U,V] [--new] [--max=N] [--remarks=N | --all] [--think] [--refresh] [--no-cache]
+ *
+ * Кроме оценки находок модель пишет собственные замечания (remarks) по позициям: по позициям с находками и по
+ * позициям без находок (самым дорогим, --remarks=N; --all — по всем). Замечания идут в отдельный раздел review.md.
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -11,7 +14,7 @@ import { ConfigError, getProfile } from './env.mjs';
 import { formatStamp } from './format.mjs';
 import { createLlmClient } from './llm.mjs';
 import { DEFAULT_OUT_DIR } from './paths.mjs';
-import { collectData } from './prepare.mjs';
+import { collectData, describePosition } from './prepare.mjs';
 import { createPortal } from './portal.mjs';
 import { importSkills, prepareSystem } from './prompt.mjs';
 import { renderReview } from './review-md.mjs';
@@ -19,6 +22,9 @@ import { addUsage, newUsage, reviewItems } from './reviewer.mjs';
 import { findingLink } from './tender.mjs';
 
 const STATE_VERSION = 1;
+
+/** Сколько позиций без находок берётся для собственных замечаний по умолчанию. */
+export const DEFAULT_REMARK_POSITIONS = 150;
 
 /** Имя части пути: только символы, безопасные для Windows. */
 export const safeName = (text) => String(text).replace(/[^\p{L}\p{N}._-]+/gu, '_').replace(/^[._]+|[._]+$/g, '') || 'x';
@@ -59,8 +65,15 @@ const usageLine = (name, u) =>
   `время ${Math.round(u.elapsedMs / 1000)} с, позиций из кэша ${u.cachedPositions} из ${u.cachedPositions + u.askedPositions}`;
 
 /**
+ * Сколько позиций без находок брать для замечаний: явный --remarks сильнее; при --rule и --new по умолчанию 0.
+ * @param {{ remarks?: number, rules?: string[], onlyNew?: boolean }} args
+ */
+const remarkPositionsOf = (args) => args.remarks ?? (args.rules?.length > 0 || args.onlyNew ? 0 : DEFAULT_REMARK_POSITIONS);
+
+/**
  * @param {import('./env.mjs').IConfig} config
- * @param {{ tender: string, models?: string[], rules?: string[], onlyNew?: boolean, max?: number, think?: boolean, refresh?: boolean, noCache?: boolean }} args
+ * @param {{ tender: string, models?: string[], rules?: string[], onlyNew?: boolean, max?: number, remarks?: number, all?: boolean,
+ *   think?: boolean, refresh?: boolean, noCache?: boolean }} args
  * @param {{ portal?: any, createClient?: Function, outDir?: string, skills?: any, now?: () => Date, log?: (line: string) => void }} [deps]
  * @returns {Promise<{ code: number, runDir: string, reviewPath: string, state: any }>}
  */
@@ -71,7 +84,9 @@ export const runReview = async (config, args, deps = {}) => {
     now = () => new Date(),
     log = (line) => console.log(line),
   } = deps;
+  if (args.all && args.remarks !== undefined) throw new ConfigError('--all и --remarks=N несовместимы: --all берёт все позиции со строками');
   const profiles = pickProfiles(config, args.models);
+  const remarksLimit = remarkPositionsOf(args);
   const portal = deps.portal ?? createPortal(config.portal);
 
   const data = await collectData(portal, args.tender, {
@@ -79,6 +94,8 @@ export const runReview = async (config, args, deps = {}) => {
     onlyNew: args.onlyNew,
     refresh: args.refresh,
     max: args.max,
+    remarks: remarksLimit,
+    all: Boolean(args.all),
     log,
   });
   for (const warning of data.warnings) log(`ВНИМАНИЕ: ${warning}`);
@@ -86,11 +103,14 @@ export const runReview = async (config, args, deps = {}) => {
 
   const ruleCodes = [...new Set([...data.items.flatMap((g) => g.findings), ...data.unreviewed].map((f) => f.ruleCode))];
   const skills = deps.skills ?? (await importSkills());
-  const { system, promptVersion, skillsRev, knownBasis } = prepareSystem({ ruleCodes, skills });
+  const { system, promptVersion, skillsRev, knownBasis, remarkCodes } = prepareSystem({ ruleCodes, skills });
+  const knownRuleCodes = new Set(data.rules.keys());
 
+  // Позиции с находками и позиции без находок (только для собственных замечаний ИИ).
+  const modelItems = [...data.items, ...data.remarkItems];
   const cache = { read: !args.noCache, write: true, dir: outDir };
   const passes = await Promise.all(
-    data.items.length === 0
+    modelItems.length === 0
       ? []
       : profiles.map(async (profile) => {
           const pass = await reviewItems({
@@ -100,7 +120,9 @@ export const runReview = async (config, args, deps = {}) => {
             promptVersion,
             skillsRev,
             knownBasis,
-            items: data.items,
+            items: modelItems,
+            remarkCodes,
+            ruleCodes: knownRuleCodes,
             think: args.think,
             cache,
             onProgress: log,
@@ -135,8 +157,8 @@ export const runReview = async (config, args, deps = {}) => {
 
   const items = [];
   const snapshot = {};
+  for (const group of modelItems) snapshot[group.position.id] = group.position;
   for (const group of data.items) {
-    snapshot[group.position.id] = group.position;
     for (const f of group.findings) {
       const ai = {};
       for (const pass of passes) {
@@ -156,6 +178,30 @@ export const runReview = async (config, args, deps = {}) => {
   }
   for (const f of data.unreviewed) items.push(makeItem(f, {}, null));
 
+  // Собственные замечания ИИ: отдельно от находок, сквозные ключи n1, n2, …
+  const remarks = [];
+  const positionById = new Map(modelItems.map((g) => [g.position.id, g.position]));
+  for (const pass of passes) {
+    for (const group of modelItems) {
+      for (const r of pass.remarks.get(group.position.id) ?? []) {
+        remarks.push({
+          key: `n${remarks.length + 1}`,
+          model: pass.name,
+          type: r.type,
+          title: r.title,
+          positionId: r.positionId,
+          rowId: r.rowId,
+          positionNumber: data.positionNumbers.get(r.positionId) ?? null,
+          where: describePosition(positionById.get(r.positionId), r.rowId),
+          positionTotal: data.positionTotals.get(r.positionId) ?? 0,
+          detail: r.detail,
+          evidence: r.evidence,
+          link: findingLink(portal.baseUrl, data.tender.id, { positionId: r.positionId, itemId: r.rowId ?? undefined }),
+        });
+      }
+    }
+  }
+
   const usage = {};
   for (const pass of passes) usage[pass.name] = addUsage(newUsage(), pass.usage);
 
@@ -171,12 +217,15 @@ export const runReview = async (config, args, deps = {}) => {
       rules: args.rules ?? null,
       onlyNew: Boolean(args.onlyNew),
       max: args.max ?? null,
+      remarks: args.all ? null : remarksLimit,
+      all: Boolean(args.all),
       think: Boolean(args.think),
       refresh: Boolean(args.refresh),
       noCache: Boolean(args.noCache),
     },
     usage,
     items,
+    remarks,
   };
 
   const runDir = makeRunDir(outDir, data.tender, createdAt);
@@ -190,6 +239,16 @@ export const runReview = async (config, args, deps = {}) => {
   log(`Разобрано находок: ${s.total - s.unreviewed}, без разбора: ${s.unreviewed}`);
   log(`  по делу: ${s.likelyError} · шум: ${s.likelyOk} · не уверен: ${s.unsure}${s.disagree ? ` (расхождений моделей: ${s.disagree})` : ''}`);
   for (const [name, u] of Object.entries(usage)) log(usageLine(name, u));
+  const usages = Object.values(usage);
+  const dropped = usages.reduce((sum, u) => sum + u.remarksDropped, 0);
+  const failed = Math.max(0, ...usages.map((u) => u.remarkPositionsFailed));
+  if (remarks.length > 0 || dropped > 0 || data.remarkItems.length > 0) {
+    log(
+      `Своих замечаний ИИ: ${remarks.length} (отброшено без подтверждения: ${dropped}), ` +
+        `позиций без находок просмотрено: ${data.remarkItems.length} (покрытие ${Math.round(data.remarkCoverage * 100)} % стоимости)`,
+    );
+    if (failed > 0) log(`  позиций без ответа: ${failed}`);
+  }
   log(`Файл для разметки: ${reviewPath}`);
   log(`Дальше: отметьте строки ([+] по делу, [-] не по делу) и запустите apply «${reviewPath}»`);
   return { code: 0, runDir, reviewPath, state };

@@ -53,6 +53,7 @@
  * @property {Record<string, string>} findingRefs «f1» → id находки
  * @property {Record<string, string>} positionRefs «p1» → id позиции
  * @property {Record<string, string>} rowRefs «r1» → id строки
+ * @property {Record<string, string>} rowPosition «r1» → «p1»: какой позиции принадлежит строка
  * @property {number} estimatedTokens
  */
 
@@ -156,7 +157,8 @@ const splitColumns = (rowCells) => {
 };
 
 /**
- * Собирает один запрос по нескольким позициям с находками.
+ * Собирает один запрос по нескольким позициям. Позиция может быть без находок (findings: []):
+ * тогда строки findings: у неё нет, данные нужны модели только для своих замечаний.
  * @param {Item[]} items
  * @returns {Prepared}
  */
@@ -167,6 +169,7 @@ export const prepareBatch = (items) => {
   const findingRefs = {};
   const positionRefs = {};
   const rowRefs = {};
+  const rowPosition = {};
   const fact = (ref, field, value) => {
     if (value !== '') facts[`${ref}.${field}`] = value;
     return value;
@@ -181,7 +184,6 @@ export const prepareBatch = (items) => {
   items.forEach((item, pi) => {
     const { position } = item;
     const findings = item.findings ?? [];
-    if (findings.length === 0) throw new Error('пустой пакет: позиция без находок');
     const posRef = `p${pi + 1}`;
     positionRefs[posRef] = position.id;
     const lines = [`## ${posRef}`];
@@ -198,6 +200,7 @@ export const prepareBatch = (items) => {
       rowNo += 1;
       rowRef.set(r.id, `r${rowNo}`);
       rowRefs[`r${rowNo}`] = r.id;
+      rowPosition[`r${rowNo}`] = posRef;
     }
 
     const rowCells = rows.map((r) => {
@@ -225,7 +228,7 @@ export const prepareBatch = (items) => {
     const omitted = (position.rows ?? []).length - rows.length;
     if (omitted > 0) lines.push(`rows_omitted: ${omitted}`);
 
-    lines.push('findings: ref | rule | row | detail');
+    if (findings.length > 0) lines.push('findings: ref | rule | row | detail');
     for (const f of findings) {
       findingNo += 1;
       const ref = `f${findingNo}`;
@@ -246,34 +249,43 @@ export const prepareBatch = (items) => {
 
   const head = ruleLines.length > 0 ? `Правила:\n${ruleLines.join('\n')}\n\n` : '';
   const text = `${head}${blocks.join('\n\n')}`;
-  return { text, facts, findingRefs, positionRefs, rowRefs, estimatedTokens: estimateTokens(text) };
+  return { text, facts, findingRefs, positionRefs, rowRefs, rowPosition, estimatedTokens: estimateTokens(text) };
 };
 
 /**
- * Делит позиции на группы по бюджету токенов и числу находок, сохраняя порядок.
- * Позиция, которая одна больше бюджета или maxFindings, идёт отдельной группой.
- * perFindingTokens — резерв под ответ: прибавляется к оценке позиции за каждую её находку.
+ * Делит позиции на группы по бюджету токенов, числу находок и резерву ответа, сохраняя порядок.
+ * Позиция, которая одна больше лимитов, идёт отдельной группой.
+ * perFindingTokens и perPositionTokens — резерв под ответ: прибавляются к оценке позиции
+ * за каждую её находку и за саму позицию (замечания). maxAnswerTokens — потолок суммарного резерва
+ * ответа в группе.
  * @param {Item[]} items
- * @param {{ budgetTokens?: number, maxFindings?: number, perFindingTokens?: number }} [opts]
+ * @param {{ budgetTokens?: number, maxFindings?: number, perFindingTokens?: number, perPositionTokens?: number, maxAnswerTokens?: number }} [opts]
  * @returns {Item[][]}
  */
-export const packBatches = (items, { budgetTokens = 20000, maxFindings = Infinity, perFindingTokens = 0 } = {}) => {
+export const packBatches = (
+  items,
+  { budgetTokens = 20000, maxFindings = Infinity, perFindingTokens = 0, perPositionTokens = 0, maxAnswerTokens = Infinity } = {},
+) => {
   const groups = [];
   let group = [];
   let tokens = 0;
   let count = 0;
+  let answer = 0;
   for (const item of items) {
     const n = item.findings.length;
-    const est = prepareBatch([item]).estimatedTokens + perFindingTokens * n;
-    if (group.length > 0 && (tokens + est > budgetTokens || count + n > maxFindings)) {
+    const reserve = perFindingTokens * n + perPositionTokens;
+    const est = prepareBatch([item]).estimatedTokens + reserve;
+    if (group.length > 0 && (tokens + est > budgetTokens || count + n > maxFindings || answer + reserve > maxAnswerTokens)) {
       groups.push(group);
       group = [];
       tokens = 0;
       count = 0;
+      answer = 0;
     }
     group.push(item);
     tokens += est;
     count += n;
+    answer += reserve;
   }
   if (group.length > 0) groups.push(group);
   return groups;

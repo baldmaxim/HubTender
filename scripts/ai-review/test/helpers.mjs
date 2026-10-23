@@ -96,3 +96,27 @@ export const makeState = () => ({
     },
   ],
 });
+
+/** Добавляет к состоянию три собственных замечания ИИ (n1–n3): две позиции, тип навыка и NEW. */
+export const withRemarks = (state = makeState()) => {
+  state.remarks = [
+    {
+      key: 'n1', model: 'qwen', type: 'AI-002', title: '', positionId: 'pos-2', rowId: 'row-2', positionNumber: 13,
+      where: 'поз. 13 «Кладка»', positionTotal: 100_000, detail: 'Работа кладки без материала',
+      evidence: [ev('row', 'row-2', 'name', 'Кладка стен', 'Кладка стен'), ev('position', 'pos-2', 'unit', 'м3', 'позиция')],
+      link: 'https://gp.su10.ru/positions/pos-2/items?tenderId=t-1&positionId=pos-2&itemId=row-2',
+    },
+    {
+      key: 'n2', model: 'qwen', type: 'NEW', title: 'Лишний слой', positionId: 'pos-1', rowId: null, positionNumber: 12,
+      where: 'поз. 12.3 «Утеплитель ПСБ-С 25»', positionTotal: 5_000_000, detail: 'Слой учтён дважды',
+      evidence: [ev('position', 'pos-1', 'customer_name', 'Утепление', 'позиция')],
+      link: 'https://gp.su10.ru/positions/pos-1/items?tenderId=t-1&positionId=pos-1',
+    },
+    {
+      key: 'n3', model: 'minimax', type: 'AI-001', title: '', positionId: 'pos-1', rowId: 'row-1', positionNumber: 12,
+      where: 'поз. 12.3 «Утеплитель ПСБ-С 25»', positionTotal: 5_000_000, detail: 'Толщина не та',
+      evidence: [], link: null,
+    },
+  ];
+  return state;
+};

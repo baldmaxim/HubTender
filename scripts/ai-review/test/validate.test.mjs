@@ -4,8 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareBatch } from '../lib/payload.mjs';
 import {
-  validateAnswer, sameValue, InvalidResponseError,
-  LABEL_LIKELY_ERROR, LABEL_LIKELY_OK, LABEL_UNSURE, MAX_EVIDENCE,
+  validateAnswer, validateRemarks, sameValue, InvalidResponseError,
+  LABEL_LIKELY_ERROR, LABEL_LIKELY_OK, LABEL_UNSURE, MAX_EVIDENCE, MAX_REMARKS_PER_POSITION,
 } from '../lib/validate.mjs';
 
 const insulation = () => ({
@@ -159,4 +159,127 @@ test('sameValue: числа, разделители, запятая, текст'
   assert.equal(sameValue('0.07', '0.05'), false);
   assert.equal(sameValue('', ''), true);
   assert.equal(sameValue('1e', '1'), false);
+});
+
+// --- validateRemarks ---------------------------------------------------------
+
+const CODES = { remarkCodes: new Set(['AI-001', 'AI-002']), ruleCodes: new Set(['GA', 'QA']) };
+
+/** Две позиции: p1 (утепление, строки r1–r3) и p2 (одна строка r4), без находок у p2. */
+const twoPositions = () => {
+  const other = { position: { id: 'pos-2', itemNo: '17', customerName: 'Штукатурка', rows: [{ id: 'z1', type: 'мат', name: 'Смесь', unit: 'кг' }] }, findings: [] };
+  return prepareBatch([insulation(), other]);
+};
+
+const remark = (over = {}) => ({
+  position: 'p1', row: 'r2', type: 'AI-001', title: '', detail: 'Толщина 150 мм, а в строке коэффициент 0.05',
+  evidence: [{ ref: 'r2.conversion_coefficient', value: '0.050' }], ...over,
+});
+
+test('validateRemarks: верное замечание по типу навыка — title игнорируется, значение факта берётся отправленное', () => {
+  const p = twoPositions();
+  const { remarks, dropped } = validateRemarks([remark({ type: ' ai-001 ', title: 'не нужно' })], p, CODES);
+  assert.equal(dropped, 0);
+  assert.deepEqual(remarks, [{
+    type: 'AI-001', title: '', positionId: 'pos-1', rowId: 'm1',
+    detail: 'Толщина 150 мм, а в строке коэффициент 0.05', evidence: [{ ref: 'r2.conversion_coefficient', value: '0.05' }],
+  }]);
+  // row "" — замечание по позиции в целом
+  const whole = validateRemarks([remark({ row: '', evidence: [{ ref: 'p1.customer_name', value: 'Утепление стен минплитой, толщина 150 мм' }] })], p, CODES);
+  assert.equal(whole.remarks[0].rowId, null);
+});
+
+test('validateRemarks: не массив — не ошибка, замечаний нет', () => {
+  const p = twoPositions();
+  for (const bad of [undefined, null, 'x', {}, 5]) assert.deepEqual(validateRemarks(bad, p, CODES), { remarks: [], dropped: 0 });
+  assert.deepEqual(validateRemarks([], p, CODES), { remarks: [], dropped: 0 });
+  // и validateAnswer ответ без remarks по-прежнему принимает
+  assert.equal(validateAnswer({ assessments: [] }, p).assessments.length, 0);
+});
+
+test('validateRemarks: чужая позиция, чужая строка, мусор — отбрасываются', () => {
+  const p = twoPositions();
+  const { remarks, dropped } = validateRemarks([
+    remark({ position: 'p9' }),
+    remark({ row: 'r4' }), // строка p2 в замечании по p1
+    remark({ row: 'r99' }),
+    remark({ position: 'constructor' }),
+    'строка',
+    null,
+    remark({ position: 'p2', row: 'r4', evidence: [{ ref: 'r4.name', value: 'Смесь' }] }), // верное
+  ], p, CODES);
+  assert.equal(remarks.length, 1);
+  assert.equal(remarks[0].positionId, 'pos-2');
+  assert.equal(remarks[0].rowId, 'z1');
+  assert.equal(dropped, 6);
+});
+
+test('validateRemarks: код скриптового правила — дубль, отбрасывается; NEW без title — тоже', () => {
+  const p = twoPositions();
+  const { remarks, dropped } = validateRemarks([
+    remark({ type: 'GA' }),
+    remark({ type: 'qa' }),
+    remark({ type: 'NEW', title: '' }),
+    remark({ type: 'AI-777', title: '   ' }), // неизвестный код = NEW, названия нет
+    remark({ type: '', title: '' }),
+  ], p, CODES);
+  assert.deepEqual(remarks, []);
+  assert.equal(dropped, 5);
+});
+
+test('validateRemarks: NEW с названием — тип NEW, title обрезается до 120 символов; неизвестный код тоже NEW', () => {
+  const p = twoPositions();
+  const { remarks } = validateRemarks([
+    remark({ type: 'NEW', title: `  ${'я'.repeat(130)}` }),
+    remark({ type: 'AI-777', title: 'Другой тип', row: '' }),
+  ], p, CODES);
+  assert.equal(remarks.length, 2);
+  assert.equal(remarks[0].type, 'NEW');
+  assert.equal(Array.from(remarks[0].title).length, 121);
+  assert.ok(remarks[0].title.endsWith('…'));
+  assert.equal(remarks[1].type, 'NEW');
+  assert.equal(remarks[1].title, 'Другой тип');
+});
+
+test('validateRemarks: без подтверждённых фактов или без detail — отбрасывается; факты фильтруются', () => {
+  const p = twoPositions();
+  const { remarks, dropped } = validateRemarks([
+    remark({ evidence: [] }),
+    remark({ evidence: [{ ref: 'r2.conversion_coefficient', value: '0.07' }] }), // значение не то
+    remark({ evidence: [{ ref: 'r2.nonexistent', value: '1' }] }),
+    remark({ evidence: 'нет' }),
+    remark({ detail: '   ' }),
+    remark({ detail: undefined }),
+    remark({ evidence: [{ ref: 'r2.conversion_coefficient', value: '0.07' }, { ref: 'r3.conversion_coefficient', value: '0.1' }, { ref: 'r3.conversion_coefficient', value: '0.1' }], row: 'r3' }),
+  ], p, CODES);
+  assert.equal(dropped, 6);
+  assert.deepEqual(remarks[0].evidence, [{ ref: 'r3.conversion_coefficient', value: '0.1' }]);
+});
+
+test('validateRemarks: detail режется до 500 символов, evidence — до MAX_EVIDENCE', () => {
+  const p = twoPositions();
+  const evidence = Object.keys(p.facts).map((ref) => ({ ref, value: p.facts[ref] }));
+  assert.ok(evidence.length > MAX_EVIDENCE);
+  const { remarks } = validateRemarks([remark({ detail: '😀'.repeat(600), evidence })], p, CODES);
+  assert.equal(Array.from(remarks[0].detail).length, 501);
+  assert.equal(remarks[0].evidence.length, MAX_EVIDENCE);
+});
+
+test('validateRemarks: не больше 3 на позицию (первые по порядку), дубли отбрасываются', () => {
+  const p = twoPositions();
+  assert.equal(MAX_REMARKS_PER_POSITION, 3);
+  const list = [
+    remark({ type: 'AI-001' }),
+    remark({ type: 'AI-001' }), // дубль: та же позиция, строка, тип и title
+    remark({ type: 'AI-002' }),
+    remark({ type: 'NEW', title: 'Один' }),
+    remark({ type: 'NEW', title: 'Два' }), // четвёртое по позиции p1
+    remark({ position: 'p2', row: 'r4', type: 'AI-001', evidence: [{ ref: 'r4.name', value: 'Смесь' }] }),
+  ];
+  const { remarks, dropped } = validateRemarks(list, p, CODES);
+  assert.deepEqual(remarks.map((r) => `${r.positionId}:${r.type}${r.title ? `:${r.title}` : ''}`), ['pos-1:AI-001', 'pos-1:AI-002', 'pos-1:NEW:Один', 'pos-2:AI-001']);
+  assert.equal(dropped, 2);
+  // тот же тип в другой строке — не дубль
+  const rows = validateRemarks([remark({ row: 'r2' }), remark({ row: 'r3', evidence: [{ ref: 'r3.conversion_coefficient', value: '0.1' }] })], p, CODES);
+  assert.equal(rows.remarks.length, 2);
 });

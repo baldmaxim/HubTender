@@ -4,6 +4,9 @@
  *
  * Формат строки находки (ключ ‹f12› — связь с run.json, его не трогать):
  *   - [ ] P · поз. 12.3 «Утеплитель» · Δ 1,2 млн ₽ · [открыть](https://…) ‹f12›
+ * Строка собственного замечания ИИ (ключ ‹n3›):
+ *   - [ ] AI-002 · поз. 12.3 «Утеплитель» · [открыть](https://…) ‹n3›
+ *   - [ ] Новый тип «Название» · поз. 12.3 «Утеплитель» ‹n3›
  */
 
 import { byMoneyDesc, clipText, FIELD_LABELS, formatDateTime, formatMoney, LABEL_RU, oneLine } from './format.mjs';
@@ -34,20 +37,16 @@ const withBasis = (reason, basis) => {
   return basis ? `${base} Основание: ${basis}` : base;
 };
 
-/** Факты модели → «Данные: «ПСБ-С 25» цена 125, К перев. 0.05; позиция: ед. м3». */
-const renderEvidence = (item) => {
-  const label = item.combined?.label;
+/** Факты → ««ПСБ-С 25» цена 125, К перев. 0.05; позиция: ед. м3» (не больше EVIDENCE_LIMIT, без повторов). */
+const renderEvidenceList = (evidence) => {
   const picked = [];
   const seen = new Set();
-  for (const ai of Object.values(item.ai ?? {})) {
-    if (ai.status !== 'ok' || (label !== 'unsure' && ai.label !== label)) continue;
-    for (const e of ai.evidence ?? []) {
-      if (e.entity === 'finding' && e.field === 'detail') continue; // и так выведено в «Правило:»
-      const id = `${e.entity}:${e.entityId}:${e.field}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      picked.push(e);
-    }
+  for (const e of evidence) {
+    if (e.entity === 'finding' && e.field === 'detail') continue; // и так выведено в «Правило:»
+    const id = `${e.entity}:${e.entityId}:${e.field}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    picked.push(e);
   }
   const groups = new Map();
   for (const e of picked.slice(0, EVIDENCE_LIMIT)) {
@@ -59,6 +58,17 @@ const renderEvidence = (item) => {
   return [...groups.values()]
     .map((g) => (g.entity === 'row' ? `«${oneLine(g.label)}» ${g.parts.join(', ')}` : `${g.label}: ${g.parts.join(', ')}`))
     .join('; ');
+};
+
+/** Факты моделей, согласных с итоговой оценкой находки. */
+const renderEvidence = (item) => {
+  const label = item.combined?.label;
+  const evidence = [];
+  for (const ai of Object.values(item.ai ?? {})) {
+    if (ai.status !== 'ok' || (label !== 'unsure' && ai.label !== label)) continue;
+    evidence.push(...(ai.evidence ?? []));
+  }
+  return renderEvidenceList(evidence);
 };
 
 const modelLine = (name, ai) => {
@@ -92,9 +102,25 @@ const renderItem = (item, multi) => {
   return lines.join('\n');
 };
 
+/** Порядок замечаний: дорогие позиции первыми, затем номер позиции и ключ. */
+export const compareRemarks = (a, b) => byMoneyDesc(a.positionTotal, b.positionTotal) || comparePosition(a, b);
+
+/** Строка замечания ИИ с пояснением и данными. */
+const renderRemark = (remark, multi) => {
+  const head = [
+    remark.type === 'NEW' ? `Новый тип «${oneLine(remark.title)}»` : remark.type,
+    oneLine(remark.where),
+    remark.link ? `[открыть](${remark.link})` : '',
+  ].filter(Boolean);
+  const lines = [`- [ ] ${head.join(' · ')} ‹${remark.key}›`, `  ${multi ? remark.model : 'ИИ'}: ${sentence(remark.detail)}`];
+  const evidence = renderEvidenceList(remark.evidence ?? []);
+  if (evidence) lines.push(`  Данные: ${evidence}`);
+  return lines.join('\n');
+};
+
 /**
  * @param {{ tender: { number: string, version: number | null, title: string }, createdAt: string,
- *   models: Array<{ name: string, model: string }>, promptVersion: string, skillsRev: string, items: any[] }} state
+ *   models: Array<{ name: string, model: string }>, promptVersion: string, skillsRev: string, items: any[], remarks?: any[] }} state
  * @returns {string}
  */
 export const renderReview = (state) => {
@@ -105,12 +131,23 @@ export const renderReview = (state) => {
     `# ИИ-проверка · тендер ${tender.number}${version} «${oneLine(tender.title)}» · ${formatDateTime(new Date(state.createdAt))}`,
     `Модели: ${state.models.map((m) => `${m.name} (${m.model})`).join(', ')} · промпт ${state.promptVersion} · навыки ${state.skillsRev}`,
     'Отметка: [+] по делу (вердикт «Ошибка») · [-] не по делу («Норма») · пусто — не решено. ' +
-      'Комментарий — в конце строки после //. Отметка в заголовке раздела ставится всем неотмеченным строкам раздела.',
+      'Комментарий — в конце строки после //. Отметка в заголовке раздела ставится всем неотмеченным строкам раздела. ' +
+      'Для замечаний ИИ: [+] — замечание по делу, [-] — нет; в портал они не уходят, только в журнал.',
   ];
+
+  const remarks = (state.remarks ?? []).slice().sort(compareRemarks);
+  const pushRemarks = () => {
+    if (remarks.length === 0) return;
+    lines.push('', `## [ ] Новые замечания ИИ (${remarks.length})`, '');
+    lines.push(remarks.map((remark) => renderRemark(remark, multi)).join('\n\n'));
+  };
 
   for (const section of SECTIONS) {
     const items = state.items.filter((item) => sectionOf(item) === section.id);
-    if (items.length === 0) continue;
+    if (items.length === 0) {
+      if (section.id === 'likely_error') pushRemarks();
+      continue;
+    }
     items.sort((a, b) => {
       if (section.id === 'unsure') {
         const da = a.combined.agree === false ? 0 : 1;
@@ -121,13 +158,14 @@ export const renderReview = (state) => {
     });
     lines.push('', `## ${section.bulk ? '[ ] ' : ''}${section.title} (${items.length})`, '');
     lines.push(items.map((item) => renderItem(item, multi)).join('\n\n'));
+    if (section.id === 'likely_error') pushRemarks(); // сразу после «По делу»
   }
   return `${lines.join('\n')}\n`;
 };
 
 // --- разбор ------------------------------------------------------------------
 
-const ITEM_RE = /^\s*[-*]\s*\[(.?)\](.*?)‹(f\d+)›(.*)$/;
+const ITEM_RE = /^\s*[-*]\s*\[(.?)\](.*?)‹([fn]\d+)›(.*)$/;
 const HEADING_RE = /^##(?:\s*\[(.?)\])?/;
 const MARKDOWN_LINK_RE = /\[[^\]]*\]\([^)]*\)/g;
 

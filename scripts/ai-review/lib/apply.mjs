@@ -15,6 +15,7 @@ import { formatMoney } from './format.mjs';
 import {
   appendJournal,
   buildJournalLine,
+  buildRemarkJournalLine,
   buildNote,
   confirmedItems,
   readApplied,
@@ -29,6 +30,7 @@ import { loadQuality } from './tender.mjs';
 
 const BATCH_SIZE = 500;
 const VERDICT_RU = { error: 'Ошибка', accepted: 'Норма' };
+const REMARK_DECISION_RU = { confirmed: 'подтверждено', rejected: 'отклонено' };
 
 /**
  * Что отправить, а что пропустить. Чистая функция.
@@ -73,10 +75,51 @@ export const planApply = ({ state, marks, fresh, applied }) => {
   return { send, skipped, same, done };
 };
 
+/**
+ * Отметки по замечаниям ИИ: в портал не уходят, только в журнал. Чистая функция.
+ * @param {{ state: any, marks: Map<string, any>, applied: Record<string, any> }} p
+ * @returns {{ record: Array<{ key: string, remark: any, decision: string, comment: string, bulk: boolean }>,
+ *   skipped: Array<{ key: string, remark: any, reason: string }>, done: number }}
+ */
+export const planRemarks = ({ state, marks, applied }) => {
+  const record = [];
+  const skipped = [];
+  let done = 0;
+  for (const remark of state.remarks ?? []) {
+    const entry = marks.get(remark.key);
+    if (!entry) continue;
+    const decision = entry.mark === '+' ? 'confirmed' : 'rejected';
+    const prior = applied[remark.key];
+    if (prior) {
+      if (prior.decision === decision) done += 1;
+      else skipped.push({ key: remark.key, remark, reason: 'отметка изменена после apply — решение уже в журнале' });
+      continue;
+    }
+    record.push({ key: remark.key, remark, decision, comment: entry.comment, bulk: entry.bulk });
+  }
+  return { record, skipped, done };
+};
+
 const chunks = (list, size) => {
   const out = [];
   for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
   return out;
+};
+
+const remarkLabel = (remark) => (remark.type === 'NEW' ? `Новый тип «${remark.title}»` : remark.type);
+
+const printRemarks = (plan, log, dryRun) => {
+  if (plan.record.length === 0 && plan.skipped.length === 0 && plan.done === 0) return;
+  log('Замечания ИИ (в портал не отправляются, только в журнал):');
+  if (plan.record.length > 0) {
+    log(dryRun ? '  Было бы записано:' : '  К записи:');
+    for (const { key, remark, decision, comment, bulk } of plan.record) {
+      const note = buildNote(comment, bulk);
+      log(`    ${key}  ${remarkLabel(remark)}  ${remark.where}  → ${REMARK_DECISION_RU[decision]}  «${note}»`);
+    }
+  }
+  for (const { key, remark, reason } of plan.skipped) log(`  ПРОПУЩЕНО ${key} (${remarkLabel(remark)}, ${remark.where}): ${reason}`);
+  if (plan.done > 0) log(`  Уже записано ранее: ${plan.done}`);
 };
 
 const printPlan = (plan, log, dryRun) => {
@@ -107,7 +150,7 @@ export const runApply = async (config, args, deps = {}) => {
   const state = JSON.parse(readFileSync(statePath, 'utf8'));
 
   const { marks, warnings } = parseReview(readFileSync(reviewPath, 'utf8'), {
-    knownKeys: new Set(state.items.map((item) => item.key)),
+    knownKeys: new Set([...state.items, ...(state.remarks ?? [])].map((entry) => entry.key)),
   });
   for (const warning of warnings) log(`ВНИМАНИЕ: ${warning}`);
   log(`Тендер ${state.tender.number}${state.tender.version ? ` v${state.tender.version}` : ''}, отметок: ${marks.size}`);
@@ -118,15 +161,33 @@ export const runApply = async (config, args, deps = {}) => {
   const fresh = new Map(report.findings.map((f) => [`${f.rule_code}|${f.entity_id}`, f]));
   const plan = planApply({ state, marks, fresh, applied });
   printPlan(plan, log, Boolean(args.dryRun));
+  const remarkPlan = planRemarks({ state, marks, applied });
+  printRemarks(remarkPlan, log, Boolean(args.dryRun));
 
   if (args.dryRun) {
-    log(`Пробный запуск: ничего не отправлено и не записано. К отправке: ${plan.send.length}, пропущено: ${plan.skipped.length}.`);
+    log(
+      `Пробный запуск: ничего не отправлено и не записано. К отправке: ${plan.send.length}, пропущено: ${plan.skipped.length}, ` +
+        `замечаний ИИ к записи: ${remarkPlan.record.length}.`,
+    );
     return 0;
   }
 
   let failed = false;
   let sent = 0;
   const runRel = relativeRun(outDir, runDir);
+
+  // Замечания ИИ пишутся в журнал без сети, до отправки вердиктов: сбой отправки их не отменяет.
+  if (remarkPlan.record.length > 0) {
+    const at = now().toISOString();
+    for (const { key, decision, comment, bulk } of remarkPlan.record) applied[key] = { decision, at, comment, bulk };
+    writeApplied(runDir, applied);
+    appendJournal(
+      outDir,
+      remarkPlan.record.map(({ remark, decision, comment, bulk }) =>
+        buildRemarkJournalLine({ state, remark, decision, comment, bulk, at, runRel }),
+      ),
+    );
+  }
   for (const batch of chunks(plan.send, BATCH_SIZE)) {
     try {
       await portal.post(`/api/v1/tenders/${state.tender.id}/quality/verdicts`, {
@@ -157,7 +218,11 @@ export const runApply = async (config, args, deps = {}) => {
   }
 
   if (Object.keys(applied).length > 0) writeFileSync(join(runDir, 'itog.md'), renderItog(state, applied), 'utf8');
-  log(`Отправлено: ${sent}, пропущено: ${plan.skipped.length}.${sent > 0 ? ` Итог: ${join(runDir, 'itog.md')}` : ''}`);
+  const written = remarkPlan.record.length;
+  log(
+    `Отправлено: ${sent}, пропущено: ${plan.skipped.length}, замечаний записано: ${written}.` +
+      `${sent > 0 || written > 0 ? ` Итог: ${join(runDir, 'itog.md')}` : ''}`,
+  );
 
   if (args.brief && !failed) {
     if (Object.keys(applied).length === 0) {

@@ -13,6 +13,15 @@ export const MAX_REASON_RUNES = 500;
 /** Сколько фактов на оценку сохраняется. */
 export const MAX_EVIDENCE = 8;
 
+/** Сколько замечаний на позицию сохраняется. */
+export const MAX_REMARKS_PER_POSITION = 3;
+
+/** Длина названия нового типа замечания. */
+export const MAX_REMARK_TITLE_RUNES = 120;
+
+/** Тип замечания, не подходящий ни под одну запись навыков. */
+export const REMARK_TYPE_NEW = 'NEW';
+
 /** Длиннее — код записи навыков считается выдуманным. */
 const MAX_BASIS_LENGTH = 32;
 
@@ -141,4 +150,66 @@ export const validateAnswer = (answer, prepared, { knownBasis } = {}) => {
     else missing.push(id);
   }
   return { assessments, missing };
+};
+
+/**
+ * Проверяет собственные замечания модели (remarks). Не массив — замечаний нет (не ошибка:
+ * ответ в режиме json_object может обойтись без поля). Замечание без подтверждённых фактов,
+ * с чужой позицией или строкой, с кодом скриптового правила, дубль и сверх лимита на позицию — отбрасывается.
+ * @param {unknown} rawRemarks
+ * @param {{ facts: Record<string, string>, positionRefs: Record<string, string>, rowRefs: Record<string, string>,
+ *   rowPosition: Record<string, string> }} prepared
+ * @param {{ remarkCodes?: Set<string>, ruleCodes?: Set<string> }} [opts]
+ *   remarkCodes — активные коды типов замечаний из навыков (AI-001), ruleCodes — коды скриптовых правил
+ * @returns {{ remarks: Array<{ type: string, title: string, positionId: string, rowId: string | null, detail: string,
+ *   evidence: Array<{ ref: string, value: string }> }>, dropped: number }}
+ */
+export const validateRemarks = (rawRemarks, prepared, { remarkCodes = new Set(), ruleCodes = new Set() } = {}) => {
+  if (!Array.isArray(rawRemarks)) return { remarks: [], dropped: 0 };
+  const { facts, positionRefs, rowRefs, rowPosition } = prepared;
+  const remarks = [];
+  const perPosition = new Map();
+  const seen = new Set();
+  let dropped = 0;
+
+  for (const r of rawRemarks) {
+    const remark = isObject(r) ? parseRemark(r, { facts, positionRefs, rowRefs, rowPosition, remarkCodes, ruleCodes }) : null;
+    if (remark === null) {
+      dropped += 1;
+      continue;
+    }
+    const key = JSON.stringify([remark.positionId, remark.rowId, remark.type, remark.title]);
+    const count = perPosition.get(remark.positionId) ?? 0;
+    if (seen.has(key) || count >= MAX_REMARKS_PER_POSITION) {
+      dropped += 1;
+      continue;
+    }
+    seen.add(key);
+    perPosition.set(remark.positionId, count + 1);
+    remarks.push(remark);
+  }
+  return { remarks, dropped };
+};
+
+/** Одно замечание → проверенный вид либо null (отбросить). */
+const parseRemark = (r, { facts, positionRefs, rowRefs, rowPosition, remarkCodes, ruleCodes }) => {
+  const positionRef = str(r.position).trim();
+  if (!has(positionRefs, positionRef)) return null;
+  const rowRef = str(r.row).trim();
+  if (rowRef !== '' && !(has(rowRefs, rowRef) && rowPosition[rowRef] === positionRef)) return null;
+
+  let type = str(r.type).trim().toUpperCase();
+  let title = '';
+  if (!remarkCodes.has(type)) {
+    if (ruleCodes.has(type)) return null; // дубль скриптового правила
+    type = REMARK_TYPE_NEW;
+    title = clipRunes(r.title, MAX_REMARK_TITLE_RUNES);
+    if (title === '') return null;
+  }
+
+  const detail = clipRunes(r.detail, MAX_REASON_RUNES);
+  if (detail === '') return null;
+  const evidence = checkEvidence(r.evidence, facts);
+  if (evidence.length === 0) return null;
+  return { type, title, positionId: positionRefs[positionRef], rowId: rowRef === '' ? null : rowRefs[rowRef], detail, evidence };
 };
