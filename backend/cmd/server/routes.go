@@ -407,6 +407,11 @@ func newRouter(
 		r.Post("/api/v1/construction-objects", d.objectsH.Create)
 		r.Patch("/api/v1/construction-objects/{id}", d.objectsH.Update)
 		r.Delete("/api/v1/construction-objects/{id}", d.objectsH.Delete)
+		r.Get("/api/v1/construction-objects/{id}/photos", d.objectPhotosH.List)
+		r.Post("/api/v1/construction-objects/{id}/photos", d.objectPhotosH.Create)
+		r.Get("/api/v1/construction-object-photos/{photoId}/image", d.objectPhotosH.Image)
+		r.Patch("/api/v1/construction-object-photos/{photoId}", d.objectPhotosH.UpdateCaption)
+		r.Delete("/api/v1/construction-object-photos/{photoId}", d.objectPhotosH.Delete)
 
 		// Этап 2.5: AI-администрирование OpenRouter — настоящий server-side
 		// role-гейт (RequireRoles), не только frontend page-ACL. Non-admin

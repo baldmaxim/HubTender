@@ -29,15 +29,19 @@ type ConstructionObjectRow struct {
 	Name              string    `json:"name"`
 	Area              *float64  `json:"area"`
 	Address           string    `json:"address"`
+	Customer          *string   `json:"customer"`
 	Latitude          *float64  `json:"latitude"`
 	Longitude         *float64  `json:"longitude"`
 	Status            string    `json:"status"`
 	ProjectID         *string   `json:"project_id"`
 	ProjectName       *string   `json:"project_name"`
 	CommissioningDate *string   `json:"commissioning_date"`
+	CommissioningFrom *string   `json:"commissioning_start_date"`
 	SortOrder         int       `json:"sort_order"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
+	PhotoCount        int       `json:"photo_count"`
+	CoverPhotoID      *string   `json:"cover_photo_id"`
 }
 
 // ConstructionObjectInput — уже проверенные и подрезанные поля для записи.
@@ -45,26 +49,32 @@ type ConstructionObjectInput struct {
 	Name              string
 	Area              *float64
 	Address           string
+	Customer          *string
 	Latitude          *float64
 	Longitude         *float64
 	Status            string
 	ProjectID         *string
 	CommissioningDate *string
+	CommissioningFrom *string
 }
 
 // Список полей Obj поверх алиаса o (строка таблицы) и LEFT JOIN projects p.
 const constructionObjectCols = `
-	o.id::text, o.name, o.area::float8, o.address, o.latitude, o.longitude,
+	o.id::text, o.name, o.area::float8, o.address, o.customer, o.latitude, o.longitude,
 	o.status, o.project_id::text, p.name,
 	to_char(o.commissioning_date, 'YYYY-MM-DD'),
-	o.sort_order, o.created_at, o.updated_at`
+	to_char(o.commissioning_start_date, 'YYYY-MM-DD'),
+	o.sort_order, o.created_at, o.updated_at,
+	(SELECT count(*)::int FROM public.construction_object_photos ph WHERE ph.object_id = o.id),
+	(SELECT ph.id::text FROM public.construction_object_photos ph WHERE ph.object_id = o.id
+	 ORDER BY ph.sort_order, ph.created_at LIMIT 1)`
 
 func scanConstructionObject(row pgx.Row) (*ConstructionObjectRow, error) {
 	var o ConstructionObjectRow
 	if err := row.Scan(
-		&o.ID, &o.Name, &o.Area, &o.Address, &o.Latitude, &o.Longitude,
-		&o.Status, &o.ProjectID, &o.ProjectName, &o.CommissioningDate,
-		&o.SortOrder, &o.CreatedAt, &o.UpdatedAt,
+		&o.ID, &o.Name, &o.Area, &o.Address, &o.Customer, &o.Latitude, &o.Longitude,
+		&o.Status, &o.ProjectID, &o.ProjectName, &o.CommissioningDate, &o.CommissioningFrom,
+		&o.SortOrder, &o.CreatedAt, &o.UpdatedAt, &o.PhotoCount, &o.CoverPhotoID,
 	); err != nil {
 		return nil, err
 	}
@@ -103,12 +113,12 @@ func (r *ConstructionObjectsRepo) Create(ctx context.Context, in ConstructionObj
 		WITH ins AS (
 			INSERT INTO public.construction_objects (
 				name, area, address, latitude, longitude, status,
-				project_id, commissioning_date, sort_order, created_by
+				project_id, commissioning_date, sort_order, created_by, customer, commissioning_start_date
 			) VALUES (
 				$1, $2::numeric, $3, $4, $5, $6,
 				$7::uuid, $8::date,
 				(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM public.construction_objects),
-				$9::uuid
+				$9::uuid, $10, $11::date
 			)
 			RETURNING *
 		)
@@ -117,7 +127,7 @@ func (r *ConstructionObjectsRepo) Create(ctx context.Context, in ConstructionObj
 		LEFT JOIN public.projects p ON p.id = o.project_id
 	`,
 		in.Name, in.Area, in.Address, in.Latitude, in.Longitude, in.Status,
-		in.ProjectID, in.CommissioningDate, createdBy,
+		in.ProjectID, in.CommissioningDate, createdBy, in.Customer, in.CommissioningFrom,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("constructionObjectsRepo.Create: %w", err)
@@ -137,7 +147,9 @@ func (r *ConstructionObjectsRepo) Update(ctx context.Context, id string, in Cons
 			    longitude          = $5,
 			    status             = $6,
 			    project_id         = $7::uuid,
-			    commissioning_date = $8::date
+			    commissioning_date = $8::date,
+			    customer           = $10,
+			    commissioning_start_date = $11::date
 			WHERE id = $9::uuid
 			RETURNING *
 		)
@@ -146,7 +158,7 @@ func (r *ConstructionObjectsRepo) Update(ctx context.Context, id string, in Cons
 		LEFT JOIN public.projects p ON p.id = o.project_id
 	`,
 		in.Name, in.Area, in.Address, in.Latitude, in.Longitude, in.Status,
-		in.ProjectID, in.CommissioningDate, id,
+		in.ProjectID, in.CommissioningDate, id, in.Customer, in.CommissioningFrom,
 	))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

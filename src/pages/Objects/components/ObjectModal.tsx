@@ -26,12 +26,18 @@ interface IObjectModalProps {
 
 interface IFormValues {
   name: string;
+  customer: string | null;
   area: number | null;
   address: string;
   status: ConstructionObjectStatus;
   project_id: string | null;
+  /** Первая очередь (необязательно), если комплекс вводился этапами. */
+  commissioning_start_date: Dayjs | null;
+  /** Дата ввода (последней очереди). */
   commissioning_date: Dayjs | null;
 }
+
+const API_DATE_FORMAT = 'YYYY-MM-DD';
 
 const STATUS_OPTIONS = [
   { value: 'archive', label: 'Построен' },
@@ -42,10 +48,14 @@ const getInitialValues = (editing: IConstructionObject | null): Partial<IFormVal
   editing
     ? {
         name: editing.name,
+        customer: editing.customer,
         area: editing.area,
         address: editing.address,
         status: editing.status,
         project_id: editing.project_id,
+        commissioning_start_date: editing.commissioning_start_date
+          ? dayjs(editing.commissioning_start_date)
+          : null,
         commissioning_date: editing.commissioning_date ? dayjs(editing.commissioning_date) : null,
       }
     : { status: 'archive' };
@@ -125,14 +135,18 @@ export const ObjectModal: FC<IObjectModalProps> = ({ open, editing, onClose, onS
     }
     const input: IConstructionObjectInput = {
       name: values.name.trim(),
+      customer: values.customer?.trim() || null,
       area: values.area ?? null,
       address: values.address.trim(),
       latitude: point ? roundCoord(point.lat) : null,
       longitude: point ? roundCoord(point.lng) : null,
       status: values.status,
       project_id: values.status === 'current' ? (values.project_id ?? null) : null,
+      commissioning_start_date: values.commissioning_start_date
+        ? values.commissioning_start_date.format(API_DATE_FORMAT)
+        : null,
       commissioning_date: values.commissioning_date
-        ? values.commissioning_date.format('YYYY-MM-DD')
+        ? values.commissioning_date.format(API_DATE_FORMAT)
         : null,
     };
     setSaving(true);
@@ -174,6 +188,9 @@ export const ObjectModal: FC<IObjectModalProps> = ({ open, editing, onClose, onS
         >
           <Input allowClear />
         </Form.Item>
+        <Form.Item name="customer" label="Заказчик">
+          <Input allowClear placeholder="Заказчик или девелопер" />
+        </Form.Item>
         <Form.Item name="area" label="Площадь, м²">
           <InputNumber<number> min={0} decimalSeparator="," />
         </Form.Item>
@@ -199,9 +216,45 @@ export const ObjectModal: FC<IObjectModalProps> = ({ open, editing, onClose, onS
             />
           </Form.Item>
         )}
-        <Form.Item name="commissioning_date" label="Дата ввода">
-          <DatePicker format="DD.MM.YYYY" />
-        </Form.Item>
+        <div className={styles.dateRow}>
+          <Form.Item
+            name="commissioning_start_date"
+            label="Ввод: с"
+            tooltip="Дата ввода первой очереди — только если комплекс вводился этапами"
+            dependencies={['commissioning_date']}
+            rules={[
+              ({ getFieldValue }) => ({
+                validator: (_rule, value: Dayjs | null | undefined) => {
+                  const end = getFieldValue('commissioning_date') as Dayjs | null | undefined;
+                  if (value && end && value.isAfter(end, 'day')) {
+                    return Promise.reject(new Error('Не позже даты ввода'));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
+          >
+            <DatePicker format="DD.MM.YYYY" placeholder="Необязательно" />
+          </Form.Item>
+          <Form.Item
+            name="commissioning_date"
+            label="Ввод: по / дата ввода"
+            dependencies={['commissioning_start_date']}
+            rules={[
+              ({ getFieldValue }) => ({
+                validator: (_rule, value: Dayjs | null | undefined) => {
+                  const start = getFieldValue('commissioning_start_date') as Dayjs | null | undefined;
+                  if (start && !value) {
+                    return Promise.reject(new Error('Укажите дату ввода'));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
+          >
+            <DatePicker format="DD.MM.YYYY" />
+          </Form.Item>
+        </div>
         <Form.Item label="Координаты" className={styles.lastItem}>
           <div className={styles.pickerActions}>
             <Button icon={<EnvironmentOutlined />} loading={searching} onClick={handleFindByAddress}>

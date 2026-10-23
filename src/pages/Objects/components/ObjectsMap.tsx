@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { FC } from 'react';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { theme as antdTheme } from 'antd';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useIsTabActive } from '../../../hooks/useIsTabActive';
 import type { IConstructionObject } from '../../../lib/types/types';
-import { formatArea, formatDate } from '../utils/format';
-import styles from '../Objects.module.css';
+import { createClusterGroup } from '../utils/clusterGroup';
+import { OBJECT_KIND_ORDER, getObjectKind } from '../utils/objectKind';
+import { MapLegend } from './MapLegend';
+import { createClusterIcon, createObjectMarker, getMarkerOptions } from './markerIcons';
+import { buildObjectPopup } from './objectPopup';
+import styles from './ObjectsMap.module.css';
 
 export interface IMapFocusRequest {
   id: string;
@@ -18,6 +22,8 @@ interface IObjectsMapProps {
   /** Объекты текущего фильтра (без координат на карте не рисуются). */
   objects: IConstructionObject[];
   selectedId: string | null;
+  /** Карточка под курсором — маркер подсвечивается. */
+  hoveredId: string | null;
   /** Запрос из списка: подлететь к маркеру и открыть попап. */
   focus: IMapFocusRequest | null;
   onSelect: (id: string) => void;
@@ -29,67 +35,48 @@ const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 const DEFAULT_CENTER: L.LatLngTuple = [55.75, 37.62];
 const FOCUS_ZOOM = 15;
+/** Через сколько «раскрыть» кластер вручную, если приближение к маркеру не помогло. */
+const REVEAL_FALLBACK_MS = 1200;
 
-const buildPopup = (o: IConstructionObject): HTMLElement => {
-  const root = document.createElement('div');
-  root.className = styles.popup;
-  const add = (cls: string, text: string) => {
-    const el = document.createElement('div');
-    el.className = cls;
-    el.textContent = text;
-    root.appendChild(el);
-  };
-  add(styles.popupName, o.name);
-  add(styles.popupRow, formatArea(o.area));
-  add(styles.popupRow, o.address);
-  if (o.commissioning_date) add(styles.popupRow, `Дата ввода: ${formatDate(o.commissioning_date)}`);
-  if (o.project_name) add(styles.popupRow, `Договор: ${o.project_name}`);
-  return root;
-};
+const hasCoords = (o: IConstructionObject): boolean => o.latitude !== null && o.longitude !== null;
 
-export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, focus, onSelect }) => {
+export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, hoveredId, focus, onSelect }) => {
   const { theme } = useTheme();
-  const { token } = antdTheme.useToken();
   const isTabActive = useIsTabActive();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const layerRef = useRef<L.LayerGroup | null>(null);
-  const markersRef = useRef<Map<string, L.CircleMarker>>(new Map());
-  const objectsByIdRef = useRef<Map<string, IConstructionObject>>(new Map());
+  const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
+  const markersRef = useRef<Map<string, L.Marker>>(new Map());
+  const hoveredClusterRef = useRef<HTMLElement | null>(null);
+  const revealTimerRef = useRef<number | null>(null);
   const boundsRef = useRef<L.LatLngBounds | null>(null);
   const idsKeyRef = useRef<string>('');
   const needFitRef = useRef(false);
 
   const onSelectRef = useRef(onSelect);
   const selectedIdRef = useRef(selectedId);
-  const colorsRef = useRef({
-    current: token.colorPrimary,
-    archive: token.colorInfo,
-    ring: token.colorBgContainer,
-    selectedRing: token.colorText,
-  });
+  const hoveredIdRef = useRef(hoveredId);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
     selectedIdRef.current = selectedId;
-    colorsRef.current = {
-      current: token.colorPrimary,
-      archive: token.colorInfo,
-      ring: token.colorBgContainer,
-      selectedRing: token.colorText,
-    };
+    hoveredIdRef.current = hoveredId;
   });
 
-  const styleFor = useCallback((o: IConstructionObject, selected: boolean): L.CircleMarkerOptions => {
-    const c = colorsRef.current;
-    return {
-      radius: selected ? 11 : 8,
-      color: selected ? c.selectedRing : c.ring,
-      weight: selected ? 3 : 2,
-      fillColor: o.status === 'current' ? c.current : c.archive,
-      fillOpacity: 0.95,
-    };
+  /** Типы объектов на карте — для легенды. */
+  const kinds = useMemo(() => {
+    const present = new Set(objects.filter(hasCoords).map((o) => getObjectKind(o.name)));
+    return OBJECT_KIND_ORDER.filter((kind) => present.has(kind));
+  }, [objects]);
+
+  /** Класс «выбран / под курсором» — на DOM-элементе маркера (он пересоздаётся при выходе из кластера). */
+  const applyMarkerState = useCallback((marker: L.Marker) => {
+    const element = marker.getElement();
+    if (!element) return;
+    const { objectId } = getMarkerOptions(marker);
+    element.classList.toggle(styles.pinSelected, objectId === selectedIdRef.current);
+    element.classList.toggle(styles.pinHover, objectId === hoveredIdRef.current);
   }, []);
 
   /** Подгоняет вид под маркеры. Ждёт, пока контейнер получит размер (вкладка могла быть скрыта). */
@@ -110,10 +97,20 @@ export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, focus, o
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return undefined;
-    const map = L.map(el, { scrollWheelZoom: true, zoomControl: true }).setView(DEFAULT_CENTER, 9);
+    const map = L.map(el, { scrollWheelZoom: true, zoomControl: false }).setView(DEFAULT_CENTER, 9);
+    // Масштаб справа внизу: сверху остаётся место под попап, слева внизу — легенда.
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
     L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION }).addTo(map);
     map.attributionControl.setPrefix(LEAFLET_PREFIX);
-    layerRef.current = L.layerGroup().addTo(map);
+    const cluster = createClusterGroup({
+      showCoverageOnHover: false,
+      maxClusterRadius: 48,
+      animate: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      iconCreateFunction: createClusterIcon,
+      spiderLegPolylineOptions: { className: styles.spiderLeg, weight: 1.5 },
+    });
+    map.addLayer(cluster);
+    clusterRef.current = cluster;
     mapRef.current = map;
     const markers = markersRef.current;
     needFitRef.current = true; // новая карта (в т.ч. повторный монтаж в StrictMode) — подогнать вид
@@ -127,33 +124,39 @@ export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, focus, o
 
     return () => {
       observer.disconnect();
+      if (revealTimerRef.current !== null) window.clearTimeout(revealTimerRef.current);
       map.remove();
       mapRef.current = null;
-      layerRef.current = null;
+      clusterRef.current = null;
       markers.clear();
     };
   }, [tryFit]);
 
-  // Перестроение маркеров при смене объектов/цветов темы.
+  // Перестроение маркеров при смене набора объектов.
   useEffect(() => {
-    const layer = layerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
+    const cluster = clusterRef.current;
+    if (!cluster) return;
+    cluster.clearLayers();
     markersRef.current.clear();
-    objectsByIdRef.current.clear();
 
     const points: L.LatLngTuple[] = [];
+    const markers: L.Marker[] = [];
     for (const o of objects) {
       if (o.latitude === null || o.longitude === null) continue;
       const latlng: L.LatLngTuple = [o.latitude, o.longitude];
       points.push(latlng);
-      const marker = L.circleMarker(latlng, styleFor(o, o.id === selectedIdRef.current));
-      marker.bindPopup(() => buildPopup(o));
+      const marker = createObjectMarker(o, latlng);
+      marker.bindPopup(() => buildObjectPopup(o), {
+        minWidth: 240,
+        maxWidth: 300, // влезает в карту шириной 360 px
+        autoPanPadding: [16, 16],
+      });
       marker.on('click', () => onSelectRef.current(o.id));
-      marker.addTo(layer);
+      marker.on('add', () => applyMarkerState(marker));
+      markers.push(marker);
       markersRef.current.set(o.id, marker);
-      objectsByIdRef.current.set(o.id, o);
     }
+    cluster.addLayers(markers);
 
     // Переподгонять вид только когда изменился набор видимых объектов (фильтр/поиск/загрузка),
     // а не после правки соседнего объекта или смены темы.
@@ -164,18 +167,28 @@ export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, focus, o
     }
     boundsRef.current = points.length > 0 ? L.latLngBounds(points) : null;
     tryFit();
-  }, [objects, token.colorPrimary, token.colorInfo, token.colorBgContainer, token.colorText, styleFor, tryFit]);
+  }, [objects, applyMarkerState, tryFit]);
 
-  // Подсветка выбранного маркера.
+  // Выбранный и подсвеченный маркер: крупнее, с кольцом, поверх соседей.
   useEffect(() => {
+    const cluster = clusterRef.current;
     markersRef.current.forEach((marker, id) => {
-      const o = objectsByIdRef.current.get(id);
-      if (!o) return;
-      const selected = id === selectedId;
-      marker.setStyle(styleFor(o, selected));
-      if (selected) marker.bringToFront();
+      applyMarkerState(marker);
+      marker.setZIndexOffset(id === selectedId ? 1000 : id === hoveredId ? 500 : 0);
     });
-  }, [selectedId, styleFor]);
+    // Маркер спрятан в кластере — подсвечиваем сам кластер.
+    hoveredClusterRef.current?.classList.remove(styles.clusterHover);
+    hoveredClusterRef.current = null;
+    const hovered = hoveredId ? markersRef.current.get(hoveredId) : undefined;
+    if (cluster && hovered) {
+      const parent = cluster.getVisibleParent(hovered);
+      const element = parent && parent !== hovered ? parent.getElement() : undefined;
+      if (element) {
+        element.classList.add(styles.clusterHover);
+        hoveredClusterRef.current = element;
+      }
+    }
+  }, [selectedId, hoveredId, applyMarkerState]);
 
   // Вкладка keep-alive скрыта display:none → при показе пересчитать размер и подогнать вид.
   useEffect(() => {
@@ -187,20 +200,40 @@ export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, focus, o
     return () => window.cancelAnimationFrame(frame);
   }, [isTabActive, tryFit]);
 
-  // Клик по строке списка: подлететь к маркеру и открыть попап.
+  // Клик по карточке: подлететь к маркеру (выйти из кластера) и открыть попап.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !focus) return;
+    const cluster = clusterRef.current;
+    if (!map || !cluster || !focus) return;
     const marker = markersRef.current.get(focus.id);
     if (!marker) return;
+    if (revealTimerRef.current !== null) window.clearTimeout(revealTimerRef.current);
+
+    let opened = false;
+    const open = () => {
+      if (opened) return;
+      opened = true;
+      marker.openPopup();
+    };
+    const reveal = () => {
+      cluster.zoomToShowLayer(marker, open);
+      // Совпадающие координаты: на максимальном зуме кластер сам не разойдётся — раскрываем веером.
+      revealTimerRef.current = window.setTimeout(() => {
+        if (opened) return;
+        const parent = cluster.getVisibleParent(marker);
+        if (parent !== marker) (parent as L.MarkerCluster).spiderfy();
+        open();
+      }, REVEAL_FALLBACK_MS);
+    };
+
     const target = marker.getLatLng();
     const zoom = Math.max(map.getZoom(), FOCUS_ZOOM);
-    // flyTo в ту же точку с тем же зумом даёт NaN-кадры в Leaflet — просто открываем попап.
+    // flyTo в ту же точку с тем же зумом даёт NaN-кадры в Leaflet — сразу раскрываем.
     if (map.getZoom() === zoom && map.getCenter().distanceTo(target) < 1) {
-      marker.openPopup();
+      reveal();
       return;
     }
-    map.once('moveend', () => marker.openPopup());
+    map.once('moveend', reveal);
     map.flyTo(target, zoom, { duration: 0.8 });
   }, [focus]);
 
@@ -209,16 +242,7 @@ export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, focus, o
       <div className={`${styles.mapRoot} ${theme === 'dark' ? styles.dark : ''}`}>
         <div ref={containerRef} className={styles.mapCanvas} />
       </div>
-      <div className={styles.legend}>
-        <div className={styles.legendItem}>
-          <span className={`${styles.legendDot} ${styles.dotCurrent}`} />
-          Текущие
-        </div>
-        <div className={styles.legendItem}>
-          <span className={`${styles.legendDot} ${styles.dotArchive}`} />
-          Построенные
-        </div>
-      </div>
+      <MapLegend kinds={kinds} />
     </>
   );
 };

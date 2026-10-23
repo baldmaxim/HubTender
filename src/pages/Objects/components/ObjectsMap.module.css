@@ -1,0 +1,425 @@
+/* Цвета приходят из токенов antd через CSS-переменные --obj-* (см. utils/cssVars.ts). */
+
+.mapRoot {
+  position: absolute;
+  inset: 0;
+  background: var(--obj-bg);
+}
+
+.mapCanvas {
+  width: 100%;
+  height: 100%;
+}
+
+.mapRoot :global(.leaflet-container) {
+  width: 100%;
+  height: 100%;
+  font: inherit;
+  background: var(--obj-bg);
+  touch-action: manipulation;
+}
+
+.dark :global(.leaflet-tile-pane) {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+
+/* ── Элементы управления в цветах темы ── */
+.mapRoot :global(.leaflet-bar) {
+  border: 1px solid var(--obj-border-strong);
+  border-radius: 10px;
+  box-shadow: var(--obj-shadow);
+}
+
+.mapRoot :global(.leaflet-bar a) {
+  color: var(--obj-text);
+  background: var(--obj-bg-elevated);
+  border-bottom-color: var(--obj-border);
+}
+
+.mapRoot :global(.leaflet-bar a:hover),
+.mapRoot :global(.leaflet-bar a:focus-visible) {
+  color: var(--obj-text);
+  background: var(--obj-selected-bg);
+}
+
+.mapRoot :global(.leaflet-control-attribution) {
+  color: var(--obj-muted);
+  background: var(--obj-bg-elevated);
+  opacity: 0.88;
+}
+
+.mapRoot :global(.leaflet-control-attribution a) {
+  color: var(--obj-text);
+}
+
+/* ── Попап — мини-карточка объекта ── */
+.mapRoot :global(.leaflet-popup-content-wrapper) {
+  padding: 0;
+  overflow: hidden;
+  color: var(--obj-text);
+  background: var(--obj-bg-elevated);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 30%);
+}
+
+.mapRoot :global(.leaflet-popup-tip) {
+  background: var(--obj-bg-elevated);
+}
+
+.mapRoot :global(.leaflet-popup-content) {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.mapRoot :global(.leaflet-container a.leaflet-popup-close-button) {
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  font-size: 22px;
+  line-height: 26px;
+  color: var(--obj-muted);
+  text-align: center;
+  border-radius: 8px;
+}
+
+.mapRoot :global(.leaflet-container a.leaflet-popup-close-button:hover) {
+  color: var(--obj-text);
+  background: var(--obj-fill-strong);
+}
+
+.popup {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 16px;
+  overflow-wrap: anywhere;
+}
+
+/* Обложка на всю ширину попапа; высота зарезервирована, поэтому загрузка не двигает попап. */
+.popupCover {
+  position: relative;
+  margin: -14px -16px 2px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: var(--obj-fill-strong);
+}
+
+.popupCoverImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: popup-cover-in 0.2s ease-out;
+}
+
+/* Кнопка закрытия поверх фото должна читаться на любом снимке. */
+.mapRoot :global(.leaflet-popup):has(.popupCover) :global(.leaflet-popup-close-button) {
+  color: var(--obj-text);
+  background: var(--obj-bg-elevated);
+}
+
+@keyframes popup-cover-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popupCoverImg {
+    animation: none;
+  }
+}
+
+.popupHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 28px;
+}
+
+.popupTile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--obj-text);
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+
+.tileCurrent {
+  background: var(--obj-current-bg);
+  border-color: var(--obj-current-border);
+}
+
+.tileArchive {
+  background: var(--obj-archive-bg);
+  border-color: var(--obj-archive-border);
+}
+
+.popupCaption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.popupKind {
+  font-size: 12px;
+  color: var(--obj-muted);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--obj-text);
+  white-space: nowrap;
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+
+.chipDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.chipCurrent {
+  background: var(--obj-current-bg);
+  border-color: var(--obj-current-border);
+}
+
+.chipCurrent .chipDot {
+  background: var(--obj-current);
+}
+
+.chipArchive {
+  background: var(--obj-archive-bg);
+  border-color: var(--obj-archive-border);
+}
+
+.chipArchive .chipDot {
+  background: var(--obj-archive);
+}
+
+.popupName {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.popupArea {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.popupRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--obj-muted);
+}
+
+.popupRowIcon {
+  display: flex;
+  flex: none;
+  margin-top: 2px;
+}
+
+.popupRowText {
+  min-width: 0;
+}
+
+/* ── Маркеры-капли ── */
+.pinIcon {
+  background: none;
+  border: 0;
+  outline: none;
+}
+
+.pinWrap {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 35%));
+  transition: transform 0.2s ease-out;
+  transform-origin: 50% 100%;
+}
+
+.pinSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.pinBody {
+  stroke: var(--obj-bg-elevated);
+  stroke-width: 1.5;
+  transition: stroke 0.2s ease-out;
+}
+
+.pinCurrent .pinBody {
+  fill: var(--obj-current);
+}
+
+.pinArchive .pinBody {
+  fill: var(--obj-archive);
+}
+
+.pinDisc {
+  fill: var(--obj-bg-elevated);
+}
+
+.pinGlyph {
+  color: var(--obj-text);
+}
+
+.pinHover .pinWrap {
+  transform: scale(1.14);
+}
+
+.pinSelected .pinWrap {
+  transform: scale(1.32);
+}
+
+.pinSelected .pinBody,
+.pinIcon:focus-visible .pinBody {
+  stroke: var(--obj-text);
+  stroke-width: 2.6;
+}
+
+/* ── Кластеры: кольцо «в работе / построено», в центре число ── */
+.clusterIcon {
+  background: none;
+  border: 0;
+  outline: none;
+}
+
+.cluster {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+  background: conic-gradient(var(--obj-current) 0 var(--share), var(--obj-archive) 0);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 35%);
+  transition: transform 0.2s ease-out;
+}
+
+.clusterCount {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--obj-text);
+  background: var(--obj-bg-elevated);
+  border-radius: 50%;
+  font-variant-numeric: tabular-nums;
+}
+
+.clusterHover .cluster {
+  transform: scale(1.14);
+}
+
+.spiderLeg {
+  stroke: var(--obj-text);
+  stroke-opacity: 0.55;
+}
+
+/* ── Легенда ── */
+.legend {
+  position: absolute;
+  bottom: 26px;
+  left: 8px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+  max-width: calc(100% - 66px);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--obj-text);
+  pointer-events: none;
+  background: var(--obj-bg-elevated);
+  border: 1px solid var(--obj-border);
+  border-radius: 10px;
+  box-shadow: var(--obj-shadow);
+  opacity: 0.96;
+}
+
+.legendRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dotCurrent {
+  background: var(--obj-current);
+}
+
+.dotArchive {
+  background: var(--obj-archive);
+}
+
+/* Телефон: карта невысокая — в легенде только статусы, типы видны в карточках. */
+@media (max-width: 767px) {
+  .legendRow + .legendRow {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .mapRoot :global(.leaflet-bar a) {
+    width: 44px;
+    height: 44px;
+    line-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mapRoot :global(.leaflet-zoom-animated),
+  .mapRoot :global(.leaflet-fade-anim),
+  .mapRoot :global(.leaflet-marker-icon),
+  .pinWrap,
+  .pinBody,
+  .cluster {
+    transition: none !important;
+    animation: none !important;
+  }
+}

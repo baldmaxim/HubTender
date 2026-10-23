@@ -1178,6 +1178,8 @@ CREATE TABLE IF NOT EXISTS public.construction_objects (
     status text NOT NULL DEFAULT 'archive',
     project_id uuid,
     commissioning_date date,
+    customer text,
+    commissioning_start_date date,
     sort_order integer NOT NULL DEFAULT 0,
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -1193,6 +1195,36 @@ COMMENT ON COLUMN public.construction_objects.project_id IS 'Связанный 
 COMMENT ON COLUMN public.construction_objects.commissioning_date IS 'Дата ввода в эксплуатацию';
 COMMENT ON COLUMN public.construction_objects.sort_order IS 'Порядок в списке внутри статуса';
 COMMENT ON COLUMN public.construction_objects.created_by IS 'Пользователь, создавший запись';
+
+-- Фотографии объектов строительства, байты в БД
+-- (см. 2026_10_construction_object_photos.sql).
+CREATE TABLE IF NOT EXISTS public.construction_object_photos (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    object_id uuid NOT NULL,
+    mime text NOT NULL,
+    content bytea NOT NULL,
+    thumb_mime text NOT NULL,
+    thumb bytea NOT NULL,
+    width integer NOT NULL,
+    height integer NOT NULL,
+    size_bytes integer NOT NULL,
+    caption text,
+    sort_order integer NOT NULL DEFAULT 0,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    created_by uuid
+);
+COMMENT ON TABLE public.construction_object_photos IS 'Фотографии объектов строительства (байты в БД)';
+COMMENT ON COLUMN public.construction_object_photos.object_id IS 'Объект (construction_objects); при удалении объекта фото удаляются';
+COMMENT ON COLUMN public.construction_object_photos.mime IS 'Тип полного изображения: jpeg, webp или png';
+COMMENT ON COLUMN public.construction_object_photos.content IS 'Полное изображение (сжато браузером, до 1,5 МБ)';
+COMMENT ON COLUMN public.construction_object_photos.thumb_mime IS 'Тип миниатюры: jpeg, webp или png';
+COMMENT ON COLUMN public.construction_object_photos.thumb IS 'Миниатюра (до 200 КБ)';
+COMMENT ON COLUMN public.construction_object_photos.width IS 'Ширина полного изображения, px';
+COMMENT ON COLUMN public.construction_object_photos.height IS 'Высота полного изображения, px';
+COMMENT ON COLUMN public.construction_object_photos.size_bytes IS 'Размер полного изображения, байт';
+COMMENT ON COLUMN public.construction_object_photos.caption IS 'Подпись к фото (необязательна)';
+COMMENT ON COLUMN public.construction_object_photos.sort_order IS 'Порядок фото внутри объекта (первое — обложка)';
+COMMENT ON COLUMN public.construction_object_photos.created_by IS 'Пользователь, загрузивший фото';
 
 -- Просмотры страниц портала для статистики использования
 -- (см. 2026_10_page_views.sql).

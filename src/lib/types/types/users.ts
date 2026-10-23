@@ -189,7 +189,7 @@ export const PAGE_LABELS: Record<string, string> = {
 export const PAGES_STRUCTURE = [
   {
     title: null, // Без группы
-    pages: ['/dashboard', '/positions'],
+    pages: ['/objects', '/dashboard', '/positions'],
   },
   {
     title: 'Данные по тендерам',
@@ -213,7 +213,7 @@ export const PAGES_STRUCTURE = [
   },
   {
     title: 'Аналитика',
-    pages: ['/costs', '/analytics/comparison', '/bsm', '/projects', '/objects'],
+    pages: ['/costs', '/analytics/comparison', '/bsm', '/projects'],
   },
   {
     title: 'Администрирование',

@@ -1,160 +1,111 @@
-import type { FC } from 'react';
-import { Button, Empty, Popconfirm, Space, Table, Tooltip } from 'antd';
-import type { TableColumnsType } from 'antd';
-import { DeleteOutlined, EditOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { useMemo } from 'react';
+import type { FC, ReactNode } from 'react';
+import { Skeleton } from 'antd';
 import type { IConstructionObject } from '../../../lib/types/types';
-import { formatArea, formatAreaValue, formatDate } from '../utils/format';
-import styles from '../Objects.module.css';
+import { Glyph } from './Glyph';
+import { ObjectCard } from './ObjectCard';
+import styles from './ObjectCard.module.css';
 
 interface IObjectsListProps {
   objects: IConstructionObject[];
   selectedId: string | null;
   loading: boolean;
-  /** Телефон: карточки вместо таблицы (на телефоне правка недоступна — как на «Текущих объектах»). */
-  cards: boolean;
   readOnly: boolean;
-  /** Контейнер со скроллом (десктоп) — для залипающей шапки таблицы. */
-  scrollContainer: HTMLElement | null;
   onSelect: (id: string) => void;
+  onHover: (id: string | null) => void;
   onEdit: (item: IConstructionObject) => void;
+  onPhotos: (item: IConstructionObject) => void;
   onDelete: (item: IConstructionObject) => Promise<void>;
 }
 
-const hasCoords = (o: IConstructionObject): boolean => o.latitude !== null && o.longitude !== null;
+const SKELETON_COUNT = 6;
 
-const NoMapMark: FC = () => (
-  <Tooltip title="Нет на карте">
-    <EyeInvisibleOutlined className={styles.noMapIcon} aria-label="Нет на карте" />
-  </Tooltip>
+/** Заглушка загрузки в форме карточек. */
+export const ObjectsListSkeleton: FC = () => (
+  <div className={styles.grid} aria-busy="true">
+    {Array.from({ length: SKELETON_COUNT }, (_, i) => (
+      <div key={i} className={`${styles.card} ${styles.cardSkeleton}`}>
+        <Skeleton active avatar={{ shape: 'square', size: 40 }} paragraph={{ rows: 3 }} title={false} />
+      </div>
+    ))}
+  </div>
+);
+
+const EmptyState: FC = () => (
+  <div className={styles.empty}>
+    <span className={styles.emptyIcon}>
+      <Glyph name="mapOff" size={28} />
+    </span>
+    <div className={styles.emptyTitle}>Объектов не найдено</div>
+    <div className={styles.emptyHint}>Измените фильтр или строку поиска.</div>
+  </div>
+);
+
+interface ISectionProps {
+  title: string;
+  status: 'current' | 'archive';
+  count: number;
+  children: ReactNode;
+}
+
+const Section: FC<ISectionProps> = ({ title, status, count, children }) => (
+  <section className={styles.section}>
+    <div className={styles.sectionHead}>
+      <i className={`${styles.sectionDot} ${status === 'current' ? styles.dotCurrent : styles.dotArchive}`} />
+      <h2 className={styles.sectionTitle}>{title}</h2>
+      <span className={styles.sectionCount}>{count}</span>
+    </div>
+    <div className={styles.grid}>{children}</div>
+  </section>
 );
 
 export const ObjectsList: FC<IObjectsListProps> = ({
   objects,
   selectedId,
   loading,
-  cards,
   readOnly,
-  scrollContainer,
   onSelect,
+  onHover,
   onEdit,
+  onPhotos,
   onDelete,
 }) => {
-  if (cards) {
-    if (objects.length === 0) return <Empty description="Нет объектов" />;
-    return (
-      <div className={styles.cards}>
-        {objects.map((o, index) => (
-          <div
-            key={o.id}
-            data-row-key={o.id}
-            role="button"
-            tabIndex={0}
-            className={`${styles.card} ${o.id === selectedId ? styles.cardSelected : ''}`}
-            onClick={() => onSelect(o.id)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onSelect(o.id);
-            }}
-          >
-            <div className={styles.cardName}>
-              {!hasCoords(o) && <NoMapMark />}
-              {index + 1}. {o.name}
-            </div>
-            <div className={styles.cardMeta}>{formatArea(o.area)}</div>
-            <div className={styles.cardMeta}>{o.address}</div>
-            {o.commissioning_date && (
-              <div className={styles.cardMeta}>Дата ввода: {formatDate(o.commissioning_date)}</div>
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  }
+  const { current, archive } = useMemo(
+    () => ({
+      current: objects.filter((o) => o.status === 'current'),
+      archive: objects.filter((o) => o.status === 'archive'),
+    }),
+    [objects],
+  );
 
-  const columns: TableColumnsType<IConstructionObject> = [
-    {
-      title: '№',
-      key: 'index',
-      width: 44,
-      render: (_v, _o, index) => index + 1,
-    },
-    {
-      title: 'Название',
-      dataIndex: 'name',
-      key: 'name',
-      render: (name: string, o) => (
-        <span>
-          {!hasCoords(o) && <NoMapMark />}
-          {name}
-        </span>
-      ),
-    },
-    {
-      title: 'Площадь, м²',
-      dataIndex: 'area',
-      key: 'area',
-      width: 104,
-      align: 'right',
-      render: (area: number | null) => formatAreaValue(area),
-    },
-    {
-      title: 'Адрес',
-      dataIndex: 'address',
-      key: 'address',
-    },
-  ];
+  if (objects.length === 0) return loading ? <ObjectsListSkeleton /> : <EmptyState />;
 
-  // Даты ввода пока не заполнены — колонку показываем, когда появится хотя бы одна.
-  if (objects.some((o) => o.commissioning_date)) {
-    columns.push({
-      title: 'Дата ввода',
-      dataIndex: 'commissioning_date',
-      key: 'commissioning_date',
-      width: 100,
-      render: (value: string | null) => formatDate(value),
-    });
-  }
-
-  if (!readOnly) {
-    columns.push({
-      title: '',
-      key: 'actions',
-      width: 76,
-      render: (_v, o) => (
-        <Space size={4} onClick={(e) => e.stopPropagation()}>
-          <Button
-            type="text"
-            size="small"
-            icon={<EditOutlined />}
-            aria-label="Изменить"
-            onClick={() => onEdit(o)}
-          />
-          <Popconfirm
-            title="Удалить объект?"
-            description={o.name}
-            okText="Удалить"
-            cancelText="Отмена"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => onDelete(o)}
-          >
-            <Button type="text" size="small" danger icon={<DeleteOutlined />} aria-label="Удалить" />
-          </Popconfirm>
-        </Space>
-      ),
-    });
-  }
+  const renderCard = (o: IConstructionObject) => (
+    <ObjectCard
+      key={o.id}
+      object={o}
+      selected={o.id === selectedId}
+      readOnly={readOnly}
+      onSelect={onSelect}
+      onHover={onHover}
+      onEdit={onEdit}
+      onPhotos={onPhotos}
+      onDelete={onDelete}
+    />
+  );
 
   return (
-    <Table<IConstructionObject>
-      size="small"
-      rowKey="id"
-      loading={loading}
-      columns={columns}
-      dataSource={objects}
-      pagination={false}
-      sticky={scrollContainer ? { getContainer: () => scrollContainer } : false}
-      locale={{ emptyText: <Empty description="Нет объектов" /> }}
-      rowClassName={(o) => `${styles.row} ${o.id === selectedId ? styles.selectedRow : ''}`}
-      onRow={(o) => ({ onClick: () => onSelect(o.id) })}
-    />
+    <div className={styles.list}>
+      {current.length > 0 && (
+        <Section title="В работе" status="current" count={current.length}>
+          {current.map(renderCard)}
+        </Section>
+      )}
+      {archive.length > 0 && (
+        <Section title="Построенные" status="archive" count={archive.length}>
+          {archive.map(renderCard)}
+        </Section>
+      )}
+    </div>
   );
 };

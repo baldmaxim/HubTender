@@ -24,6 +24,8 @@ type FetchOptions = Omit<RequestInit, 'headers'> & {
    * Pass 0 to disable the timeout (e.g. long-running exports).
    */
   timeoutMs?: number;
+  /** Вернуть тело успешного ответа как Blob (картинки), а не JSON. */
+  asBlob?: boolean;
 };
 
 // Если Go BFF недоступен/висит, браузерный fetch по умолчанию ждёт десятки
@@ -48,12 +50,12 @@ export async function apiFetch<T>(
   path: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  const { cacheKey, timeoutMs, signal: callerSignal, ...rest } = options;
+  const { cacheKey, timeoutMs, asBlob, signal: callerSignal, ...rest } = options;
   const token = await getToken();
 
   const buildRequest = (bearer: string | null): { headers: Record<string, string>; signal: AbortSignal | undefined } => {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(rest.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...(rest.headers ?? {}),
     };
     if (bearer) headers['Authorization'] = `Bearer ${bearer}`;
@@ -155,6 +157,8 @@ export async function apiFetch<T>(
   }
 
   if (res.status === 204) return undefined as T;
+
+  if (asBlob) return (await res.blob()) as T;
 
   // Некоторые batch-эндпоинты Go BFF отвечают 201/200 с пустым телом.
   // res.json() на пустом body кидает SyntaxError — поэтому читаем как текст

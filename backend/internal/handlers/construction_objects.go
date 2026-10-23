@@ -42,11 +42,13 @@ type constructionObjectReq struct {
 	Name              string   `json:"name"`
 	Area              *float64 `json:"area"`
 	Address           string   `json:"address"`
+	Customer          *string  `json:"customer"`
 	Latitude          *float64 `json:"latitude"`
 	Longitude         *float64 `json:"longitude"`
 	Status            string   `json:"status"`
 	ProjectID         *string  `json:"project_id"`
 	CommissioningDate *string  `json:"commissioning_date"`
+	CommissioningFrom *string  `json:"commissioning_start_date"`
 }
 
 func isFinite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
@@ -63,6 +65,11 @@ func validateConstructionObjectInput(req constructionObjectReq) (repository.Cons
 	out.Address = strings.TrimSpace(req.Address)
 	if out.Address == "" {
 		return out, errors.New("address is required")
+	}
+	if req.Customer != nil {
+		if c := strings.TrimSpace(*req.Customer); c != "" {
+			out.Customer = &c
+		}
 	}
 	out.Status = strings.TrimSpace(req.Status)
 	if out.Status != "archive" && out.Status != "current" {
@@ -103,6 +110,16 @@ func validateConstructionObjectInput(req constructionObjectReq) (repository.Cons
 			return out, errors.New("commissioning_date must be YYYY-MM-DD")
 		}
 		out.CommissioningDate = &d
+	}
+	if req.CommissioningFrom != nil {
+		d := strings.TrimSpace(*req.CommissioningFrom)
+		if _, err := time.Parse("2006-01-02", d); err != nil {
+			return out, errors.New("commissioning_start_date must be YYYY-MM-DD")
+		}
+		if out.CommissioningDate == nil || d > *out.CommissioningDate {
+			return out, errors.New("commissioning_start_date requires commissioning_date not earlier than it")
+		}
+		out.CommissioningFrom = &d
 	}
 	return out, nil
 }

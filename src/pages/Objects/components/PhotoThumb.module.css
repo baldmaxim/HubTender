@@ -1,0 +1,62 @@
+/* Цвета — из --obj-* (задаются на корне страницы и в обёртке Drawer). */
+.box {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--obj-fill-strong);
+}
+
+.img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  animation: thumb-in 0.2s ease-out;
+}
+
+.skeleton {
+  position: absolute;
+  inset: 0;
+  background: var(--obj-fill);
+  animation: thumb-pulse 1.2s ease-in-out infinite;
+}
+
+.failed {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  color: var(--obj-muted);
+}
+
+@keyframes thumb-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes thumb-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .img,
+  .skeleton {
+    animation: none;
+  }
+}

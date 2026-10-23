@@ -33,6 +33,11 @@ import {
 /** Статическое дерево бокового меню. Фильтрация по правам/устройству — в MainLayout. */
 export const menuItems: NonNullable<MenuProps['items']> = [
   {
+    key: '/objects',
+    icon: <EnvironmentOutlined />,
+    label: 'Объекты на карте',
+  },
+  {
     key: '/dashboard',
     icon: <DashboardOutlined />,
     label: 'Дашборд',
@@ -172,11 +177,6 @@ export const menuItems: NonNullable<MenuProps['items']> = [
         key: '/projects',
         icon: <BuildOutlined />,
         label: 'Текущие объекты',
-      },
-      {
-        key: '/objects',
-        icon: <EnvironmentOutlined />,
-        label: 'Объекты на карте',
       },
     ],
   },
