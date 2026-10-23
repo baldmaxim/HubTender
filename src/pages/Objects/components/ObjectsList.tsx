@@ -25,7 +25,7 @@ export const ObjectsListSkeleton: FC = () => (
   <div className={styles.grid} aria-busy="true">
     {Array.from({ length: SKELETON_COUNT }, (_, i) => (
       <div key={i} className={`${styles.card} ${styles.cardSkeleton}`}>
-        <Skeleton active avatar={{ shape: 'square', size: 40 }} paragraph={{ rows: 3 }} title={false} />
+        <Skeleton active avatar={{ shape: 'square', size: 32 }} paragraph={{ rows: 2 }} title={false} />
       </div>
     ))}
   </div>

@@ -37,6 +37,17 @@
   flex: 1 1 100%;
 }
 
+.viewSwitch {
+  flex: 1 1 100%;
+}
+
+.viewSwitch :global(.ant-segmented-item-label) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .search {
   flex: 1 1 100%;
   min-width: 0;
@@ -128,6 +139,16 @@
   min-width: 0;
 }
 
+.listPane[hidden] {
+  display: none;
+}
+
+/* «Только карта»: список скрыт (карта остаётся в DOM), карта на высоту экрана. */
+.bodyMapOnly .mapPane {
+  height: calc(100dvh - 96px);
+  min-height: 320px;
+}
+
 /* ── Модалка ── */
 .form {
   margin-top: 16px;
@@ -206,7 +227,8 @@
     min-height: 44px;
   }
 
-  .filter :global(.ant-segmented-item-label) {
+  .filter :global(.ant-segmented-item-label),
+  .viewSwitch :global(.ant-segmented-item-label) {
     min-height: 40px;
     line-height: 40px;
   }
@@ -240,7 +262,8 @@
     justify-content: flex-end;
   }
 
-  .filter {
+  .filter,
+  .viewSwitch {
     flex: none;
   }
 
@@ -272,6 +295,12 @@
 
   .mapPane {
     flex: 0 0 50%;
+    height: auto;
+    min-height: 0;
+  }
+
+  .bodyMapOnly .mapPane {
+    flex: 1 1 100%;
     height: auto;
     min-height: 0;
   }

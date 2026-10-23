@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FC } from 'react';
+import type { FC, ReactNode } from 'react';
 import { Alert, Button, Input, Segmented, Typography, message, theme as antdTheme } from 'antd';
-import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import {
+  EnvironmentOutlined,
+  LayoutOutlined,
+  PlusOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import {
@@ -30,6 +35,23 @@ const FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: 'archive', label: 'Построенные' },
 ];
 
+type ViewMode = 'split' | 'map';
+
+const VIEW_MODE_KEY = 'objects_view_mode';
+
+const VIEW_OPTIONS: { value: ViewMode; label: string; icon: ReactNode }[] = [
+  { value: 'split', label: 'Карта и список', icon: <LayoutOutlined /> },
+  { value: 'map', label: 'Только карта', icon: <EnvironmentOutlined /> },
+];
+
+const readViewMode = (): ViewMode => {
+  try {
+    return window.localStorage.getItem(VIEW_MODE_KEY) === 'map' ? 'map' : 'split';
+  } catch {
+    return 'split';
+  }
+};
+
 const Objects: FC = () => {
   const { token } = antdTheme.useToken();
   const { user } = useAuth();
@@ -40,6 +62,7 @@ const Objects: FC = () => {
   const isSplit = useMediaQuery('(min-width: 1280px)');
 
   const { objects, loading, error, reload } = useConstructionObjects();
+  const [viewMode, setViewMode] = useState<ViewMode>(readViewMode);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -61,6 +84,17 @@ const Objects: FC = () => {
     );
   }, [objects, filter, search]);
 
+  const mapOnly = viewMode === 'map';
+
+  const handleViewMode = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    try {
+      window.localStorage.setItem(VIEW_MODE_KEY, mode);
+    } catch {
+      // хранилище недоступно — вид просто не запомнится
+    }
+  }, []);
+
   const stats = useMemo(() => getObjectsStats(filtered), [filtered]);
 
   // Клик по маркеру: подсветка и прокрутка списка к строке (только когда список — отдельная панель
@@ -68,11 +102,11 @@ const Objects: FC = () => {
   const handleMapSelect = useCallback((id: string) => setSelectedId(id), []);
 
   useEffect(() => {
-    if (!isSplit || !selectedId || !listPane) return;
+    if (!isSplit || mapOnly || !selectedId || !listPane) return;
     listPane
       .querySelector(`[data-row-key="${CSS.escape(selectedId)}"]`)
       ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [isSplit, selectedId, listPane]);
+  }, [isSplit, mapOnly, selectedId, listPane]);
 
   // Клик по карточке: карта летит к маркеру и открывает попап.
   const handleListSelect = useCallback(
@@ -80,9 +114,9 @@ const Objects: FC = () => {
       setSelectedId(id);
       setFocus((prev) => ({ id, nonce: (prev?.nonce ?? 0) + 1 }));
       // Карта над списком — вернуть её в видимую область.
-      if (!isSplit) mapPaneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (!isSplit && !mapOnly) mapPaneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     },
-    [isSplit],
+    [isSplit, mapOnly],
   );
 
   const handleAdd = () => {
@@ -149,6 +183,13 @@ const Objects: FC = () => {
             value={filter}
             onChange={setFilter}
           />
+          <Segmented<ViewMode>
+            className={styles.viewSwitch}
+            options={VIEW_OPTIONS}
+            value={viewMode}
+            onChange={handleViewMode}
+            aria-label="Вид страницы"
+          />
           <div className={styles.search}>
             <Input
               allowClear
@@ -182,7 +223,7 @@ const Objects: FC = () => {
         />
       )}
 
-      <div className={styles.body}>
+      <div className={`${styles.body} ${mapOnly ? styles.bodyMapOnly : ''}`}>
         <div ref={mapPaneRef} className={styles.mapPane}>
           <ObjectsMap
             objects={filtered}
@@ -192,7 +233,7 @@ const Objects: FC = () => {
             onSelect={handleMapSelect}
           />
         </div>
-        <div ref={setListPane} className={styles.listPane}>
+        <div ref={setListPane} className={styles.listPane} hidden={mapOnly}>
           {initialLoading ? (
             <ObjectsListSkeleton />
           ) : (
