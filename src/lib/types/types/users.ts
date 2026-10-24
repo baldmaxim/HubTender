@@ -85,12 +85,12 @@ export const ALL_PAGES = [
   '/costs',
   '/bsm',
   '/analytics/comparison',
-  '/analytics/quality',
-  '/analytics/price-benchmark',
-  '/analytics/price-sources',
-  '/analytics/action-plan',
-  '/analytics/change-impact',
-  '/analytics/review-pack',
+  // '/analytics/quality', // архив 23.10.2026
+  // '/analytics/price-benchmark', // архив 23.10.2026
+  // '/analytics/price-sources', // архив 23.10.2026
+  // '/analytics/action-plan', // архив 23.10.2026
+  // '/analytics/change-impact', // архив 23.10.2026
+  // '/analytics/review-pack', // архив 23.10.2026
   '/financial-indicators',
   '/projects',
   '/projects/:projectId',
@@ -176,12 +176,12 @@ export const PAGE_LABELS: Record<string, string> = {
   '/positions/:positionId/items': 'Работы и материалы',
   '/commerce': 'Форма КП', // Старый путь, оставлен для совместимости
   '/data-quality': 'Проверка данных',
-  '/analytics/quality': 'Качество расчёта',
-  '/analytics/price-benchmark': 'Ценовые отклонения',
-  '/analytics/price-sources': 'Источники цен',
-  '/analytics/action-plan': 'План действий',
-  '/analytics/change-impact': 'Изменения расчёта',
-  '/analytics/review-pack': 'Отчёт для проверки',
+  // '/analytics/quality': 'Качество расчёта', // архив 23.10.2026
+  // '/analytics/price-benchmark': 'Ценовые отклонения', // архив 23.10.2026
+  // '/analytics/price-sources': 'Источники цен', // архив 23.10.2026
+  // '/analytics/action-plan': 'План действий', // архив 23.10.2026
+  // '/analytics/change-impact': 'Изменения расчёта', // архив 23.10.2026
+  // '/analytics/review-pack': 'Отчёт для проверки', // архив 23.10.2026
   '/admin/ai-settings': 'AI и нейросети',
 };
 

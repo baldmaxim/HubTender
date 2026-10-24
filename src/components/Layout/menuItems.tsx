@@ -14,10 +14,6 @@ import {
   ClockCircleOutlined,
   BarChartOutlined,
   FundOutlined,
-  LinkOutlined,
-  OrderedListOutlined,
-  DiffOutlined,
-  FileExcelOutlined,
   LineChartOutlined,
   SwapOutlined,
   BuildOutlined,
@@ -128,36 +124,37 @@ export const menuItems: NonNullable<MenuProps['items']> = [
     icon: <FundOutlined />,
     label: 'Аналитика',
     children: [
-      {
-        key: '/analytics/quality',
-        icon: <SafetyCertificateOutlined />,
-        label: 'Качество расчёта',
-      },
-      {
-        key: '/analytics/price-benchmark',
-        icon: <FundOutlined />,
-        label: 'Ценовые отклонения',
-      },
-      {
-        key: '/analytics/price-sources',
-        icon: <LinkOutlined />,
-        label: 'Источники цен',
-      },
-      {
-        key: '/analytics/action-plan',
-        icon: <OrderedListOutlined />,
-        label: 'План действий',
-      },
-      {
-        key: '/analytics/change-impact',
-        icon: <DiffOutlined />,
-        label: 'Изменения расчёта',
-      },
-      {
-        key: '/analytics/review-pack',
-        icon: <FileExcelOutlined />,
-        label: 'Отчёт для проверки',
-      },
+      // В архиве с 23.10.2026: страницы не выданы ни одной роли. Код страниц и API сохранены — чтобы вернуть, раскомментировать.
+      // {
+      //   key: '/analytics/quality',
+      //   icon: <SafetyCertificateOutlined />,
+      //   label: 'Качество расчёта',
+      // },
+      // {
+      //   key: '/analytics/price-benchmark',
+      //   icon: <FundOutlined />,
+      //   label: 'Ценовые отклонения',
+      // },
+      // {
+      //   key: '/analytics/price-sources',
+      //   icon: <LinkOutlined />,
+      //   label: 'Источники цен',
+      // },
+      // {
+      //   key: '/analytics/action-plan',
+      //   icon: <OrderedListOutlined />,
+      //   label: 'План действий',
+      // },
+      // {
+      //   key: '/analytics/change-impact',
+      //   icon: <DiffOutlined />,
+      //   label: 'Изменения расчёта',
+      // },
+      // {
+      //   key: '/analytics/review-pack',
+      //   icon: <FileExcelOutlined />,
+      //   label: 'Отчёт для проверки',
+      // },
       {
         key: '/costs',
         icon: <DollarOutlined />,
