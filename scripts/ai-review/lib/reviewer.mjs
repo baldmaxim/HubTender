@@ -13,8 +13,8 @@ import { cacheKey, readCache, writeCache } from './cache.mjs';
 import { clipText } from './format.mjs';
 import { InvalidResponseError, LABEL_UNSURE, validateAnswer, validateRemarks } from './validate.mjs';
 
-const PER_FINDING_TOKENS = 200;
-const PER_POSITION_TOKENS = 300;
+const PER_FINDING_TOKENS = 400;
+const PER_POSITION_TOKENS = 500;
 const BASE_ANSWER_TOKENS = 1000;
 const THINK_RESERVE = 3000;
 const CONTEXT_RESERVE = 1024;
@@ -143,11 +143,9 @@ export const planLimits = (profile, system, think) => {
   };
 };
 
-const maxTokensFor = (profile, findingsCount, positionsCount, think) =>
-  Math.min(
-    profile.maxTokens,
-    PER_FINDING_TOKENS * findingsCount + PER_POSITION_TOKENS * positionsCount + BASE_ANSWER_TOKENS + (think ? THINK_RESERVE : 0),
-  );
+// Предел ответа — всегда потолок профиля: оценки PER_* только для нарезки пачек. Узкий предел
+// обрезал JSON (finish length), а деление пачки пополам сужало его ещё сильнее.
+const maxTokensFor = (profile) => profile.maxTokens;
 
 /** @returns {Assessment} */
 const failedAssessment = (findingId, status, reason, think) => ({
@@ -288,7 +286,7 @@ export const reviewPass = async ({
       ],
       schema: RESPONSE_SCHEMA,
       schemaName: 'finding_review',
-      maxTokens: maxTokensFor(profile, findingsCount, positionsCount, think),
+      maxTokens: maxTokensFor(profile),
       think,
     });
     usage.requests += 1;
@@ -305,11 +303,16 @@ export const reviewPass = async ({
     const count = batch.reduce((sum, it) => sum + it.findings.length, 0);
     for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
       const res = await chat(prepared, count, batch.length);
-      if (!res.json) continue;
+      const tokens = `выход ${res.usage?.completionTokens ?? '?'}, рассуждения ${res.usage?.reasoningTokens ?? 0}, max_tokens ${maxTokensFor(profile)}`;
+      if (!res.json) {
+        onProgress(`${profile.name}: ответ не разобран — ${res.parseError ?? 'нет JSON'} (finish ${res.finishReason ?? '?'}, ${tokens})`);
+        continue;
+      }
       try {
         return { prepared, rawRemarks: res.json?.remarks, ...validateAnswer(res.json, prepared, { knownBasis }) };
       } catch (err) {
         if (!(err instanceof InvalidResponseError)) throw err;
+        onProgress(`${profile.name}: ответ не прошёл проверку — ${err.message} (${tokens})`);
       }
     }
     return null;

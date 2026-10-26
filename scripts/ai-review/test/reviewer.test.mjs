@@ -85,7 +85,7 @@ test('пачка разобрана одним запросом; запрос у
     assert.match(body.messages[1].content, /^Данные позиций и находки:\n\nПравила:/);
     assert.equal(body.response_format.type, 'json_schema');
     assert.deepEqual(body.response_format.json_schema.schema, RESPONSE_SCHEMA);
-    assert.equal(body.max_tokens, 200 * 3 + 300 * 3 + 1000); // находки и позиции
+    assert.equal(body.max_tokens, profile.maxTokens); // всегда потолок профиля
     for (const n of [1, 2, 3]) {
       const a = results.get(`fnd-${n}`);
       assert.equal(a.status, 'ok');
@@ -259,8 +259,8 @@ test('think: заменяет unsure и крупнейших по |Δ|; без t
     const items = [mkItem(1), mkItem(2, { money: 5000 }), mkItem(3)];
     const { results, usage } = await reviewItems({ client, profile, ...COMMON, items, think: true });
     assert.equal(srv.calls.length, 2);
-    assert.equal(srv.calls[0].body.max_tokens, 200 * 3 + 300 * 3 + 1000);
-    assert.equal(srv.calls[1].body.max_tokens, 200 * 2 + 300 * 2 + 1000 + 3000);
+    assert.equal(srv.calls[0].body.max_tokens, profile.maxTokens);
+    assert.equal(srv.calls[1].body.max_tokens, profile.maxTokens);
     assert.deepEqual(findingsOf(srv.calls[1].body).map((f) => f.detail), ['без цены 1', 'без цены 2']);
     assert.equal(results.get('fnd-1').label, 'likely_ok');
     assert.equal(results.get('fnd-1').think, true);
@@ -312,13 +312,13 @@ test('selectThinkTargets: сбойные не берутся, 20 крупней�
 test('planLimits: бюджет, maxFindings, мало контекста', () => {
   const p = makeProfile('http://x', { contextTokens: 16384, maxTokens: 8192, batchFindings: 60 });
   const plain = planLimits(p, 'abc', false);
-  assert.equal(plain.maxFindings, 35); // floor((8192 − 1000) / 200)
-  assert.equal(plain.perFindingTokens, 200);
-  assert.equal(plain.perPositionTokens, 300);
+  assert.equal(plain.maxFindings, 17); // floor((8192 − 1000) / 400)
+  assert.equal(plain.perFindingTokens, 400);
+  assert.equal(plain.perPositionTokens, 500);
   assert.equal(plain.maxAnswerTokens, 8192 - 1000);
   assert.ok(plain.budgetTokens > 15000 && plain.budgetTokens < 16384 - 1024 + 1);
   const think = planLimits(p, 'abc', true);
-  assert.equal(think.maxFindings, 20); // (8192 − 4000) / 200 = 20,96
+  assert.equal(think.maxFindings, 10); // (8192 − 4000) / 400 = 10,48
   assert.equal(plain.budgetTokens - think.budgetTokens, 3000);
   assert.equal(think.maxAnswerTokens, 8192 - 1000 - 3000);
   assert.equal(planLimits({ ...p, batchFindings: 5 }, 'abc', false).maxFindings, 5);
@@ -383,7 +383,7 @@ test('замечания: из ответа на пачку, для позици
     const items = [mkItem(1), mkBare(2), mkBare(3)];
     const { results, remarks, usage } = await reviewPass({ client, profile, ...COMMON, ...REMARK_OPTS, items });
     assert.equal(srv.calls.length, 1);
-    assert.equal(srv.calls[0].body.max_tokens, 200 * 1 + 300 * 3 + 1000);
+    assert.equal(srv.calls[0].body.max_tokens, profile.maxTokens);
     assert.equal(srv.calls[0].body.messages[1].content.split('findings:').length - 1, 1); // у p2 и p3 строки findings: нет
     assert.equal(results.size, 1);
     assert.deepEqual([...remarks.keys()], ['pos-1', 'pos-2']);
