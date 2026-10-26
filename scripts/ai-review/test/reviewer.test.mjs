@@ -580,8 +580,8 @@ test('think: замечания берутся только из первого 
 test('prepareSystem: типы замечаний идут в промпт всегда, remarkCodes — активные remark', async () => {
   const skills = await import('../lib/skills.mjs');
   const { system, remarkCodes } = prepareSystem({ ruleCodes: [], skills });
-  assert.deepEqual([...remarkCodes], ['AI-001', 'AI-002', 'AI-003', 'AI-004']);
-  assert.equal((system.match(/^### AI-\d{3} · /gm) ?? []).length, 4);
+  assert.deepEqual([...remarkCodes], ['AI-001', 'AI-002', 'AI-003', 'AI-004', 'AI-005']);
+  assert.equal((system.match(/^### AI-\d{3} · /gm) ?? []).length, 5);
   assert.match(system, /## Свои замечания/);
   assert.match(system, /У части позиций находок нет/);
   // снятая запись не попадает в remarkCodes

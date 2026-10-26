@@ -324,10 +324,10 @@ test('loadSkills: временный файл — записи и rev из 7 hex
   }
 });
 
-test('настоящий AI-SKILLS.md разбирается; четыре стартовых типа замечаний AI-001…AI-004 уходят в промпт', () => {
+test('настоящий AI-SKILLS.md разбирается; типы замечаний AI-001…AI-005 уходят в промпт', () => {
   const { entries } = loadSkills();
   const remarks = entries.filter((e) => e.kind === 'remark');
-  assert.deepEqual(remarks.map((e) => e.code), ['AI-001', 'AI-002', 'AI-003', 'AI-004']);
+  assert.deepEqual(remarks.map((e) => e.code), ['AI-001', 'AI-002', 'AI-003', 'AI-004', 'AI-005']);
   assert.ok(remarks.every((e) => e.status === 'active' && e.auto === 'no' && e.rule === null));
   for (const e of remarks) {
     assert.match(e.body, /^\*\*Признак:\*\*/);
@@ -335,6 +335,6 @@ test('настоящий AI-SKILLS.md разбирается; четыре ст�
     assert.match(e.body, /\*\*Как проверить:\*\*/);
   }
   const text = renderSkillsForPrompt(entries, [], { includeRemarks: true });
-  assert.equal((text.match(/^### AI-\d{3} · /gm) ?? []).length, 4);
+  assert.equal((text.match(/^### AI-\d{3} · /gm) ?? []).length, 5);
   assert.ok(!/^### AI-/m.test(renderSkillsForPrompt(entries, ['GA'])));
 });

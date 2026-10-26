@@ -14,12 +14,12 @@ import { byMoneyDesc, clipText, FIELD_LABELS, formatDateTime, formatMoney, LABEL
 const DETAIL_LIMIT = 300;
 const EVIDENCE_LIMIT = 5;
 
-/** Разделы по метке итоговой оценки. */
+/** Разделы по метке итоговой оценки; hint — что дают отметки (см. decisionOf в apply.mjs). */
 const SECTIONS = [
-  { id: 'likely_error', title: 'По делу — ИИ считает ошибкой', bulk: true },
-  { id: 'likely_ok', title: 'Похоже на шум', bulk: true },
-  { id: 'unsure', title: 'Не уверен', bulk: true },
-  { id: 'unreviewed', title: 'Без разбора — находки по тендеру и справочнику', bulk: false },
+  { id: 'likely_error', title: 'По делу — ИИ считает ошибкой', bulk: true, hint: '[+] ошибка · [-] норма' },
+  { id: 'likely_ok', title: 'Похоже на шум', bulk: true, hint: '[+] норма · [-] ошибка' },
+  { id: 'unsure', title: 'Не уверен', bulk: true, hint: '[+] ошибка · [-] норма' },
+  { id: 'unreviewed', title: 'Без разбора — находки по тендеру и справочнику', bulk: false, hint: '[+] ошибка · [-] норма' },
 ];
 
 const sectionOf = (item) => (item.combined ? item.combined.label : 'unreviewed');
@@ -130,7 +130,8 @@ export const renderReview = (state) => {
   const lines = [
     `# ИИ-проверка · тендер ${tender.number}${version} «${oneLine(tender.title)}» · ${formatDateTime(new Date(state.createdAt))}`,
     `Модели: ${state.models.map((m) => `${m.name} (${m.model})`).join(', ')} · промпт ${state.promptVersion} · навыки ${state.skillsRev}`,
-    'Отметка: [+] по делу (вердикт «Ошибка») · [-] не по делу («Норма») · пусто — не решено. ' +
+    'Отметка: [+] согласен с ИИ · [-] не согласен · пусто — не решено. В «Похоже на шум» [+] — вердикт «Норма», ' +
+      'в остальных разделах [+] — «Ошибка»; подсказка — в заголовке раздела. ' +
       'Комментарий — в конце строки после //. Отметка в заголовке раздела ставится всем неотмеченным строкам раздела. ' +
       'Для замечаний ИИ: [+] — замечание по делу, [-] — нет; в портал они не уходят, только в журнал.',
   ];
@@ -138,7 +139,7 @@ export const renderReview = (state) => {
   const remarks = (state.remarks ?? []).slice().sort(compareRemarks);
   const pushRemarks = () => {
     if (remarks.length === 0) return;
-    lines.push('', `## [ ] Новые замечания ИИ (${remarks.length})`, '');
+    lines.push('', `## [ ] Новые замечания ИИ (${remarks.length}) — [+] по делу · [-] нет`, '');
     lines.push(remarks.map((remark) => renderRemark(remark, multi)).join('\n\n'));
   };
 
@@ -156,7 +157,7 @@ export const renderReview = (state) => {
       }
       return byMoneyDesc(a.moneyDelta, b.moneyDelta) || comparePosition(a, b);
     });
-    lines.push('', `## ${section.bulk ? '[ ] ' : ''}${section.title} (${items.length})`, '');
+    lines.push('', `## ${section.bulk ? '[ ] ' : ''}${section.title} (${items.length}) — ${section.hint}`, '');
     lines.push(items.map((item) => renderItem(item, multi)).join('\n\n'));
     if (section.id === 'likely_error') pushRemarks(); // сразу после «По делу»
   }

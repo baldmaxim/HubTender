@@ -249,7 +249,7 @@ test('run: свои замечания ИИ — по позициям с нах�
     assert.ok(!snapshot['pos-4']);
 
     const review = readFileSync(result.reviewPath, 'utf8');
-    assert.match(review, /^## \[ \] Новые замечания ИИ \(2\)$/m);
+    assert.match(review, /^## \[ \] Новые замечания ИИ \(2\) — \[\+\] по делу · \[-\] нет$/m);
     assert.match(review, /^- \[ \] AI-001 · поз\. 3 «Бетон B25» · \[открыть\]\(.*\) ‹n\d›$/m);
     assert.match(review, /^ {2}ИИ: Проверить состав: Бетон B25\.$/m);
     assert.ok(logs.some((l) => /^Своих замечаний ИИ: 2 \(отброшено без подтверждения: 0\), позиций без находок просмотрено: 1 \(покрытие 98 % стоимости\)$/.test(l)), logs.join('\n'));

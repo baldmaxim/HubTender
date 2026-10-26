@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { composeBrief } from '../lib/brief.mjs';
-import { planApply, planRemarks, runApply } from '../lib/apply.mjs';
+import { decisionOf, planApply, planRemarks, runApply } from '../lib/apply.mjs';
 import { renderReview } from '../lib/review-md.mjs';
 import { makeState, withRemarks } from './helpers.mjs';
 
@@ -80,7 +80,7 @@ const mark = (text, key, char, comment) =>
 
 const MARKED = (text) => {
   let out = mark(text, 'f1', '+', 'цена за м², проверить');
-  out = out.replace(/^## \[ \] Похоже на шум/m, '## [-] Похоже на шум'); // f2 — отметка раздела
+  out = out.replace(/^## \[ \] Похоже на шум/m, '## [+] Похоже на шум'); // f2 — отметка раздела: согласен с ИИ → «Норма»
   out = mark(out, 'f3', '+');
   out = mark(out, 'f4', '-');
   out = mark(out, 'f5', '+');
@@ -388,4 +388,14 @@ test('planRemarks: подтверждено/отклонено, повтор —
   assert.equal(plan.skipped[0].key, 'n4');
   assert.match(plan.skipped[0].reason, /отметка изменена после apply — решение уже в журнале/);
   assert.deepEqual(planRemarks({ state: {}, marks, applied }), { record: [], skipped: [], done: 0 });
+});
+
+test('decisionOf: [+] — согласен с ИИ; в «Похоже на шум» это «Норма», где мнения нет — «Ошибка»', () => {
+  const of = (label) => ({ combined: label ? { label } : null });
+  assert.equal(decisionOf('+', of('likely_error')), 'error');
+  assert.equal(decisionOf('-', of('likely_error')), 'accepted');
+  assert.equal(decisionOf('+', of('likely_ok')), 'accepted');
+  assert.equal(decisionOf('-', of('likely_ok')), 'error');
+  assert.equal(decisionOf('+', of('unsure')), 'error');
+  assert.equal(decisionOf('-', of(null)), 'accepted');
 });

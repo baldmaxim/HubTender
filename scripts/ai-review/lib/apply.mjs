@@ -33,6 +33,15 @@ const VERDICT_RU = { error: 'Ошибка', accepted: 'Норма' };
 const REMARK_DECISION_RU = { confirmed: 'подтверждено', rejected: 'отклонено' };
 
 /**
+ * Отметка → вердикт. [+] — согласен с ИИ, [-] — не согласен: в «Похоже на шум» [+] значит «Норма».
+ * Где у ИИ нет мнения («Не уверен», «Без разбора»), [+] — «Ошибка», [-] — «Норма».
+ */
+export const decisionOf = (mark, item) => {
+  const errorMark = item.combined?.label === 'likely_ok' ? '-' : '+';
+  return mark === errorMark ? 'error' : 'accepted';
+};
+
+/**
  * Что отправить, а что пропустить. Чистая функция.
  * @param {{ state: any, marks: Map<string, any>, fresh: Map<string, any>, applied: Record<string, any> }} p
  */
@@ -44,7 +53,7 @@ export const planApply = ({ state, marks, fresh, applied }) => {
   for (const item of state.items) {
     const entry = marks.get(item.key);
     if (!entry) continue;
-    const decision = entry.mark === '+' ? 'error' : 'accepted';
+    const decision = decisionOf(entry.mark, item);
     const prior = applied[item.key];
     if (prior) {
       // Вердикт этого прогона уже в портале; передумали — менять на странице, а не повторным apply.

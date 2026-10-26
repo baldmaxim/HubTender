@@ -10,10 +10,10 @@ test('render: разделы, шапка, строки моделей, расх�
   const text = renderReview(makeState());
   assert.match(text, /^# ИИ-проверка · тендер 256 v3 «Название» · 2026-10-23 14:05$/m);
   assert.match(text, /^Модели: qwen \(qwen3\.8-27b-pricer-rl648\), minimax \(minimax\/m3\) · промпт review-v1@1a2b3c4d · навыки a1b2c3d$/m);
-  assert.match(text, /^## \[ \] По делу — ИИ считает ошибкой \(1\)$/m);
-  assert.match(text, /^## \[ \] Похоже на шум \(1\)$/m);
-  assert.match(text, /^## \[ \] Не уверен \(1\)$/m);
-  assert.match(text, /^## Без разбора — находки по тендеру и справочнику \(1\)$/m);
+  assert.match(text, /^## \[ \] По делу — ИИ считает ошибкой \(1\) — \[\+\] ошибка · \[-\] норма$/m);
+  assert.match(text, /^## \[ \] Похоже на шум \(1\) — \[\+\] норма · \[-\] ошибка$/m);
+  assert.match(text, /^## \[ \] Не уверен \(1\) — \[\+\] ошибка · \[-\] норма$/m);
+  assert.match(text, /^## Без разбора — находки по тендеру и справочнику \(1\) — \[\+\] ошибка · \[-\] норма$/m);
   assert.match(text, /^- \[ \] P · поз\. 12\.3 «Утеплитель ПСБ-С 25» · Δ 1,2 млн ₽ · \[открыть\]\(https:\/\/gp\.su10\.ru\/positions\/pos-1\/items\?tenderId=t-1&positionId=pos-1&itemId=row-1\) ‹f1›$/m);
   assert.match(text, /^ {2}qwen: ошибка — 125 ₽\/м³ при медиане 4 800\. Основание: P-1$/m);
   assert.match(text, /^ {2}minimax: ошибка — цена за м² вместо м³\.$/m);
@@ -130,7 +130,7 @@ test('parse: BOM и CRLF', () => {
 test('render: раздел «Новые замечания ИИ» — после «По делу», до «Похоже на шум»; порядок и строки', () => {
   const text = renderReview(withRemarks());
   const at = (re) => text.search(re);
-  assert.ok(at(/^## \[ \] По делу/m) < at(/^## \[ \] Новые замечания ИИ \(3\)$/m));
+  assert.ok(at(/^## \[ \] По делу/m) < at(/^## \[ \] Новые замечания ИИ \(3\) — \[\+\] по делу · \[-\] нет$/m));
   assert.ok(at(/^## \[ \] Новые замечания ИИ/m) < at(/^## \[ \] Похоже на шум/m));
   assert.match(text, /^Отметка: .*Для замечаний ИИ: \[\+\] — замечание по делу, \[-\] — нет; в портал они не уходят, только в журнал\.$/m);
   // порядок: дорогая позиция (n2, n3 — по ключу), затем n1
@@ -161,7 +161,7 @@ test('render: одна модель — «ИИ:»; без замечаний р�
   noError.items = noError.items.filter((i) => i.combined?.label !== 'likely_error');
   const text = renderReview(noError);
   assert.ok(!text.includes('По делу'));
-  assert.ok(text.indexOf('Новые замечания ИИ') < text.indexOf('Похоже на шум'));
+  assert.ok(text.indexOf('## [ ] Новые замечания ИИ') < text.indexOf('## [ ] Похоже на шум'));
 });
 
 test('render → parse: нетронутый файл с замечаниями не даёт отметок', () => {
