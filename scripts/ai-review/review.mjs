@@ -4,7 +4,8 @@
  *
  *   node scripts/ai-review/review.mjs help
  *   node scripts/ai-review/review.mjs ping [--models=qwen,minimax] [--quick] [--no-portal] [--bench=<тендер>]
- *   node scripts/ai-review/review.mjs run <тендер> [--models=a,b] [--rule=U,V] [--new] [--max=N] [--remarks=N | --all] [--think] [--refresh] [--no-cache]
+ *   node scripts/ai-review/review.mjs run <тендер> [--models=a,b] [--rule=U,V] [--new] [--max=N] [--remarks=N | --all] [--think] [--refresh] [--no-cache] [--no-publish]
+ *   node scripts/ai-review/review.mjs publish [каталог прогона] [--dry-run] [--no-auto]
  *   node scripts/ai-review/review.mjs apply <путь к review.md> [--dry-run] [--brief]
  *
  * Настройки — только в scripts/ai-review/ai-review.env (см. README.md).
@@ -17,6 +18,7 @@ import { ConfigError, loadConfig } from './lib/env.mjs';
 import { LlmError } from './lib/llm.mjs';
 import { runPing } from './lib/ping.mjs';
 import { PortalError } from './lib/portal.mjs';
+import { runPublish } from './lib/publish.mjs';
 import { runReview } from './lib/run.mjs';
 
 const HELP = `ИИ-проверка находок «Проверки данных»
@@ -36,6 +38,11 @@ const HELP = `ИИ-проверка находок «Проверки данны
            --think        второй проход с рассуждениями (нужен AI_REVIEW_<ИМЯ>_THINK_EXTRA)
            --refresh      пересчитать отчёт портала перед разбором
            --no-cache     не читать кэш ответов моделей
+           --no-publish   не публиковать метки ИИ и не снимать шум автоматически (иначе — как publish)
+  publish [каталог прогона]   Записать метки ИИ на страницу «Проверка данных» и снять явный шум
+                 без каталога — последний прогон в out/
+           --dry-run      показать план, ничего не отправлять и не писать
+           --no-auto      только метки, без автоотсева (вердикт «Норма» по записям AI-SKILLS.md с auto: yes)
   apply <review.md>   Отправить отметки ([+] ошибка, [-] норма) в портал
            --dry-run      показать, что ушло бы, ничего не отправлять и не писать
            --brief        записать краткий итог в выжимку тендера
@@ -74,6 +81,7 @@ const COMMANDS = {
       think: { type: 'boolean' },
       refresh: { type: 'boolean' },
       'no-cache': { type: 'boolean' },
+      'no-publish': { type: 'boolean' },
     },
     positionals: true,
     run: async ({ values, positionals }) => {
@@ -91,7 +99,8 @@ const COMMANDS = {
         }
         if (values.all) throw new ConfigError('--all и --remarks=N несовместимы: --all берёт все позиции со строками');
       }
-      const result = await runReview(loadConfig(), {
+      const config = loadConfig();
+      const result = await runReview(config, {
         tender,
         models: splitList(values.models, (item) => item.toLowerCase()),
         rules: splitList(values.rule, (item) => item.toUpperCase()),
@@ -103,7 +112,29 @@ const COMMANDS = {
         refresh: values.refresh,
         noCache: values['no-cache'],
       });
+      if (result.code !== 0 || values['no-publish']) return result.code;
+      // Файлы прогона уже записаны: сбой публикации не валит run, её можно повторить командой publish.
+      try {
+        if ((await runPublish(config, { dir: result.runDir })) !== 0) {
+          console.warn(`ВНИМАНИЕ: публикация завершилась с ошибкой. Повторите: publish "${result.runDir}"`);
+        }
+      } catch (err) {
+        console.warn(`ВНИМАНИЕ: публикация не удалась (${err.message}). Повторите: publish "${result.runDir}"`);
+      }
       return result.code;
+    },
+  },
+  publish: {
+    options: {
+      'dry-run': { type: 'boolean' },
+      'no-auto': { type: 'boolean' },
+    },
+    positionals: true,
+    run: async ({ values, positionals }) => {
+      if (positionals.length > 1) {
+        throw new ConfigError('Ожидается не больше одного аргумента.\nИспользование: node scripts/ai-review/review.mjs publish [каталог прогона] [--dry-run] [--no-auto]');
+      }
+      return runPublish(loadConfig(), { dir: positionals[0], dryRun: values['dry-run'], noAuto: values['no-auto'] });
     },
   },
   apply: {

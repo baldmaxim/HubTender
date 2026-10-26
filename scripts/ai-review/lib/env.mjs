@@ -26,6 +26,8 @@ const DEFAULT_CONTEXT_TOKENS = 16384;
 const DEFAULT_TIMEOUT_SEC = 900;
 const DEFAULT_MAX_TOKENS = 8192;
 const DEFAULT_BATCH_FINDINGS = 60;
+/** Потолок |Δ|, ниже которого находку-шум можно снять автоматически (₽). */
+export const DEFAULT_AUTO_MAX_RUB = 100_000;
 const MODEL_NAME_RE = /^[a-z0-9_]+$/;
 
 /**
@@ -110,6 +112,7 @@ const readJsonObject = (values, key) => {
  * @typedef {object} IConfig
  * @property {string} file
  * @property {{ url: string, key: string }} portal
+ * @property {number} autoMaxRub  порог |Δ| автоотсева шума, ₽ (AI_REVIEW_AUTO_MAX_RUB)
  * @property {string[]} modelNames
  * @property {Record<string, IModelProfile>} profiles  только полные профили (есть BASE_URL и MODEL)
  */
@@ -193,6 +196,7 @@ export const loadConfig = (filePath = DEFAULT_ENV_PATH) => {
       url: values.get('TENDERHUB_API_URL') ?? '',
       key: values.get('TENDERHUB_API_KEY') ?? '',
     },
+    autoMaxRub: readPositiveInt(values, 'AI_REVIEW_AUTO_MAX_RUB', DEFAULT_AUTO_MAX_RUB),
     modelNames,
     profiles,
   };

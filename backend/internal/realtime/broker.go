@@ -121,6 +121,9 @@ func (b *Broker) schedulePublish(topic string, payload []byte) {
 //
 //   - table == "notifications" → "notifications:{user_id}"
 //   - table == "tenders"       → "tenders" AND "tender:{id}"
+//   - table == "verification"  → "verification:{tender_id}" (событие «проверка
+//     обновилась» из pg_notify вручную; тема "tender:" не используется — на неё
+//     подписаны тяжёлые страницы)
 //   - global / reference tables → dedicated global topic (see cases below)
 //   - all other tables         → "tender:{tender_id}" (if tender_id non-empty)
 func (b *Broker) topicsFor(e Event) []string {
@@ -140,6 +143,16 @@ func (b *Broker) topicsFor(e Event) []string {
 			topics = append(topics, "tender:"+e.ID)
 		}
 		return topics
+
+	case "verification":
+		if e.TenderID == "" {
+			b.logger.Warn().
+				Str("table", e.Table).
+				Str("id", e.ID).
+				Msg("event has no tender_id; skipping")
+			return nil
+		}
+		return []string{"verification:" + e.TenderID}
 
 	// --- Global / reference tables → dedicated topics (no tender_id) ---
 	case "user_tasks":

@@ -229,6 +229,7 @@ var globalTopics = map[string]bool{
 //   - "notifications:<uid>"  → uid must exactly match authed.ID
 //   - "user:<uid>"           → uid must exactly match authed.ID
 //   - "tender:<uuid>"        → any authenticated user (RLS parity deferred to 4b)
+//   - "verification:<uuid>"  → any authenticated user (как tender:)
 //   - "tenders"              → any authenticated user
 //   - global reference topics → any authenticated user (see globalTopics)
 //   - "users"                → admin roles only (see adminRoles)
@@ -242,7 +243,7 @@ func (h *WsHandler) authoriseTopic(authed *middleware.AuthUser, topic string) bo
 		uid := strings.TrimPrefix(topic, "user:")
 		return uid == authed.ID
 	}
-	if strings.HasPrefix(topic, "tender:") {
+	if strings.HasPrefix(topic, "tender:") || strings.HasPrefix(topic, "verification:") {
 		return true
 	}
 	if topic == "tenders" {

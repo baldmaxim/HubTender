@@ -405,7 +405,7 @@ func buildDeps(
 	aiTriageQueue := services.NewRecalcQueue(rootCtx, verifAISvc, 10*time.Second, 1, logger)
 	aiTriageQueue.SetLabel("verification ai triage")
 	verifQueue.SetAfterSuccess(aiTriageQueue)
-	verifAIH := handlers.NewVerificationAIHandler(verifAISvc)
+	verifAIH := handlers.NewVerificationAIHandler(verifAISvc, verifAIRepo)
 
 	var catalogSource openrouter.ModelsLister = orClient
 	if llmTransport == openrouter.TransportProxyLLM {
@@ -483,7 +483,7 @@ func buildDeps(
 		positionH:         handlers.NewPositionHandler(positionSvc),
 		positionWH:        handlers.NewPositionWriteHandler(positionSvc),
 		positionCostsH:    handlers.NewPositionCostsHandler(positionCostsSvc),
-		qualityH:          handlers.NewQualityHandler(qualitySvc),
+		qualityH:          handlers.NewQualityHandler(qualitySvc, verifAIRepo),
 		verifSectionsH:    handlers.NewVerificationSectionsHandler(verifSectionsSvc),
 		costBenchmarkH:    handlers.NewCostBenchmarkHandler(costBenchmarkSvc),
 		pricingH:          handlers.NewPricingHandler(pricingSvc),

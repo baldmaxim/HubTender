@@ -55,6 +55,10 @@ type fakeAIRepo struct {
 	requests    []repository.AIRequestRecord
 	assessments []triage.Assessment
 	tests       []bool
+
+	// Находки по тендерам и последняя запись оценок — для внешних оценок.
+	tenderFindings map[string][]repository.AIFindingRef
+	lastSave       struct{ tenderID, requestID, modelID, promptVersion string }
 }
 
 func (r *fakeAIRepo) GetSettings(context.Context) (*repository.VerificationAISettings, error) {
@@ -87,9 +91,24 @@ func (r *fakeAIRepo) AICandidates(_ context.Context, _ string, _ []string, _ str
 func (r *fakeAIRepo) PositionsContext(context.Context, string, []string) (map[string]*triage.Position, error) {
 	return r.positions, nil
 }
-func (r *fakeAIRepo) SaveAssessments(_ context.Context, _, _, _, _ string, _ map[string]triage.Finding, a []triage.Assessment) error {
+func (r *fakeAIRepo) SaveAssessments(_ context.Context, tenderID, requestID, modelID, promptVersion string, _ map[string]triage.Finding, a []triage.Assessment) error {
+	r.lastSave.tenderID, r.lastSave.requestID, r.lastSave.modelID, r.lastSave.promptVersion =
+		tenderID, requestID, modelID, promptVersion
 	r.assessments = append(r.assessments, a...)
 	return nil
+}
+func (r *fakeAIRepo) FindingsByIDs(_ context.Context, tenderID string, ids []string) ([]repository.AIFindingRef, error) {
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	var out []repository.AIFindingRef
+	for _, f := range r.tenderFindings[tenderID] {
+		if want[f.ID] {
+			out = append(out, f)
+		}
+	}
+	return out, nil
 }
 func (r *fakeAIRepo) ListAssessments(context.Context, string, string) ([]repository.AIAssessmentView, error) {
 	return nil, nil
@@ -238,5 +257,66 @@ func TestVerificationAIEnableRequiresPassedTest(t *testing.T) {
 	in.ModelID = &model
 	if _, err := svc.SaveSettings(context.Background(), in, nil); err != nil {
 		t.Fatalf("включение проверенной модели: %v", err)
+	}
+}
+
+func TestSaveExternalAssessments(t *testing.T) {
+	svc, repo, _ := newAIFixture()
+	repo.tenderFindings = map[string][]repository.AIFindingRef{
+		"t1": {
+			{ID: "f-open", RuleCode: "GA", Fingerprint: "fp1", Open: true},
+			{ID: "f-closed", RuleCode: "GA", Fingerprint: "fp2", Open: false},
+			{ID: "f-stale", RuleCode: "GA", Fingerprint: "fp3-new", Open: true},
+			{ID: "f-dup", RuleCode: "GA", Fingerprint: "fp4", Open: true},
+		},
+		"t2": {{ID: "f-foreign", RuleCode: "GA", Fingerprint: "fp5", Open: true}},
+	}
+	ev := []triage.Evidence{{Ref: "r1.quantity", Value: "10"}}
+	items := []ExternalAssessment{
+		{FindingID: "f-open", Fingerprint: "fp1", Label: triage.LabelLikelyError, Reason: "ошибка", Evidence: ev},
+		{FindingID: "f-closed", Fingerprint: "fp2", Label: triage.LabelLikelyOK},
+		{FindingID: "f-stale", Fingerprint: "fp3-old", Label: triage.LabelLikelyOK},
+		{FindingID: "f-foreign", Fingerprint: "fp5", Label: triage.LabelLikelyOK},
+		{FindingID: "f-missing", Fingerprint: "fp6", Label: triage.LabelUnsure},
+		{FindingID: "f-dup", Fingerprint: "fp4", Label: triage.LabelUnsure},
+		{FindingID: "f-dup", Fingerprint: "fp4", Label: triage.LabelLikelyOK},
+	}
+	res, err := svc.SaveExternalAssessments(context.Background(), "t1", "qwen-27b", "ext:v1", items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Saved != 2 || res.Skipped != 5 {
+		t.Fatalf("saved %d skipped %d, ожидалось 2 и 5", res.Saved, res.Skipped)
+	}
+	if len(repo.assessments) != 2 {
+		t.Fatalf("записано %d оценок", len(repo.assessments))
+	}
+	labels := map[string]string{}
+	for _, a := range repo.assessments {
+		labels[a.FindingID] = a.Label
+		if a.Downgraded {
+			t.Fatalf("Downgraded должен быть false: %+v", a)
+		}
+		if a.Evidence == nil {
+			t.Fatalf("evidence не должен быть nil: %+v", a)
+		}
+	}
+	if labels["f-open"] != triage.LabelLikelyError || labels["f-dup"] != triage.LabelLikelyOK {
+		t.Fatalf("метки: %v (у дубля побеждает последняя оценка)", labels)
+	}
+	if got := repo.lastSave; got.tenderID != "t1" || got.requestID != "" || got.modelID != "qwen-27b" || got.promptVersion != "ext:v1" {
+		t.Fatalf("параметры записи: %+v", got)
+	}
+}
+
+func TestSaveExternalAssessmentsNothingToSave(t *testing.T) {
+	svc, repo, _ := newAIFixture()
+	res, err := svc.SaveExternalAssessments(context.Background(), "t1", "m", "ext:v1",
+		[]ExternalAssessment{{FindingID: "nope", Fingerprint: "fp", Label: triage.LabelUnsure}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Saved != 0 || res.Skipped != 1 || len(repo.assessments) != 0 || repo.lastSave.tenderID != "" {
+		t.Fatalf("res %+v, записей %d", res, len(repo.assessments))
 	}
 }

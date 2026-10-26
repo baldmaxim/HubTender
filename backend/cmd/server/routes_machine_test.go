@@ -255,3 +255,71 @@ func TestVerificationBotHandlerResponses(t *testing.T) {
 		t.Fatalf("result: %v", m)
 	}
 }
+
+type fakeVerificationAI struct{ saved int }
+
+func (f *fakeVerificationAI) Settings(context.Context) (*services.VerificationAISettingsView, error) {
+	return nil, nil
+}
+func (f *fakeVerificationAI) SaveSettings(context.Context, repository.VerificationAISettings, *string) (*services.VerificationAISettingsView, error) {
+	return nil, nil
+}
+func (f *fakeVerificationAI) TestModel(context.Context, *string) (*services.AITestResult, error) {
+	return nil, nil
+}
+func (f *fakeVerificationAI) StartManual(context.Context, string, *string) (string, error) {
+	return services.AITriageStarted, nil
+}
+func (f *fakeVerificationAI) Assessments(context.Context, string) (*services.TenderAssessments, error) {
+	return &services.TenderAssessments{Assessments: []repository.AIAssessmentView{}}, nil
+}
+func (f *fakeVerificationAI) SaveExternalAssessments(context.Context, string, string, string, []services.ExternalAssessment) (*services.ExternalAssessmentsResult, error) {
+	return &services.ExternalAssessmentsResult{Saved: f.saved}, nil
+}
+
+func verificationAIRouter(principal *middleware.APIKeyPrincipal) *chi.Mux {
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if principal != nil {
+				req = req.WithContext(context.WithValue(req.Context(), middleware.CtxAPIKey, principal))
+			}
+			next.ServeHTTP(w, req)
+		})
+	})
+	registerVerificationAIRoutes(r, handlers.NewVerificationAIHandler(&fakeVerificationAI{saved: 1}, nil))
+	return r
+}
+
+// POST ai-assessments — действие проверяющего: нужна область verification:write,
+// ключ только на чтение получает 403; GET тех же оценок читается и с read.
+func TestVerificationAIAssessmentsRouteGate(t *testing.T) {
+	read := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"verification:read"}}
+	write := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"verification:write"}}
+	restricted := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"verification:write"},
+		AllowedTenderIDs: []string{"11111111-1111-1111-1111-111111111111"}}
+	path := "/api/v1/tenders/" + regID + "/verification/ai-assessments"
+	body := `{"model_id":"m","prompt_version":"ext:v1","items":[{"finding_id":"` + regID + `","fingerprint":"fp","label":"unsure"}]}`
+	cases := []struct {
+		name      string
+		principal *middleware.APIKeyPrincipal
+		method    string
+		status    int
+		code      string
+	}{
+		{"POST: человек с JWT", nil, "POST", 200, ""},
+		{"POST: ключ только на чтение", read, "POST", 403, "API_KEY_SCOPE_DENIED"},
+		{"POST: ключ на запись", write, "POST", 200, ""},
+		{"POST: ключ со списком тендеров без этого", restricted, "POST", 403, "API_KEY_TENDER_DENIED"},
+		{"GET: ключ на чтение", read, "GET", 200, ""},
+		{"GET: ключ только на запись", write, "GET", 403, "API_KEY_SCOPE_DENIED"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w, m := callRegistry(t, verificationAIRouter(c.principal), c.method, path, body)
+			if w.Code != c.status || (c.code != "" && m["code"] != c.code) {
+				t.Fatalf("status %d code %v, ожидалось %d %s: %.300s", w.Code, m["code"], c.status, c.code, w.Body.String())
+			}
+		})
+	}
+}

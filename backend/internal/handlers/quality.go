@@ -28,12 +28,22 @@ type qualityServicer interface {
 
 // QualityHandler serves the /api/v1/tenders/:id/quality endpoints.
 type QualityHandler struct {
-	svc qualityServicer
+	svc      qualityServicer
+	notifier verificationNotifier
 }
 
-// NewQualityHandler creates a QualityHandler.
-func NewQualityHandler(svc qualityServicer) *QualityHandler {
-	return &QualityHandler{svc: svc}
+// NewQualityHandler creates a QualityHandler. notifier шлёт realtime-событие
+// «проверка обновилась» после вердиктов по API-ключу.
+func NewQualityHandler(svc qualityServicer, notifier verificationNotifier) *QualityHandler {
+	return &QualityHandler{svc: svc, notifier: notifier}
+}
+
+// notifyKeyVerdicts — событие только для запроса по API-ключу: страница, поставившая
+// вердикт сама, уже знает о нём, а внешний клиент (скрипт, бот) — нет.
+func (h *QualityHandler) notifyKeyVerdicts(r *http.Request, tenderID string) {
+	if middleware.APIKeyFromContext(r.Context()) != nil {
+		notifyVerificationUpdated(r, h.notifier, tenderID)
+	}
 }
 
 type qualityEnvelope struct {
@@ -178,6 +188,7 @@ func (h *QualityHandler) PostVerdict(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.notifyKeyVerdicts(r, tenderID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -246,6 +257,7 @@ func (h *QualityHandler) PostVerdicts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.notifyKeyVerdicts(r, tenderID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

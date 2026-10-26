@@ -73,6 +73,7 @@
 | `POST /api/v1/tenders/{id}/verification/sections/mark` | `{section_key, stage: "review", content_hash, note?}` — `content_hash` из `/sections` | 204 без тела; раздел изменился → `409 SECTION_CHANGED`; раздела нет → 404 |
 | `POST /api/v1/tenders/{id}/verification/sections/unmark` | `{section_key, stage: "review"}` | 204 без тела |
 | `POST /api/v1/tenders/{id}/verification/ai-triage` | без тела — разобрать новые находки ИИ в фоне | `{status}`: 202 при `started`; 200 при `already_running`, `disabled`, `tender_not_in_pilot`, `not_configured` |
+| `POST /api/v1/tenders/{id}/verification/ai-assessments` | оценки находок от внешнего скрипта, см. ниже | `{"data": {saved, skipped}}` |
 | `PUT /api/v1/tenders/{id}/brief` | `{summary_text, fact_category_ids}` — `fact_category_ids: null` = крупнейшие категории автоматически; `summary_text` до 20 000 символов | 200 и сохранённая выжимка |
 
 Ответы 204 приходят **без тела** — не разбирайте их как JSON.
@@ -82,6 +83,51 @@
 
 `checkpoint` сдвигает точку «новизны» и для людей на странице — вызывать, только когда
 проверка действительно пройдена.
+
+### Внешние ИИ-оценки — `POST …/verification/ai-assessments`
+
+Скрипт на офисном ПК присылает свои оценки находок (`scripts/ai-review`); они ложатся в
+те же ИИ-оценки, что и серверный разбор, и показываются на странице «Проверка данных».
+
+```json
+{
+  "model_id": "qwen-27b",
+  "prompt_version": "ext:review-v3",
+  "items": [
+    {"finding_id": "<uuid>", "fingerprint": "<из /quality>", "label": "likely_error",
+     "reason": "…", "evidence": [{"ref": "r1.quantity", "value": "10"}]}
+  ]
+}
+```
+
+- `items` — от 1 до 2000; `label` — `likely_error`, `likely_ok` или `unsure`; `finding_id` —
+  uuid; `fingerprint` обязателен.
+- `prompt_version` обязана начинаться с `ext:` (не длиннее 100 символов), `model_id` —
+  непустая, до 200 символов. Иначе `400`; `400` и на битый JSON, и на плохой элемент.
+- `reason` обрезается до 2000 символов, `evidence` — до 10 фактов (нет поля — `[]`).
+  Факты сервер не сверяет с данными: оценка пишется как есть, без «понижения» до `unsure`.
+- Сервер берёт находки этого тендера и **пропускает** (`skipped`): находку чужого тендера
+  или несуществующую, закрытую (её уже нет в открытых), и оценку с отпечатком, не
+  совпавшим с текущим (данные изменились после чтения `/quality`). Остальные
+  записываются (`saved`): одна текущая оценка на находку, новая заменяет прежнюю.
+  Если находка повторяется в пакете, берётся последняя оценка.
+- В `ai-assessments` (GET) оценка с `prompt_version` `ext:*` считается актуальной
+  (`current: true`), пока совпадает отпечаток; версия серверного промпта не сверяется.
+- Серверный ИИ-разбор параллельно включать нельзя: он перезаписывает оценку находки
+  (одна оценка на находку), и внешние оценки пропадут.
+
+## Событие «проверка обновилась»
+
+Страница «Проверка данных» перечитывает данные по realtime-событию. Тема —
+`verification:<tender_id>` (не `tender:<id>`: на неё подписаны тяжёлые страницы),
+payload — `{"table": "verification", "op": "UPDATE", "id": "<tender_id>", "tender_id": "<tender_id>"}`.
+Событие шлётся один раз на запрос:
+
+- после `POST …/verification/ai-assessments`, если записана хотя бы одна оценка;
+- после `POST …/quality/verdict` и `…/quality/verdicts`, **только** если запрос пришёл по
+  API-ключу: вердикты человека со страницы событие не шлют.
+
+Ошибка отправки события только пишется в лог и ответ запроса не меняет.
 
 ## Сценарий: проверить тендер
 

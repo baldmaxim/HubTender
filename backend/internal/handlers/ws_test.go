@@ -23,6 +23,7 @@ func TestAuthoriseTopic(t *testing.T) {
 		{"own user topic", eng, "user:u1", true},
 		{"other user topic", eng, "user:u2", false},
 		{"tender any", eng, "tender:abc", true},
+		{"verification any", eng, "verification:abc", true},
 		{"tenders global", eng, "tenders", true},
 		{"tasks", eng, "tasks", true},
 		{"references", eng, "references", true},

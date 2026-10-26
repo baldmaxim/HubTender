@@ -95,13 +95,22 @@ func registerMachineRoutes(r chi.Router, d *deps, verifyCfg middleware.VerifyCon
 		r.With(writeV).Post("/api/v1/tenders/{id}/verification/sections/mark", d.verifSectionsH.PostMark)
 		r.With(writeV).Post("/api/v1/tenders/{id}/verification/sections/unmark", d.verifSectionsH.PostUnmark)
 		r.With(writeV).Put("/api/v1/tenders/{id}/brief", d.costBenchmarkH.PutBrief)
-		// ИИ-разбор находок: оценки — чтение, запуск разбора — действие проверяющего.
-		r.With(readV).Get("/api/v1/tenders/{id}/verification/ai-assessments", d.verifAIH.GetAssessments)
-		r.With(writeV).Post("/api/v1/tenders/{id}/verification/ai-triage", d.verifAIH.PostTriage)
+		registerVerificationAIRoutes(r, d.verifAIH)
 
 		registerRegistryBotRoutes(r, d.registryBotH)
 		registerVerificationBotRoutes(r, d.verifBotH)
 	})
+}
+
+// registerVerificationAIRoutes — ИИ-разбор находок: оценки — чтение, запуск
+// серверного разбора и приём внешних оценок (скрипт на офисном ПК) — действия
+// проверяющего (verification:write).
+func registerVerificationAIRoutes(r chi.Router, h *handlers.VerificationAIHandler) {
+	readV := middleware.RequireAPIKeyScope(apikey.ScopeVerificationRead, "id")
+	writeV := middleware.RequireAPIKeyScope(apikey.ScopeVerificationWrite, "id")
+	r.With(readV).Get("/api/v1/tenders/{id}/verification/ai-assessments", h.GetAssessments)
+	r.With(writeV).Post("/api/v1/tenders/{id}/verification/ai-assessments", h.PostExternalAssessments)
+	r.With(writeV).Post("/api/v1/tenders/{id}/verification/ai-triage", h.PostTriage)
 }
 
 // registerRegistryBotRoutes — «Перечень тендеров» для внешнего Telegram-бота

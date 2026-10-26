@@ -201,7 +201,7 @@ const DataQuality: React.FC = () => {
                       description={`Будет отмечено находок: ${okByAI.length}. Перед этим просмотрите причины в таблице.`}
                       okText="Принять"
                       cancelText="Отмена"
-                      onConfirm={() => void submitGroupVerdict(okByAI, 'accepted')}
+                      onConfirm={() => void submitGroupVerdict(okByAI, 'accepted', 'ИИ-массово')}
                     >
                       <Button size="small" icon={<RobotOutlined />}>
                         Принять «похоже на норму» по ИИ ({okByAI.length})

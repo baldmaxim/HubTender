@@ -6,6 +6,7 @@ import {
   type TenderAIAssessments,
 } from '../../../lib/api/verificationAI';
 import { availabilityText, currentAssessments } from '../../../lib/quality/aiTriagePolicy';
+import { useRealtimeTopic } from '../../../lib/realtime/useRealtimeTopic';
 import { getErrorMessage } from '../../../utils/errors';
 
 /** Пока идёт разбор — перечитываем оценки, чтобы они появлялись по мере ответа модели. */
@@ -30,6 +31,14 @@ export function useAITriage(tenderId: string | null) {
     setData(null);
     if (tenderId) void load(tenderId);
   }, [tenderId, load]);
+
+  // Внешний скрипт записал ИИ-оценки — перечитываем.
+  useRealtimeTopic(
+    tenderId ? `verification:${tenderId}` : null,
+    useCallback(() => {
+      if (tenderId) void load(tenderId);
+    }, [tenderId, load]),
+  );
 
   useEffect(() => {
     if (timer.current) window.clearTimeout(timer.current);

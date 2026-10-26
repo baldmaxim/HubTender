@@ -37,6 +37,10 @@ func TestTopicsFor(t *testing.T) {
 		{"project_monthly_completion", Event{Table: "project_monthly_completion"}, []string{"projects"}},
 		{"tender_registry", Event{Table: "tender_registry"}, []string{"tenders"}},
 
+		// Событие проверки данных — своя тема, не tender:<id>.
+		{"verification", Event{Table: "verification", ID: "t9", TenderID: "t9"}, []string{"verification:t9"}},
+		{"verification without tender_id", Event{Table: "verification", ID: "t9"}, nil},
+
 		// Tender-scoped config tables fall through to the generic branch.
 		{"tender_markup_percentage", Event{Table: "tender_markup_percentage", TenderID: "t9"}, []string{"tender:t9"}},
 		{"tender_pricing_distribution", Event{Table: "tender_pricing_distribution", TenderID: "t9"}, []string{"tender:t9"}},

@@ -121,6 +121,8 @@ func (r *VerificationAIRepo) PositionsContext(ctx context.Context, tenderID stri
 }
 
 // SaveAssessments записывает оценки пакета: одна текущая оценка на находку.
+// Пустой requestID пишется как NULL: внешние оценки (скрипт на офисном ПК) не
+// связаны с журналом запросов сервера.
 func (r *VerificationAIRepo) SaveAssessments(
 	ctx context.Context, tenderID, requestID, modelID, promptVersion string,
 	findings map[string]triage.Finding, assessments []triage.Assessment,
@@ -158,7 +160,7 @@ func (r *VerificationAIRepo) SaveAssessments(
 			(finding_id, tender_id, rule_code, fingerprint, prompt_version, model_id, label, reason,
 			 evidence, downgraded, request_id)
 		SELECT x.finding_id, $1::uuid, x.rule_code, x.fingerprint, $2, $3, x.label, x.reason,
-		       x.evidence::jsonb, x.downgraded, $4::uuid
+		       x.evidence::jsonb, x.downgraded, NULLIF($4, '')::uuid
 		FROM unnest($5::uuid[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[], $11::boolean[])
 		     AS x(finding_id, rule_code, fingerprint, label, reason, evidence, downgraded)
 		ON CONFLICT (finding_id) DO UPDATE
@@ -173,6 +175,49 @@ func (r *VerificationAIRepo) SaveAssessments(
 	return nil
 }
 
+// AIFindingRef — находка тендера для сверки внешней оценки.
+type AIFindingRef struct {
+	ID          string
+	RuleCode    string
+	Fingerprint string
+	Open        bool // resolved_at IS NULL
+}
+
+// FindingsByIDs — находки ЭТОГО тендера по списку id одним запросом. Чужие и
+// несуществующие в ответ не попадают.
+func (r *VerificationAIRepo) FindingsByIDs(ctx context.Context, tenderID string, ids []string) ([]AIFindingRef, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id::text, rule_code, fingerprint, resolved_at IS NULL
+		FROM public.verification_findings
+		WHERE id = ANY($2::uuid[]) AND tender_id = $1`, tenderID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("verificationAI.FindingsByIDs: %w", err)
+	}
+	defer rows.Close()
+	var out []AIFindingRef
+	for rows.Next() {
+		var f AIFindingRef
+		if err := rows.Scan(&f.ID, &f.RuleCode, &f.Fingerprint, &f.Open); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// NotifyVerificationUpdated — событие realtime «проверка тендера обновилась»
+// (тема verification:<tender_id>). Шлётся вручную, не из триггера: событие нужно
+// один раз на запрос, а не на каждую строку.
+func (r *VerificationAIRepo) NotifyVerificationUpdated(ctx context.Context, tenderID string) error {
+	_, err := r.pool.Exec(ctx, `
+		SELECT pg_notify('rowchange', json_build_object(
+			'table', 'verification', 'op', 'UPDATE', 'id', $1::text, 'tender_id', $1::text)::text)`, tenderID)
+	if err != nil {
+		return fmt.Errorf("verificationAI.NotifyVerificationUpdated: %w", err)
+	}
+	return nil
+}
+
 // AIAssessmentView — оценка для страницы и API.
 type AIAssessmentView struct {
 	FindingID string            `json:"finding_id"`
@@ -180,7 +225,8 @@ type AIAssessmentView struct {
 	Label     string            `json:"label"`
 	Reason    string            `json:"reason"`
 	Evidence  []triage.Evidence `json:"evidence"`
-	// Current — данные находки с оценки не менялись и промпт тот же.
+	// Current — данные находки с оценки не менялись и промпт тот же; внешние оценки
+	// (prompt_version «ext:…») промпт сервера не сверяют — важен только отпечаток.
 	Current   bool      `json:"current"`
 	ModelID   string    `json:"model_id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -190,7 +236,8 @@ type AIAssessmentView struct {
 func (r *VerificationAIRepo) ListAssessments(ctx context.Context, tenderID, promptVersion string) ([]AIAssessmentView, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT a.finding_id::text, a.rule_code, a.label, a.reason, a.evidence::text,
-		       a.fingerprint = vf.fingerprint AND a.prompt_version = $2, a.model_id, a.created_at
+		       a.fingerprint = vf.fingerprint AND (a.prompt_version = $2 OR a.prompt_version LIKE 'ext:%'),
+		       a.model_id, a.created_at
 		FROM public.verification_ai_assessments a
 		JOIN public.verification_findings vf ON vf.id = a.finding_id
 		WHERE a.tender_id = $1 AND vf.resolved_at IS NULL

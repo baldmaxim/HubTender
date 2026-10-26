@@ -41,6 +41,7 @@ type verificationAIRepoer interface {
 		findings map[string]triage.Finding, assessments []triage.Assessment) error
 	ListAssessments(ctx context.Context, tenderID, promptVersion string) ([]repository.AIAssessmentView, error)
 	Agreement(ctx context.Context) (*repository.AIAgreement, error)
+	FindingsByIDs(ctx context.Context, tenderID string, ids []string) ([]repository.AIFindingRef, error)
 }
 
 // VerificationAIService — ИИ-разбор находок проверки данных. Оценка — подсказка
