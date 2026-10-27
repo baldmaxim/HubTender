@@ -2,7 +2,7 @@ import { memo, useState } from 'react';
 import type { FC } from 'react';
 import { Button, Dropdown, Popconfirm } from 'antd';
 import type { MenuProps } from 'antd';
-import { CameraOutlined, DeleteOutlined, EditOutlined, MoreOutlined } from '@ant-design/icons';
+import { CameraOutlined, DeleteOutlined, EditOutlined, FileTextOutlined, MoreOutlined } from '@ant-design/icons';
 import type { IConstructionObject } from '../../../lib/types/types';
 import { formatCommissioning } from '../utils/commissioning';
 import { formatAreaValue } from '../utils/format';
@@ -21,12 +21,14 @@ interface IObjectCardProps {
   onHover: (id: string | null) => void;
   onEdit: (item: IConstructionObject) => void;
   onPhotos: (item: IConstructionObject) => void;
+  onDocuments: (item: IConstructionObject) => void;
   onDelete: (item: IConstructionObject) => Promise<void>;
 }
 
 const MENU_ITEMS: MenuProps['items'] = [
   { key: 'edit', icon: <EditOutlined />, label: 'Изменить' },
   { key: 'photos', icon: <CameraOutlined />, label: 'Фото' },
+  { key: 'documents', icon: <FileTextOutlined />, label: 'Документы' },
   { key: 'delete', icon: <DeleteOutlined />, label: 'Удалить', danger: true },
 ];
 
@@ -38,6 +40,7 @@ const ObjectCardView: FC<IObjectCardProps> = ({
   onHover,
   onEdit,
   onPhotos,
+  onDocuments,
   onDelete,
 }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -101,6 +104,18 @@ const ObjectCardView: FC<IObjectCardProps> = ({
               </span>
             )}
             <span className={styles.actions}>
+              {o.document_count > 0 && (
+                <button
+                  type="button"
+                  className={styles.docBadge}
+                  title="Документы"
+                  aria-label={`Документы: ${o.document_count}`}
+                  onClick={() => onDocuments(o)}
+                >
+                  <FileTextOutlined />
+                  {o.document_count}
+                </button>
+              )}
               {!readOnly && !o.cover_photo_id && (
                 <Button
                   type="text"
@@ -138,6 +153,7 @@ const ObjectCardView: FC<IObjectCardProps> = ({
                         onClick: ({ key }) => {
                           if (key === 'edit') onEdit(o);
                           else if (key === 'photos') onPhotos(o);
+                          else if (key === 'documents') onDocuments(o);
                           else setConfirmOpen(true);
                         },
                       }}

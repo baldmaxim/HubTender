@@ -53,6 +53,11 @@
   min-width: 0;
 }
 
+.customer {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
 /* ── Показатели ── */
 /* Телефон: три счётчика в ряд, площадь — отдельной строкой во всю ширину. */
 .kpi {
@@ -213,6 +218,8 @@
 @media (max-width: 767px), (pointer: coarse) {
   .search :global(.ant-input-affix-wrapper),
   .search :global(.ant-input),
+  .customer,
+  .customer :global(.ant-select-selection-search-input),
   .modal :global(.ant-input),
   .modal :global(.ant-input-affix-wrapper),
   .modal :global(.ant-input-number-input),
@@ -223,8 +230,14 @@
 
   /* Тап-цели ≥ 44px. */
   .search :global(.ant-input-affix-wrapper),
+  .customer :global(.ant-select-selector),
   .toolbar :global(.ant-btn) {
     min-height: 44px;
+  }
+
+  .customer :global(.ant-select-selection-item),
+  .customer :global(.ant-select-selection-placeholder) {
+    line-height: 42px;
   }
 
   .filter :global(.ant-segmented-item-label),
@@ -265,6 +278,10 @@
   .filter,
   .viewSwitch {
     flex: none;
+  }
+
+  .customer {
+    flex: 0 1 220px;
   }
 
   .search {

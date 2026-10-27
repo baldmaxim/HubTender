@@ -87,6 +87,7 @@ type deps struct {
 	projectsH         *handlers.ProjectsHandler
 	objectsH          *handlers.ConstructionObjectsHandler
 	objectPhotosH     *handlers.ConstructionObjectPhotosHandler
+	objectDocumentsH  *handlers.ConstructionObjectDocumentsHandler
 	pageViewsH        *handlers.PageViewsHandler
 	userAdminH        *handlers.UserAdminHandler
 	markupH           *handlers.MarkupHandler
@@ -158,6 +159,7 @@ func buildDeps(
 	projectsRepo := repository.NewProjectsRepo(pool)
 	constructionObjectsRepo := repository.NewConstructionObjectsRepo(pool)
 	constructionObjectPhotosRepo := repository.NewConstructionObjectPhotosRepo(pool)
+	constructionObjectDocumentsRepo := repository.NewConstructionObjectDocumentsRepo(pool)
 	pageViewsRepo := repository.NewPageViewsRepo(pool)
 	userAdminRepo := repository.NewUserAdminRepo(pool)
 	markupRepo := repository.NewMarkupRepo(pool)
@@ -264,6 +266,7 @@ func buildDeps(
 	projectsSvc := services.NewProjectsService(projectsRepo)
 	constructionObjectsSvc := services.NewConstructionObjectsService(constructionObjectsRepo)
 	constructionObjectPhotosSvc := services.NewConstructionObjectPhotosService(constructionObjectPhotosRepo)
+	constructionObjectDocumentsSvc := services.NewConstructionObjectDocumentsService(constructionObjectDocumentsRepo)
 	pageViewsSvc := services.NewPageViewsService(pageViewsRepo)
 	userAdminSvc := services.NewUserAdminService(userAdminRepo, inMemCache)
 	markupSvc := services.NewMarkupService(markupRepo, inMemCache).WithRecalcQueue(recalcQueue)
@@ -523,6 +526,7 @@ func buildDeps(
 		projectsH:         handlers.NewProjectsHandler(projectsSvc),
 		objectsH:          handlers.NewConstructionObjectsHandler(constructionObjectsSvc),
 		objectPhotosH:     handlers.NewConstructionObjectPhotosHandler(constructionObjectPhotosSvc),
+		objectDocumentsH:  handlers.NewConstructionObjectDocumentsHandler(constructionObjectDocumentsSvc),
 		pageViewsH:        handlers.NewPageViewsHandler(pageViewsSvc),
 		userAdminH:        handlers.NewUserAdminHandler(userAdminSvc),
 		markupH:           handlers.NewMarkupHandler(markupSvc),

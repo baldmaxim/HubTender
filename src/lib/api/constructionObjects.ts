@@ -110,3 +110,77 @@ export function fetchObjectPhotoImage(
     timeoutMs: IMAGE_TIMEOUT_MS,
   });
 }
+
+// ── Документы объектов (разрешения на ввод и др.) ──
+
+export interface IConstructionObjectDocument {
+  id: string;
+  object_id: string;
+  file_name: string;
+  mime: string;
+  size_bytes: number;
+  title: string | null;
+  /** YYYY-MM-DD */
+  doc_date: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export type ConstructionObjectDocumentDisposition = 'inline' | 'attachment';
+
+const DOCUMENTS_PATH = '/api/v1/construction-object-documents';
+const DOCUMENT_UPLOAD_TIMEOUT_MS = 120_000;
+const DOCUMENT_FILE_TIMEOUT_MS = 60_000;
+
+export async function fetchObjectDocuments(objectId: string): Promise<IConstructionObjectDocument[]> {
+  const res = await apiFetch<{ data: IConstructionObjectDocument[] }>(
+    `${BASE_PATH}/${encodeURIComponent(objectId)}/documents`,
+  );
+  return res.data ?? [];
+}
+
+export interface IUploadObjectDocumentInput {
+  file: File;
+  title?: string;
+  docDate?: string;
+}
+
+export async function uploadObjectDocument(
+  objectId: string,
+  input: IUploadObjectDocumentInput,
+): Promise<IConstructionObjectDocument> {
+  const form = new FormData();
+  form.append('file', input.file, input.file.name);
+  if (input.title) form.append('title', input.title);
+  if (input.docDate) form.append('doc_date', input.docDate);
+  const res = await apiFetch<{ data: IConstructionObjectDocument }>(
+    `${BASE_PATH}/${encodeURIComponent(objectId)}/documents`,
+    { method: 'POST', body: form, timeoutMs: DOCUMENT_UPLOAD_TIMEOUT_MS },
+  );
+  return res.data;
+}
+
+export async function updateObjectDocument(
+  docId: string,
+  input: { title: string | null; doc_date: string | null },
+): Promise<void> {
+  await apiFetch<unknown>(`${DOCUMENTS_PATH}/${encodeURIComponent(docId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteObjectDocument(docId: string): Promise<void> {
+  await apiFetch<undefined>(`${DOCUMENTS_PATH}/${encodeURIComponent(docId)}`, { method: 'DELETE' });
+}
+
+/** Байты файла: нужен Authorization, поэтому качаем через apiFetch → Blob. */
+export function fetchObjectDocumentFile(
+  docId: string,
+  disposition: ConstructionObjectDocumentDisposition,
+): Promise<Blob> {
+  return apiFetch<Blob>(`${DOCUMENTS_PATH}/${encodeURIComponent(docId)}/file?disposition=${disposition}`, {
+    asBlob: true,
+    timeoutMs: DOCUMENT_FILE_TIMEOUT_MS,
+  });
+}

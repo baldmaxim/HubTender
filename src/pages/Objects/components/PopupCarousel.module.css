@@ -1,0 +1,157 @@
+/* Цвета — токены antd через --obj-* (задаются на странице, см. utils/cssVars.ts). */
+/* Размер задаёт контейнер попапа (см. .popupCarousel в ObjectsMap.module.css):
+   кадр 16:9 + строка подписи, поэтому смена фото не двигает попап. */
+.carousel {
+  position: absolute;
+  inset: 0;
+  outline: none;
+}
+
+.stage {
+  position: absolute;
+  inset: 0 0 var(--carousel-meta, 0px);
+  overflow: hidden;
+  background: var(--obj-fill-strong);
+}
+
+.frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  cursor: zoom-in;
+  background: none;
+  border: 0;
+  /* Горизонтальные жесты отдаём карусели, вертикальные — браузеру. */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.frame:focus-visible,
+.carousel:focus-visible .frame {
+  outline: 2px solid var(--obj-current);
+  outline-offset: -2px;
+}
+
+.img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  animation: carousel-img-in 0.2s ease-out;
+}
+
+.failed {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 28px;
+  color: var(--obj-muted);
+}
+
+/* Тап-цель 44×44, визуально — аккуратный кружок 30px. */
+.arrow {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--obj-text);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  transform: translateY(-50%);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.prev {
+  left: 0;
+}
+
+.next {
+  right: 0;
+}
+
+.arrowDisc {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
+  background: var(--obj-bg-elevated);
+  border: 1px solid var(--obj-border);
+  border-radius: 50%;
+  opacity: 0.85;
+  transition:
+    opacity 0.18s ease-out,
+    transform 0.18s ease-out;
+}
+
+@media (hover: hover) {
+  .arrow:hover .arrowDisc {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.arrow:focus-visible {
+  outline: 2px solid var(--obj-current);
+  outline-offset: -4px;
+  border-radius: 50%;
+}
+
+/* Подпись и счётчик: одна строка фиксированной высоты. */
+.meta {
+  position: absolute;
+  inset: auto 0 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--carousel-meta, 0px);
+  padding: 4px 16px 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--obj-muted);
+}
+
+.caption {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counter {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes carousel-img-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .img {
+    animation: none;
+  }
+
+  .arrowDisc {
+    transition: none;
+  }
+}

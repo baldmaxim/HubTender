@@ -20,6 +20,21 @@
   overscroll-behavior: contain;
 }
 
+.tabs {
+  min-width: 0;
+}
+
+.tabs :global(.ant-tabs-tab) {
+  min-height: 44px;
+}
+
+.tabPane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
 .upload {
   min-width: 0;
 }

@@ -21,3 +21,10 @@ export const formatDate = (value: string | null): string => {
   const d = dayjs(value);
   return d.isValid() ? d.format('DD.MM.YYYY') : EMPTY;
 };
+
+/** Размер файла: «512 КБ», «1,2 МБ». */
+export const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes}${NBSP}Б`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024).toLocaleString('ru-RU')}${NBSP}КБ`;
+  return `${(bytes / (1024 * 1024)).toLocaleString('ru-RU', { maximumFractionDigits: 1 })}${NBSP}МБ`;
+};

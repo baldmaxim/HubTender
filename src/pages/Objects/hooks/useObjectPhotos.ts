@@ -9,6 +9,7 @@ import {
 import type { IConstructionObjectPhoto } from '../../../lib/api/constructionObjects';
 import { compressImage } from '../utils/imageCompress';
 import { forgetPhoto } from '../utils/photoCache';
+import { bySortOrder, invalidatePhotoList } from '../utils/photoListCache';
 
 export const MAX_PHOTOS_PER_OBJECT = 30;
 
@@ -30,9 +31,6 @@ interface IUseObjectPhotos {
 }
 
 const errorText = (e: unknown, fallback: string): string => (e instanceof Error && e.message ? e.message : fallback);
-
-const bySortOrder = (a: IConstructionObjectPhoto, b: IConstructionObjectPhoto): number =>
-  a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at);
 
 /** Список фото объекта и операции над ним. onChanged — обновить photo_count/cover_photo_id в списке объектов. */
 export const useObjectPhotos = (objectId: string | null, onChanged: () => void): IUseObjectPhotos => {
@@ -94,7 +92,10 @@ export const useObjectPhotos = (objectId: string | null, onChanged: () => void):
           setPending((prev) => prev.filter((p) => p.key !== key));
         }
       }
-      if (uploaded > 0) onChangedRef.current();
+      if (uploaded > 0) {
+        invalidatePhotoList(objectId);
+        onChangedRef.current();
+      }
     },
     [objectId],
   );
@@ -103,6 +104,7 @@ export const useObjectPhotos = (objectId: string | null, onChanged: () => void):
     const value = caption.trim();
     try {
       await updateObjectPhotoCaption(photoId, value === '' ? null : value);
+      if (objectRef.current) invalidatePhotoList(objectRef.current);
       setPhotos((prev) => prev.map((p) => (p.id === photoId ? { ...p, caption: value === '' ? null : value } : p)));
       return true;
     } catch (e) {
@@ -115,6 +117,7 @@ export const useObjectPhotos = (objectId: string | null, onChanged: () => void):
     try {
       await deleteObjectPhoto(photoId);
       forgetPhoto(photoId);
+      if (objectRef.current) invalidatePhotoList(objectRef.current);
       setPhotos((prev) => prev.filter((p) => p.id !== photoId));
       onChangedRef.current();
     } catch (e) {

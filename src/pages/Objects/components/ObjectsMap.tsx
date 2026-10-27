@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FC } from 'react';
+import { createPortal } from 'react-dom';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
@@ -10,7 +11,8 @@ import { createClusterGroup } from '../utils/clusterGroup';
 import { OBJECT_KIND_ORDER, getObjectKind } from '../utils/objectKind';
 import { MapLegend } from './MapLegend';
 import { createClusterIcon, createObjectMarker, getMarkerOptions } from './markerIcons';
-import { buildObjectPopup } from './objectPopup';
+import { buildObjectPopup, findCarouselHost } from './objectPopup';
+import { PopupCarousel } from './PopupCarousel';
 import styles from './ObjectsMap.module.css';
 
 export interface IMapFocusRequest {
@@ -27,6 +29,14 @@ interface IObjectsMapProps {
   /** Запрос из списка: подлететь к маркеру и открыть попап. */
   focus: IMapFocusRequest | null;
   onSelect: (id: string) => void;
+  /** Ссылка «Документы: N» в попапе: открыть окно объекта на вкладке документов. */
+  onDocuments: (item: IConstructionObject) => void;
+}
+
+/** Контейнер карусели открытого попапа: PopupCarousel монтируется в него порталом. */
+interface ICarouselTarget {
+  object: IConstructionObject;
+  host: HTMLElement;
 }
 
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -40,7 +50,14 @@ const REVEAL_FALLBACK_MS = 1200;
 
 const hasCoords = (o: IConstructionObject): boolean => o.latitude !== null && o.longitude !== null;
 
-export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, hoveredId, focus, onSelect }) => {
+export const ObjectsMap: FC<IObjectsMapProps> = ({
+  objects,
+  selectedId,
+  hoveredId,
+  focus,
+  onSelect,
+  onDocuments,
+}) => {
   const { theme } = useTheme();
   const isTabActive = useIsTabActive();
 
@@ -53,13 +70,16 @@ export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, hoveredI
   const boundsRef = useRef<L.LatLngBounds | null>(null);
   const idsKeyRef = useRef<string>('');
   const needFitRef = useRef(false);
+  const [carousel, setCarousel] = useState<ICarouselTarget | null>(null);
 
   const onSelectRef = useRef(onSelect);
+  const onDocumentsRef = useRef(onDocuments);
   const selectedIdRef = useRef(selectedId);
   const hoveredIdRef = useRef(hoveredId);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
+    onDocumentsRef.current = onDocuments;
     selectedIdRef.current = selectedId;
     hoveredIdRef.current = hoveredId;
   });
@@ -146,10 +166,28 @@ export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, hoveredI
       const latlng: L.LatLngTuple = [o.latitude, o.longitude];
       points.push(latlng);
       const marker = createObjectMarker(o, latlng);
-      marker.bindPopup(() => buildObjectPopup(o), {
-        minWidth: 240,
-        maxWidth: 300, // влезает в карту шириной 360 px
-        autoPanPadding: [16, 16],
+      // Содержимое живёт, пока попап открыт: Leaflet перестраивает его при update(),
+      // а контейнер карусели (цель портала) должен оставаться тем же элементом.
+      let content: HTMLElement | null = null;
+      marker.bindPopup(
+        () => {
+          content ??= buildObjectPopup(o, { onOpenDocuments: (item) => onDocumentsRef.current(item) });
+          return content;
+        },
+        {
+          minWidth: 240,
+          maxWidth: 300, // влезает в карту шириной 360 px
+          autoPanPadding: [16, 16],
+        },
+      );
+      marker.on('popupopen', () => {
+        const host = content ? findCarouselHost(content) : null;
+        if (host) setCarousel({ object: o, host });
+      });
+      marker.on('popupclose', () => {
+        const closed = content ? findCarouselHost(content) : null;
+        content = null;
+        setCarousel((prev) => (prev && prev.host === closed ? null : prev));
       });
       marker.on('click', () => onSelectRef.current(o.id));
       marker.on('add', () => applyMarkerState(marker));
@@ -243,6 +281,17 @@ export const ObjectsMap: FC<IObjectsMapProps> = ({ objects, selectedId, hoveredI
         <div ref={containerRef} className={styles.mapCanvas} />
       </div>
       <MapLegend kinds={kinds} />
+      {carousel &&
+        createPortal(
+          <PopupCarousel
+            key={carousel.object.id}
+            objectId={carousel.object.id}
+            objectName={carousel.object.name}
+            photoCount={carousel.object.photo_count}
+            coverPhotoId={carousel.object.cover_photo_id ?? ''}
+          />,
+          carousel.host,
+        )}
     </>
   );
 };

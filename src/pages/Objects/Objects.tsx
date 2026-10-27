@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FC, ReactNode } from 'react';
-import { Alert, Button, Input, Segmented, Typography, message, theme as antdTheme } from 'antd';
+import { Alert, Button, Input, Segmented, Select, Typography, message, theme as antdTheme } from 'antd';
 import {
   EnvironmentOutlined,
   LayoutOutlined,
@@ -16,6 +16,7 @@ import {
 } from '../../lib/api/constructionObjects';
 import type { IConstructionObject, IConstructionObjectInput } from '../../lib/types/types';
 import { ObjectPhotosDrawer } from './components/ObjectPhotosDrawer';
+import type { ObjectDrawerTab } from './components/ObjectPhotosDrawer';
 import { ObjectModal } from './components/ObjectModal';
 import { ObjectsKpi } from './components/ObjectsKpi';
 import { ObjectsList, ObjectsListSkeleton } from './components/ObjectsList';
@@ -52,6 +53,38 @@ const readViewMode = (): ViewMode => {
   }
 };
 
+/** Значение фильтра «Заказчик» для объектов без заказчика (в localStorage пишется как есть). */
+const NO_CUSTOMER = '__none__';
+const CUSTOMER_FILTER_KEY = 'objects_customer_filter';
+
+const readCustomerFilter = (): string | null => {
+  try {
+    return window.localStorage.getItem(CUSTOMER_FILTER_KEY) || null;
+  } catch {
+    return null;
+  }
+};
+
+const customerKey = (o: IConstructionObject): string => o.customer?.trim() || NO_CUSTOMER;
+
+interface ICustomerOption {
+  value: string;
+  label: string;
+}
+
+/** Заказчики с числом объектов: по алфавиту, «Без заказчика» — в конце. */
+const getCustomerOptions = (objects: readonly IConstructionObject[]): ICustomerOption[] => {
+  const counts = new Map<string, number>();
+  for (const o of objects) counts.set(customerKey(o), (counts.get(customerKey(o)) ?? 0) + 1);
+  const options = [...counts.entries()]
+    .filter(([key]) => key !== NO_CUSTOMER)
+    .sort(([a], [b]) => a.localeCompare(b, 'ru'))
+    .map(([key, count]) => ({ value: key, label: `${key} · ${count}` }));
+  const none = counts.get(NO_CUSTOMER);
+  if (none) options.push({ value: NO_CUSTOMER, label: `Без заказчика · ${none}` });
+  return options;
+};
+
 const Objects: FC = () => {
   const { token } = antdTheme.useToken();
   const { user } = useAuth();
@@ -64,6 +97,7 @@ const Objects: FC = () => {
   const { objects, loading, error, reload } = useConstructionObjects();
   const [viewMode, setViewMode] = useState<ViewMode>(readViewMode);
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const [customerFilter, setCustomerFilter] = useState<string | null>(readCustomerFilter);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -72,17 +106,38 @@ const Objects: FC = () => {
   const [editing, setEditing] = useState<IConstructionObject | null>(null);
   const [photosObject, setPhotosObject] = useState<IConstructionObject | null>(null);
   const [photosOpen, setPhotosOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<ObjectDrawerTab>('photos');
   const [listPane, setListPane] = useState<HTMLDivElement | null>(null);
   const mapPaneRef = useRef<HTMLDivElement | null>(null);
+
+  const customerOptions = useMemo(() => getCustomerOptions(objects), [objects]);
+
+  // Сохранённый заказчик мог исчезнуть из данных — тогда фильтр не действует (пока данные не загружены, держим как есть).
+  const activeCustomer =
+    customerFilter !== null && (objects.length === 0 || customerOptions.some((x) => x.value === customerFilter))
+      ? customerFilter
+      : null;
+
+  const handleCustomer = useCallback((value: string | null | undefined) => {
+    const next = value ?? null;
+    setCustomerFilter(next);
+    try {
+      if (next === null) window.localStorage.removeItem(CUSTOMER_FILTER_KEY);
+      else window.localStorage.setItem(CUSTOMER_FILTER_KEY, next);
+    } catch {
+      // хранилище недоступно — выбор просто не запомнится
+    }
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return objects.filter(
       (o) =>
         (filter === 'all' || o.status === filter) &&
+        (activeCustomer === null || customerKey(o) === activeCustomer) &&
         (q === '' || o.name.toLowerCase().includes(q) || o.address.toLowerCase().includes(q)),
     );
-  }, [objects, filter, search]);
+  }, [objects, filter, activeCustomer, search]);
 
   const mapOnly = viewMode === 'map';
 
@@ -129,10 +184,14 @@ const Objects: FC = () => {
     setModalOpen(true);
   }, []);
 
-  const handlePhotos = useCallback((item: IConstructionObject) => {
+  const openDrawer = useCallback((item: IConstructionObject, tab: ObjectDrawerTab) => {
     setPhotosObject(item);
+    setDrawerTab(tab);
     setPhotosOpen(true);
   }, []);
+
+  const handlePhotos = useCallback((item: IConstructionObject) => openDrawer(item, 'photos'), [openDrawer]);
+  const handleDocuments = useCallback((item: IConstructionObject) => openDrawer(item, 'documents'), [openDrawer]);
 
   const handleSave = async (input: IConstructionObjectInput, id?: string): Promise<boolean> => {
     try {
@@ -183,6 +242,18 @@ const Objects: FC = () => {
             value={filter}
             onChange={setFilter}
           />
+          <Select<string>
+            className={styles.customer}
+            showSearch
+            allowClear
+            placeholder="Заказчик"
+            aria-label="Заказчик"
+            value={activeCustomer ?? undefined}
+            options={customerOptions}
+            optionFilterProp="label"
+            popupMatchSelectWidth={360}
+            onChange={handleCustomer}
+          />
           <Segmented<ViewMode>
             className={styles.viewSwitch}
             options={VIEW_OPTIONS}
@@ -231,6 +302,7 @@ const Objects: FC = () => {
             hoveredId={hoveredId}
             focus={focus}
             onSelect={handleMapSelect}
+            onDocuments={handleDocuments}
           />
         </div>
         <div ref={setListPane} className={styles.listPane} hidden={mapOnly}>
@@ -246,6 +318,7 @@ const Objects: FC = () => {
               onHover={setHoveredId}
               onEdit={handleEdit}
               onPhotos={handlePhotos}
+              onDocuments={handleDocuments}
               onDelete={handleDelete}
             />
           )}
@@ -255,6 +328,7 @@ const Objects: FC = () => {
       <ObjectPhotosDrawer
         open={photosOpen}
         object={photosObject}
+        initialTab={drawerTab}
         readOnly={readOnly}
         onClose={() => setPhotosOpen(false)}
         onChanged={() => void reload()}

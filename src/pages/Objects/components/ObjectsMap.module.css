@@ -98,44 +98,28 @@
   overflow-wrap: anywhere;
 }
 
-/* Обложка на всю ширину попапа; высота зарезервирована, поэтому загрузка не двигает попап. */
-.popupCover {
+/* Карусель фото на всю ширину попапа. Место под кадр 16:9 (и строку подписи у нескольких фото)
+   зарезервировано до монтирования React-содержимого, поэтому попап не растёт после открытия
+   и Leaflet верно считает автопрокрутку. */
+.popupCarousel {
+  --carousel-meta: 0px;
+
   position: relative;
-  margin: -14px -16px 2px;
-  overflow: hidden;
+  box-sizing: content-box;
+  margin: -14px -16px 0;
   aspect-ratio: 16 / 9;
-  background: var(--obj-fill-strong);
 }
 
-.popupCoverImg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  animation: popup-cover-in 0.2s ease-out;
+.popupCarouselMulti {
+  --carousel-meta: 22px;
+
+  padding-bottom: var(--carousel-meta);
 }
 
 /* Кнопка закрытия поверх фото должна читаться на любом снимке. */
-.mapRoot :global(.leaflet-popup):has(.popupCover) :global(.leaflet-popup-close-button) {
+.mapRoot :global(.leaflet-popup):has(.popupCarousel) :global(.leaflet-popup-close-button) {
   color: var(--obj-text);
   background: var(--obj-bg-elevated);
-}
-
-@keyframes popup-cover-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .popupCoverImg {
-    animation: none;
-  }
 }
 
 .popupHead {
@@ -245,6 +229,43 @@
 
 .popupRowText {
   min-width: 0;
+}
+
+/* Ссылка «Документы: N» в стиле строки попапа. */
+.popupLink {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 0;
+  font: inherit;
+  color: var(--obj-current);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.18s ease-out;
+}
+
+.popupLink:hover {
+  opacity: 0.8;
+}
+
+.popupLink:focus-visible {
+  outline: 2px solid var(--obj-current);
+  outline-offset: 2px;
+}
+
+.popupLink .popupRowText {
+  text-decoration: underline;
+}
+
+@media (pointer: coarse) {
+  .popupLink {
+    align-items: center;
+    min-height: 44px;
+  }
 }
 
 /* ── Маркеры-капли ── */

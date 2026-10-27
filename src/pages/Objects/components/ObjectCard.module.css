@@ -238,6 +238,45 @@
   content: '';
 }
 
+/* Бейдж документов: пилюля как на обложке, кнопка открывает вкладку документов. */
+.docBadge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  margin-right: 2px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--obj-text);
+  cursor: pointer;
+  background: var(--obj-bg-elevated);
+  border: 1px solid var(--obj-border);
+  border-radius: 999px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.18s ease-out;
+}
+
+/* Зона касания 44px вокруг компактной пилюли. */
+.docBadge::after {
+  position: absolute;
+  inset: -13px -6px;
+  content: '';
+}
+
+.docBadge:hover {
+  border-color: var(--obj-current);
+}
+
+.docBadge:focus-visible {
+  outline: 2px solid var(--obj-current);
+  outline-offset: 1px;
+}
+
 .name {
   margin: 0;
   font-size: 14px;
@@ -451,7 +490,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card {
+  .card,
+  .docBadge {
     transition: none;
   }
 

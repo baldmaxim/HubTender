@@ -24,6 +24,8 @@ export interface IConstructionObject {
   /** Число фото объекта и id обложки (фото с минимальным sort_order) */
   photo_count: number;
   cover_photo_id: string | null;
+  /** Число документов объекта (разрешения на ввод и др.) */
+  document_count: number;
   created_at: string;
   updated_at: string;
 }

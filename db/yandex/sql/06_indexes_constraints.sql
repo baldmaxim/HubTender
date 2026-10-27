@@ -863,6 +863,15 @@ ALTER TABLE public.construction_object_photos ADD CONSTRAINT construction_object
 CREATE INDEX IF NOT EXISTS idx_construction_object_photos_object_sort
     ON public.construction_object_photos (object_id, sort_order);
 
+-- construction_object_documents
+ALTER TABLE public.construction_object_documents ADD CONSTRAINT construction_object_documents_pkey PRIMARY KEY (id);
+ALTER TABLE public.construction_object_documents ADD CONSTRAINT construction_object_documents_object_fkey
+    FOREIGN KEY (object_id) REFERENCES public.construction_objects(id) ON DELETE CASCADE;
+ALTER TABLE public.construction_object_documents ADD CONSTRAINT construction_object_documents_mime_check
+    CHECK (mime IN ('application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/webp'));
+CREATE INDEX IF NOT EXISTS idx_construction_object_documents_object_sort
+    ON public.construction_object_documents (object_id, sort_order);
+
 -- page_views
 ALTER TABLE public.page_views ADD CONSTRAINT page_views_pkey PRIMARY KEY (id);
 ALTER TABLE public.page_views ADD CONSTRAINT page_views_page_check

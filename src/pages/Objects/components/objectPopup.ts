@@ -1,5 +1,5 @@
+import * as L from 'leaflet';
 import type { IConstructionObject } from '../../../lib/types/types';
-import { loadPhotoUrl } from '../utils/photoCache';
 import { formatCommissioning } from '../utils/commissioning';
 import { formatArea } from '../utils/format';
 import { glyphSvg } from '../utils/glyphs';
@@ -26,30 +26,44 @@ const row = (glyph: GlyphName, text: string, title?: string): HTMLElement => {
   return node;
 };
 
-/** Обложка попапа: рамка 16:9 с серым фоном, картинка подгружается при открытии. */
-const buildCover = (o: IConstructionObject, photoId: string): HTMLElement => {
-  const cover = el('div', styles.popupCover);
-  const img = document.createElement('img');
-  img.className = styles.popupCoverImg;
-  img.alt = o.name;
-  img.draggable = false;
-  loadPhotoUrl(photoId, 'thumb').then(
-    (url) => {
-      img.src = url;
-      cover.append(img);
-    },
-    () => undefined, // без обложки попап остаётся рабочим
-  );
-  return cover;
+const CAROUSEL_HOST_ATTR = 'data-carousel-host';
+
+/** Контейнер карусели фото: React-портал монтирует в него PopupCarousel (см. ObjectsMap). */
+const buildCarouselHost = (multi: boolean): HTMLElement => {
+  const host = el('div', multi ? `${styles.popupCarousel} ${styles.popupCarouselMulti}` : styles.popupCarousel);
+  host.setAttribute(CAROUSEL_HOST_ATTR, '');
+  // Свайп и колесо внутри карусели не должны двигать и масштабировать карту.
+  L.DomEvent.disableClickPropagation(host);
+  L.DomEvent.disableScrollPropagation(host);
+  return host;
 };
 
+export const findCarouselHost = (popupContent: HTMLElement): HTMLElement | null =>
+  popupContent.querySelector<HTMLElement>(`[${CAROUSEL_HOST_ATTR}]`);
+
+/** Строка-ссылка «Документы: N» — открывает окно объекта на вкладке документов. */
+const documentsLink = (count: number, onClick: () => void): HTMLElement => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = styles.popupLink;
+  const icon = el('span', styles.popupRowIcon);
+  icon.innerHTML = glyphSvg('file', 16);
+  button.append(icon, el('span', styles.popupRowText, `Документы: ${count}`));
+  button.addEventListener('click', onClick);
+  return button;
+};
+
+export interface IObjectPopupOptions {
+  onOpenDocuments: (o: IConstructionObject) => void;
+}
+
 /** Мини-карточка объекта для попапа маркера. */
-export const buildObjectPopup = (o: IConstructionObject): HTMLElement => {
+export const buildObjectPopup = (o: IConstructionObject, options: IObjectPopupOptions): HTMLElement => {
   const kind = getObjectKind(o.name);
   const isCurrent = o.status === 'current';
 
   const root = el('div', styles.popup);
-  if (o.cover_photo_id) root.append(buildCover(o, o.cover_photo_id));
+  if (o.cover_photo_id && o.photo_count > 0) root.append(buildCarouselHost(o.photo_count > 1));
 
   const head = el('div', styles.popupHead);
   const tile = el('span', `${styles.popupTile} ${isCurrent ? styles.tileCurrent : styles.tileArchive}`);
@@ -69,5 +83,6 @@ export const buildObjectPopup = (o: IConstructionObject): HTMLElement => {
   const commissioning = formatCommissioning(o.commissioning_start_date, o.commissioning_date);
   if (commissioning) root.append(row('calendar', `Ввод: ${commissioning.text}`, commissioning.title));
   if (o.project_name) root.append(row('file', `Договор: ${o.project_name}`));
+  if (o.document_count > 0) root.append(documentsLink(o.document_count, () => options.onOpenDocuments(o)));
   return root;
 };

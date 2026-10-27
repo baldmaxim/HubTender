@@ -42,6 +42,7 @@ type ConstructionObjectRow struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 	PhotoCount        int       `json:"photo_count"`
 	CoverPhotoID      *string   `json:"cover_photo_id"`
+	DocumentCount     int       `json:"document_count"`
 }
 
 // ConstructionObjectInput — уже проверенные и подрезанные поля для записи.
@@ -67,14 +68,15 @@ const constructionObjectCols = `
 	o.sort_order, o.created_at, o.updated_at,
 	(SELECT count(*)::int FROM public.construction_object_photos ph WHERE ph.object_id = o.id),
 	(SELECT ph.id::text FROM public.construction_object_photos ph WHERE ph.object_id = o.id
-	 ORDER BY ph.sort_order, ph.created_at LIMIT 1)`
+	 ORDER BY ph.sort_order, ph.created_at LIMIT 1),
+	(SELECT count(*)::int FROM public.construction_object_documents d WHERE d.object_id = o.id)`
 
 func scanConstructionObject(row pgx.Row) (*ConstructionObjectRow, error) {
 	var o ConstructionObjectRow
 	if err := row.Scan(
 		&o.ID, &o.Name, &o.Area, &o.Address, &o.Customer, &o.Latitude, &o.Longitude,
 		&o.Status, &o.ProjectID, &o.ProjectName, &o.CommissioningDate, &o.CommissioningFrom,
-		&o.SortOrder, &o.CreatedAt, &o.UpdatedAt, &o.PhotoCount, &o.CoverPhotoID,
+		&o.SortOrder, &o.CreatedAt, &o.UpdatedAt, &o.PhotoCount, &o.CoverPhotoID, &o.DocumentCount,
 	); err != nil {
 		return nil, err
 	}

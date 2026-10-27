@@ -15,6 +15,7 @@ interface IObjectsListProps {
   onHover: (id: string | null) => void;
   onEdit: (item: IConstructionObject) => void;
   onPhotos: (item: IConstructionObject) => void;
+  onDocuments: (item: IConstructionObject) => void;
   onDelete: (item: IConstructionObject) => Promise<void>;
 }
 
@@ -68,6 +69,7 @@ export const ObjectsList: FC<IObjectsListProps> = ({
   onHover,
   onEdit,
   onPhotos,
+  onDocuments,
   onDelete,
 }) => {
   const { current, archive } = useMemo(
@@ -90,6 +92,7 @@ export const ObjectsList: FC<IObjectsListProps> = ({
       onHover={onHover}
       onEdit={onEdit}
       onPhotos={onPhotos}
+      onDocuments={onDocuments}
       onDelete={onDelete}
     />
   );
