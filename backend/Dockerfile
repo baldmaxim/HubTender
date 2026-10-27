@@ -5,15 +5,14 @@ FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# Copy module manifest first so Docker can cache the download layer.
-COPY go.mod ./
+# Модули — отдельным слоем до исходников: Docker кэширует его, пока не меняются
+# go.mod/go.sum (на сервере proxy.golang.org отдаёт ~20 КБ/с, полная загрузка ~10 мин).
+COPY go.mod go.sum ./
+RUN go mod download
 
-# go mod tidy requires the full source tree, so we copy sources first and then
-# run download + tidy together. go.sum is intentionally absent from the repo —
-# the Dockerfile generates it.
+# tidy нужен весь код; модули уже в кэше слоя, докачивается только недостающее.
 COPY . .
-
-RUN go mod download && go mod tidy
+RUN go mod tidy
 
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w" \
