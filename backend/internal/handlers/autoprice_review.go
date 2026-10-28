@@ -64,6 +64,7 @@ func autopriceJSON(w http.ResponseWriter, status int, v any) {
 
 // autopriceRepoError — единое соответствие ошибок репозитория кодам ответа.
 func autopriceRepoError(w http.ResponseWriter, r *http.Request, err error, detail string) {
+	extras := autopriceBulkExtras(err)
 	var zp *repository.AutopriceZeroPriceError
 	var tr *repository.AutopriceTransitionError
 	switch {
@@ -76,17 +77,17 @@ func autopriceRepoError(w http.ResponseWriter, r *http.Request, err error, detai
 			"Действие недоступно из текущего статуса позиции.", nil)
 	case errors.Is(err, repository.ErrAutopriceApproved):
 		autopriceError(w, http.StatusConflict, "approved",
-			"Позиция подтверждена: сначала снимите подтверждение (переоткрыть).", nil)
+			"Позиция подтверждена: сначала снимите подтверждение (переоткрыть).", extras)
 	case errors.Is(err, repository.ErrAutopriceRunCancelled):
-		autopriceError(w, http.StatusConflict, "run_cancelled", "Прогон авторасценки отменён.", nil)
+		autopriceError(w, http.StatusConflict, "run_cancelled", "Прогон авторасценки отменён.", extras)
 	case errors.Is(err, repository.ErrAutopriceRunNotFound):
-		autopriceError(w, http.StatusNotFound, "run_not_found", "Прогон авторасценки не найден.", nil)
+		autopriceError(w, http.StatusNotFound, "run_not_found", "Прогон авторасценки не найден.", extras)
 	case errors.Is(err, repository.ErrAutopriceTenderNotFound):
-		autopriceError(w, http.StatusNotFound, "tender_not_found", "Тендер не найден.", nil)
+		autopriceError(w, http.StatusNotFound, "tender_not_found", "Тендер не найден.", extras)
 	case errors.Is(err, repository.ErrAutopricePositionNotFound):
-		autopriceError(w, http.StatusNotFound, "position_not_found", "Позиция не найдена в тендере прогона.", nil)
+		autopriceError(w, http.StatusNotFound, "position_not_found", "Позиция не найдена в тендере прогона.", extras)
 	case errors.Is(err, repository.ErrAutopriceReviewNotFound):
-		autopriceError(w, http.StatusNotFound, "review_not_found", "Позиция не загружена в этот прогон.", nil)
+		autopriceError(w, http.StatusNotFound, "review_not_found", "Позиция не загружена в этот прогон.", extras)
 	default:
 		apierr.InternalFromErr(w, r, err, detail)
 	}
@@ -273,6 +274,35 @@ type putAutopriceReviewReq struct {
 	Findings  json.RawMessage `json:"findings"`
 }
 
+// buildAutopriceReviewInput проверяет тело карточки и собирает вход репозитория.
+// При ошибке возвращает имя поля (basis, pd_refs, questions, findings) и текст.
+func buildAutopriceReviewInput(req putAutopriceReviewReq) (in repository.AutopriceReviewInput, field, msg string) {
+	if req.Basis != nil && !autopriceBasisValues[*req.Basis] {
+		return in, "basis", "basis: PD_CONFIRMED, ASSUMED, NOT_IN_PD или RESERVE."
+	}
+	in = repository.AutopriceReviewInput{Basis: req.Basis, PdNote: req.PdNote}
+	checks := []struct {
+		field    string
+		raw      json.RawMessage
+		validate func(json.RawMessage) string
+		dst      *json.RawMessage
+	}{
+		{"pd_refs", req.PdRefs, validateRefs, &in.PdRefs},
+		{"questions", req.Questions, validateQuestions, &in.Questions},
+		{"findings", req.Findings, validateFindings, &in.Findings},
+	}
+	for _, c := range checks {
+		if isJSONNull(c.raw) {
+			continue
+		}
+		if m := c.validate(c.raw); m != "" {
+			return in, c.field, m
+		}
+		*c.dst = c.raw
+	}
+	return in, "", ""
+}
+
 // PutReview handles PUT /api/v1/autoprice-runs/{sid}/positions/{posId}/review.
 func (h *AutopriceReviewHandler) PutReview(w http.ResponseWriter, r *http.Request) {
 	user := autopriceUser(w, r)
@@ -288,29 +318,10 @@ func (h *AutopriceReviewHandler) PutReview(w http.ResponseWriter, r *http.Reques
 		autopriceBadRequest(w, "Некорректный JSON.")
 		return
 	}
-	if req.Basis != nil && !autopriceBasisValues[*req.Basis] {
-		autopriceBadRequest(w, "basis: PD_CONFIRMED, ASSUMED, NOT_IN_PD или RESERVE.")
+	in, _, msg := buildAutopriceReviewInput(req)
+	if msg != "" {
+		autopriceBadRequest(w, msg)
 		return
-	}
-	in := repository.AutopriceReviewInput{Basis: req.Basis, PdNote: req.PdNote}
-	checks := []struct {
-		raw      json.RawMessage
-		validate func(json.RawMessage) string
-		dst      *json.RawMessage
-	}{
-		{req.PdRefs, validateRefs, &in.PdRefs},
-		{req.Questions, validateQuestions, &in.Questions},
-		{req.Findings, validateFindings, &in.Findings},
-	}
-	for _, c := range checks {
-		if isJSONNull(c.raw) {
-			continue
-		}
-		if msg := c.validate(c.raw); msg != "" {
-			autopriceBadRequest(w, msg)
-			return
-		}
-		*c.dst = c.raw
 	}
 	review, err := h.store.UpsertReview(r.Context(), ids[0], ids[1], user.ID, in)
 	if err != nil {

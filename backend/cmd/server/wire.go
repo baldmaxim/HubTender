@@ -87,6 +87,7 @@ type deps struct {
 	// autopriceRepo нужен гейту машинного доступа: тендер по id прогона.
 	autopriceRepo     *repository.AutopriceReviewRepo
 	autopriceH        *handlers.AutopriceReviewHandler
+	autopriceBulkH    *handlers.AutopriceBulkHandler
 	importLogH        *handlers.ImportLogHandler
 	projectsH         *handlers.ProjectsHandler
 	objectsH          *handlers.ConstructionObjectsHandler
@@ -247,6 +248,9 @@ func buildDeps(
 	verifBotH := handlers.NewVerificationBotHandler(
 		services.NewVerificationBotService(telegramRepo, dispatchRepo, qualitySvc, cfg.AppBaseURL, logger))
 	boqSvc := services.NewBoqService(boqRepo, inMemCache).WithRecalcQueue(recalcQueue)
+	// Пакетная запись строк авторасценки: кэш и пересчёт коммерции один раз на запрос.
+	autopriceBulkH := handlers.NewAutopriceBulkHandler(
+		services.NewAutopriceBulkService(autopriceRepo, inMemCache).WithRecalcQueue(recalcQueue))
 	bulkBoqSvc := services.NewBulkBoqService(bulkBoqRepo, inMemCache)
 	importBoqSvc := services.NewImportBoqService(importBoqRepo, inMemCache).WithRecalcQueue(recalcQueue)
 	timelineSvc := services.NewTimelineService(timelineRepo)
@@ -532,6 +536,7 @@ func buildDeps(
 		importLogH:        handlers.NewImportLogHandler(importLogSvc),
 		autopriceRepo:     autopriceRepo,
 		autopriceH:        handlers.NewAutopriceReviewHandler(autopriceRepo),
+		autopriceBulkH:    autopriceBulkH,
 		projectsH:         handlers.NewProjectsHandler(projectsSvc),
 		objectsH:          handlers.NewConstructionObjectsHandler(constructionObjectsSvc),
 		objectPhotosH:     handlers.NewConstructionObjectPhotosHandler(constructionObjectPhotosSvc),

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -413,5 +414,73 @@ func TestNomenclatureEnsureHandlerResponses(t *testing.T) {
 	row, _ := data[0].(map[string]any)
 	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || row["created"] != true || row["id"] != regID || row["index"] != float64(0) {
 		t.Fatalf("ответ: %d %s", w.Code, w.Body.String())
+	}
+}
+
+type fakeBulkStore struct{ calls int }
+
+func (f *fakeBulkStore) BulkWrite(_ context.Context, _, _ string, positions []repository.AutopriceBulkPosition) (*repository.AutopriceBulkResult, error) {
+	f.calls++
+	res := &repository.AutopriceBulkResult{TenderID: "t"}
+	for _, p := range positions {
+		res.Positions = append(res.Positions, repository.AutopriceBulkPositionResult{
+			PositionID: p.PositionID, Items: []repository.AutopriceBulkItemResult{}})
+	}
+	return res, nil
+}
+
+// bulkRouter — маршрут пакетной записи авторасценки; resolve — тендер прогона для гейта.
+func bulkRouter(store *fakeBulkStore, principal *middleware.APIKeyPrincipal, resolve middleware.TenderResolver) *chi.Mux {
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			ctx := context.WithValue(req.Context(), middleware.CtxUser, &middleware.AuthUser{ID: "u-1", Role: "engineer"})
+			if principal != nil {
+				ctx = context.WithValue(ctx, middleware.CtxAPIKey, principal)
+			}
+			next.ServeHTTP(w, req.WithContext(ctx))
+		})
+	})
+	registerAutopriceBulkRoute(r, handlers.NewAutopriceBulkHandler(store), resolve)
+	return r
+}
+
+func TestAutopriceBulkRouteGate(t *testing.T) {
+	const (
+		runTender   = "11111111-1111-1111-1111-111111111111"
+		otherTender = "22222222-2222-2222-2222-222222222222"
+		path        = "/api/v1/autoprice-runs/0f8fad5b-d9cb-469f-a165-70867728950e/items:bulk"
+		body        = `{"positions":[{"position_id":"0f8fad5b-d9cb-469f-a165-70867728950e","items":[]}]}`
+	)
+	writer := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"tenders:write"}}
+	readOnly := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"tenders:read"}}
+	forRun := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"tenders:write"}, AllowedTenderIDs: []string{runTender}}
+	forOther := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"tenders:write"}, AllowedTenderIDs: []string{otherTender}}
+	resolve := func(*http.Request) (string, error) { return runTender, nil }
+	resolveFail := func(*http.Request) (string, error) { return "", errors.New("нет прогона") }
+
+	cases := []struct {
+		name      string
+		principal *middleware.APIKeyPrincipal
+		resolve   middleware.TenderResolver
+		status    int
+		code      string
+		wantCalls int
+	}{
+		{"человек с JWT", nil, resolve, 200, "", 1},
+		{"ключ tenders:write", writer, resolve, 200, "", 1},
+		{"ключ без tenders:write", readOnly, resolve, 403, "API_KEY_SCOPE_DENIED", 0},
+		{"ключ на тендер прогона", forRun, resolve, 200, "", 1},
+		{"ключ на другой тендер", forOther, resolve, 403, "API_KEY_TENDER_DENIED", 0},
+		{"тендер прогона не определён", forRun, resolveFail, 403, "API_KEY_TENDER_DENIED", 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			store := &fakeBulkStore{}
+			w, m := callRegistry(t, bulkRouter(store, c.principal, c.resolve), "POST", path, body)
+			if w.Code != c.status || (c.code != "" && m["code"] != c.code) || store.calls != c.wantCalls {
+				t.Fatalf("status %d code %v calls %d, ожидалось %d %s %d: %s", w.Code, m["code"], store.calls, c.status, c.code, c.wantCalls, w.Body.String())
+			}
+		})
 	}
 }

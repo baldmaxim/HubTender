@@ -128,6 +128,15 @@ func registerAutopriceRoutes(r chi.Router, d *deps) {
 	r.With(readT).Get("/api/v1/tenders/{id}/autoprice-runs", d.autopriceH.ListRuns)
 	r.With(writeRun).Put("/api/v1/autoprice-runs/{sid}/positions/{posId}/review", d.autopriceH.PutReview)
 	r.With(readRun).Get("/api/v1/autoprice-runs/{sid}/reviews", d.autopriceH.ListReviews)
+	registerAutopriceBulkRoute(r, d.autopriceBulkH, d.tenderOfAutopriceRun)
+}
+
+// registerAutopriceBulkRoute — пакетная запись строк BOQ прогона авторасценки
+// (заменяет по одному POST .../items + PUT .../review на каждую строку).
+// Область tenders:write; тендер для ограничения ключа — тендер прогона.
+func registerAutopriceBulkRoute(r chi.Router, h *handlers.AutopriceBulkHandler, tenderOfRun middleware.TenderResolver) {
+	writeRun := middleware.RequireAPIKeyScopeResolved(apikey.ScopeTendersWrite, tenderOfRun)
+	r.With(writeRun).Post("/api/v1/autoprice-runs/{sid}/items:bulk", h.PostBulk)
 }
 
 // registerVerificationAIRoutes — ИИ-разбор находок: оценки — чтение, запуск

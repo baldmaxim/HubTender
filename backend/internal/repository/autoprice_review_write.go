@@ -100,17 +100,21 @@ func optJSON(raw json.RawMessage) *string {
 	return &s
 }
 
-// lockedRun — сессия прогона для записи: должна существовать, быть
-// autoprice и не отменённой; позиция — принадлежать тендеру прогона.
-func lockedRun(ctx context.Context, tx pgx.Tx, sessionID, positionID string) (tenderID string, err error) {
+// lockRun — сессия прогона для записи: должна существовать, быть autoprice и
+// не отменённой. forUpdate берёт блокировку строки сессии (пакетная запись:
+// отмена прогона дождётся коммита и увидит вставленные строки).
+func lockRun(ctx context.Context, tx pgx.Tx, sessionID string, forUpdate bool) (tenderID string, err error) {
 	var (
 		tid       *string
 		cancelled bool
 	)
-	err = tx.QueryRow(ctx, `
+	q := `
 		SELECT tender_id::text, cancelled_at IS NOT NULL
-		FROM public.import_sessions WHERE id = $1 AND source = $2`,
-		sessionID, AutopriceSource).Scan(&tid, &cancelled)
+		FROM public.import_sessions WHERE id = $1 AND source = $2`
+	if forUpdate {
+		q += ` FOR UPDATE`
+	}
+	err = tx.QueryRow(ctx, q, sessionID, AutopriceSource).Scan(&tid, &cancelled)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrAutopriceRunNotFound
@@ -123,16 +127,26 @@ func lockedRun(ctx context.Context, tx pgx.Tx, sessionID, positionID string) (te
 	if cancelled {
 		return "", ErrAutopriceRunCancelled
 	}
+	return *tid, nil
+}
+
+// lockedRun — сессия прогона для записи (lockRun) плюс проверка, что позиция
+// принадлежит тендеру прогона.
+func lockedRun(ctx context.Context, tx pgx.Tx, sessionID, positionID string) (tenderID string, err error) {
+	tid, err := lockRun(ctx, tx, sessionID, false)
+	if err != nil {
+		return "", err
+	}
 	var ok bool
 	if err := tx.QueryRow(ctx, `
 		SELECT EXISTS (SELECT 1 FROM public.client_positions WHERE id = $1 AND tender_id = $2)`,
-		positionID, *tid).Scan(&ok); err != nil {
+		positionID, tid).Scan(&ok); err != nil {
 		return "", fmt.Errorf("autoprice: check position: %w", err)
 	}
 	if !ok {
 		return "", ErrAutopricePositionNotFound
 	}
-	return *tid, nil
+	return tid, nil
 }
 
 // autopriceUserName — имя для журнала: ФИО, а если оно пустое — e-mail,
@@ -160,13 +174,27 @@ func (r *AutopriceReviewRepo) UpsertReview(ctx context.Context, sessionID, posit
 		return nil, err
 	}
 
+	review, err := upsertReviewTx(ctx, tx, sessionID, tenderID, positionID, actorID, in)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("autoprice.UpsertReview: commit: %w", err)
+	}
+	return review, nil
+}
+
+// upsertReviewTx — запись карточки позиции в открытой транзакции после лока
+// прогона (lockedRun): общая часть UpsertReview и пакетной записи
+// (autoprice_bulk.go). Коммит и откат — на вызывающем.
+func upsertReviewTx(ctx context.Context, tx pgx.Tx, sessionID, tenderID, positionID, actorID string, in AutopriceReviewInput) (*AutopriceReview, error) {
 	var status *string
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT status FROM public.autoprice_position_reviews
 		WHERE import_session_id = $1 AND client_position_id = $2 FOR UPDATE`,
 		sessionID, positionID).Scan(&status)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("autoprice.UpsertReview: load: %w", err)
+		return nil, fmt.Errorf("autoprice.upsertReviewTx: load: %w", err)
 	}
 	exists := err == nil
 	if exists && *status == AutopriceStatusApproved {
@@ -185,7 +213,7 @@ func (r *AutopriceReviewRepo) UpsertReview(ctx context.Context, sessionID, posit
 	ev.To = &to
 	evJSON, err := eventArray(ev)
 	if err != nil {
-		return nil, fmt.Errorf("autoprice.UpsertReview: event: %w", err)
+		return nil, fmt.Errorf("autoprice.upsertReviewTx: event: %w", err)
 	}
 
 	if exists {
@@ -206,16 +234,9 @@ func (r *AutopriceReviewRepo) UpsertReview(ctx context.Context, sessionID, posit
 			nonNilJSON(in.Questions, "[]"), nonNilJSON(in.Findings, "[]"), to, evJSON)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("autoprice.UpsertReview: write: %w", err)
+		return nil, fmt.Errorf("autoprice.upsertReviewTx: write: %w", err)
 	}
-	review, err := getAutopriceReview(ctx, tx, sessionID, positionID)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("autoprice.UpsertReview: commit: %w", err)
-	}
-	return review, nil
+	return getAutopriceReview(ctx, tx, sessionID, positionID)
 }
 
 // lockReview блокирует карточку и возвращает её статус; запись в отменённый

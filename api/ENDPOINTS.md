@@ -14,7 +14,7 @@
 машинный список это `GET /api/v1/tenders/brief`. Админские
 `/api/v1/admin/api-access/*` и остальные эндпоинты портала ключу тоже закрыты.
 
-## Все маршруты — 35 операций
+## Все маршруты — 36 операций
 
 | Метод | Путь | Область |
 |---|---|---|
@@ -29,6 +29,7 @@
 | POST | `/api/v1/tenders/{id}/positions/{posId}/items` | `tenders:write` |
 | PATCH | `/api/v1/items/{id}` | `tenders:write` |
 | POST | `/api/v1/positions/{id}/recompute-totals` | `tenders:write` |
+| POST | `/api/v1/autoprice-runs/{sid}/items:bulk` | `tenders:write` |
 | POST | `/api/v1/nomenclature/ensure` | `nomenclature:write` |
 | GET | `/api/v1/archive/positions/search` | `archive:read` |
 | POST | `/api/v1/archive/positions/suggest` | `archive:read` |
@@ -179,6 +180,93 @@ created_at, updated_at`.
 Идемпотентности нет: перед повтором читайте строки позиции. Суммы и коммерческие
 стоимости считает сервер. Имена номенклатуры сервер не сопоставляет — либо текст в
 `description`, либо готовые id.
+
+### Пакетная запись строк прогона — `POST /api/v1/autoprice-runs/{sid}/items:bulk`
+
+Область `tenders:write`; ключ с ограничением по тендерам должен включать тендер прогона
+(`{sid}` — id прогона авторасценки, созданного `POST /api/v1/tenders/{id}/autoprice-runs`).
+Заменяет серию `POST …/positions/{posId}/items` + `PUT …/autoprice-runs/{sid}/positions/{posId}/review`
+(11 тыс. запросов на тендер): **одна транзакция на весь запрос** — записывается всё или ничего.
+
+```json
+{"positions":[
+  {"position_id":"<uuid позиции тендера прогона>",
+   "replace":true,
+   "items":[
+     {"ref":"w1","boq_item_type":"раб","work_name_id":"<uuid>","unit_code":"м2",
+      "quantity":120,"unit_rate":850,"currency_type":"RUB"},
+     {"ref":"m1","parent_ref":"w1","boq_item_type":"мат","material_name_id":"<uuid>","material_type":"основн.",
+      "unit_code":"кг","quantity":14.5,"unit_rate":32,"currency_type":"RUB","delivery_price_type":"в цене",
+      "conversion_coefficient":1,"consumption_coefficient":1}
+   ],
+   "review":{"basis":"ASSUMED","pd_refs":["лист 12"],"pd_note":"…","questions":[],"findings":[]}}
+]}
+```
+
+- **Позиция.** `position_id` — позиция тендера прогона, в запросе не повторяется. `review` — как тело
+  `PUT …/review` (`basis`, `pd_refs`, `pd_note`, `questions`, `findings`), `null` или отсутствует — карточку
+  не менять; новая карточка `pending`, `returned` после загрузки снова `pending`.
+- **Строка.** Поля те же, что у `POST …/items` (`boq_item_type`, `quantity`, `unit_rate`, `currency_type`,
+  `work_name_id`/`material_name_id` и т. д.) и теми же проверками; у работы обязателен `work_name_id`, у материала —
+  `material_name_id`. `import_session_id` не нужен — строки всегда пишутся в прогон `{sid}`. Коммерческих полей
+  (наценок) нет: итоги и КП считает сервер. Если `sort_number` не задан, он равен индексу строки в `items`.
+- **`ref` / `parent_ref`.** `ref` — произвольный непустой ключ строки, уникальный в пределах позиции. Материал
+  привязывается к работе той же позиции через `parent_ref` = `ref` работы (`parent_work_item_id` в пакете **не
+  принимается**). Работа родителя иметь не может; `parent_ref` указывает только на работу, не на себя.
+  Порядок строк в `items` любой: сначала вставляются строки без `parent_ref`, затем с ним.
+- **`replace: true`.** Перед вставкой удаляются строки этой позиции, записанные **этим же прогоном** (аудит `DELETE`
+  по каждой). Ручные строки и строки других прогонов не трогаются. Если под заменяемой работой висит чужая
+  дочерняя строка (ручная или другого прогона) — 409 `foreign_children`, ничего не меняется.
+- **Подтверждённая позиция** (`approved`): любая запись в неё — `items`, `replace` или `review` — даёт 409 `approved`
+  на весь запрос; сначала `reopen` в портале.
+- **Лимиты.** Тело ≤ 8 МБ; позиций 1…50; строк (сумма по всем позициям) ≤ 2000.
+- **Побочные эффекты.** Аудит `INSERT`/`DELETE` с автором — выпустившим ключ; счётчик строк прогона, итоги позиций
+  (`total_material`, `total_works`) и одна ревизия финансовых входов тендера — за запрос, не за строку;
+  пересчёт коммерции ставится в очередь один раз после коммита.
+
+Ответ 200 (позиции и строки — в порядке запроса; `review` — `null`, если не передавалась):
+
+```json
+{"data":[
+  {"position_id":"<uuid>",
+   "items":[
+     {"ref":"w1","id":"<uuid>","parent_work_item_id":null,"quantity":120,"unit_rate":850,"total_amount":102000,"updated_at":"2026-10-28T09:00:00Z"},
+     {"ref":"m1","id":"<uuid>","parent_work_item_id":"<id работы w1>","quantity":14.5,"unit_rate":32,"total_amount":464,"updated_at":"2026-10-28T09:00:00Z"}
+   ],
+   "review":{"client_position_id":"<uuid>","status":"pending","basis":"ASSUMED", "…":"как в GET …/reviews"}}
+]}
+```
+
+Ошибки. Тела прогона — `{"error":"<код>","message":"<по-русски>", …}`; отказы гейта ключа — RFC 7807 с `code`;
+`MISSING_FX_RATE` — как у `POST …/items` (RFC 7807), плюс `position_id`/`ref`.
+
+| Код | Когда | Тело (суть) |
+|---|---|---|
+| 400 | битый JSON; `positions` пуст; `sid` не UUID | `{"error":"bad_request","message":"Некорректный JSON."}` |
+| 400 | не задан курс валюты тендера | `{"code":"MISSING_FX_RATE","currency":"USD","position_id":"…","ref":"m1",…}` |
+| 403 | у ключа нет `tenders:write` | `{"code":"API_KEY_SCOPE_DENIED","requiredScope":"tenders:write",…}` |
+| 403 | ключ не включает тендер прогона | `{"code":"API_KEY_TENDER_DENIED",…}` |
+| 404 | прогона нет / позиция не из тендера прогона | `{"error":"run_not_found",…}` / `{"error":"position_not_found","position_id":"…",…}` |
+| 409 | позиция подтверждена | `{"error":"approved","message":"Позиция подтверждена: сначала снимите подтверждение (переоткрыть).","position_id":"…"}` |
+| 409 | прогон отменён; чужие дочерние строки при `replace` | `{"error":"run_cancelled",…}` / `{"error":"foreign_children","position_id":"…",…}` |
+| 413 | тело > 8 МБ либо > 50 позиций или > 2000 строк | `{"error":"too_large","message":"не больше 50 позиций и 2000 строк на запрос: получено 51 позиций, 1830 строк"}` |
+| 422 | ошибка в данных строки/позиции | см. ниже |
+
+422 `invalid_item` — первая найденная ошибка; `field` — имя поля запроса (`review.<поле>` для карточки),
+`ref` пуст, если ошибка на уровне позиции:
+
+```json
+{"error":"invalid_item","message":"parent_ref: строка с таким ref не найдена в этой позиции",
+ "position_id":"<uuid>","ref":"m1","field":"parent_ref"}
+```
+
+Причины: пустой/повторный `position_id` или `ref`; `parent_ref` не найден, на себя, на материал, у работы;
+`parent_work_item_id` в строке; `boq_item_type` вне списка; нарушены проверки полей (`unit_rate < 0`, не UUID и т. п.);
+работа без `work_name_id` / материал без `material_name_id`; неверные даты источника (`quote_price_date`,
+`quote_valid_until`); несуществующие `work_name_id`, `material_name_id`, `unit_code`, `detail_cost_category_id`
+(`field` — по имени ограничения БД); невалидная карточка (`review.basis`, `review.findings`, …).
+
+Идемпотентности нет: при сетевой ошибке без ответа повторите запрос с `replace: true`, иначе строки задвоятся.
 
 ## Наименования работ и материалов — область `nomenclature:write`
 

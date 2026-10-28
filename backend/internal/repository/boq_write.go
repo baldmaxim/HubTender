@@ -300,6 +300,34 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
 	}
 
+	rates, err := loadTenderRates(ctx, tx, in.TenderID)
+	if err != nil {
+		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
+	}
+
+	item, err := insertBoqItemTx(ctx, tx, in, rates)
+	if err != nil {
+		return nil, err
+	}
+
+	// Position totals are derived from its rows — refreshed in the same tx.
+	if err := recomputePositionTotalsByIDsTx(ctx, tx, []string{item.ClientPositionID}); err != nil {
+		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("boqRepo.CreateBoqItem: commit: %w", err)
+	}
+	return item, nil
+}
+
+// insertBoqItemTx — запись одной строки в открытой транзакции: проверка дат
+// источника, расчёт total_amount, INSERT и аудит INSERT. Транзакцию, аудит-GUC,
+// счётчик сессии прогона, ревизию тендера и пересчёт итогов позиции ведёт
+// вызывающий: так одну функцию используют одиночная запись и пакетная
+// (autoprice_bulk.go). Ошибки возвращаются как есть (InvalidQuoteDatesError,
+// MissingFXRateError — для errors.As), прочие — с префиксом.
+func insertBoqItemTx(ctx context.Context, tx pgx.Tx, in CreateBoqItemInput, rates calc.CurrencyRates) (*BoqItemRow, error) {
 	// 1.3: quote source dates — та же валидация, что и в UpdateBoqItem.
 	if err := validateQuoteDates(in.QuotePriceDate, in.QuoteValidUntil, &BoqItemRow{}); err != nil {
 		return nil, err
@@ -315,11 +343,6 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 	sortNum := 0
 	if in.SortNumber != nil {
 		sortNum = *in.SortNumber
-	}
-
-	rates, err := loadTenderRates(ctx, tx, in.TenderID)
-	if err != nil {
-		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
 	}
 
 	calcIn := calc.BoqItemAmountInput{
@@ -338,7 +361,7 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 	}
 	totalAmount, err := calc.CalculateBoqItemTotalAmount(calcIn, rates)
 	if err != nil {
-		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
+		return nil, fmt.Errorf("boqRepo.insertBoqItemTx: %w", err)
 	}
 
 	// NOTE: public.boq_items in the live Yandex schema has no `created_by`
@@ -369,21 +392,12 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 	)
 	item, err := scanBoqItemRow(row)
 	if err != nil {
-		return nil, fmt.Errorf("boqRepo.CreateBoqItem: scan: %w", err)
+		return nil, fmt.Errorf("boqRepo.insertBoqItemTx: scan: %w", err)
 	}
 
 	newJSON, _ := boqRowJSON(item)
 	if err := insertAudit(ctx, tx, item.ID, "INSERT", in.CreatedBy, nil, nil, newJSON); err != nil {
-		return nil, fmt.Errorf("boqRepo.CreateBoqItem: audit: %w", err)
-	}
-
-	// Position totals are derived from its rows — refreshed in the same tx.
-	if err := recomputePositionTotalsByIDsTx(ctx, tx, []string{item.ClientPositionID}); err != nil {
-		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("boqRepo.CreateBoqItem: commit: %w", err)
+		return nil, fmt.Errorf("boqRepo.insertBoqItemTx: audit: %w", err)
 	}
 	return item, nil
 }
