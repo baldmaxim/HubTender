@@ -26,6 +26,7 @@ readonly BACKEND_ENV="$SITE_DIR/server/.env.prod"
 readonly LEGACY_FRONTEND_ENV="$BUILD_DIR/.env.production.yandex"
 readonly DB_CA="$SITE_DIR/.certs/yandex-ca.pem"
 readonly IMAGE=hubtender-api:prod
+readonly BUILDER_IMAGE=hubtender-api:builder
 readonly SERVICE=hubtender-bff.service
 readonly BFF_PORT=3006
 readonly REMOTE="${HUBTENDER_REMOTE:-origin}"
@@ -139,6 +140,10 @@ deploy_backend() {
     printf 'SENTRY_RELEASE=hubtender-api@%s\n' "$sha" >> "$BACKEND_ENV"
   fi
 
+  # Стадия builder — под своим тегом: иначе её слои (в т.ч. go mod download)
+  # висят без тега и docker image prune в конце деплоя удаляет кэш модулей.
+  log "docker build --target builder -t $BUILDER_IMAGE ./backend"
+  docker build --target builder -t "$BUILDER_IMAGE" ./backend
   log "docker build -t $IMAGE ./backend"
   docker build -t "$IMAGE" ./backend
 
