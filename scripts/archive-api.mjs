@@ -6,7 +6,7 @@
  * передаётся (иначе осел бы в истории шелла и в логах агента).
  *
  *   TENDERHUB_API_KEY=thk_...           обязателен
- *   TENDERHUB_API_URL=https://tender.su10.ru   по умолчанию
+ *   TENDERHUB_API_URL=https://gp.su10.ru      по умолчанию
  *
  * Примеры:
  *   node scripts/archive-api.mjs search "устройство стяжки" --unit=м2 --limit=5
@@ -30,7 +30,7 @@
  *   node scripts/archive-api.mjs brief-set <tender_id> ./brief.txt
  */
 
-const BASE = process.env.TENDERHUB_API_URL ?? 'https://tender.su10.ru';
+const BASE = process.env.TENDERHUB_API_URL ?? 'https://gp.su10.ru';
 const KEY = process.env.TENDERHUB_API_KEY;
 
 if (!KEY) {
