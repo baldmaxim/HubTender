@@ -84,33 +84,36 @@ type deps struct {
 	costsH              *handlers.CostsHandler
 	nomenclaturesH      *handlers.NomenclaturesHandler
 	nomenclatureEnsureH *handlers.NomenclatureEnsureHandler
-	importLogH          *handlers.ImportLogHandler
-	projectsH           *handlers.ProjectsHandler
-	objectsH            *handlers.ConstructionObjectsHandler
-	objectPhotosH       *handlers.ConstructionObjectPhotosHandler
-	objectDocumentsH    *handlers.ConstructionObjectDocumentsHandler
-	pageViewsH          *handlers.PageViewsHandler
-	userAdminH          *handlers.UserAdminHandler
-	markupH             *handlers.MarkupHandler
-	fiH                 *handlers.FIHandler
-	qualityAnalyticsH   *handlers.QualityAnalyticsHandler
-	priceBenchmarkH     *handlers.PriceBenchmarkHandler
-	priceSourceH        *handlers.PriceSourceHandler
-	actionPlanH         *handlers.ActionPlanHandler
-	changeImpactH       *handlers.ChangeImpactHandler
-	reviewPackH         *handlers.ReviewPackHandler
-	smartImportH        *handlers.SmartImportHandler
-	importMemoryH       *handlers.ImportMemoryHandler
-	ccvH                *handlers.ConstructionCostVolumesHandler
-	aiAdminH            *handlers.AIAdminHandler
-	aiHealthH           *handlers.AIHealthHandler
-	wsH                 *handlers.WsHandler
-	qualityH            *handlers.QualityHandler
-	verifSectionsH      *handlers.VerificationSectionsHandler
-	costBenchmarkH      *handlers.CostBenchmarkHandler
-	pricingH            *handlers.PricingHandler
-	mcpOAuthH           *mcpauth.Handler
-	mcpHTTP             http.Handler
+	// autopriceRepo нужен гейту машинного доступа: тендер по id прогона.
+	autopriceRepo     *repository.AutopriceReviewRepo
+	autopriceH        *handlers.AutopriceReviewHandler
+	importLogH        *handlers.ImportLogHandler
+	projectsH         *handlers.ProjectsHandler
+	objectsH          *handlers.ConstructionObjectsHandler
+	objectPhotosH     *handlers.ConstructionObjectPhotosHandler
+	objectDocumentsH  *handlers.ConstructionObjectDocumentsHandler
+	pageViewsH        *handlers.PageViewsHandler
+	userAdminH        *handlers.UserAdminHandler
+	markupH           *handlers.MarkupHandler
+	fiH               *handlers.FIHandler
+	qualityAnalyticsH *handlers.QualityAnalyticsHandler
+	priceBenchmarkH   *handlers.PriceBenchmarkHandler
+	priceSourceH      *handlers.PriceSourceHandler
+	actionPlanH       *handlers.ActionPlanHandler
+	changeImpactH     *handlers.ChangeImpactHandler
+	reviewPackH       *handlers.ReviewPackHandler
+	smartImportH      *handlers.SmartImportHandler
+	importMemoryH     *handlers.ImportMemoryHandler
+	ccvH              *handlers.ConstructionCostVolumesHandler
+	aiAdminH          *handlers.AIAdminHandler
+	aiHealthH         *handlers.AIHealthHandler
+	wsH               *handlers.WsHandler
+	qualityH          *handlers.QualityHandler
+	verifSectionsH    *handlers.VerificationSectionsHandler
+	costBenchmarkH    *handlers.CostBenchmarkHandler
+	pricingH          *handlers.PricingHandler
+	mcpOAuthH         *mcpauth.Handler
+	mcpHTTP           http.Handler
 }
 
 // buildDeps wires repositories → cache → services → handlers. Extracted from
@@ -157,6 +160,7 @@ func buildDeps(
 	costsRepo := repository.NewCostsRepo(pool)
 	nomenclaturesRepo := repository.NewNomenclaturesRepo(pool)
 	importLogRepo := repository.NewImportLogRepo(pool)
+	autopriceRepo := repository.NewAutopriceReviewRepo(pool)
 	projectsRepo := repository.NewProjectsRepo(pool)
 	constructionObjectsRepo := repository.NewConstructionObjectsRepo(pool)
 	constructionObjectPhotosRepo := repository.NewConstructionObjectPhotosRepo(pool)
@@ -526,6 +530,8 @@ func buildDeps(
 		nomenclatureEnsureH: handlers.NewNomenclatureEnsureHandler(
 			services.NewNomenclatureEnsureService(nomenclaturesRepo, inMemCache)),
 		importLogH:        handlers.NewImportLogHandler(importLogSvc),
+		autopriceRepo:     autopriceRepo,
+		autopriceH:        handlers.NewAutopriceReviewHandler(autopriceRepo),
 		projectsH:         handlers.NewProjectsHandler(projectsSvc),
 		objectsH:          handlers.NewConstructionObjectsHandler(constructionObjectsSvc),
 		objectPhotosH:     handlers.NewConstructionObjectPhotosHandler(constructionObjectPhotosSvc),

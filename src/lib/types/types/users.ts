@@ -104,6 +104,7 @@ export const ALL_PAGES = [
   '/admin/api-access',
   '/admin/usage',
   '/data-quality',
+  '/autoprice-review',
 ] as const;
 
 // Страницы по умолчанию для каждой роли
@@ -176,6 +177,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/positions/:positionId/items': 'Работы и материалы',
   '/commerce': 'Форма КП', // Старый путь, оставлен для совместимости
   '/data-quality': 'Проверка данных',
+  '/autoprice-review': 'Подтверждение авторасценки',
   // '/analytics/quality': 'Качество расчёта', // архив 23.10.2026
   // '/analytics/price-benchmark': 'Ценовые отклонения', // архив 23.10.2026
   // '/analytics/price-sources': 'Источники цен', // архив 23.10.2026
@@ -210,6 +212,10 @@ export const PAGES_STRUCTURE = [
   {
     title: null, // Без группы
     pages: ['/financial-indicators'],
+  },
+  {
+    title: null, // Без группы; тест авторасценки
+    pages: ['/autoprice-review'],
   },
   {
     title: 'Аналитика',

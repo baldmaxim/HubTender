@@ -16,6 +16,7 @@ import { exportCommerceToExcel } from './utils/exportToExcel';
 import { resolveFinancialCalculationState, LAST_CALCULATED_TOTAL_LABEL } from '../../lib/financial/calculationState';
 import { computeCommerceTotals } from './utils/computeCommerceTotals';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useAutopriceExportWarning } from '../../hooks/useAutopriceExportWarning';
 import { useIsTabActive } from '../../hooks/useIsTabActive';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LandscapeTableOverlay } from '../../components/responsive/LandscapeTableOverlay';
@@ -31,6 +32,7 @@ export default function Commerce() {
   // не определить: у скрытой вкладки router-контекст заморожен (TabHost) и показывает её же путь.
   const isTabActive = useIsTabActive();
   const { openPositionTab } = useWorkspaceTabActions();
+  const { confirmExport } = useAutopriceExportWarning();
   const { isPhone, isLandscapePhone } = useIsMobile();
   const { theme: currentTheme } = useTheme();
   // Архивные тендеры отображаются в фильтре для всех пользователей
@@ -155,7 +157,7 @@ export default function Commerce() {
   };
 
   // Обработка экспорта в Excel
-  const handleExportToExcel = () => {
+  const handleExportToExcel = async () => {
     const selectedTender = tenders.find(t => t.id === selectedTenderId);
     // Fail-closed: нет курса → не выгружаем частичные значения.
     const fxMsg = selectedTender
@@ -187,6 +189,8 @@ export default function Commerce() {
       );
       return;
     }
+    // Тест авторасценки: только предупреждение, не блокирует экспорт.
+    if (selectedTenderId && !(await confirmExport(selectedTenderId))) return;
     exportCommerceToExcel(positions, selectedTender, effInsurance, distributeToRows);
   };
 

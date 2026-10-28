@@ -49,6 +49,7 @@ export const WORKSPACE_PAGES: WorkspacePage[] = [
   page('/costs', ConstructionCostNew),
   page('/financial-indicators', lazy(() => import('../../pages/FinancialIndicators/FinancialIndicators'))),
   page('/data-quality', lazy(() => import('../../pages/DataQuality/DataQuality'))),
+  page('/autoprice-review', lazy(() => import('../../pages/AutopriceReview/AutopriceReview'))),
   page('/analytics/comparison', lazy(() => import('../../pages/Analytics/ObjectComparison'))),
   // В архиве с 23.10.2026: страницы не выданы ни одной роли. Код страниц и API сохранены — чтобы вернуть, раскомментировать.
   // page('/analytics/quality', lazy(() => import('../../pages/TenderQuality/TenderQuality')), 'tenderId'),

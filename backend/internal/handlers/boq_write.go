@@ -107,6 +107,8 @@ type createBoqItemReq struct {
 	QuoteLink              *string  `json:"quote_link"`
 	QuotePriceDate         *string  `json:"quote_price_date"`
 	QuoteValidUntil        *string  `json:"quote_valid_until"`
+	// ImportSessionID — необязательная привязка к прогону авторасценки.
+	ImportSessionID *string `json:"import_session_id" validate:"omitempty,uuid"`
 }
 
 // updateBoqItemReq is the request body for PATCH /api/v1/items/:id.
@@ -219,6 +221,7 @@ func (h *BoqWriteHandler) CreateBoqItem(w http.ResponseWriter, r *http.Request) 
 		QuotePriceDate:         req.QuotePriceDate,
 		QuoteValidUntil:        req.QuoteValidUntil,
 		CreatedBy:              authUser.ID,
+		ImportSessionID:        req.ImportSessionID,
 	}
 
 	item, err := h.svc.CreateBoqItem(r.Context(), in)
@@ -229,6 +232,11 @@ func (h *BoqWriteHandler) CreateBoqItem(w http.ResponseWriter, r *http.Request) 
 		var qd *repository.InvalidQuoteDatesError
 		if errors.As(err, &qd) {
 			apierr.BadRequest(qd.Reason).Render(w)
+			return
+		}
+		var is *repository.InvalidImportSessionError
+		if errors.As(err, &is) {
+			apierr.BadRequest(is.Reason).Render(w)
 			return
 		}
 		apierr.InternalFromErr(w, r, err, "failed to create BOQ item", "tender_id", tenderID, "position_id", posID)

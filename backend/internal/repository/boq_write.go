@@ -73,6 +73,9 @@ type CreateBoqItemInput struct {
 	QuotePriceDate         *string // YYYY-MM-DD; metadata-only (1.3)
 	QuoteValidUntil        *string // YYYY-MM-DD; metadata-only (1.3)
 	CreatedBy              string  // app users UUID for audit (changed_by)
+	// ImportSessionID — необязательная привязка строки к прогону авторасценки
+	// (import_sessions.source='autoprice'); nil — поведение прежнее.
+	ImportSessionID *string
 }
 
 // UpdateBoqItemInput holds validated patch fields for a boq_item.
@@ -276,6 +279,22 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
 	}
 
+	// Привязка к прогону авторасценки: сессия того же тендера, source='autoprice',
+	// не отменена. UPDATE берёт блокировку строки сессии — отмена (FOR UPDATE)
+	// дождётся этой транзакции и увидит строку.
+	if in.ImportSessionID != nil {
+		tag, err := tx.Exec(ctx, `
+			UPDATE public.import_sessions SET items_count = items_count + 1
+			WHERE id = $1 AND tender_id = $2 AND source = $3 AND cancelled_at IS NULL`,
+			*in.ImportSessionID, in.TenderID, AutopriceSource)
+		if err != nil {
+			return nil, fmt.Errorf("boqRepo.CreateBoqItem: import session: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return nil, &InvalidImportSessionError{Reason: "import_session_id: прогон авторасценки не найден, закрыт или относится к другому тендеру"}
+		}
+	}
+
 	// 0-F2 (category A): one revision bump; commercial recalc follows async.
 	if _, err := MarkTenderFinancialInputsChangedTx(ctx, tx, in.TenderID, "boq_create"); err != nil {
 		return nil, fmt.Errorf("boqRepo.CreateBoqItem: %w", err)
@@ -333,9 +352,9 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		     delivery_amount, consumption_coefficient, total_amount,
 		     detail_cost_category_id, material_name_id, work_name_id,
 		     parent_work_item_id, sort_number, quote_link,
-		     quote_price_date, quote_valid_until)
+		     quote_price_date, quote_valid_until, import_session_id)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
-		        $22::date, $23::date)
+		        $22::date, $23::date, $24::uuid)
 		RETURNING ` + boqScanCols
 	row := tx.QueryRow(ctx, q,
 		in.ClientPositionID, in.TenderID, in.BoqItemType,
@@ -346,7 +365,7 @@ func (r *BoqRepo) CreateBoqItem(ctx context.Context, in CreateBoqItemInput) (*Bo
 		in.DetailCostCategoryID,
 		in.MaterialNameID, in.WorkNameID,
 		in.ParentWorkItemID, sortNum, in.QuoteLink,
-		qpd, qvu,
+		qpd, qvu, in.ImportSessionID,
 	)
 	item, err := scanBoqItemRow(row)
 	if err != nil {

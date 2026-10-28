@@ -1,0 +1,155 @@
+import { type FC } from 'react';
+import { Alert, Button, Input, Spin, Tag, theme } from 'antd';
+import { CloseOutlined, LinkOutlined } from '@ant-design/icons';
+import { BASIS_COLORS, BASIS_LABELS, STATUS_COLORS, STATUS_LABELS } from '../constants';
+import type { AutopriceAction, IPositionDetail, IReviewPatch } from '../types';
+import { formatNumber, positionLabel } from '../utils/format';
+import { getReviewCssVars } from '../utils/cssVars';
+import { isStaleApproval } from '../utils/reviewPolicy';
+import { useReviewDraft } from '../hooks/useReviewDraft';
+import { ItemsTable } from './ItemsTable';
+import { FindingsEditor } from './FindingsEditor';
+import { QuestionsEditor } from './QuestionsEditor';
+import { EventsList } from './EventsList';
+import { PanelActions } from './PanelActions';
+import styles from '../AutopriceReview.module.css';
+
+interface IPositionPanelProps {
+  detail: IPositionDetail | null;
+  loading: boolean;
+  busy: boolean;
+  error: string | null;
+  isApprover: boolean;
+  onSave: (patch: IReviewPatch) => Promise<boolean>;
+  onAction: (action: AutopriceAction, okText: string, comment?: string) => Promise<boolean>;
+  onOpenPosition: (positionId: string) => void;
+  onClose: () => void;
+}
+
+export const PositionPanel: FC<IPositionPanelProps> = ({
+  detail,
+  loading,
+  busy,
+  error,
+  isApprover,
+  onSave,
+  onAction,
+  onOpenPosition,
+  onClose,
+}) => {
+  const { token } = theme.useToken();
+  const { draft, dirty, toPatch, setComment, setQuestions, setFindings } = useReviewDraft(detail);
+
+  if (loading && !detail) {
+    return (
+      <div className={styles.panel} style={getReviewCssVars(token)}>
+        <div className={styles.center}>
+          <Spin />
+        </div>
+      </div>
+    );
+  }
+  if (!detail) {
+    return (
+      <div className={styles.panel} style={getReviewCssVars(token)}>
+        {error ? <Alert type="error" showIcon message={error} /> : <div className={styles.center}>Выберите позицию</div>}
+      </div>
+    );
+  }
+
+  const { review, position } = detail;
+  const locked = review.status === 'approved';
+
+  // Несохранённые правки уходят вместе с действием: иначе после перезагрузки карточки они пропали бы.
+  const handleAction = async (action: AutopriceAction, okText: string, comment?: string): Promise<boolean> => {
+    if (dirty && !locked && !(await onSave(toPatch()))) return false;
+    return onAction(action, okText, comment);
+  };
+
+  return (
+    <div className={styles.panel} style={getReviewCssVars(token)}>
+      <div className={styles.panelHead}>
+        <div className={styles.panelTitle}>
+          <span className={styles.positionNo}>№ {positionLabel(position)}</span>
+          {isStaleApproval(review) ? (
+            <Tag color="red">Подтверждение снято</Tag>
+          ) : (
+            <Tag color={STATUS_COLORS[review.status]}>{STATUS_LABELS[review.status]}</Tag>
+          )}
+          {review.basis && <Tag color={BASIS_COLORS[review.basis]}>{BASIS_LABELS[review.basis]}</Tag>}
+        </div>
+        <Button className={styles.closeBtn} type="text" icon={<CloseOutlined />} aria-label="Закрыть" onClick={onClose} />
+      </div>
+
+      <Spin spinning={loading || busy}>
+        <div className={styles.panelBody}>
+          <div className={styles.positionText}>{position.work_name}</div>
+          <div className={styles.muted}>
+            {position.volume !== null && `Объём: ${formatNumber(position.volume, 3)} ${position.unit_code ?? ''}`}
+            {review.section ? ` · ${review.section}` : ''}
+          </div>
+
+          {error && <Alert type="error" showIcon message={error} />}
+          {isStaleApproval(review) && (
+            <Alert
+              type="warning"
+              showIcon
+              message="После подтверждения цены или состав строк изменены — подтверждение снято"
+            />
+          )}
+          {review.zero_price_count > 0 && (
+            <Alert type="warning" showIcon message={`Строк без цены: ${review.zero_price_count}`} />
+          )}
+
+          <Button className={styles.linkBtn} icon={<LinkOutlined />} onClick={() => onOpenPosition(position.id)}>
+            Открыть позицию
+          </Button>
+
+          <ItemsTable items={detail.items} deleted={detail.deleted} />
+
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>Основание</div>
+            {review.pd_refs.length > 0 ? (
+              <ul className={styles.plainList}>
+                {review.pd_refs.map((ref, i) => (
+                  <li key={`${i}-${ref}`}>{ref}</li>
+                ))}
+              </ul>
+            ) : (
+              <div className={styles.muted}>Ссылок на ПД нет</div>
+            )}
+            {review.pd_note && <div className={styles.cardText}>{review.pd_note}</div>}
+          </div>
+
+          <FindingsEditor findings={draft.findings} disabled={locked} onChange={setFindings} />
+          <QuestionsEditor questions={draft.questions} disabled={locked} onChange={setQuestions} />
+
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>Комментарий инженера</div>
+            <Input.TextArea
+              className={styles.input}
+              autoSize={{ minRows: 2, maxRows: 8 }}
+              allowClear
+              disabled={locked}
+              value={draft.comment}
+              onChange={(e) => setComment(e.target.value)}
+            />
+            <Button
+              className={styles.saveBtn}
+              type={dirty ? 'primary' : 'default'}
+              disabled={!dirty || locked || busy}
+              onClick={() => void onSave(toPatch())}
+            >
+              Сохранить
+            </Button>
+            {locked && <div className={styles.muted}>Позиция подтверждена — для правок переоткройте её.</div>}
+          </div>
+
+          <PanelActions review={review} busy={busy} isApprover={isApprover} onAction={handleAction} />
+
+          <EventsList events={review.events ?? []} />
+        </div>
+      </Spin>
+    </div>
+  );
+};
