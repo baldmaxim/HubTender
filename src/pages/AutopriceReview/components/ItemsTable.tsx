@@ -1,65 +1,43 @@
-import { useMemo, type FC, type ReactNode } from 'react';
+import { useMemo, type FC } from 'react';
 import { Button, Table, Tag, Tooltip } from 'antd';
-import { EditOutlined } from '@ant-design/icons';
+import { EllipsisOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { CHANGED_TO_COLUMN } from '../constants';
 import type { IDeletedItem, IPositionItem } from '../types';
-import { formatDateTime, formatNumber } from '../utils/format';
+import { formatDateTime } from '../utils/format';
 import { resizableHeaderProps } from '../utils/headerCell';
 import { useColumnWidths } from '../hooks/useColumnWidths';
 import { useElementSize } from '../hooks/useElementSize';
 import { ResizableHeaderCell } from './ResizableHeaderCell';
-import { ItemTypeCell, ItemTypeTag } from './ItemTypeTag';
+import { ItemTypeTag } from './ItemTypeTag';
+import {
+  renderConsCell,
+  renderConvCell,
+  renderNameCell,
+  renderPriceCell,
+  renderQtyCell,
+  renderTypeCell,
+  type IItemsEditing,
+} from './itemColumns';
 import { getBoqTypeTagStyle } from '../../PositionItems/components/boqColors';
-import { isBoqItemType, isLinkedToWork, summarizeItems, workIdSet } from '../utils/itemTypes';
+import { isBoqItemType, summarizeItems, workIdSet } from '../utils/itemTypes';
 import styles from '../AutopriceReview.module.css';
-
-type ColumnKind = 'type' | 'name' | 'unit_rate' | 'conversion' | 'consumption';
 
 interface IItemsTableProps {
   items: IPositionItem[];
   deleted: IDeletedItem[];
-  /** Открыть правку строки; без него столбца правки нет. */
+  /** Открыть лист «Все поля строки»; без него столбца с кнопкой нет. */
   onEditItem?: (itemId: string) => void;
+  /** Правка прямо в строке; без него таблица только показывает текст. */
+  editing?: IItemsEditing;
 }
 
-const changedColumns = (item: IPositionItem): Set<ColumnKind> =>
-  new Set(item.changed.map((f) => CHANGED_TO_COLUMN[f]));
-
-const machineValue = (item: IPositionItem, kind: ColumnKind): string => {
-  const m = item.machine;
-  if (!m) return '—';
-  switch (kind) {
-    case 'type':
-      return m.material_type || '—';
-    case 'name':
-      return m.name || '—';
-    case 'unit_rate':
-      return formatNumber(m.unit_rate);
-    case 'conversion':
-      return formatNumber(m.conversion_coefficient, 4);
-    case 'consumption':
-      return formatNumber(m.consumption_coefficient, 4);
-  }
-};
-
-/** Ячейка; если поле изменено относительно машины — подсветка и подсказка «машина: X». */
-const cell = (item: IPositionItem, kind: ColumnKind, content: ReactNode) => {
-  if (!changedColumns(item).has(kind)) return content;
-  return (
-    <Tooltip title={`машина: ${machineValue(item, kind)}`}>
-      <span className={styles.changedCell}>{content}</span>
-    </Tooltip>
-  );
-};
-
 const MIN_NAME_WIDTH = 120;
-const COLUMNS_STORAGE_KEY = 'autoprice-review:item-cols:v2';
+const COLUMNS_STORAGE_KEY = 'autoprice-review:item-cols:v3';
 const EDIT_COL_WIDTH = 44;
-const DEFAULT_WIDTHS = { type: 78, unit: 56, qty: 84, price: 90, conv: 72, cons: 72 };
+const DEFAULT_WIDTHS = { type: 96, unit: 56, qty: 96, price: 104, conv: 84, cons: 84 };
 const TABLE_COMPONENTS = { header: { cell: ResizableHeaderCell } };
 
-export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted, onEditItem }) => {
+export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted, onEditItem, editing }) => {
   const { ref, size } = useElementSize<HTMLDivElement>();
   const { widths, setWidth } = useColumnWidths(COLUMNS_STORAGE_KEY, DEFAULT_WIDTHS);
 
@@ -79,20 +57,13 @@ export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted, onEditItem })
         title: 'Тип',
         key: 'type',
         ...resizable('type'),
-        render: (_: unknown, item) =>
-          cell(item, 'type', <ItemTypeCell item={item} linked={isLinkedToWork(item, works)} />),
+        render: (_: unknown, item) => renderTypeCell(item, works, editing),
       },
       {
         title: 'Наименование',
         key: 'name',
         width: nameWidth,
-        render: (_: unknown, item) => (
-          <span className={`${styles.itemName} ${isLinkedToWork(item, works) ? styles.childName : ''}`}>
-            {isLinkedToWork(item, works) && <span className={styles.childMark}>↳</span>}
-            {cell(item, 'name', item.name)}
-            {item.origin === 'manual' && <Tag color="blue">добавлено</Tag>}
-          </span>
-        ),
+        render: (_: unknown, item) => renderNameCell(item, works),
       },
       {
         title: 'Ед.',
@@ -106,33 +77,28 @@ export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted, onEditItem })
         key: 'qty',
         ...resizable('qty'),
         align: 'right',
-        render: (_: unknown, item) => formatNumber(item.quantity, 4),
+        render: (_: unknown, item) => renderQtyCell(item, editing),
       },
       {
         title: 'Цена',
         key: 'price',
         ...resizable('price'),
         align: 'right',
-        render: (_: unknown, item) =>
-          item.unit_rate === 0 ? (
-            <span className={styles.danger}>0</span>
-          ) : (
-            cell(item, 'unit_rate', formatNumber(item.unit_rate))
-          ),
+        render: (_: unknown, item) => renderPriceCell(item, editing),
       },
       {
         title: 'Перев.',
         key: 'conv',
         ...resizable('conv'),
         align: 'right',
-        render: (_: unknown, item) => cell(item, 'conversion', formatNumber(item.conversion_coefficient, 4)),
+        render: (_: unknown, item) => renderConvCell(item, editing),
       },
       {
         title: 'Расх.',
         key: 'cons',
         ...resizable('cons'),
         align: 'right',
-        render: (_: unknown, item) => cell(item, 'consumption', formatNumber(item.consumption_coefficient, 4)),
+        render: (_: unknown, item) => renderConsCell(item, editing),
       },
     ];
     if (onEditItem) {
@@ -143,18 +109,20 @@ export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted, onEditItem })
         width: EDIT_COL_WIDTH,
         align: 'center',
         render: (_: unknown, item) => (
-          <Button
-            className={styles.editBtn}
-            type="text"
-            icon={<EditOutlined />}
-            aria-label="Изменить строку"
-            onClick={() => onEditItem(item.id)}
-          />
+          <Tooltip title="Все поля строки">
+            <Button
+              className={styles.editBtn}
+              type="text"
+              icon={<EllipsisOutlined />}
+              aria-label="Все поля строки"
+              onClick={() => onEditItem(item.id)}
+            />
+          </Tooltip>
         ),
       });
     }
     return { columns: cols, scrollX: fixed + nameWidth };
-  }, [widths, setWidth, size.width, works, onEditItem]);
+  }, [widths, setWidth, size.width, works, onEditItem, editing]);
 
   return (
     <div className={styles.section}>
@@ -173,7 +141,6 @@ export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted, onEditItem })
           pagination={false}
           scroll={{ x: scrollX }}
           onRow={(item) => ({
-            onDoubleClick: onEditItem ? () => onEditItem(item.id) : undefined,
             style: isBoqItemType(item.boq_item_type)
               ? { backgroundColor: getBoqTypeTagStyle(item.boq_item_type).bgColor }
               : undefined,
