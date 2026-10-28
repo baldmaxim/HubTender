@@ -1,9 +1,13 @@
-import { type FC } from 'react';
+import { useMemo, type FC } from 'react';
 import { Table, Tag, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { CHANGED_TO_COLUMN } from '../constants';
 import type { IDeletedItem, IPositionItem } from '../types';
 import { formatDateTime, formatNumber } from '../utils/format';
+import { resizableHeaderProps } from '../utils/headerCell';
+import { useColumnWidths } from '../hooks/useColumnWidths';
+import { useElementSize } from '../hooks/useElementSize';
+import { ResizableHeaderCell } from './ResizableHeaderCell';
 import styles from '../AutopriceReview.module.css';
 
 type ColumnKind = 'name' | 'unit_rate' | 'conversion' | 'consumption';
@@ -41,83 +45,113 @@ const cell = (item: IPositionItem, kind: ColumnKind, content: string) => {
   );
 };
 
-const columns: ColumnsType<IPositionItem> = [
-  {
-    title: 'Наименование',
-    key: 'name',
-    width: 240,
-    render: (_: unknown, item) => (
-      <span className={styles.itemName}>
-        {cell(item, 'name', item.name)}
-        {item.origin === 'manual' && <Tag color="blue">добавлено</Tag>}
-      </span>
-    ),
-  },
-  { title: 'Ед.', dataIndex: 'unit_code', key: 'unit', width: 60, render: (v: string | null) => v ?? '—' },
-  {
-    title: 'Кол-во',
-    key: 'qty',
-    width: 90,
-    align: 'right',
-    render: (_: unknown, item) => formatNumber(item.quantity, 4),
-  },
-  {
-    title: 'Цена',
-    key: 'price',
-    width: 100,
-    align: 'right',
-    render: (_: unknown, item) =>
-      item.unit_rate === 0 ? (
-        <span className={styles.danger}>0</span>
-      ) : (
-        cell(item, 'unit_rate', formatNumber(item.unit_rate))
-      ),
-  },
-  {
-    title: 'Перев.',
-    key: 'conv',
-    width: 80,
-    align: 'right',
-    render: (_: unknown, item) => cell(item, 'conversion', formatNumber(item.conversion_coefficient, 4)),
-  },
-  {
-    title: 'Расх.',
-    key: 'cons',
-    width: 80,
-    align: 'right',
-    render: (_: unknown, item) => cell(item, 'consumption', formatNumber(item.consumption_coefficient, 4)),
-  },
-];
+const MIN_NAME_WIDTH = 120;
+const COLUMNS_STORAGE_KEY = 'autoprice-review:item-cols:v1';
+const DEFAULT_WIDTHS = { unit: 56, qty: 84, price: 90, conv: 72, cons: 72 };
+const TABLE_COMPONENTS = { header: { cell: ResizableHeaderCell } };
 
-export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted }) => (
-  <div className={styles.section}>
-    <div className={styles.sectionTitle}>Строки расчёта ({items.length})</div>
-    <Table<IPositionItem>
-      size="small"
-      rowKey="id"
-      columns={columns}
-      dataSource={items}
-      pagination={false}
-      scroll={{ x: 650 }}
-      locale={{ emptyText: 'Строк нет' }}
-    />
-    {deleted.length > 0 && (
-      <div className={styles.deletedBlock}>
-        <div className={styles.sectionTitle}>Удалено ({deleted.length})</div>
-        <ul className={styles.plainList}>
-          {deleted.map((d) => (
-            <li key={d.boq_item_id}>
-              <Tag color="red">удалено</Tag>
-              {d.name}
-              <span className={styles.muted}>
-                {' '}
-                — {formatDateTime(d.deleted_at)}
-                {d.deleted_by_name ? `, ${d.deleted_by_name}` : ''}
-              </span>
-            </li>
-          ))}
-        </ul>
+export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted }) => {
+  const { ref, size } = useElementSize<HTMLDivElement>();
+  const { widths, setWidth } = useColumnWidths(COLUMNS_STORAGE_KEY, DEFAULT_WIDTHS);
+
+  const { columns, scrollX } = useMemo(() => {
+    const resizable = (key: keyof typeof DEFAULT_WIDTHS) => ({
+      width: widths[key],
+      onHeaderCell: () => resizableHeaderProps(widths[key], (w) => setWidth(key, w)),
+    });
+    const fixed = Object.values(widths).reduce((sum, w) => sum + w, 0);
+    // Наименование забирает остаток ширины панели и переносится по словам.
+    const nameWidth = Math.max(size.width - fixed, MIN_NAME_WIDTH);
+    const cols: ColumnsType<IPositionItem> = [
+      {
+        title: 'Наименование',
+        key: 'name',
+        width: nameWidth,
+        render: (_: unknown, item) => (
+          <span className={styles.itemName}>
+            {cell(item, 'name', item.name)}
+            {item.origin === 'manual' && <Tag color="blue">добавлено</Tag>}
+          </span>
+        ),
+      },
+      {
+        title: 'Ед.',
+        dataIndex: 'unit_code',
+        key: 'unit',
+        ...resizable('unit'),
+        render: (v: string | null) => v ?? '—',
+      },
+      {
+        title: 'Кол-во',
+        key: 'qty',
+        ...resizable('qty'),
+        align: 'right',
+        render: (_: unknown, item) => formatNumber(item.quantity, 4),
+      },
+      {
+        title: 'Цена',
+        key: 'price',
+        ...resizable('price'),
+        align: 'right',
+        render: (_: unknown, item) =>
+          item.unit_rate === 0 ? (
+            <span className={styles.danger}>0</span>
+          ) : (
+            cell(item, 'unit_rate', formatNumber(item.unit_rate))
+          ),
+      },
+      {
+        title: 'Перев.',
+        key: 'conv',
+        ...resizable('conv'),
+        align: 'right',
+        render: (_: unknown, item) => cell(item, 'conversion', formatNumber(item.conversion_coefficient, 4)),
+      },
+      {
+        title: 'Расх.',
+        key: 'cons',
+        ...resizable('cons'),
+        align: 'right',
+        render: (_: unknown, item) => cell(item, 'consumption', formatNumber(item.consumption_coefficient, 4)),
+      },
+    ];
+    return { columns: cols, scrollX: fixed + nameWidth };
+  }, [widths, setWidth, size.width]);
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionTitle}>Строки расчёта ({items.length})</div>
+      <div ref={ref}>
+        <Table<IPositionItem>
+          className={styles.headEllipsis}
+          components={TABLE_COMPONENTS}
+          size="small"
+          rowKey="id"
+          columns={columns}
+          dataSource={items}
+          pagination={false}
+          scroll={{ x: scrollX }}
+          locale={{ emptyText: 'Строк нет' }}
+        />
       </div>
-    )}
-  </div>
-);
+      {deleted.length > 0 && (
+        <div className={styles.deletedBlock}>
+          <div className={styles.sectionTitle}>Удалено ({deleted.length})</div>
+          <ul className={styles.plainList}>
+            {deleted.map((d) => (
+              <li key={d.boq_item_id}>
+                <Tag color="red">удалено</Tag>
+                {d.name}
+                <span className={styles.muted}>
+                  {' '}
+                  — {formatDateTime(d.deleted_at)}
+                  {d.deleted_by_name ? `, ${d.deleted_by_name}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};

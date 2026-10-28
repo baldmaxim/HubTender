@@ -77,6 +77,10 @@ export interface IReviewRow {
   approved_by: string | null;
   approved_by_name: string | null;
   approved_at: string | null;
+  /** Последнее решение по статусу: approve | return | needs_customer | exclude | reopen. */
+  decided_action: string | null;
+  decided_by_name: string | null;
+  decided_at: string | null;
   updated_at: string;
 }
 

@@ -124,7 +124,12 @@ type AutopriceReview struct {
 	ApprovedBy       *string         `json:"approved_by"`
 	ApprovedByName   *string         `json:"approved_by_name"`
 	ApprovedAt       *time.Time      `json:"approved_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	// Последнее решение по позиции (approve/return/needs_customer/exclude/reopen)
+	// из журнала events; null, если решений не было.
+	DecidedAction *string    `json:"decided_action"`
+	DecidedByName *string    `json:"decided_by_name"`
+	DecidedAt     *time.Time `json:"decided_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 	// Events — только в карточке одной позиции (GET .../positions/{posId}).
 	Events json.RawMessage `json:"events,omitempty"`
 }
@@ -273,10 +278,19 @@ SELECT r.client_position_id::text, cp.position_number::float8, cp.item_no, cp.wo
        COALESCE(agg.items_count, 0), COALESCE(agg.zero_count, 0),
        r.basis, r.pd_refs, r.pd_note, r.questions, r.findings, r.status,
        ` + autopriceStaleExpr + `,
-       r.engineer_comment, r.approved_by::text, u.full_name, r.approved_at, r.updated_at` + events + `
+       r.engineer_comment, r.approved_by::text, u.full_name, r.approved_at,
+       dec.e->>'action', NULLIF(dec.e->>'user_name', ''), (dec.e->>'at')::timestamptz,
+       r.updated_at` + events + `
 FROM public.autoprice_position_reviews r
 JOIN public.client_positions cp ON cp.id = r.client_position_id
 LEFT JOIN public.users u ON u.id = r.approved_by
+LEFT JOIN LATERAL (
+    SELECT t.e
+    FROM jsonb_array_elements(r.events) WITH ORDINALITY t(e, n)
+    WHERE t.e->>'action' IN ('approve', 'return', 'needs_customer', 'exclude', 'reopen')
+    ORDER BY t.n DESC
+    LIMIT 1
+) dec ON true
 LEFT JOIN LATERAL (
     SELECT count(*)::int AS items_count,
            (count(*) FILTER (WHERE COALESCE(b.unit_rate, 0) = 0))::int AS zero_count
@@ -302,7 +316,7 @@ func scanAutopriceReview(row pgx.Row, withEvents bool) (*AutopriceReview, error)
 	dest := []any{&v.ClientPositionID, &v.PositionNumber, &v.ItemNo, &v.WorkName, &v.Section,
 		&v.ItemsCount, &v.ZeroPriceCount, &v.Basis, &v.PdRefs, &v.PdNote, &v.Questions, &v.Findings,
 		&v.Status, &v.ApprovalStale, &v.EngineerComment, &v.ApprovedBy, &v.ApprovedByName,
-		&v.ApprovedAt, &v.UpdatedAt}
+		&v.ApprovedAt, &v.DecidedAction, &v.DecidedByName, &v.DecidedAt, &v.UpdatedAt}
 	if withEvents {
 		dest = append(dest, &v.Events)
 	}

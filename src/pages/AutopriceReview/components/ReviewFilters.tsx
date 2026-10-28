@@ -37,6 +37,7 @@ export const ReviewFilters: FC<IReviewFiltersProps> = ({ filters, sections, prog
     <Button
       className={styles.toggle}
       type={filters[key] ? 'primary' : 'default'}
+      aria-pressed={filters[key]}
       onClick={() => onChange({ [key]: !filters[key] })}
     >
       {label}
@@ -79,11 +80,11 @@ export const ReviewFilters: FC<IReviewFiltersProps> = ({ filters, sections, prog
           onChange={(section) => onChange({ section: section ?? null })}
           popupMatchSelectWidth={false}
         />
-      </div>
-      <div className={styles.filterRow}>
-        {toggle('hasQuestions', 'Есть вопросы')}
-        {toggle('hasFindings', 'Есть находки')}
-        {toggle('noPrice', 'Без цены')}
+        <div className={styles.toggles}>
+          {toggle('hasQuestions', 'Есть вопросы')}
+          {toggle('hasFindings', 'Есть находки')}
+          {toggle('noPrice', 'Без цены')}
+        </div>
         <Input
           className={styles.search}
           prefix={<SearchOutlined />}
