@@ -36,7 +36,7 @@ cleanup() {
   [[ -n "$WEB_PID" ]] && kill "$WEB_PID" >/dev/null 2>&1 || true
   [[ -n "$OR_PID" ]] && kill "$OR_PID" >/dev/null 2>&1 || true
   [[ -n "$BACKEND_PID" ]] && kill "$BACKEND_PID" >/dev/null 2>&1 || true
-  docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
   rm -rf "$TMPDIR_E2E"
   exit $rc
 }

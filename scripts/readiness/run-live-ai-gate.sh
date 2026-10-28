@@ -39,7 +39,7 @@ cleanup() {
   local rc=$?
   echo "== cleanup (rc=$rc) =="
   [[ -n "$BACKEND_PID" ]] && kill "$BACKEND_PID" >/dev/null 2>&1 || true
-  docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
   rm -rf "$TMP"
   exit $rc
 }

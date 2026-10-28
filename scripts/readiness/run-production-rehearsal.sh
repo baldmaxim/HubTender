@@ -42,7 +42,7 @@ if [[ "$DB" != *test* ]]; then echo "FATAL: имя БД обязано соде�
 cleanup() {
   local rc=$?
   echo "== cleanup (rc=$rc) =="
-  docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  docker rm -fv "$CONTAINER" >/dev/null 2>&1 || true
   exit $rc
 }
 trap cleanup EXIT INT TERM
