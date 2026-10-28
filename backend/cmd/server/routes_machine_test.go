@@ -323,3 +323,95 @@ func TestVerificationAIAssessmentsRouteGate(t *testing.T) {
 		})
 	}
 }
+
+type fakeNomenclatureEnsure struct {
+	calls int
+	items []repository.EnsureNameItem
+}
+
+func (f *fakeNomenclatureEnsure) Ensure(_ context.Context, items []repository.EnsureNameItem) ([]repository.EnsureNameResult, error) {
+	f.calls++
+	f.items = items
+	if len(items) == 0 {
+		return nil, &services.EnsureInputError{Index: -1, Reason: "items: пусто"}
+	}
+	if items[0].Kind == "bad" {
+		return nil, &services.EnsureInputError{Index: 0, Reason: "kind"}
+	}
+	return []repository.EnsureNameResult{{Index: 0, ID: regID, Kind: items[0].Kind, Name: items[0].Name, Unit: items[0].Unit, Created: true}}, nil
+}
+
+func nomenclatureRouter(f *fakeNomenclatureEnsure, principal *middleware.APIKeyPrincipal) *chi.Mux {
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if principal != nil {
+				req = req.WithContext(context.WithValue(req.Context(), middleware.CtxAPIKey, principal))
+			}
+			next.ServeHTTP(w, req)
+		})
+	})
+	registerNomenclatureRoutes(r, handlers.NewNomenclatureEnsureHandler(f))
+	return r
+}
+
+// POST /nomenclature/ensure: область nomenclature:write обязательна; ключ с
+// tenders:write без неё получает 403 и до сервиса не доходит.
+func TestNomenclatureEnsureRouteGate(t *testing.T) {
+	path, body := "/api/v1/nomenclature/ensure", `{"items":[{"kind":"work","name":"Стяжка","unit":"м2"}]}`
+	withScope := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"nomenclature:write"}}
+	noScope := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"tenders:read", "tenders:write"}}
+	restricted := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"nomenclature:write"},
+		AllowedTenderIDs: []string{"11111111-1111-1111-1111-111111111111"}}
+	cases := []struct {
+		name      string
+		principal *middleware.APIKeyPrincipal
+		status    int
+		code      string
+		calls     int
+	}{
+		{"человек с JWT", nil, 200, "", 1},
+		{"ключ с областью", withScope, 200, "", 1},
+		{"ключ без области", noScope, 403, "API_KEY_SCOPE_DENIED", 0},
+		{"ключ со списком тендеров", restricted, 200, "", 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := &fakeNomenclatureEnsure{}
+			w, m := callRegistry(t, nomenclatureRouter(f, c.principal), "POST", path, body)
+			if w.Code != c.status || (c.code != "" && m["code"] != c.code) || f.calls != c.calls {
+				t.Fatalf("status %d code %v calls %d, ожидалось %d %s %d: %.300s", w.Code, m["code"], f.calls, c.status, c.code, c.calls, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestNomenclatureEnsureHandlerResponses(t *testing.T) {
+	key := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"nomenclature:write"}}
+	path := "/api/v1/nomenclature/ensure"
+	cases := []struct {
+		name   string
+		body   string
+		status int
+		index  any
+	}{
+		{"битое тело", `x`, 400, nil},
+		{"пустой список", `{"items":[]}`, 400, nil},
+		{"ошибка элемента — индекс в ответе", `{"items":[{"kind":"bad","name":"a","unit":"м2"}]}`, 400, float64(0)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w, m := callRegistry(t, nomenclatureRouter(&fakeNomenclatureEnsure{}, key), "POST", path, c.body)
+			if w.Code != c.status || m["code"] != "NOMENCLATURE_INVALID_REQUEST" || m["itemIndex"] != c.index {
+				t.Fatalf("status %d code %v itemIndex %v: %.300s", w.Code, m["code"], m["itemIndex"], w.Body.String())
+			}
+		})
+	}
+	w, m := callRegistry(t, nomenclatureRouter(&fakeNomenclatureEnsure{}, key), "POST", path,
+		`{"items":[{"kind":"work","name":"Стяжка","unit":"м2"}]}`)
+	data, _ := m["data"].([]any)
+	row, _ := data[0].(map[string]any)
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || row["created"] != true || row["id"] != regID || row["index"] != float64(0) {
+		t.Fatalf("ответ: %d %s", w.Code, w.Body.String())
+	}
+}

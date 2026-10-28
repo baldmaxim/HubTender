@@ -60,13 +60,18 @@ const (
 	// итог отправки (api/VERIFICATION_BOT.md). Ключ, ограниченный списком
 	// тендеров, не допускается: бот рассылает замечания по всем тендерам.
 	ScopeVerificationTelegram = "verification:telegram"
+	// ScopeNomenclatureWrite — заведение наименований работ и материалов в
+	// справочнике (POST /api/v1/nomenclature/ensure): найти существующее или
+	// создать. Справочник общий, не привязан к тендеру, поэтому ограничение
+	// ключа по списку тендеров здесь не действует.
+	ScopeNomenclatureWrite = "nomenclature:write"
 )
 
 // KnownScopes — все допустимые области.
 var KnownScopes = []string{
 	ScopeArchiveRead, ScopeArchiveWrite, ScopeTendersRead, ScopeTendersWrite,
 	ScopeVerificationRead, ScopeVerificationWrite, ScopeRegistryRead, ScopeRegistryWrite,
-	ScopeVerificationTelegram,
+	ScopeVerificationTelegram, ScopeNomenclatureWrite,
 }
 
 func isKnownScope(s string) bool {

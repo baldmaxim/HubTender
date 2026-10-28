@@ -14,7 +14,7 @@
 машинный список это `GET /api/v1/tenders/brief`. Админские
 `/api/v1/admin/api-access/*` и остальные эндпоинты портала ключу тоже закрыты.
 
-## Все маршруты — 34 операции
+## Все маршруты — 35 операций
 
 | Метод | Путь | Область |
 |---|---|---|
@@ -29,6 +29,7 @@
 | POST | `/api/v1/tenders/{id}/positions/{posId}/items` | `tenders:write` |
 | PATCH | `/api/v1/items/{id}` | `tenders:write` |
 | POST | `/api/v1/positions/{id}/recompute-totals` | `tenders:write` |
+| POST | `/api/v1/nomenclature/ensure` | `nomenclature:write` |
 | GET | `/api/v1/archive/positions/search` | `archive:read` |
 | POST | `/api/v1/archive/positions/suggest` | `archive:read` |
 | GET | `/api/v1/archive/positions/{id}` | `archive:read` |
@@ -178,6 +179,25 @@ created_at, updated_at`.
 Идемпотентности нет: перед повтором читайте строки позиции. Суммы и коммерческие
 стоимости считает сервер. Имена номенклатуры сервер не сопоставляет — либо текст в
 `description`, либо готовые id.
+
+## Наименования работ и материалов — область `nomenclature:write`
+
+`POST /api/v1/nomenclature/ensure` — найти или создать имя в общем справочнике, чтобы
+затем передать `work_name_id` / `material_name_id` в строку BOQ.
+
+```json
+{"items":[{"kind":"work","name":"Устройство стяжки","unit":"м2"},
+          {"kind":"material","name":"Цемент М400","unit":"кг"}]}
+```
+
+- 1–500 элементов; `kind` — `work` | `material`; `name` непустое после trim, до 1024
+  символов; `unit` — код существующей единицы. Ошибка → 400
+  `NOMENCLATURE_INVALID_REQUEST` с `itemIndex`, ничего не записывается.
+- Идемпотентно: поиск среди имён того же вида с той же единицей, без учёта регистра и с
+  схлопнутыми пробелами. Найдено → его `id`, `created:false`; нет → вставка,
+  `created:true`. Одна транзакция; одинаковые элементы запроса не дают двух вставок.
+- Ответ 200: `{"data":[{"index":0,"id":"…","kind":"work","name":"как в БД","unit":"м2","created":true}]}`
+  в порядке запроса. Ограничение ключа по тендерам не действует (справочник общий).
 
 ## Лимиты и поведение
 

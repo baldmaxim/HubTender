@@ -768,7 +768,8 @@ ALTER TABLE public.api_keys
     CHECK (cardinality(scopes) > 0
            AND scopes <@ ARRAY['archive:read', 'archive:write', 'tenders:read', 'tenders:write',
                                'verification:read', 'verification:write',
-                               'registry:read', 'registry:write', 'verification:telegram']::text[]);
+                               'registry:read', 'registry:write', 'verification:telegram',
+                               'nomenclature:write']::text[]);
 ALTER TABLE public.api_keys
     ADD CONSTRAINT api_keys_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
 ALTER TABLE public.api_keys

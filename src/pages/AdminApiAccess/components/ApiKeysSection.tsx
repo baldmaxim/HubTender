@@ -34,6 +34,7 @@ const SCOPE_LABEL: Record<string, string> = {
   'registry:read': 'Чтение перечня тендеров',
   'registry:write': 'Хронология и напоминания перечня',
   'verification:telegram': 'Telegram-бот рассылки замечаний',
+  'nomenclature:write': 'Создание наименований работ и материалов',
 };
 
 export const ApiKeysSection: FC<IApiKeysSectionProps> = ({

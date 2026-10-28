@@ -97,9 +97,19 @@ func registerMachineRoutes(r chi.Router, d *deps, verifyCfg middleware.VerifyCon
 		r.With(writeV).Put("/api/v1/tenders/{id}/brief", d.costBenchmarkH.PutBrief)
 		registerVerificationAIRoutes(r, d.verifAIH)
 
+		registerNomenclatureRoutes(r, d.nomenclatureEnsureH)
+
 		registerRegistryBotRoutes(r, d.registryBotH)
 		registerVerificationBotRoutes(r, d.verifBotH)
 	})
+}
+
+// registerNomenclatureRoutes — справочник наименований: найти или создать имя
+// работы/материала (авторасценка). Справочник общий, не тендерный: id тендера
+// в URL нет, гейт проверяет только область nomenclature:write.
+func registerNomenclatureRoutes(r chi.Router, h *handlers.NomenclatureEnsureHandler) {
+	r.With(middleware.RequireAPIKeyScope(apikey.ScopeNomenclatureWrite, "")).
+		Post("/api/v1/nomenclature/ensure", h.Ensure)
 }
 
 // registerVerificationAIRoutes — ИИ-разбор находок: оценки — чтение, запуск

@@ -143,9 +143,10 @@ node scripts/archive-api.mjs estimate x --position=<position_id>   # одна п
 | `verification:read` / `verification:write` | «Проверка данных»: находки и вердикты — см. [VERIFICATION.md](VERIFICATION.md) |
 | `registry:read` / `registry:write` | «Перечень тендеров» для Telegram-бота: поиск и карточка / напоминания и запись в хронологию — см. [REGISTRY.md](REGISTRY.md) |
 | `verification:telegram` | Telegram-бот рассылки замечаний «Проверки данных»: ретрансляция обновлений, выдача очереди, итог отправки — см. [VERIFICATION_BOT.md](VERIFICATION_BOT.md) |
+| `nomenclature:write` | `POST /api/v1/nomenclature/ensure` — найти или создать наименования работ/материалов в общем справочнике — см. [ENDPOINTS.md](ENDPOINTS.md#наименования-работ-и-материалов--область-nomenclaturewrite) |
 
-Ограничение по списку тендеров действует для всех областей, кроме `registry:*` и
-`verification:telegram`: у перечня нет связи с тендерами, а бот рассылки работает со всей
+Ограничение по списку тендеров действует для всех областей, кроме `registry:*`,
+`nomenclature:write` (справочник общий) и `verification:telegram`: у перечня нет связи с тендерами, а бот рассылки работает со всей
 очередью, и ключ со списком тендеров к ним не допускается. Управление ключами и
 настройками (`/api/v1/admin/api-access/*`) и остальные эндпоинты портала ключу
 недоступны — только JWT пользователя.

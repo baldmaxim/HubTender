@@ -65,51 +65,52 @@ type deps struct {
 	apiAccessSvc *services.ApiAccessService
 	// positionSvc/boqSvc нужны гейту машинного доступа: резолвить тендер по
 	// id позиции/строки для маршрутов без {id} тендера в URL.
-	positionSvc       *services.PositionService
-	boqSvc            *services.BoqService
-	tenderNotesH      *handlers.TenderNotesHandler
-	boqAuditRollbackH *handlers.BoqAuditRollbackHandler
-	tasksH            *handlers.TasksHandler
-	comparisonH       *handlers.ComparisonHandler
-	costImportH       *handlers.CostImportHandler
-	libraryH          *handlers.LibraryHandler
-	redistributionH   *handlers.RedistributionHandler
-	insuranceH        *handlers.InsuranceHandler
-	fiDiscountsH      *handlers.FIDiscountsHandler
-	positionFiltersH  *handlers.PositionFiltersHandler
-	notificationsH    *handlers.NotificationsHandler
-	tenderRegistryH   *handlers.TenderRegistryHandler
-	registryBotH      *handlers.TenderRegistryBotHandler
-	verifBotH         *handlers.VerificationBotHandler
-	costsH            *handlers.CostsHandler
-	nomenclaturesH    *handlers.NomenclaturesHandler
-	importLogH        *handlers.ImportLogHandler
-	projectsH         *handlers.ProjectsHandler
-	objectsH          *handlers.ConstructionObjectsHandler
-	objectPhotosH     *handlers.ConstructionObjectPhotosHandler
-	objectDocumentsH  *handlers.ConstructionObjectDocumentsHandler
-	pageViewsH        *handlers.PageViewsHandler
-	userAdminH        *handlers.UserAdminHandler
-	markupH           *handlers.MarkupHandler
-	fiH               *handlers.FIHandler
-	qualityAnalyticsH *handlers.QualityAnalyticsHandler
-	priceBenchmarkH   *handlers.PriceBenchmarkHandler
-	priceSourceH      *handlers.PriceSourceHandler
-	actionPlanH       *handlers.ActionPlanHandler
-	changeImpactH     *handlers.ChangeImpactHandler
-	reviewPackH       *handlers.ReviewPackHandler
-	smartImportH      *handlers.SmartImportHandler
-	importMemoryH     *handlers.ImportMemoryHandler
-	ccvH              *handlers.ConstructionCostVolumesHandler
-	aiAdminH          *handlers.AIAdminHandler
-	aiHealthH         *handlers.AIHealthHandler
-	wsH               *handlers.WsHandler
-	qualityH          *handlers.QualityHandler
-	verifSectionsH    *handlers.VerificationSectionsHandler
-	costBenchmarkH    *handlers.CostBenchmarkHandler
-	pricingH          *handlers.PricingHandler
-	mcpOAuthH         *mcpauth.Handler
-	mcpHTTP           http.Handler
+	positionSvc         *services.PositionService
+	boqSvc              *services.BoqService
+	tenderNotesH        *handlers.TenderNotesHandler
+	boqAuditRollbackH   *handlers.BoqAuditRollbackHandler
+	tasksH              *handlers.TasksHandler
+	comparisonH         *handlers.ComparisonHandler
+	costImportH         *handlers.CostImportHandler
+	libraryH            *handlers.LibraryHandler
+	redistributionH     *handlers.RedistributionHandler
+	insuranceH          *handlers.InsuranceHandler
+	fiDiscountsH        *handlers.FIDiscountsHandler
+	positionFiltersH    *handlers.PositionFiltersHandler
+	notificationsH      *handlers.NotificationsHandler
+	tenderRegistryH     *handlers.TenderRegistryHandler
+	registryBotH        *handlers.TenderRegistryBotHandler
+	verifBotH           *handlers.VerificationBotHandler
+	costsH              *handlers.CostsHandler
+	nomenclaturesH      *handlers.NomenclaturesHandler
+	nomenclatureEnsureH *handlers.NomenclatureEnsureHandler
+	importLogH          *handlers.ImportLogHandler
+	projectsH           *handlers.ProjectsHandler
+	objectsH            *handlers.ConstructionObjectsHandler
+	objectPhotosH       *handlers.ConstructionObjectPhotosHandler
+	objectDocumentsH    *handlers.ConstructionObjectDocumentsHandler
+	pageViewsH          *handlers.PageViewsHandler
+	userAdminH          *handlers.UserAdminHandler
+	markupH             *handlers.MarkupHandler
+	fiH                 *handlers.FIHandler
+	qualityAnalyticsH   *handlers.QualityAnalyticsHandler
+	priceBenchmarkH     *handlers.PriceBenchmarkHandler
+	priceSourceH        *handlers.PriceSourceHandler
+	actionPlanH         *handlers.ActionPlanHandler
+	changeImpactH       *handlers.ChangeImpactHandler
+	reviewPackH         *handlers.ReviewPackHandler
+	smartImportH        *handlers.SmartImportHandler
+	importMemoryH       *handlers.ImportMemoryHandler
+	ccvH                *handlers.ConstructionCostVolumesHandler
+	aiAdminH            *handlers.AIAdminHandler
+	aiHealthH           *handlers.AIHealthHandler
+	wsH                 *handlers.WsHandler
+	qualityH            *handlers.QualityHandler
+	verifSectionsH      *handlers.VerificationSectionsHandler
+	costBenchmarkH      *handlers.CostBenchmarkHandler
+	pricingH            *handlers.PricingHandler
+	mcpOAuthH           *mcpauth.Handler
+	mcpHTTP             http.Handler
 }
 
 // buildDeps wires repositories → cache → services → handlers. Extracted from
@@ -520,8 +521,10 @@ func buildDeps(
 		tenderRegistryH:   handlers.NewTenderRegistryHandler(tenderRegistrySvc),
 		registryBotH: handlers.NewTenderRegistryBotHandler(services.NewTenderRegistryBotService(
 			repository.NewTenderRegistryBotRepo(pool), cfg.AppBaseURL)),
-		costsH:            handlers.NewCostsHandler(costsSvc),
-		nomenclaturesH:    handlers.NewNomenclaturesHandler(nomenclaturesSvc),
+		costsH:         handlers.NewCostsHandler(costsSvc),
+		nomenclaturesH: handlers.NewNomenclaturesHandler(nomenclaturesSvc),
+		nomenclatureEnsureH: handlers.NewNomenclatureEnsureHandler(
+			services.NewNomenclatureEnsureService(nomenclaturesRepo, inMemCache)),
 		importLogH:        handlers.NewImportLogHandler(importLogSvc),
 		projectsH:         handlers.NewProjectsHandler(projectsSvc),
 		objectsH:          handlers.NewConstructionObjectsHandler(constructionObjectsSvc),

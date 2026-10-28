@@ -14,7 +14,8 @@ export type ApiKeyScope =
   | 'verification:write'
   | 'registry:read'
   | 'registry:write'
-  | 'verification:telegram';
+  | 'verification:telegram'
+  | 'nomenclature:write';
 export type ApiKeyStatus = 'active' | 'revoked' | 'expired';
 
 export interface ApiKey {
