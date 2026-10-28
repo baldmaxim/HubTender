@@ -223,7 +223,7 @@ test('run: свои замечания ИИ — по позициям с нах�
 
     const result = await runReview(config, { tender: '256' }, deps);
     const { state } = result;
-    assert.equal(state.options.remarks, 150);
+    assert.equal(state.options.remarks, 20);
     assert.equal(state.options.all, false);
     // находки прежние; замечания — отдельно
     assert.deepEqual(state.items.map((i) => i.key), ['f1', 'f2', 'f3', 'f4']);

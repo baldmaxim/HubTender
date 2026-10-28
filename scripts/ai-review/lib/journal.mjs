@@ -39,10 +39,10 @@ export const writeApplied = (runDir, applied) => {
 export const relativeRun = (outDir, runDir) => relative(outDir, runDir).split(sep).join('/');
 
 /**
- * Строка журнала решений.
- * @param {{ state: any, item: any, decision: string, comment: string, bulk: boolean, at: string, runRel: string }} p
+ * Строка журнала решений. origin: 'review' — отметка в review.md (apply), 'page' — вердикт на странице (sync).
+ * @param {{ state: any, item: any, decision: string, comment: string, bulk: boolean, at: string, runRel: string, origin?: string }} p
  */
-export const buildJournalLine = ({ state, item, decision, comment, bulk, at, runRel }) => ({
+export const buildJournalLine = ({ state, item, decision, comment, bulk, at, runRel, origin = 'review' }) => ({
   at,
   tender_id: state.tender.id,
   tender: `${state.tender.number}${state.tender.version ? ` v${state.tender.version}` : ''}`,
@@ -62,7 +62,7 @@ export const buildJournalLine = ({ state, item, decision, comment, bulk, at, run
   decision,
   note: comment,
   bulk,
-  origin: 'review',
+  origin,
   models: state.models.map((m) => m.name),
   prompt_version: state.promptVersion,
   skills_rev: state.skillsRev,

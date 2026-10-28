@@ -178,7 +178,7 @@ export const findLatestRun = (outDir) => {
 };
 
 /** Каталог прогона: аргумент (папка либо файл внутри неё) или последний прогон. */
-const resolveRunDir = (arg, outDir) => {
+export const resolveRunDir = (arg, outDir) => {
   if (!arg) {
     const latest = findLatestRun(outDir);
     if (!latest) throw new ConfigError(`В ${outDir} нет прогонов: сначала run <тендер>`);
@@ -187,7 +187,7 @@ const resolveRunDir = (arg, outDir) => {
   const path = resolve(arg);
   if (!existsSync(path)) throw new ConfigError(`Нет каталога ${path}`);
   const dir = statSync(path).isDirectory() ? path : dirname(path);
-  if (!existsSync(join(dir, 'run.json'))) throw new ConfigError(`В ${dir} нет run.json: publish работает только с папкой прогона`);
+  if (!existsSync(join(dir, 'run.json'))) throw new ConfigError(`В ${dir} нет run.json: команды publish и sync работают только с папкой прогона`);
   return dir;
 };
 

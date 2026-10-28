@@ -7,6 +7,7 @@
  *   node scripts/ai-review/review.mjs run <тендер> [--models=a,b] [--rule=U,V] [--new] [--max=N] [--remarks=N | --all] [--think] [--refresh] [--no-cache] [--no-publish]
  *   node scripts/ai-review/review.mjs publish [каталог прогона] [--dry-run] [--no-auto]
  *   node scripts/ai-review/review.mjs apply <путь к review.md> [--dry-run] [--brief]
+ *   node scripts/ai-review/review.mjs sync [каталог прогона] [--dry-run]
  *
  * Настройки — только в scripts/ai-review/ai-review.env (см. README.md).
  */
@@ -20,6 +21,7 @@ import { runPing } from './lib/ping.mjs';
 import { PortalError } from './lib/portal.mjs';
 import { runPublish } from './lib/publish.mjs';
 import { runReview } from './lib/run.mjs';
+import { runSync } from './lib/sync.mjs';
 
 const HELP = `ИИ-проверка находок «Проверки данных»
 
@@ -32,7 +34,7 @@ const HELP = `ИИ-проверка находок «Проверки данны
            --rule=U,V     только эти правила
            --new          только новые находки
            --max=N        первые N позиций по сумме Δ
-           --remarks=N    позиций без находок для своих замечаний ИИ, самых дорогих (по умолчанию 150;
+           --remarks=N    позиций без находок для своих замечаний ИИ, самых дорогих (по умолчанию 20;
                           при --rule и --new — 0)
            --all          свои замечания ИИ по всем позициям со строками (несовместимо с --remarks)
            --think        второй проход с рассуждениями (нужен AI_REVIEW_<ИМЯ>_THINK_EXTRA)
@@ -46,6 +48,11 @@ const HELP = `ИИ-проверка находок «Проверки данны
   apply <review.md>   Отправить отметки ([+] ошибка, [-] норма) в портал
            --dry-run      показать, что ушло бы, ничего не отправлять и не писать
            --brief        записать краткий итог в выжимку тендера
+  sync [каталог прогона]   Забрать вердикты, поставленные на странице «Проверка данных», в журнал решений
+                 (для обучения); без каталога — последний прогон в out/. В портал ничего не отправляет.
+                 Если вы вернули «Ошибкой» находку, снятую автоотсевом, запись AI-SKILLS.md получает auto: paused.
+                 Пишет sync.md (согласие с ИИ и расхождения) в каталог прогона
+           --dry-run      показать, что записалось бы, ничего не писать
   ping   Проверить связь с порталом и моделями
            --models=a,b   профили (по умолчанию — все из AI_REVIEW_MODELS)
            --quick        без проверки контекста (быстро)
@@ -146,6 +153,18 @@ const COMMANDS = {
     run: async ({ values, positionals }) => {
       const file = positional(positionals, 'node scripts/ai-review/review.mjs apply <путь к review.md> [--dry-run] [--brief]');
       return runApply(loadConfig(), { file, dryRun: values['dry-run'], brief: values.brief });
+    },
+  },
+  sync: {
+    options: {
+      'dry-run': { type: 'boolean' },
+    },
+    positionals: true,
+    run: async ({ values, positionals }) => {
+      if (positionals.length > 1) {
+        throw new ConfigError('Ожидается не больше одного аргумента.\nИспользование: node scripts/ai-review/review.mjs sync [каталог прогона] [--dry-run]');
+      }
+      return runSync(loadConfig(), { dir: positionals[0], dryRun: values['dry-run'] });
     },
   },
   ping: {

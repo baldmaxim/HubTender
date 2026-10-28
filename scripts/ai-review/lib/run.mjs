@@ -24,7 +24,7 @@ import { findingLink } from './tender.mjs';
 const STATE_VERSION = 1;
 
 /** Сколько позиций без находок берётся для собственных замечаний по умолчанию. */
-export const DEFAULT_REMARK_POSITIONS = 150;
+export const DEFAULT_REMARK_POSITIONS = 20;
 
 /** Имя части пути: только символы, безопасные для Windows. */
 export const safeName = (text) => String(text).replace(/[^\p{L}\p{N}._-]+/gu, '_').replace(/^[._]+|[._]+$/g, '') || 'x';
