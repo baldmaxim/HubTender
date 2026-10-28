@@ -10,11 +10,12 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# tidy нужен весь код; модули уже в кэше слоя, докачивается только недостающее.
+# Без go mod tidy: он докачивал тестовые зависимости библиотек при каждом деплое.
+# go.mod/go.sum приводятся в порядок до коммита; -mod=readonly падает, если это забыли.
 COPY . .
-RUN go mod tidy
 
 RUN CGO_ENABLED=0 GOOS=linux go build \
+    -mod=readonly \
     -ldflags="-s -w" \
     -o server \
     ./cmd/server
