@@ -120,6 +120,11 @@ export const menuItems: NonNullable<MenuProps['items']> = [
     label: 'Проверка данных',
   },
   {
+    key: '/autoprice-review',
+    icon: <CheckSquareOutlined />,
+    label: 'Подтверждение авторасценки',
+  },
+  {
     key: 'analytics',
     icon: <FundOutlined />,
     label: 'Аналитика',

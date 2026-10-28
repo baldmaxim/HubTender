@@ -384,6 +384,13 @@ func newRouter(
 		r.Get("/api/v1/import-sessions/all-tenders", d.importLogH.AllTendersForFilter)
 		r.Post("/api/v1/import-sessions/{id}/cancel", d.importLogH.Cancel)
 
+		// Подтверждение авторасценки (тест): только JWT. Машинные маршруты
+		// авторасценки — в routes_machine.go (registerAutopriceRoutes).
+		r.Get("/api/v1/autoprice-tenders", d.autopriceH.ListTenders)
+		r.Get("/api/v1/autoprice-runs/{sid}/positions/{posId}", d.autopriceH.GetPosition)
+		r.Patch("/api/v1/autoprice-runs/{sid}/positions/{posId}/review", d.autopriceH.PatchReview)
+		r.Post("/api/v1/autoprice-runs/{sid}/positions/{posId}/review/action", d.autopriceH.Action)
+
 		// Projects + agreements + monthly completion.
 		r.Post("/api/v1/projects", d.projectsH.Create)
 		r.Patch("/api/v1/projects/{id}", d.projectsH.Update)

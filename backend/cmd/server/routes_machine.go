@@ -97,9 +97,28 @@ func registerMachineRoutes(r chi.Router, d *deps, verifyCfg middleware.VerifyCon
 		r.With(writeV).Put("/api/v1/tenders/{id}/brief", d.costBenchmarkH.PutBrief)
 		registerVerificationAIRoutes(r, d.verifAIH)
 
+		registerAutopriceRoutes(r, d)
+
 		registerRegistryBotRoutes(r, d.registryBotH)
 		registerVerificationBotRoutes(r, d.verifBotH)
 	})
+}
+
+// registerAutopriceRoutes — подтверждение авторасценки (тест): машинная часть
+// (создать прогон, загрузить карточку позиции, прочитать прогоны и карточки)
+// доступна и по ключу с областью tenders:read/write, и по JWT. Остальные
+// маршруты авторасценки (карточка позиции, правка, действия, список тендеров)
+// — только JWT, см. routes.go.
+func registerAutopriceRoutes(r chi.Router, d *deps) {
+	readT := middleware.RequireAPIKeyScope(apikey.ScopeTendersRead, "id")
+	writeT := middleware.RequireAPIKeyScope(apikey.ScopeTendersWrite, "id")
+	readRun := middleware.RequireAPIKeyScopeResolved(apikey.ScopeTendersRead, d.tenderOfAutopriceRun)
+	writeRun := middleware.RequireAPIKeyScopeResolved(apikey.ScopeTendersWrite, d.tenderOfAutopriceRun)
+
+	r.With(writeT).Post("/api/v1/tenders/{id}/autoprice-runs", d.autopriceH.CreateRun)
+	r.With(readT).Get("/api/v1/tenders/{id}/autoprice-runs", d.autopriceH.ListRuns)
+	r.With(writeRun).Put("/api/v1/autoprice-runs/{sid}/positions/{posId}/review", d.autopriceH.PutReview)
+	r.With(readRun).Get("/api/v1/autoprice-runs/{sid}/reviews", d.autopriceH.ListReviews)
 }
 
 // registerVerificationAIRoutes — ИИ-разбор находок: оценки — чтение, запуск

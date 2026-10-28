@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tabs, message, Alert } from 'antd';
 import { formatFXUnavailable } from '../../utils/boq/currencyGuard';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useAutopriceExportWarning } from '../../hooks/useAutopriceExportWarning';
 import { useTheme } from '../../contexts/ThemeContext';
 import { loadTenderInsurance } from '../../lib/api/insurance';
 import { RedistributionHeader } from './components/RedistributionHeader';
@@ -41,6 +42,7 @@ const SAVED_TAG_DURATION_MS = 2000;
 const CostRedistribution: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState('setup');
   const { isPhone, isPhoneDevice } = useIsMobile();
+  const { confirmExport } = useAutopriceExportWarning();
   const { theme: currentTheme } = useTheme();
   const [insuranceTotal, setInsuranceTotal] = useState(0);
   // Server prepared projection — единственный авторитетный источник итоговых
@@ -404,14 +406,18 @@ const CostRedistribution: React.FC = () => {
       return;
     }
 
-    import('./utils/exportToExcel').then(({ exportRedistributionToExcel }) => {
-      exportRedistributionToExcel({
-        rows: preparedResults.rows,
-        tenderTitle: `${selectedTender.title} (v${selectedTender.version})`,
-        hierarchyLevels: new Map(clientPositions.map((p) => [p.id, p.hierarchy_level || 0])),
+    // Тест авторасценки: только предупреждение, не блокирует экспорт.
+    void confirmExport(selectedTenderId).then((proceed) => {
+      if (!proceed) return;
+      return import('./utils/exportToExcel').then(({ exportRedistributionToExcel }) => {
+        exportRedistributionToExcel({
+          rows: preparedResults.rows,
+          tenderTitle: `${selectedTender.title} (v${selectedTender.version})`,
+          hierarchyLevels: new Map(clientPositions.map((p) => [p.id, p.hierarchy_level || 0])),
+        });
       });
     });
-  }, [selectedTenderId, tenders, preparedResults, exportBlockedMessage, fxMissing, clientPositions]);
+  }, [selectedTenderId, tenders, preparedResults, exportBlockedMessage, fxMissing, clientPositions, confirmExport]);
 
   // Слепок ровно того набора, который уходит в save (правила, не деньги).
   const currentRulesSignature = useMemo(

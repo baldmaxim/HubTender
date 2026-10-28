@@ -28,6 +28,9 @@ import { IconSwap } from '../transitions';
 import { type Notification } from '../../lib/types';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { listNotifications, deleteAllNotifications } from '../../lib/api/notifications';
+import { fetchAutopriceTenders } from '../../lib/api/autoprice';
+
+const AUTOPRICE_REVIEW_PATH = '/autoprice-review';
 import { hasPageAccess, PAGE_LABELS } from '../../lib/types/types';
 import type { AuthUser } from '../../lib/types/types';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -308,9 +311,27 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
 
   // Меню пересчитывается только при смене пользователя/типа устройства,
   // а не на каждый рендер лейаута.
+  // Тест авторасценки: пункт «Подтверждение авторасценки» виден, только если есть
+  // тендер с autoprice-сессией; ошибка запроса — пункт скрыт.
+  const [hasAutoprice, setHasAutoprice] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    fetchAutopriceTenders()
+      .then((list) => { if (!cancelled) setHasAutoprice(list.length > 0); })
+      .catch(() => { if (!cancelled) setHasAutoprice(false); });
+    return () => { cancelled = true; };
+  }, [user]);
+
   const filteredMenuItems = useMemo(
-    () => filterMenuByAccess(filterMenuByDevice(processedMenuItems, isPhoneDevice), user),
-    [user, isPhoneDevice]
+    () => filterMenuByAccess(
+      filterMenuByDevice(
+        hasAutoprice ? processedMenuItems : processedMenuItems?.filter((i) => i?.key !== AUTOPRICE_REVIEW_PATH),
+        isPhoneDevice,
+      ),
+      user,
+    ),
+    [user, isPhoneDevice, hasAutoprice]
   );
 
   return (

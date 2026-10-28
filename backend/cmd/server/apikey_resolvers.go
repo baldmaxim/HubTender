@@ -27,6 +27,12 @@ func (d *deps) tenderOfPosition(r *http.Request) (string, error) {
 	return pos.TenderID, nil
 }
 
+// tenderOfAutopriceRun — тендер прогона авторасценки по {sid}: маршруты
+// /autoprice-runs/{sid}/... не несут id тендера в URL.
+func (d *deps) tenderOfAutopriceRun(r *http.Request) (string, error) {
+	return d.autopriceRepo.TenderOfRun(r.Context(), chi.URLParam(r, "sid"))
+}
+
 // errRegistryNotTenderScoped — у «Перечня тендеров» нет связи с тендерами:
 // принадлежность строки перечня списку разрешённых тендеров не проверить.
 var errRegistryNotTenderScoped = errors.New("перечень тендеров не привязан к тендерам")

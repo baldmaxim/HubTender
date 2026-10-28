@@ -84,6 +84,9 @@ type deps struct {
 	costsH            *handlers.CostsHandler
 	nomenclaturesH    *handlers.NomenclaturesHandler
 	importLogH        *handlers.ImportLogHandler
+	// autopriceRepo нужен гейту машинного доступа: тендер по id прогона.
+	autopriceRepo     *repository.AutopriceReviewRepo
+	autopriceH        *handlers.AutopriceReviewHandler
 	projectsH         *handlers.ProjectsHandler
 	objectsH          *handlers.ConstructionObjectsHandler
 	objectPhotosH     *handlers.ConstructionObjectPhotosHandler
@@ -156,6 +159,7 @@ func buildDeps(
 	costsRepo := repository.NewCostsRepo(pool)
 	nomenclaturesRepo := repository.NewNomenclaturesRepo(pool)
 	importLogRepo := repository.NewImportLogRepo(pool)
+	autopriceRepo := repository.NewAutopriceReviewRepo(pool)
 	projectsRepo := repository.NewProjectsRepo(pool)
 	constructionObjectsRepo := repository.NewConstructionObjectsRepo(pool)
 	constructionObjectPhotosRepo := repository.NewConstructionObjectPhotosRepo(pool)
@@ -523,6 +527,8 @@ func buildDeps(
 		costsH:            handlers.NewCostsHandler(costsSvc),
 		nomenclaturesH:    handlers.NewNomenclaturesHandler(nomenclaturesSvc),
 		importLogH:        handlers.NewImportLogHandler(importLogSvc),
+		autopriceRepo:     autopriceRepo,
+		autopriceH:        handlers.NewAutopriceReviewHandler(autopriceRepo),
 		projectsH:         handlers.NewProjectsHandler(projectsSvc),
 		objectsH:          handlers.NewConstructionObjectsHandler(constructionObjectsSvc),
 		objectPhotosH:     handlers.NewConstructionObjectPhotosHandler(constructionObjectPhotosSvc),

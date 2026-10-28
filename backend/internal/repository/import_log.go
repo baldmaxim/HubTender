@@ -18,6 +18,9 @@ var (
 	ErrImportSessionForbidden        = errors.New("import session: not owner")
 	ErrImportSessionNotFound         = errors.New("import session: not found")
 	ErrImportSessionAlreadyCancelled = errors.New("import session: already cancelled")
+	// ErrImportSessionAutopriceProtected — прогон авторасценки с подтверждёнными
+	// позициями или правками других пользователей отменять нельзя.
+	ErrImportSessionAutopriceProtected = errors.New("import session: autoprice run has approvals or manual edits")
 )
 
 // ImportLogRepo handles import_sessions reads + atomic session-cancel.
@@ -240,13 +243,14 @@ func (r *ImportLogRepo) CancelSession(ctx context.Context, sessionID, cancelledB
 		snapshot    []byte
 		createdRaw  []byte
 		cancelledAt *time.Time
+		source      *string
 	)
 	err = tx.QueryRow(ctx, `
-		SELECT user_id::text, tender_id::text, positions_snapshot, created_positions, cancelled_at
+		SELECT user_id::text, tender_id::text, positions_snapshot, created_positions, cancelled_at, source
 		FROM public.import_sessions
 		WHERE id = $1
 		FOR UPDATE
-	`, sessionID).Scan(&ownerID, &tenderID, &snapshot, &createdRaw, &cancelledAt)
+	`, sessionID).Scan(&ownerID, &tenderID, &snapshot, &createdRaw, &cancelledAt, &source)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrImportSessionNotFound
@@ -259,6 +263,24 @@ func (r *ImportLogRepo) CancelSession(ctx context.Context, sessionID, cancelledB
 	// Повторная отмена снова накатила бы снимок ГП поверх более поздних правок.
 	if cancelledAt != nil {
 		return nil, ErrImportSessionAlreadyCancelled
+	}
+	// Прогон авторасценки с подтверждениями инженера или чужими правками строк
+	// отмена уничтожила бы вместе с работой людей. Остальные сессии — как раньше.
+	if source != nil && *source == AutopriceSource {
+		var protected bool
+		if err := tx.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM public.autoprice_position_reviews
+			               WHERE import_session_id = $1 AND status = 'approved')
+			    OR EXISTS (SELECT 1 FROM public.boq_items b
+			               JOIN public.boq_items_audit a ON a.boq_item_id = b.id
+			               WHERE b.import_session_id = $1
+			                 AND a.changed_by IS NOT NULL AND a.changed_by <> $2::uuid)
+		`, sessionID, ownerID).Scan(&protected); err != nil {
+			return nil, fmt.Errorf("importLogRepo.CancelSession: autoprice guard: %w", err)
+		}
+		if protected {
+			return nil, ErrImportSessionAutopriceProtected
+		}
 	}
 
 	res := &CancelResult{}

@@ -1,0 +1,408 @@
+/* Переменные --apr-* задаются из токенов antd на корне страницы и панели (Drawer рендерится в body). */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  color: var(--apr-text);
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.center {
+  display: grid;
+  place-items: center;
+  padding: 32px 0;
+}
+
+.muted {
+  color: var(--apr-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.danger {
+  color: var(--apr-danger);
+  font-weight: 600;
+}
+
+.selectors {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tenderSelect,
+.runSelect {
+  width: 100%;
+  min-height: 44px;
+}
+
+.tenderSelect :global(.ant-select-selector),
+.runSelect :global(.ant-select-selector),
+.filterSelect :global(.ant-select-selector) {
+  min-height: 44px;
+  align-items: center;
+}
+
+.tenderSelect :global(.ant-select-selection-search-input),
+.runSelect :global(.ant-select-selection-search-input),
+.filterSelect :global(.ant-select-selection-search-input),
+.resolutionSelect :global(.ant-select-selection-search-input) {
+  font-size: 16px;
+}
+
+/* Фильтры */
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progressRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.progressText {
+  font-weight: 600;
+}
+
+.progressBar {
+  flex: 1 1 120px;
+  min-width: 120px;
+  margin: 0;
+}
+
+.filterRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filterSelect {
+  width: 100%;
+}
+
+.toggle {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+.search,
+.search :global(.ant-input) {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+/* Список */
+.split {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.listArea {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tableWrap {
+  height: max(360px, calc(100dvh - 330px));
+  min-width: 0;
+  overflow: hidden;
+  background: var(--apr-bg);
+  border: 1px solid var(--apr-border);
+  border-radius: var(--apr-radius);
+}
+
+/* Фиксированная высота строки — обязательна для virtual. */
+.table :global(.ant-table-tbody .ant-table-cell) {
+  height: var(--apr-row-h);
+  padding-block: 0;
+  overflow: hidden;
+}
+
+.row {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.rowSelected {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.rowSelected :global(.ant-table-cell) {
+  background: var(--apr-selected) !important;
+}
+
+.ellipsis {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cellStack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.badges :global(.ant-tag) {
+  margin-inline-end: 4px;
+}
+
+.aside {
+  flex: 0 0 520px;
+  width: 520px;
+  height: max(360px, calc(100dvh - 330px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--apr-bg);
+  border: 1px solid var(--apr-border);
+  border-radius: var(--apr-radius);
+}
+
+/* Панель позиции */
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--apr-text);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.panelHead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  padding-top: max(8px, env(safe-area-inset-top));
+  background: var(--apr-bg);
+  border-bottom: 1px solid var(--apr-border);
+}
+
+.panelTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.positionNo {
+  font-weight: 600;
+  margin-inline-end: 4px;
+}
+
+.closeBtn {
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+}
+
+.panelBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-x: hidden;
+}
+
+.positionText {
+  font-size: 15px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.linkBtn,
+.saveBtn,
+.actionBtn {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+.linkBtn {
+  align-self: flex-start;
+}
+
+.saveBtn {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sectionTitle {
+  font-weight: 600;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: var(--apr-fill);
+  border: 1px solid var(--apr-border);
+  border-radius: var(--apr-radius);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardText {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.cardControls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resolutionSelect {
+  width: 100%;
+  min-height: 44px;
+}
+
+.resolutionSelect :global(.ant-select-selector) {
+  min-height: 44px;
+  align-items: center;
+}
+
+.input,
+.input :global(.ant-input) {
+  font-size: 16px;
+}
+
+.checkbox {
+  min-height: 32px;
+}
+
+.itemName {
+  overflow-wrap: anywhere;
+}
+
+.changedCell {
+  padding: 0 4px;
+  background: var(--apr-changed);
+  border: 1px solid var(--apr-changed-border);
+  border-radius: 4px;
+}
+
+.deletedBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.plainList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.event {
+  padding-bottom: 4px;
+  border-bottom: 1px dashed var(--apr-border);
+}
+
+.eventComment {
+  color: var(--apr-muted);
+  white-space: pre-wrap;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (min-width: 576px) {
+  .page {
+    padding: 16px;
+  }
+
+  .selectors,
+  .filterRow {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .tenderSelect {
+    flex: 2 1 320px;
+    width: auto;
+  }
+
+  .runSelect {
+    flex: 1 1 240px;
+    width: auto;
+  }
+
+  .filterSelect {
+    flex: 0 1 220px;
+    width: auto;
+    min-width: 160px;
+  }
+
+  .search {
+    flex: 1 1 240px;
+    min-width: 200px;
+  }
+
+  .cardControls {
+    flex-direction: row;
+  }
+
+  .resolutionSelect {
+    flex: 0 0 180px;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
