@@ -1,0 +1,120 @@
+/* Переменные --apr-* приходят от родителя (getReviewCssVars на панели). */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sectionTitle {
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--apr-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.tag {
+  margin: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.refList,
+.partList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.refCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--apr-border);
+  border-radius: var(--apr-radius);
+  background: var(--apr-bg);
+}
+
+.refHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.refDoc {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.refLocation {
+  min-width: 0;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--apr-fill);
+  color: var(--apr-muted);
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.refDetail {
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.noteTitle {
+  font-weight: 600;
+}
+
+.noteHeading {
+  font-weight: 600;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.part {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: var(--apr-radius);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.partAssumption {
+  background: var(--apr-changed);
+  border-left: 3px solid var(--apr-changed-border);
+}
+
+.partExcluded {
+  background: var(--apr-fill);
+  border-left: 3px solid var(--apr-border);
+}
+
+.partText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

@@ -1,14 +1,20 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { App } from 'antd';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useDeadlineCheck } from '../../../hooks/useDeadlineCheck';
 import { recomputeLinkedMaterials, updateBoqItemWithAudit } from '../../../lib/api/boq';
 import { recomputePositionTotals } from '../../../lib/api/positions';
 import { markRealtimeMutation } from '../../../lib/realtime/useRealtimeRefetch';
-import type { BoqItemInsert } from '../../../lib/types';
+import type { BoqItemFull, BoqItemInsert } from '../../../lib/types';
 import { getErrorMessage } from '../../../utils/errors';
 import { useBoqItems } from '../../PositionItems/hooks/useBoqItems';
-import type { BoqItemFieldPatch } from '../../PositionItems/utils/boqFieldPatch';
+import {
+  buildFieldPatch,
+  isWorkItemType,
+  type BoqItemFieldPatch,
+  type EditableFieldKey,
+  type FieldPatchCtx,
+} from '../../PositionItems/utils/boqFieldPatch';
 
 interface IUseRowEditingParams {
   positionId: string | null;
@@ -18,15 +24,14 @@ interface IUseRowEditingParams {
 }
 
 /**
- * Правка строк BOQ из панели позиции (лист BoqItemSheet).
- * Данные позиции и справочники грузятся лениво — при первом вызове `activate`;
- * при смене позиции загруженное сбрасывается (строки фильтруются по позиции).
+ * Правка строк BOQ из панели позиции: прямо в таблице (`saveField`) и через лист BoqItemSheet.
+ * Строки, единицы и курсы грузятся сразу при открытии позиции; справочники наименований и
+ * затрат (нужны только листу) — лениво, при вызове `activate`.
  */
 export const useRowEditing = ({ positionId, tenderId, onSaved }: IUseRowEditingParams) => {
   const { message } = App.useApp();
   const { user } = useAuth();
-  const [activatedFor, setActivatedFor] = useState<string | null>(null);
-  const activeId = positionId && activatedFor === positionId ? positionId : undefined;
+  const activeId = positionId ?? undefined;
 
   const boq = useBoqItems(activeId, true);
   const { canEdit: canEditByDeadline, loading: deadlineLoading } = useDeadlineCheck(tenderId ?? undefined);
@@ -39,9 +44,10 @@ export const useRowEditing = ({ positionId, tenderId, onSaved }: IUseRowEditingP
   );
 
   const activate = useCallback(() => {
-    if (positionId) setActivatedFor(positionId);
     void loadEditData();
-  }, [positionId, loadEditData]);
+  }, [loadEditData]);
+
+  const getFull = (itemId: string): BoqItemFull | undefined => items.find((i) => i.id === itemId);
 
   // Повторяет handleItemFieldSave из PositionItems/hooks/useItemActions.ts.
   // Ошибку PATCH не глотаем: её ловит лист и оставляет поле в режиме редактирования.
@@ -81,7 +87,31 @@ export const useRowEditing = ({ positionId, tenderId, onSaved }: IUseRowEditingP
     await onSaved();
   };
 
+  /**
+   * Сохранение одного поля из ячейки таблицы. ctx строится как в BoqItemSheet
+   * (работы позиции, наличие привязанных материалов), патч — buildFieldPatch.
+   * Ошибка (валидация или PATCH) пробрасывается вызывающему — ячейка откатывается.
+   */
+  const saveField = async (itemId: string, key: EditableFieldKey, draft: unknown): Promise<void> => {
+    const item = getFull(itemId);
+    if (!item) throw new Error('Строка не найдена, обновите панель');
+    const ctx: FieldPatchCtx = {
+      item,
+      workItems: items.filter((i) => isWorkItemType(i.boq_item_type)),
+      units: boq.units,
+      gpVolume: boq.gpVolume,
+      hasChildren: items.some((i) => i.parent_work_item_id === item.id),
+      currencyRates: boq.currencyRates,
+    };
+    const built = buildFieldPatch(key, draft, ctx);
+    if (!built.ok) throw new Error(built.error);
+    await onFieldSave(itemId, built.patch, { recomputeWorkId: built.recomputeWorkId });
+  };
+
   return {
+    ready: items.length > 0,
+    getFull,
+    saveField,
     items,
     workNames: boq.workNames,
     materialNames: boq.materialNames,

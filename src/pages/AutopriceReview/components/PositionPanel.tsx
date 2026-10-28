@@ -11,6 +11,7 @@ import { useRowEditing } from '../hooks/useRowEditing';
 import { useWideScreen } from '../hooks/useWideScreen';
 import BoqItemSheet from '../../PositionItems/components/mobile/BoqItemSheet';
 import { ItemsTable } from './ItemsTable';
+import { BasisSection } from './BasisSection';
 import { FindingsEditor } from './FindingsEditor';
 import { QuestionsEditor } from './QuestionsEditor';
 import { EventsList } from './EventsList';
@@ -135,21 +136,14 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
             Открыть позицию
           </Button>
 
-          <ItemsTable items={detail.items} deleted={detail.deleted} onEditItem={handleEditItem} />
+          <ItemsTable
+            items={detail.items}
+            deleted={detail.deleted}
+            onEditItem={handleEditItem}
+            editing={{ ready: rowEditing.ready, canEdit: rowEditing.canEdit, saveField: rowEditing.saveField }}
+          />
 
-          <div className={styles.section}>
-            <div className={styles.sectionTitle}>Основание</div>
-            {review.pd_refs.length > 0 ? (
-              <ul className={styles.plainList}>
-                {review.pd_refs.map((ref, i) => (
-                  <li key={`${i}-${ref}`}>{ref}</li>
-                ))}
-              </ul>
-            ) : (
-              <div className={styles.muted}>Ссылок на ПД нет</div>
-            )}
-            {review.pd_note && <div className={styles.cardText}>{review.pd_note}</div>}
-          </div>
+          <BasisSection refs={review.pd_refs} note={review.pd_note} />
 
           <FindingsEditor findings={draft.findings} disabled={locked} onChange={setFindings} />
           <QuestionsEditor questions={draft.questions} disabled={locked} onChange={setQuestions} />

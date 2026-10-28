@@ -403,6 +403,33 @@
   border-radius: 4px;
 }
 
+/* Инпуты прямо в строке: на телефоне 16px (иначе Safari зумит), на планшете и выше — компактнее. */
+.inlineNum {
+  width: 100%;
+}
+
+.inlineNum :global(.ant-input-number-input) {
+  height: 32px;
+  font-size: 16px;
+  text-align: right;
+}
+
+.inlineSelect {
+  width: 100%;
+}
+
+.changedFill {
+  display: block;
+  padding: 0;
+}
+
+@media (min-width: 576px) {
+  .inlineNum :global(.ant-input-number-input) {
+    height: 22px;
+    font-size: 14px;
+  }
+}
+
 /* Столбец правки строки: без внутренних отступов, кнопка занимает всю ячейку (44px). */
 .editCell {
   padding: 0 !important;

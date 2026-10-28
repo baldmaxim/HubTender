@@ -1,4 +1,4 @@
-import type { FC } from 'react';
+import type { FC, ReactNode } from 'react';
 import { Tag, Tooltip } from 'antd';
 import { getBoqTypeTagStyle } from '../../PositionItems/components/boqColors';
 import type { IPositionItem } from '../types';
@@ -23,17 +23,19 @@ export const ItemTypeTag: FC<IItemTypeTagProps> = ({ type }) => {
 interface IItemTypeCellProps {
   item: IPositionItem;
   linked: boolean;
+  /** Вместо текста «осн./вспом.» (редактируемый селект). */
+  kindControl?: ReactNode;
 }
 
-/** Ячейка «Тип»: тег + у материалов «осн./вспом.»; несвязанный материал — подсказка. */
-export const ItemTypeCell: FC<IItemTypeCellProps> = ({ item, linked }) => {
+/** Ячейка «Тип»: тег + у материалов «осн./вспом.» (текст или селект); несвязанный материал — подсказка. */
+export const ItemTypeCell: FC<IItemTypeCellProps> = ({ item, linked, kindControl }) => {
   const material = isMaterialItemType(item.boq_item_type);
   const kind = material ? shortMaterialType(item.material_type) : null;
   const tag = <ItemTypeTag type={item.boq_item_type} />;
   return (
     <span className={styles.typeCell}>
       {material && !linked ? <Tooltip title="не привязан к работе">{tag}</Tooltip> : tag}
-      {kind && <span className={styles.typeKind}>{kind}</span>}
+      {kindControl ?? (kind && <span className={styles.typeKind}>{kind}</span>)}
     </span>
   );
 };
