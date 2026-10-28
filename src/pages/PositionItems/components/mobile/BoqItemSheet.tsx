@@ -38,6 +38,8 @@ interface BoqItemSheetProps {
     opts: { recomputeWorkId?: string },
   ) => Promise<void>;
   onClose: () => void;
+  /** 'right' — боковая панель 520 px (десктоп, «Подтверждение авторасценки»). */
+  placement?: 'bottom' | 'right';
 }
 
 /**
@@ -61,6 +63,7 @@ const BoqItemSheet: React.FC<BoqItemSheetProps> = ({
   canEdit,
   onFieldSave,
   onClose,
+  placement = 'bottom',
 }) => {
   const { token } = theme.useToken();
   const { message } = AntApp.useApp();
@@ -151,8 +154,8 @@ const BoqItemSheet: React.FC<BoqItemSheetProps> = ({
     <Drawer
       open={!!itemId && !!item}
       onClose={onClose}
-      placement="bottom"
-      height="92%"
+      placement={placement}
+      {...(placement === 'right' ? { width: 520 } : { height: '92%' })}
       zIndex={1200}
       destroyOnHidden
       // Крестика нет — лист закрывается тапом по маске, и она закрывает ВСЕГДА.

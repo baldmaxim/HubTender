@@ -75,6 +75,8 @@ const AutopriceReview: FC = () => {
       onSave={detail.save}
       onAction={(action, okText, comment) => detail.act(action, okText, comment)}
       onOpenPosition={handleOpenPosition}
+      tenderId={tenderId}
+      onRowsChanged={detail.refresh}
       onClose={() => setSelectedId(null)}
     />
   );

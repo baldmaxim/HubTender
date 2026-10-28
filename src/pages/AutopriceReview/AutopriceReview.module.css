@@ -403,6 +403,24 @@
   border-radius: 4px;
 }
 
+/* Столбец правки строки: без внутренних отступов, кнопка занимает всю ячейку (44px). */
+.editCell {
+  padding: 0 !important;
+}
+
+.editBtn {
+  width: 44px;
+  height: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (min-width: 576px) {
+  .editBtn {
+    height: 32px;
+  }
+}
+
 .deletedBlock {
   display: flex;
   flex-direction: column;
@@ -490,4 +508,39 @@
     transition: none !important;
     animation: none !important;
   }
+}
+
+.typeCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.typeTag {
+  margin: 0;
+  border: none;
+  font-size: 11px;
+}
+
+.typeKind {
+  color: var(--apr-muted);
+  font-size: 11px;
+}
+
+.childName {
+  display: inline-block;
+  padding-left: 16px;
+}
+
+.childMark {
+  margin-right: 4px;
+  color: var(--apr-muted);
+}
+
+.itemsSummary {
+  color: var(--apr-muted);
+  font-size: 12px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
 }

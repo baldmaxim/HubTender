@@ -81,13 +81,16 @@ export const DECISION_LABELS: Record<string, string> = {
 };
 
 /** Какое поле строки отражает изменение из `changed`. */
-export const CHANGED_TO_COLUMN: Record<MachineChangedField, 'name' | 'unit_rate' | 'conversion' | 'consumption'> = {
+export const CHANGED_TO_COLUMN: Record<
+  MachineChangedField,
+  'type' | 'name' | 'unit_rate' | 'conversion' | 'consumption'
+> = {
   unit_rate: 'unit_rate',
   conversion_coefficient: 'conversion',
   consumption_coefficient: 'consumption',
   work_name_id: 'name',
   material_name_id: 'name',
-  material_type: 'name',
+  material_type: 'type',
 };
 
 /** Высота строки списка — фиксирована (виртуализация, 500+ строк). */
