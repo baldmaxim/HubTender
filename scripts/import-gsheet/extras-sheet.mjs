@@ -195,7 +195,8 @@ export const makeGroupKeyOf = (details) => {
  * (площадь объекта, повторённая в десятке строк) — один раз; у групп объёмы не складываются.
  */
 export const parseVolumes = (wb, tenderId, costOf, { groupKeyOf } = {}) => {
-  const s = sheetAccess(wb, 'Затраты на строительство');
+  // В части файлов лист назван коротко — «Затраты» (тендер 221).
+  const s = sheetAccess(wb, !wb.Sheets['Затраты на строительство'] && wb.Sheets['Затраты'] ? 'Затраты' : 'Затраты на строительство');
   const first = (r) => normLabel(s.text('A', r));
   let header = 1;
   while (header <= Math.min(10, s.lastRow) && first(header) !== 'код' && first(header) !== 'вид работ') header += 1;

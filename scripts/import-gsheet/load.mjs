@@ -39,6 +39,10 @@ import { renderReport } from './report.mjs';
 
 const TACTIC_NAME = 'Базовая схема';
 const NAME_CONCURRENCY = 6;
+/** Создание наименований при сбоях шлюза: кругов, пауза между ними (мс × номер круга), сбоев до остановки круга. */
+const NAME_ROUNDS = 4;
+const NAME_RETRY_MS = 5000;
+const NAME_FAIL_LIMIT = 12;
 /** Строк в одном запросе импорта: порции по ~1 200 строк упирались в таймаут nginx (504). */
 const IMPORT_CHUNK_ITEMS = 500;
 /** Пауза между порциями импорта (мс) — даёт серверу закончить автопересчёт тендера. */
@@ -64,6 +68,7 @@ const { values: args } = parseArgs({
 });
 
 const log = (...a) => console.log(...a);
+const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
 const readJson = (dir, file) => {
   const p = path.join(dir, file);
   return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
@@ -196,14 +201,34 @@ const applyFile = async (api, refs, prep, outDir) => {
       entry.unitsCreated = prep.missingUnits;
     }
     log(`Создаю наименования: ${prep.missingNames.length}`);
-    await pool(prep.missingNames, NAME_CONCURRENCY, (n) => api.createName(n.kind, n.name, n.unit));
-    entry.namesCreated = prep.missingNames.length;
-    for (const kind of ['work', 'material']) {
-      for (const n of await api.listNames(kind)) {
-        const k = canonKey(kind, n.name, n.unit);
-        if (!nameIds.has(k)) nameIds.set(k, n.id);
+    // Сбой шлюза (5xx/сеть) не повторяем вслепую — уникальности «имя + единица» в справочнике
+    // нет, повтор уже записанного дал бы дубль: перечитываем справочник и досоздаём недостающее.
+    let pending = prep.missingNames;
+    for (let round = 1; ; round += 1) {
+      let failures = 0;
+      let lastError = null;
+      await pool(pending, NAME_CONCURRENCY, async (n) => {
+        if (failures >= NAME_FAIL_LIMIT) return;
+        await api.createName(n.kind, n.name, n.unit).catch((err) => {
+          if (!(err.status === 0 || err.status >= 500)) throw err;
+          failures += 1;
+          lastError = err;
+        });
+      });
+      for (const kind of ['work', 'material']) {
+        for (const n of await api.listNames(kind)) {
+          const k = canonKey(kind, n.name, n.unit);
+          if (!nameIds.has(k)) nameIds.set(k, n.id);
+        }
       }
+      pending = pending.filter((n) => !nameIds.has(canonKey(n.kind, n.name, n.unit)));
+      if (!pending.length || !lastError) break;
+      const why = lastError.message.replace(/\s+/g, ' ').slice(0, 90);
+      if (round >= NAME_ROUNDS) throw new Error(`не создано наименований: ${pending.length} (пример: «${pending[0].name}», ${pending[0].unit}) — ${why}`);
+      log(`  не создано ${pending.length} (${why}) — повтор ${round} через ${(NAME_RETRY_MS * round) / 1000} с`);
+      await sleep(NAME_RETRY_MS * round);
     }
+    entry.namesCreated = prep.missingNames.length;
     const lost = [...prep.names.keys()].filter((k) => !nameIds.has(k));
     if (lost.length) throw new Error(`после создания не найдено ${lost.length} наименований (пример: ${lost[0]})`);
   }
