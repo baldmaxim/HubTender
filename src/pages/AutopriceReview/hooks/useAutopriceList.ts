@@ -11,8 +11,12 @@ import type { IAutopriceRun, IAutopriceTender, IReviewRow } from '../types';
 const byImportedDesc = (a: IAutopriceRun, b: IAutopriceRun): number =>
   b.imported_at.localeCompare(a.imported_at);
 
-/** Тендеры с прогонами авторасценки → прогоны тендера → позиции выбранного прогона. */
-export const useAutopriceList = () => {
+/**
+ * Тендеры с прогонами авторасценки → прогоны тендера → позиции выбранного прогона.
+ * requestedTenderId (из ?tenderId=) выбирает тендер при загрузке списка и при смене параметра;
+ * если такого тендера в списке нет — прежнее поведение (первый из списка).
+ */
+export const useAutopriceList = (requestedTenderId: string | null) => {
   const [tenders, setTenders] = useState<IAutopriceTender[]>([]);
   const [tendersLoading, setTendersLoading] = useState(true);
   const [tenderId, setTenderId] = useState<string | null>(null);
@@ -22,6 +26,8 @@ export const useAutopriceList = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reviewsReq = useRef(0);
+  const requestedRef = useRef(requestedTenderId);
+  requestedRef.current = requestedTenderId;
 
   useEffect(() => {
     let cancelled = false;
@@ -29,7 +35,8 @@ export const useAutopriceList = () => {
       .then((list) => {
         if (cancelled) return;
         setTenders(list);
-        setTenderId((prev) => prev ?? list[0]?.tender_id ?? null);
+        const requested = list.find((t) => t.tender_id === requestedRef.current)?.tender_id;
+        setTenderId((prev) => prev ?? requested ?? list[0]?.tender_id ?? null);
       })
       .catch((e: unknown) => !cancelled && setError(autopriceErrorMessage(e)))
       .finally(() => !cancelled && setTendersLoading(false));
@@ -37,6 +44,13 @@ export const useAutopriceList = () => {
       cancelled = true;
     };
   }, []);
+
+  // Параметр сменился при уже открытой (keep-alive) вкладке — переключаем тендер.
+  useEffect(() => {
+    if (requestedTenderId && tenders.some((t) => t.tender_id === requestedTenderId)) {
+      setTenderId(requestedTenderId);
+    }
+  }, [requestedTenderId, tenders]);
 
   useEffect(() => {
     setRuns([]);

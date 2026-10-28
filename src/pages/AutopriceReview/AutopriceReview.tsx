@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { Alert, Drawer, Empty, Select, Spin, theme } from 'antd';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -33,12 +33,27 @@ const AutopriceReview: FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { openPositionTab } = useWorkspaceTabActions();
-  const list = useAutopriceList();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const list = useAutopriceList(searchParams.get('tenderId'));
   const [filters, setFilters] = useState<IReviewFilters>(DEFAULT_FILTERS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { tenderId, runId, reload } = list;
 
   useEffect(() => setSelectedId(null), [runId]);
+
+  // Выбор в фильтре пишем в URL: иначе повторный переход с тем же ?tenderId не переключил бы тендер.
+  const { setTenderId } = list;
+  const handleTenderChange = useCallback(
+    (value: string) => {
+      setTenderId(value);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tenderId', value);
+        return next;
+      }, { replace: true });
+    },
+    [setTenderId, setSearchParams],
+  );
 
   const detail = usePositionDetail(runId, selectedId, reload);
 
@@ -100,7 +115,7 @@ const AutopriceReview: FC = () => {
             value={list.tenderId ?? undefined}
             options={tenderOptions}
             placeholder="Тендер"
-            onChange={list.setTenderId}
+            onChange={handleTenderChange}
           />
           <Select<string>
             className={styles.runSelect}

@@ -8,6 +8,10 @@ import {
 } from '@ant-design/icons';
 import type { Tender } from '../../../lib/types';
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasPageAccess } from '../../../lib/types/types';
+import { useHasAutopriceRuns } from '../hooks/useHasAutopriceRuns';
+import { AutopriceReviewButton } from './AutopriceReviewButton';
 import { HOUSING_CLASS_COLORS } from '../../../utils/housingClassColor';
 
 const { Text } = Typography;
@@ -48,6 +52,10 @@ const PositionToolbarInner: React.FC<PositionToolbarProps> = ({
   onVersionChange,
 }) => {
   const { isPhoneDevice, isPhone } = useIsMobile();
+  const { user } = useAuth();
+  const hasAutoprice = useHasAutopriceRuns(selectedTender?.id);
+  const showAutopriceButton =
+    hasAutoprice && !!selectedTender && !!user && hasPageAccess(user, '/autoprice-review');
 
   const txt: React.CSSProperties = { color: currentTheme === 'dark' ? '#fff' : '#000' };
   const green: React.CSSProperties = { color: '#10b981' };
@@ -302,6 +310,9 @@ const PositionToolbarInner: React.FC<PositionToolbarProps> = ({
                         >
                           Папка с проектом
                         </Button>
+                      )}
+                      {showAutopriceButton && selectedTender && (
+                        <AutopriceReviewButton tenderId={selectedTender.id} />
                       )}
                     </Space>
                   </div>
