@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
-import { Alert, Drawer, Empty, Select, Spin, theme } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Alert, Drawer, Empty, Select, Spin, Splitter, theme } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -12,6 +12,7 @@ import { ReviewFilters } from './components/ReviewFilters';
 import { ReviewTable } from './components/ReviewTable';
 import { PositionPanel } from './components/PositionPanel';
 import { getReviewCssVars } from './utils/cssVars';
+import { readStorage, writeStorage } from './utils/safeStorage';
 import { formatDateTime } from './utils/format';
 import {
   DEFAULT_FILTERS,
@@ -25,6 +26,14 @@ import {
 import styles from './AutopriceReview.module.css';
 
 const DRAWER_WIDTH = 640;
+const PANEL_WIDTH_KEY = 'autoprice-review:panel-width';
+const PANEL_WIDTH_DEFAULT = 520;
+const PANEL_WIDTH_MIN = 380;
+
+const readPanelWidth = (): number => {
+  const v = Number(readStorage(PANEL_WIDTH_KEY));
+  return Number.isFinite(v) && v >= PANEL_WIDTH_MIN ? Math.round(v) : PANEL_WIDTH_DEFAULT;
+};
 
 const AutopriceReview: FC = () => {
   const { token } = theme.useToken();
@@ -37,6 +46,7 @@ const AutopriceReview: FC = () => {
   const list = useAutopriceList(searchParams.get('tenderId'));
   const [filters, setFilters] = useState<IReviewFilters>(DEFAULT_FILTERS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [panelWidth] = useState(readPanelWidth);
   const { tenderId, runId, reload } = list;
 
   useEffect(() => setSelectedId(null), [runId]);
@@ -82,6 +92,12 @@ const AutopriceReview: FC = () => {
       onOpenPosition={handleOpenPosition}
       onClose={() => setSelectedId(null)}
     />
+  );
+
+  const table = (
+    <Spin spinning={list.loading}>
+      <ReviewTable rows={rows} selectedId={selectedId} isPhone={isPhone} onSelect={setSelectedId} />
+    </Spin>
   );
 
   const tenderOptions = list.tenders.map((t) => ({
@@ -136,14 +152,23 @@ const AutopriceReview: FC = () => {
               shown={rows.length}
               onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))}
             />
-            <div className={styles.split}>
-              <div className={styles.listArea}>
-                <Spin spinning={list.loading}>
-                  <ReviewTable rows={rows} selectedId={selectedId} isPhone={isPhone} onSelect={setSelectedId} />
-                </Spin>
+            {wide ? (
+              <Splitter
+                className={styles.splitter}
+                onResizeEnd={(sizes) => {
+                  if (sizes.length > 1) writeStorage(PANEL_WIDTH_KEY, String(Math.round(sizes[1])));
+                }}
+              >
+                <Splitter.Panel min={480}>{table}</Splitter.Panel>
+                <Splitter.Panel className={styles.asidePanel} defaultSize={panelWidth} min={PANEL_WIDTH_MIN} max="65%">
+                  {selectedId ? panel : <Empty description="Выберите позицию" />}
+                </Splitter.Panel>
+              </Splitter>
+            ) : (
+              <div className={styles.split}>
+                <div className={styles.listArea}>{table}</div>
               </div>
-              {wide && <aside className={styles.aside}>{selectedId ? panel : <Empty description="Выберите позицию" />}</aside>}
-            </div>
+            )}
           </>
         )}
         {!list.runId && !list.error && <Empty description="У тендера нет действующих прогонов авторасценки" />}

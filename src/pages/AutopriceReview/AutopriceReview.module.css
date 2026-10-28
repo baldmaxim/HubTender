@@ -33,21 +33,23 @@
 }
 
 .selectors {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
 }
 
 .tenderSelect,
-.runSelect {
+.runSelect,
+.filterSelect {
   width: 100%;
-  min-height: 44px;
+  min-width: 0;
+  height: 44px;
 }
 
 .tenderSelect :global(.ant-select-selector),
 .runSelect :global(.ant-select-selector),
 .filterSelect :global(.ant-select-selector) {
-  min-height: 44px;
+  height: 44px;
   align-items: center;
 }
 
@@ -62,7 +64,7 @@
 .filters {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .progressRow {
@@ -83,24 +85,40 @@
 }
 
 .filterRow {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
 }
 
-.filterSelect {
-  width: 100%;
+.toggles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .toggle {
-  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding-inline: 6px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   touch-action: manipulation;
 }
 
-.search,
-.search :global(.ant-input) {
-  min-height: 44px;
+/* allowClear: Input оборачивается в affix-wrapper, высота и шрифт задаются только на нём. */
+.search {
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
   font-size: 16px;
+}
+
+.search :global(.ant-input) {
+  min-height: 0;
 }
 
 /* Список */
@@ -114,6 +132,30 @@
 .listArea {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* Десктоп: список и панель в Splitter, высота задаётся контейнером. */
+.splitter {
+  height: max(420px, calc(100dvh - 330px));
+  min-width: 0;
+}
+
+.splitter :global(.ant-splitter-panel) {
+  min-width: 0;
+}
+
+.splitter :global(.ant-spin-nested-loading),
+.splitter :global(.ant-spin-container),
+.splitter .tableWrap {
+  height: 100%;
+}
+
+.asidePanel {
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--apr-bg);
+  border: 1px solid var(--apr-border);
+  border-radius: var(--apr-radius);
 }
 
 .tableWrap {
@@ -148,6 +190,49 @@
   background: var(--apr-selected) !important;
 }
 
+.rowSelected :global(.ant-table-cell:first-child) {
+  box-shadow: inset 3px 0 0 var(--apr-accent);
+}
+
+/* Заголовки не обрезаются молча: многоточие. */
+.headEllipsis :global(.ant-table-thead .ant-table-cell) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Горизонтальный скролл виртуальной таблицы виден всегда, а не только при наведении. */
+.table :global(.ant-table-tbody-virtual-scrollbar-horizontal) {
+  visibility: visible !important;
+}
+
+/* Ручка изменения ширины колонки. */
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resizeHandle::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  right: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background-color 0.15s ease-out;
+}
+
+.resizeHandle:hover::after,
+.resizeHandle:active::after {
+  background: var(--apr-accent);
+}
+
 .ellipsis {
   display: block;
   overflow: hidden;
@@ -171,17 +256,6 @@
 
 .badges :global(.ant-tag) {
   margin-inline-end: 4px;
-}
-
-.aside {
-  flex: 0 0 520px;
-  width: 520px;
-  height: max(360px, calc(100dvh - 330px));
-  overflow: auto;
-  overscroll-behavior: contain;
-  background: var(--apr-bg);
-  border: 1px solid var(--apr-border);
-  border-radius: var(--apr-radius);
 }
 
 /* Панель позиции */
@@ -232,6 +306,11 @@
   gap: 12px;
   padding: 12px;
   overflow-x: hidden;
+}
+
+.decision {
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .positionText {
@@ -346,6 +425,10 @@
   border-bottom: 1px dashed var(--apr-border);
 }
 
+.eventDecision {
+  font-weight: 600;
+}
+
 .eventComment {
   color: var(--apr-muted);
   white-space: pre-wrap;
@@ -362,32 +445,17 @@
     padding: 16px;
   }
 
-  .selectors,
+  .selectors {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+
   .filterRow {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .tenderSelect {
-    flex: 2 1 320px;
-    width: auto;
-  }
-
-  .runSelect {
-    flex: 1 1 240px;
-    width: auto;
-  }
-
-  .filterSelect {
-    flex: 0 1 220px;
-    width: auto;
-    min-width: 160px;
-  }
-
-  .search {
-    flex: 1 1 240px;
-    min-width: 200px;
+  .toggles {
+    grid-column: 1 / -1;
+    order: 1;
   }
 
   .cardControls {
@@ -397,6 +465,23 @@
   .resolutionSelect {
     flex: 0 0 180px;
     width: auto;
+  }
+}
+
+@media (min-width: 1280px) {
+  .filterRow {
+    grid-template-columns: repeat(3, minmax(160px, 1fr)) auto auto auto minmax(240px, 2fr);
+  }
+
+  /* Кнопки-переключатели встают в общую строку сетки отдельными ячейками. */
+  .toggles {
+    display: contents;
+  }
+
+  .toggle {
+    width: auto;
+    padding-inline: 15px;
+    font-size: 14px;
   }
 }
 

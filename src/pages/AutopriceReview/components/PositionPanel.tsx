@@ -3,7 +3,7 @@ import { Alert, Button, Input, Spin, Tag, theme } from 'antd';
 import { CloseOutlined, LinkOutlined } from '@ant-design/icons';
 import { BASIS_COLORS, BASIS_LABELS, STATUS_COLORS, STATUS_LABELS } from '../constants';
 import type { AutopriceAction, IPositionDetail, IReviewPatch } from '../types';
-import { formatNumber, positionLabel } from '../utils/format';
+import { decisionText, formatNumber, positionLabel } from '../utils/format';
 import { getReviewCssVars } from '../utils/cssVars';
 import { isStaleApproval } from '../utils/reviewPolicy';
 import { useReviewDraft } from '../hooks/useReviewDraft';
@@ -59,6 +59,7 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
 
   const { review, position } = detail;
   const locked = review.status === 'approved';
+  const decision = decisionText(review, true);
 
   // Несохранённые правки уходят вместе с действием: иначе после перезагрузки карточки они пропали бы.
   const handleAction = async (action: AutopriceAction, okText: string, comment?: string): Promise<boolean> => {
@@ -87,6 +88,10 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
           <div className={styles.muted}>
             {position.volume !== null && `Объём: ${formatNumber(position.volume, 3)} ${position.unit_code ?? ''}`}
             {review.section ? ` · ${review.section}` : ''}
+          </div>
+          <div className={styles.decision}>
+            <span className={styles.muted}>Решение: </span>
+            {decision ?? <span className={styles.muted}>Решения ещё не было</span>}
           </div>
 
           {error && <Alert type="error" showIcon message={error} />}

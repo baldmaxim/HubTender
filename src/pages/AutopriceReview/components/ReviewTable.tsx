@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties, type FC } from 'react';
-import { Table, Tag } from 'antd';
+import { Table, Tag, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   BASIS_COLORS,
@@ -10,9 +10,12 @@ import {
   STATUS_LABELS,
 } from '../constants';
 import type { IReviewRow } from '../types';
-import { positionLabel } from '../utils/format';
+import { decisionText, positionLabel } from '../utils/format';
+import { resizableHeaderProps } from '../utils/headerCell';
 import { isStaleApproval } from '../utils/reviewPolicy';
 import { useElementSize } from '../hooks/useElementSize';
+import { useColumnWidths } from '../hooks/useColumnWidths';
+import { ResizableHeaderCell } from './ResizableHeaderCell';
 import styles from '../AutopriceReview.module.css';
 
 interface IReviewTableProps {
@@ -23,7 +26,10 @@ interface IReviewTableProps {
 }
 
 const HEADER_HEIGHT = 40;
-const MIN_NAME_WIDTH = 260;
+const MIN_NAME_WIDTH = 200;
+const COLUMNS_STORAGE_KEY = 'autoprice-review:cols:v1';
+const DEFAULT_WIDTHS = { num: 72, section: 170, items: 80, zero: 100, badges: 280, decision: 220, status: 140 };
+const TABLE_COMPONENTS = { header: { cell: ResizableHeaderCell } };
 
 const StatusTag: FC<{ row: IReviewRow }> = ({ row }) =>
   isStaleApproval(row) ? (
@@ -42,28 +48,18 @@ const Badges: FC<{ row: IReviewRow }> = ({ row }) => (
 
 export const ReviewTable: FC<IReviewTableProps> = ({ rows, selectedId, isPhone, onSelect }) => {
   const { ref, size } = useElementSize<HTMLDivElement>();
+  const { widths, setWidth } = useColumnWidths(COLUMNS_STORAGE_KEY, DEFAULT_WIDTHS);
   const rowHeight = isPhone ? LIST_ROW_HEIGHT_PHONE : LIST_ROW_HEIGHT;
 
   const { columns, scrollX } = useMemo(() => {
-    const num: ColumnsType<IReviewRow>[number] = {
-      title: '№',
-      key: 'num',
-      width: isPhone ? 56 : 90,
-      render: (_: unknown, r) => positionLabel(r),
-    };
-    const status: ColumnsType<IReviewRow>[number] = {
-      title: 'Статус',
-      key: 'status',
-      width: isPhone ? 110 : 140,
-      render: (_: unknown, r) => <StatusTag row={r} />,
-    };
     const container = Math.max(size.width, 320);
+    const statusRender = (_: unknown, r: IReviewRow) => <StatusTag row={r} />;
     if (isPhone) {
       const nameWidth = Math.max(container - 56 - 110, 140);
       return {
         scrollX: 56 + nameWidth + 110,
         columns: [
-          num,
+          { title: '№', key: 'num', width: 56, render: (_: unknown, r) => positionLabel(r) },
           {
             title: 'Наименование',
             key: 'name',
@@ -75,16 +71,26 @@ export const ReviewTable: FC<IReviewTableProps> = ({ rows, selectedId, isPhone, 
               </div>
             ),
           },
-          status,
+          { title: 'Статус', key: 'status', width: 110, render: statusRender },
         ] as ColumnsType<IReviewRow>,
       };
     }
-    const fixed = 90 + 170 + 80 + 100 + 280 + 140;
+    const resizable = (key: keyof typeof DEFAULT_WIDTHS) => ({
+      width: widths[key],
+      onHeaderCell: () => resizableHeaderProps(widths[key], (w) => setWidth(key, w)),
+    });
+    const fixed = Object.values(widths).reduce((sum, w) => sum + w, 0);
+    // Наименование забирает остаток контейнера; если не хватает — таблица скроллится по горизонтали.
     const nameWidth = Math.max(container - fixed, MIN_NAME_WIDTH);
     return {
       scrollX: fixed + nameWidth,
       columns: [
-        num,
+        {
+          title: '№',
+          key: 'num',
+          ...resizable('num'),
+          render: (_: unknown, r) => <span className={styles.ellipsis}>{positionLabel(r)}</span>,
+        },
         {
           title: 'Наименование',
           key: 'name',
@@ -94,29 +100,45 @@ export const ReviewTable: FC<IReviewTableProps> = ({ rows, selectedId, isPhone, 
         {
           title: 'Раздел',
           key: 'section',
-          width: 170,
+          ...resizable('section'),
           render: (_: unknown, r) => <span className={styles.ellipsis}>{r.section ?? '—'}</span>,
         },
-        { title: 'Строк', key: 'items', width: 80, align: 'right', render: (_: unknown, r) => r.items_count },
+        { title: 'Строк', key: 'items', ...resizable('items'), align: 'right', render: (_: unknown, r) => r.items_count },
         {
           title: 'Без цены',
           key: 'zero',
-          width: 100,
+          ...resizable('zero'),
           align: 'right',
           render: (_: unknown, r) =>
             r.zero_price_count > 0 ? <span className={styles.danger}>{r.zero_price_count}</span> : 0,
         },
-        { title: 'Метки', key: 'badges', width: 280, render: (_: unknown, r) => <Badges row={r} /> },
-        status,
+        { title: 'Метки', key: 'badges', ...resizable('badges'), render: (_: unknown, r) => <Badges row={r} /> },
+        {
+          title: 'Решение',
+          key: 'decision',
+          ...resizable('decision'),
+          render: (_: unknown, r) => {
+            const text = decisionText(r, true);
+            return text ? (
+              <Tooltip title={text}>
+                <span className={styles.ellipsis}>{decisionText(r)}</span>
+              </Tooltip>
+            ) : (
+              '—'
+            );
+          },
+        },
+        { title: 'Статус', key: 'status', ...resizable('status'), render: statusRender },
       ] as ColumnsType<IReviewRow>,
     };
-  }, [isPhone, size.width]);
+  }, [isPhone, size.width, widths, setWidth]);
 
   return (
     <div ref={ref} className={styles.tableWrap} style={{ '--apr-row-h': `${rowHeight}px` } as CSSProperties}>
       {size.height > 0 && (
         <Table<IReviewRow>
-          className={styles.table}
+          className={`${styles.table} ${styles.headEllipsis}`}
+          components={TABLE_COMPONENTS}
           size="small"
           rowKey="client_position_id"
           columns={columns}

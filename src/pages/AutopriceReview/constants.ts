@@ -71,6 +71,15 @@ export const ACTION_LABELS: Record<string, string> = {
   reopen: 'Переоткрыто',
 };
 
+/** Глаголы последнего решения («Решение» в списке и панели). */
+export const DECISION_LABELS: Record<string, string> = {
+  approve: 'Подтвердил',
+  return: 'Вернул',
+  needs_customer: 'Ждём Заказчика —',
+  exclude: 'Исключил',
+  reopen: 'Переоткрыл',
+};
+
 /** Какое поле строки отражает изменение из `changed`. */
 export const CHANGED_TO_COLUMN: Record<MachineChangedField, 'name' | 'unit_rate' | 'conversion' | 'consumption'> = {
   unit_rate: 'unit_rate',

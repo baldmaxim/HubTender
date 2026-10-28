@@ -135,9 +135,11 @@ func lockedRun(ctx context.Context, tx pgx.Tx, sessionID, positionID string) (te
 	return *tid, nil
 }
 
+// autopriceUserName — имя для журнала: ФИО, а если оно пустое — e-mail,
+// чтобы у каждого события было видно, кто нажал кнопку.
 func autopriceUserName(ctx context.Context, tx pgx.Tx, userID string) string {
 	var name *string
-	if err := tx.QueryRow(ctx, `SELECT full_name FROM public.users WHERE id = $1`, userID).Scan(&name); err != nil || name == nil {
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(NULLIF(trim(full_name), ''), email) FROM public.users WHERE id = $1`, userID).Scan(&name); err != nil || name == nil {
 		return ""
 	}
 	return *name
