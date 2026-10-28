@@ -1,4 +1,4 @@
-import { type FC } from 'react';
+import { useCallback, useEffect, useState, type FC } from 'react';
 import { Alert, Button, Input, Spin, Tag, theme } from 'antd';
 import { CloseOutlined, LinkOutlined } from '@ant-design/icons';
 import { BASIS_COLORS, BASIS_LABELS, STATUS_COLORS, STATUS_LABELS } from '../constants';
@@ -7,6 +7,9 @@ import { decisionText, formatNumber, positionLabel } from '../utils/format';
 import { getReviewCssVars } from '../utils/cssVars';
 import { isStaleApproval } from '../utils/reviewPolicy';
 import { useReviewDraft } from '../hooks/useReviewDraft';
+import { useRowEditing } from '../hooks/useRowEditing';
+import { useWideScreen } from '../hooks/useWideScreen';
+import BoqItemSheet from '../../PositionItems/components/mobile/BoqItemSheet';
 import { ItemsTable } from './ItemsTable';
 import { FindingsEditor } from './FindingsEditor';
 import { QuestionsEditor } from './QuestionsEditor';
@@ -23,6 +26,9 @@ interface IPositionPanelProps {
   onSave: (patch: IReviewPatch) => Promise<boolean>;
   onAction: (action: AutopriceAction, okText: string, comment?: string) => Promise<boolean>;
   onOpenPosition: (positionId: string) => void;
+  tenderId: string | null;
+  /** Строки BOQ правили из панели: перечитать деталь и список. */
+  onRowsChanged: () => Promise<void>;
   onClose: () => void;
 }
 
@@ -35,10 +41,29 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
   onSave,
   onAction,
   onOpenPosition,
+  tenderId,
+  onRowsChanged,
   onClose,
 }) => {
   const { token } = theme.useToken();
   const { draft, dirty, toPatch, setComment, setQuestions, setFindings } = useReviewDraft(detail);
+  const positionId = detail?.position.id ?? null;
+  const rowEditing = useRowEditing({ positionId, tenderId, onSaved: onRowsChanged });
+  const { activate } = rowEditing;
+  const [editItemId, setEditItemId] = useState<string | null>(null);
+  const wide = useWideScreen();
+
+  // Сменилась позиция — лист закрываем.
+  useEffect(() => setEditItemId(null), [positionId]);
+
+  const handleEditItem = useCallback(
+    (itemId: string) => {
+      activate();
+      setEditItemId(itemId);
+    },
+    [activate],
+  );
+  const handleCloseSheet = useCallback(() => setEditItemId(null), []);
 
   if (loading && !detail) {
     return (
@@ -110,7 +135,7 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
             Открыть позицию
           </Button>
 
-          <ItemsTable items={detail.items} deleted={detail.deleted} />
+          <ItemsTable items={detail.items} deleted={detail.deleted} onEditItem={handleEditItem} />
 
           <div className={styles.section}>
             <div className={styles.sectionTitle}>Основание</div>
@@ -155,6 +180,22 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
           <EventsList events={review.events ?? []} />
         </div>
       </Spin>
+
+      <BoqItemSheet
+        itemId={editItemId}
+        items={rowEditing.items}
+        workNames={rowEditing.workNames}
+        materialNames={rowEditing.materialNames}
+        costCategories={rowEditing.costCategories}
+        units={rowEditing.units}
+        currencyRates={rowEditing.currencyRates}
+        gpVolume={rowEditing.gpVolume}
+        editDataState={rowEditing.editDataState}
+        canEdit={rowEditing.canEdit}
+        onFieldSave={rowEditing.onFieldSave}
+        onClose={handleCloseSheet}
+        placement={wide ? 'right' : 'bottom'}
+      />
     </div>
   );
 };

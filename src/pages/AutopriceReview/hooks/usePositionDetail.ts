@@ -66,6 +66,12 @@ export const usePositionDetail = (
     [load, onChanged, message],
   );
 
+  /** Перечитывает карточку и список после правки строк вне ревью. */
+  const refresh = useCallback(async () => {
+    await load();
+    onChanged();
+  }, [load, onChanged]);
+
   const save = useCallback(
     (patch: IReviewPatch) =>
       sessionId && positionId
@@ -82,5 +88,5 @@ export const usePositionDetail = (
     [sessionId, positionId, run],
   );
 
-  return { detail, loading, busy, error, save, act };
+  return { detail, loading, busy, error, save, act, refresh };
 };

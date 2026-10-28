@@ -79,11 +79,9 @@ export const filterReviews = (rows: IReviewRow[], f: IReviewFilters): IReviewRow
   });
 };
 
-const basisRank = (b: AutopriceBasis | null): number => (b === 'ASSUMED' || b === 'NOT_IN_PD' ? 0 : 1);
-
-/** Сначала ASSUMED и NOT_IN_PD, далее по номеру позиции. */
+/** По номеру позиции (порядок строк в тендере). */
 export const sortReviews = (rows: IReviewRow[]): IReviewRow[] =>
-  [...rows].sort((a, b) => basisRank(a.basis) - basisRank(b.basis) || a.position_number - b.position_number);
+  [...rows].sort((a, b) => a.position_number - b.position_number);
 
 export const uniqueSections = (rows: IReviewRow[]): string[] =>
   Array.from(new Set(rows.map((r) => r.section).filter((s): s is string => !!s))).sort((a, b) =>
