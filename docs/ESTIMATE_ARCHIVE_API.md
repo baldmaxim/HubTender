@@ -81,6 +81,7 @@ curl -s "$BASE/api/v1/archive/positions/search?q=..." -H "Authorization: Bearer 
   запросов, ни секретов. Чистится по сроку хранения.
 
 Админские эндпоинты: `GET|POST /api/v1/admin/api-access/keys`,
+`PUT .../keys/{id}` (название, права, тендеры, срок; секрет не меняется),
 `POST /api/v1/admin/api-access/keys/{id}/revoke`, `DELETE .../keys/{id}`,
 `GET|PUT .../settings`, `GET .../calls`.
 

@@ -28,6 +28,7 @@ type apiAccessRepoer interface {
 	ListApiKeys(ctx context.Context) ([]repository.ApiKeyRow, error)
 	CreateApiKey(ctx context.Context, in repository.CreateApiKeyInput) (*repository.ApiKeyRow, error)
 	GetApiKey(ctx context.Context, id string) (*repository.ApiKeyRow, error)
+	UpdateApiKey(ctx context.Context, id string, in repository.UpdateApiKeyInput) (*repository.ApiKeyRow, error)
 	RevokeApiKey(ctx context.Context, id, revokedBy string) (*repository.ApiKeyRow, error)
 	DeleteApiKey(ctx context.Context, id string) error
 	VerifyApiKeyHash(ctx context.Context, hash string) (*repository.VerifiedApiKey, error)
@@ -120,6 +121,14 @@ type CreateApiKeyRequest struct {
 	CreatedBy        string
 }
 
+// UpdateApiKeyRequest — новые значения редактируемых полей ключа (полная замена).
+type UpdateApiKeyRequest struct {
+	Name             string
+	Scopes           []string
+	AllowedTenderIDs []string
+	ExpiresAt        *string
+}
+
 // ListKeys возвращает все ключи (без секретов).
 func (s *ApiAccessService) ListKeys(ctx context.Context) ([]repository.ApiKeyRow, error) {
 	return s.repo.ListApiKeys(ctx)
@@ -149,6 +158,24 @@ func (s *ApiAccessService) CreateKey(ctx context.Context, req CreateApiKeyReques
 		return nil, err
 	}
 	return &IssuedApiKey{Key: *row, Secret: gen.Secret}, nil
+}
+
+// UpdateKey меняет название, права, тендеры и срок ключа. Секрет не меняется.
+// Кэша ключей нет: VerifyAPIKey читает права из БД на каждом запросе, поэтому
+// новые права действуют сразу.
+func (s *ApiAccessService) UpdateKey(
+	ctx context.Context, id string, req UpdateApiKeyRequest,
+) (*repository.ApiKeyRow, error) {
+	scopes, err := apikey.NormalizeScopes(req.Scopes)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.UpdateApiKey(ctx, id, repository.UpdateApiKeyInput{
+		Name:             req.Name,
+		Scopes:           scopes,
+		AllowedTenderIDs: req.AllowedTenderIDs,
+		ExpiresAt:        req.ExpiresAt,
+	})
 }
 
 // RevokeKey гасит ключ.

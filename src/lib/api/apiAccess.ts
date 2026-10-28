@@ -47,6 +47,9 @@ export interface CreateApiKeyInput {
   expires_at?: string | null;
 }
 
+/** Правка выпущенного ключа: полная замена полей, секрет не меняется. */
+export type UpdateApiKeyInput = CreateApiKeyInput;
+
 export interface ApiAccessSettings {
   archive_search_enabled: boolean;
   archive_read_enabled: boolean;
@@ -88,6 +91,19 @@ export async function listApiKeys(): Promise<ApiKey[]> {
 export async function createApiKey(input: CreateApiKeyInput): Promise<IssuedApiKey> {
   const res = await apiFetch<{ data: IssuedApiKey }>(`${BASE}/keys`, {
     method: 'POST',
+    body: JSON.stringify({
+      name: input.name,
+      scopes: input.scopes,
+      allowed_tender_ids: input.allowed_tender_ids ?? [],
+      expires_at: input.expires_at ?? null,
+    }),
+  });
+  return res.data;
+}
+
+export async function updateApiKey(id: string, input: UpdateApiKeyInput): Promise<ApiKey> {
+  const res = await apiFetch<{ data: ApiKey }>(`${BASE}/keys/${encodeURIComponent(id)}`, {
+    method: 'PUT',
     body: JSON.stringify({
       name: input.name,
       scopes: input.scopes,

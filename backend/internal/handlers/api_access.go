@@ -27,6 +27,7 @@ var ApiAccessAdminRoles = map[string]bool{
 type apiAccessServicer interface {
 	ListKeys(ctx context.Context) ([]repository.ApiKeyRow, error)
 	CreateKey(ctx context.Context, req services.CreateApiKeyRequest) (*services.IssuedApiKey, error)
+	UpdateKey(ctx context.Context, id string, req services.UpdateApiKeyRequest) (*repository.ApiKeyRow, error)
 	RevokeKey(ctx context.Context, id, revokedBy string) (*repository.ApiKeyRow, error)
 	DeleteKey(ctx context.Context, id string) error
 	Settings(ctx context.Context) (*repository.ApiAccessSettings, error)
@@ -105,6 +106,52 @@ func (h *ApiAccessHandler) CreateKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	renderJSON(w, r, http.StatusCreated, dataEnvelope{Data: issued})
+}
+
+// UpdateKey handles PUT /api/v1/admin/api-access/keys/{id}.
+//
+// Полная замена названия, прав, списка тендеров и срока; секрет не меняется.
+func (h *ApiAccessHandler) UpdateKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		apierr.BadRequest("missing key id").Render(w)
+		return
+	}
+
+	var req createKeyReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.BadRequest("invalid JSON body").Render(w)
+		return
+	}
+	if err := h.validate.Struct(req); err != nil {
+		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
+		return
+	}
+	if len(req.AllowedTenderIDs) > 0 && hasRegistryScope(req.Scopes) {
+		apierr.BadRequest("области registry:* не сочетаются со списком тендеров: у перечня нет связи с тендерами").Render(w)
+		return
+	}
+
+	key, err := h.svc.UpdateKey(r.Context(), id, services.UpdateApiKeyRequest{
+		Name:             req.Name,
+		Scopes:           req.Scopes,
+		AllowedTenderIDs: req.AllowedTenderIDs,
+		ExpiresAt:        req.ExpiresAt,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrApiKeyNotFound):
+			apierr.NotFound("ключ не найден").Render(w)
+		case errors.Is(err, repository.ErrApiKeyRevoked):
+			apierr.Conflict("отозванный ключ изменить нельзя").Render(w)
+		case errors.Is(err, apikey.ErrUnknownScope), errors.Is(err, apikey.ErrNoScopes):
+			apierr.BadRequest(err.Error()).Render(w)
+		default:
+			apierr.InternalFromErr(w, r, err, "не удалось изменить ключ")
+		}
+		return
+	}
+	renderJSON(w, r, http.StatusOK, dataEnvelope{Data: key})
 }
 
 // RevokeKey handles POST /api/v1/admin/api-access/keys/{id}/revoke.

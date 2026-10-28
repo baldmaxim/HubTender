@@ -21,6 +21,7 @@ import {
   listApiKeys,
   revokeApiKey,
   updateApiAccessSettings,
+  updateApiKey,
 } from '../../lib/api/apiAccess';
 import { getErrorMessage } from '../../utils/errors';
 
@@ -51,6 +52,8 @@ export default function AdminApiAccess() {
 
   const [issueOpen, setIssueOpen] = useState(false);
   const [issued, setIssued] = useState<IssuedApiKey | null>(null);
+  // Остаётся заданным, пока окно закрывается, и сбрасывается при следующем открытии.
+  const [editingKey, setEditingKey] = useState<ApiKey | null>(null);
 
   const [filterKeyId, setFilterKeyId] = useState<string | undefined>();
   const [onlyErrors, setOnlyErrors] = useState(false);
@@ -97,11 +100,20 @@ export default function AdminApiAccess() {
   const handleIssue = async (input: CreateApiKeyInput) => {
     setIssuing(true);
     try {
+      if (editingKey) {
+        await updateApiKey(editingKey.id, input);
+        message.success('Права ключа обновлены');
+        setIssueOpen(false);
+        await loadKeys();
+        return;
+      }
       const result = await createApiKey(input);
       setIssued(result);
       await loadKeys();
     } catch (e) {
-      message.error(`Не удалось выпустить ключ: ${getErrorMessage(e)}`);
+      message.error(
+        `${editingKey ? 'Не удалось изменить ключ' : 'Не удалось выпустить ключ'}: ${getErrorMessage(e)}`,
+      );
     } finally {
       setIssuing(false);
     }
@@ -167,7 +179,14 @@ export default function AdminApiAccess() {
               <ApiKeysSection
                 keys={keys}
                 loading={keysLoading}
-                onIssue={() => setIssueOpen(true)}
+                onIssue={() => {
+                  setEditingKey(null);
+                  setIssueOpen(true);
+                }}
+                onEdit={(key) => {
+                  setEditingKey(key);
+                  setIssueOpen(true);
+                }}
                 onRevoke={handleRevoke}
                 onDelete={handleDelete}
               />
@@ -207,6 +226,7 @@ export default function AdminApiAccess() {
         open={issueOpen}
         issuing={issuing}
         issued={issued}
+        editing={editingKey}
         onSubmit={handleIssue}
         onClose={handleCloseIssue}
       />

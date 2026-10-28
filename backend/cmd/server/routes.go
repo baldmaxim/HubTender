@@ -235,6 +235,7 @@ func newRouter(
 
 			r.Get("/api/v1/admin/api-access/keys", d.apiAccessH.ListKeys)
 			r.Post("/api/v1/admin/api-access/keys", d.apiAccessH.CreateKey)
+			r.Put("/api/v1/admin/api-access/keys/{id}", d.apiAccessH.UpdateKey)
 			r.Post("/api/v1/admin/api-access/keys/{id}/revoke", d.apiAccessH.RevokeKey)
 			r.Delete("/api/v1/admin/api-access/keys/{id}", d.apiAccessH.DeleteKey)
 			r.Get("/api/v1/admin/api-access/settings", d.apiAccessH.GetSettings)

@@ -22,6 +22,9 @@ func NewApiAccessRepo(pool *pgxpool.Pool) *ApiAccessRepo {
 // ErrApiKeyNotFound — ключа с таким id нет.
 var ErrApiKeyNotFound = errors.New("api key not found")
 
+// ErrApiKeyRevoked — ключ отозван, менять его нельзя.
+var ErrApiKeyRevoked = errors.New("api key revoked")
+
 // ApiKeyRow — ключ в списке. Секрета здесь нет и быть не может: в БД лежит
 // только хеш, и наружу он тоже не отдаётся.
 type ApiKeyRow struct {
@@ -52,6 +55,15 @@ type CreateApiKeyInput struct {
 	AllowedTenderIDs []string
 	ExpiresAt        *string
 	CreatedBy        string
+}
+
+// UpdateApiKeyInput — полная замена редактируемых полей ключа. Секрет и хеш
+// не меняются.
+type UpdateApiKeyInput struct {
+	Name             string
+	Scopes           []string
+	AllowedTenderIDs []string
+	ExpiresAt        *string
 }
 
 // VerifiedApiKey — то, что нужно рантайму после проверки заголовка.
@@ -146,6 +158,32 @@ func (r *ApiAccessRepo) GetApiKey(ctx context.Context, id string) (*ApiKeyRow, e
 		return nil, ErrApiKeyNotFound
 	}
 	return &list[0], nil
+}
+
+// UpdateApiKey заменяет название, права, список тендеров и срок действия.
+// Отозванный ключ не меняется (ErrApiKeyRevoked); просроченный — можно: так
+// продлевают срок.
+func (r *ApiAccessRepo) UpdateApiKey(ctx context.Context, id string, in UpdateApiKeyInput) (*ApiKeyRow, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE public.api_keys
+		SET name = $2,
+		    scopes = $3::text[],
+		    allowed_tender_ids = NULLIF($4::text[], '{}')::uuid[],
+		    expires_at = NULLIF($5, '')::timestamptz,
+		    updated_at = NOW()
+		WHERE id = $1::uuid AND revoked_at IS NULL
+	`, id, in.Name, in.Scopes, in.AllowedTenderIDs, derefOrEmpty(in.ExpiresAt))
+	if err != nil {
+		return nil, fmt.Errorf("apiAccessRepo.UpdateApiKey: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		// Различаем «нет такого» и «отозван».
+		if _, err := r.GetApiKey(ctx, id); err != nil {
+			return nil, err
+		}
+		return nil, ErrApiKeyRevoked
+	}
+	return r.GetApiKey(ctx, id)
 }
 
 // RevokeApiKey гасит ключ. Повторный отзыв — no-op, а не ошибка: результат

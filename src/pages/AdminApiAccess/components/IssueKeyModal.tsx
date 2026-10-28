@@ -3,8 +3,9 @@ import {
   Alert, Button, Checkbox, DatePicker, Form, Input, Modal, Space, Typography,
 } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
-import type { ApiKeyScope, CreateApiKeyInput, IssuedApiKey } from '../../../lib/api/apiAccess';
+import type { ApiKey, ApiKeyScope, CreateApiKeyInput, IssuedApiKey } from '../../../lib/api/apiAccess';
 
 const { Paragraph, Text } = Typography;
 
@@ -13,6 +14,8 @@ interface IIssueKeyModalProps {
   issuing: boolean;
   /** Заполнено сразу после выпуска: экран показа секрета. */
   issued: IssuedApiKey | null;
+  /** Задан — окно правки выпущенного ключа вместо выпуска. */
+  editing?: ApiKey | null;
   onSubmit: (input: CreateApiKeyInput) => void;
   onClose: () => void;
 }
@@ -25,10 +28,19 @@ interface IFormValues {
 }
 
 export const IssueKeyModal: FC<IIssueKeyModalProps> = ({
-  open, issuing, issued, onSubmit, onClose,
+  open, issuing, issued, editing = null, onSubmit, onClose,
 }) => {
   const [form] = Form.useForm<IFormValues>();
   const [copied, setCopied] = useState(false);
+
+  const initialValues: Partial<IFormValues> = editing
+    ? {
+        name: editing.name,
+        scopes: editing.scopes,
+        allowedTenderIds: editing.allowed_tender_ids.join('\n'),
+        expiresAt: editing.expires_at ? dayjs(editing.expires_at) : null,
+      }
+    : { scopes: ['archive:read'] };
 
   const handleFinish = (values: IFormValues) => {
     const tenderIds = (values.allowedTenderIds ?? '')
@@ -97,8 +109,8 @@ export const IssueKeyModal: FC<IIssueKeyModalProps> = ({
   return (
     <Modal
       open={open}
-      title="Выпустить ключ доступа"
-      okText="Выпустить"
+      title={editing ? `Изменить ключ «${editing.name}»` : 'Выпустить ключ доступа'}
+      okText={editing ? 'Сохранить' : 'Выпустить'}
       cancelText="Отмена"
       confirmLoading={issuing}
       onOk={() => form.submit()}
@@ -106,11 +118,21 @@ export const IssueKeyModal: FC<IIssueKeyModalProps> = ({
       destroyOnClose
     >
       <Form
+        key={editing?.id ?? 'new'}
         form={form}
         layout="vertical"
         onFinish={handleFinish}
-        initialValues={{ scopes: ['archive:read'] as ApiKeyScope[] }}
+        initialValues={initialValues}
       >
+        {editing && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="Секрет ключа не меняется; новые права действуют сразу."
+          />
+        )}
+
         <Form.Item
           name="name"
           label="Название"

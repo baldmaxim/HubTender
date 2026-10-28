@@ -3,7 +3,7 @@ import {
   Alert, Button, Card, Popconfirm, Space, Table, Tag, Tooltip, Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DeleteOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
 import type { ApiKey } from '../../../lib/api/apiAccess';
 import { formatDateTime } from '../utils/format';
 
@@ -13,6 +13,7 @@ interface IApiKeysSectionProps {
   keys: ApiKey[];
   loading: boolean;
   onIssue: () => void;
+  onEdit: (key: ApiKey) => void;
   onRevoke: (id: string) => void;
   onDelete: (id: string) => void;
 }
@@ -36,7 +37,7 @@ const SCOPE_LABEL: Record<string, string> = {
 };
 
 export const ApiKeysSection: FC<IApiKeysSectionProps> = ({
-  keys, loading, onIssue, onRevoke, onDelete,
+  keys, loading, onIssue, onEdit, onRevoke, onDelete,
 }) => {
   const [showHint, setShowHint] = useState(true);
 
@@ -123,9 +124,19 @@ export const ApiKeysSection: FC<IApiKeysSectionProps> = ({
     {
       title: '',
       key: 'actions',
-      width: 96,
+      width: 136,
       render: (_, row) => (
         <Space size={4}>
+          {row.status !== 'revoked' && (
+            <Tooltip title="Изменить права">
+              <Button
+                type="text"
+                icon={<EditOutlined />}
+                aria-label="Изменить ключ"
+                onClick={() => onEdit(row)}
+              />
+            </Tooltip>
+          )}
           {row.status === 'active' && (
             <Popconfirm
               title="Отозвать ключ?"
