@@ -119,6 +119,7 @@ func registerAutopriceRoutes(r chi.Router, d *deps) {
 	r.With(readT).Get("/api/v1/tenders/{id}/autoprice-runs", d.autopriceH.ListRuns)
 	r.With(writeRun).Put("/api/v1/autoprice-runs/{sid}/positions/{posId}/review", d.autopriceH.PutReview)
 	r.With(readRun).Get("/api/v1/autoprice-runs/{sid}/reviews", d.autopriceH.ListReviews)
+	r.With(writeRun).Put("/api/v1/autoprice-runs/{sid}/skipped", d.autopriceH.PutSkipped)
 }
 
 // registerVerificationAIRoutes — ИИ-разбор находок: оценки — чтение, запуск

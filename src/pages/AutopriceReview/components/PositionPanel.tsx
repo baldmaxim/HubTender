@@ -8,9 +8,12 @@ import { getReviewCssVars } from '../utils/cssVars';
 import { isStaleApproval } from '../utils/reviewPolicy';
 import { useReviewDraft } from '../hooks/useReviewDraft';
 import { useRowEditing } from '../hooks/useRowEditing';
+import { useItemDelete } from '../hooks/useItemDelete';
+import { useItemReplace } from '../hooks/useItemReplace';
 import { useWideScreen } from '../hooks/useWideScreen';
 import BoqItemSheet from '../../PositionItems/components/mobile/BoqItemSheet';
 import { ItemsTable } from './ItemsTable';
+import { ReplaceItemModal } from './ReplaceItemModal';
 import { BasisSection } from './BasisSection';
 import { FindingsEditor } from './FindingsEditor';
 import { QuestionsEditor } from './QuestionsEditor';
@@ -52,10 +55,16 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
   const rowEditing = useRowEditing({ positionId, tenderId, onSaved: onRowsChanged });
   const { activate } = rowEditing;
   const [editItemId, setEditItemId] = useState<string | null>(null);
+  const [replaceItemId, setReplaceItemId] = useState<string | null>(null);
+  const deleteItem = useItemDelete(rowEditing);
+  const itemReplace = useItemReplace(rowEditing);
   const wide = useWideScreen();
 
   // Сменилась позиция — лист закрываем.
-  useEffect(() => setEditItemId(null), [positionId]);
+  useEffect(() => {
+    setEditItemId(null);
+    setReplaceItemId(null);
+  }, [positionId]);
 
   const handleEditItem = useCallback(
     (itemId: string) => {
@@ -84,6 +93,7 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
   }
 
   const { review, position } = detail;
+  const replaceItem = replaceItemId ? (detail.items.find((i) => i.id === replaceItemId) ?? null) : null;
   const locked = review.status === 'approved';
   const decision = decisionText(review, true);
 
@@ -141,6 +151,8 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
             deleted={detail.deleted}
             onEditItem={handleEditItem}
             editing={{ ready: rowEditing.ready, canEdit: rowEditing.canEdit, saveField: rowEditing.saveField }}
+            onReplaceItem={setReplaceItemId}
+            onDeleteItem={deleteItem}
           />
 
           <BasisSection refs={review.pd_refs} note={review.pd_note} />
@@ -174,6 +186,16 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
           <EventsList events={review.events ?? []} />
         </div>
       </Spin>
+
+      {replaceItem && (
+        <ReplaceItemModal
+          key={replaceItem.id}
+          item={replaceItem}
+          busy={itemReplace.busy}
+          onConfirm={(choice) => itemReplace.replace(replaceItem.id, choice)}
+          onClose={() => setReplaceItemId(null)}
+        />
+      )}
 
       <BoqItemSheet
         itemId={editItemId}

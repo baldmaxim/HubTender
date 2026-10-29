@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -20,7 +21,11 @@ var AutopriceApproverRoles = map[string]bool{
 	"administrator":      true,
 }
 
-const maxAutopriceLabelLen = 200
+const (
+	maxAutopriceLabelLen     = 200
+	maxAutopriceSkippedItems = 5000
+	maxAutopriceSkippedLen   = 2000
+)
 
 // autopriceStore — граница репозитория авторасценки.
 type autopriceStore interface {
@@ -33,6 +38,8 @@ type autopriceStore interface {
 	UpsertReview(ctx context.Context, sessionID, positionID, actorID string, in repository.AutopriceReviewInput) (*repository.AutopriceReview, error)
 	PatchReview(ctx context.Context, sessionID, positionID, actorID string, p repository.AutopriceReviewPatch) (*repository.AutopriceReview, error)
 	ApplyAction(ctx context.Context, sessionID, positionID, actorID, action, comment string) (*repository.AutopriceReview, error)
+	ReplaceSkipped(ctx context.Context, sessionID string, items []repository.AutopriceSkippedInput) (int, error)
+	ListUnpriced(ctx context.Context, sessionID string) ([]repository.AutopriceUnpriced, error)
 }
 
 // AutopriceReviewHandler — подтверждение авторасценки (тест).
@@ -66,7 +73,11 @@ func autopriceJSON(w http.ResponseWriter, status int, v any) {
 func autopriceRepoError(w http.ResponseWriter, r *http.Request, err error, detail string) {
 	var zp *repository.AutopriceZeroPriceError
 	var tr *repository.AutopriceTransitionError
+	var mp *repository.MissingPositionsError
 	switch {
+	case errors.As(err, &mp):
+		autopriceError(w, http.StatusBadRequest, "bad_request",
+			"Позиции не найдены в тендере прогона.", map[string]any{"position_ids": mp.IDs})
 	case errors.As(err, &zp):
 		autopriceError(w, http.StatusUnprocessableEntity, "zero_price",
 			"Нельзя подтвердить: в позиции есть строки с нулевой ценой.",
@@ -133,6 +144,7 @@ type autopriceFinding struct {
 }
 
 var (
+	autopriceSkippedCodes     = map[string]bool{"no_match": true, "ambiguous": true, "no_volume": true, "no_price": true, "out_of_scope": true, "error": true, "other": true}
 	autopriceBasisValues      = map[string]bool{"PD_CONFIRMED": true, "ASSUMED": true, "NOT_IN_PD": true, "RESERVE": true}
 	autopriceSeverityValues   = map[string]bool{"high": true, "medium": true, "low": true}
 	autopriceResolutionValues = map[string]bool{"fixed": true, "not_duplicate": true, "moved": true, "other": true}
@@ -420,4 +432,78 @@ func (h *AutopriceReviewHandler) Action(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	autopriceJSON(w, http.StatusOK, review)
+}
+
+// ─── Позиции вне авторасценки ───────────────────────────────────────────────
+
+type putAutopriceSkippedReq struct {
+	Items []struct {
+		PositionID string  `json:"position_id"`
+		ReasonCode string  `json:"reason_code"`
+		Reason     *string `json:"reason"`
+	} `json:"items"`
+}
+
+// PutSkipped handles PUT /api/v1/autoprice-runs/{sid}/skipped: заменяет весь
+// набор пропущенных позиций прогона (пустой items — очистка).
+func (h *AutopriceReviewHandler) PutSkipped(w http.ResponseWriter, r *http.Request) {
+	ids, ok := autopriceIDs(w, r, "sid")
+	if !ok {
+		return
+	}
+	var req putAutopriceSkippedReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		autopriceBadRequest(w, "Некорректный JSON.")
+		return
+	}
+	if len(req.Items) > maxAutopriceSkippedItems {
+		autopriceBadRequest(w, "items: не более 5000 позиций.")
+		return
+	}
+	items := make([]repository.AutopriceSkippedInput, 0, len(req.Items))
+	seen := make(map[string]bool, len(req.Items))
+	for i, it := range req.Items {
+		id := strings.ToLower(it.PositionID)
+		if !uuidPatchRe.MatchString(id) {
+			autopriceBadRequest(w, fmt.Sprintf("items[%d].position_id: ожидается UUID", i))
+			return
+		}
+		if seen[id] {
+			autopriceBadRequest(w, fmt.Sprintf("items[%d].position_id: позиция повторяется", i))
+			return
+		}
+		seen[id] = true
+		if !autopriceSkippedCodes[it.ReasonCode] {
+			autopriceBadRequest(w, fmt.Sprintf("items[%d].reason_code: no_match, ambiguous, no_volume, no_price, out_of_scope, error или other", i))
+			return
+		}
+		if it.Reason != nil && len([]rune(*it.Reason)) > maxAutopriceSkippedLen {
+			autopriceBadRequest(w, fmt.Sprintf("items[%d].reason: до 2000 символов", i))
+			return
+		}
+		items = append(items, repository.AutopriceSkippedInput{PositionID: id, ReasonCode: it.ReasonCode, Reason: it.Reason})
+	}
+	n, err := h.store.ReplaceSkipped(r.Context(), ids[0], items)
+	if err != nil {
+		autopriceRepoError(w, r, err, "failed to replace autoprice skipped positions")
+		return
+	}
+	autopriceJSON(w, http.StatusOK, map[string]any{"count": n})
+}
+
+// ListUnpriced handles GET /api/v1/autoprice-runs/{sid}/unpriced.
+func (h *AutopriceReviewHandler) ListUnpriced(w http.ResponseWriter, r *http.Request) {
+	ids, ok := autopriceIDs(w, r, "sid")
+	if !ok {
+		return
+	}
+	positions, err := h.store.ListUnpriced(r.Context(), ids[0])
+	if err != nil {
+		autopriceRepoError(w, r, err, "failed to list autoprice unpriced positions")
+		return
+	}
+	if positions == nil {
+		positions = []repository.AutopriceUnpriced{}
+	}
+	autopriceJSON(w, http.StatusOK, positions)
 }

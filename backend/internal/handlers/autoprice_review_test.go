@@ -25,6 +25,7 @@ type fakeAutoprice struct {
 	actionCmt  string
 	upsertIn   repository.AutopriceReviewInput
 	called     bool
+	skippedIn  []repository.AutopriceSkippedInput
 }
 
 func (f *fakeAutoprice) CreateRun(context.Context, string, string, string, *string) (*repository.AutopriceRunCreated, error) {
@@ -61,6 +62,15 @@ func (f *fakeAutoprice) ApplyAction(_ context.Context, _, _, _, action, comment 
 	return &repository.AutopriceReview{}, f.err
 }
 
+func (f *fakeAutoprice) ReplaceSkipped(_ context.Context, _ string, items []repository.AutopriceSkippedInput) (int, error) {
+	f.called = true
+	f.skippedIn = items
+	return len(items), f.err
+}
+func (f *fakeAutoprice) ListUnpriced(context.Context, string) ([]repository.AutopriceUnpriced, error) {
+	return nil, f.err
+}
+
 func doAutoprice(t *testing.T, f *fakeAutoprice, role, method, path, body string) (*httptest.ResponseRecorder, map[string]any) {
 	t.Helper()
 	h := NewAutopriceReviewHandler(f)
@@ -69,6 +79,8 @@ func doAutoprice(t *testing.T, f *fakeAutoprice, role, method, path, body string
 	r.Put("/runs/{sid}/positions/{posId}/review", h.PutReview)
 	r.Patch("/runs/{sid}/positions/{posId}/review", h.PatchReview)
 	r.Post("/runs/{sid}/positions/{posId}/review/action", h.Action)
+	r.Put("/runs/{sid}/skipped", h.PutSkipped)
+	r.Get("/runs/{sid}/unpriced", h.ListUnpriced)
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req = req.WithContext(context.WithValue(req.Context(), middleware.CtxUser,
 		&middleware.AuthUser{ID: "u-1", Role: role}))
@@ -195,5 +207,74 @@ func TestAutopriceCreateRun_Validation(t *testing.T) {
 	w, _ := doAutoprice(t, &fakeAutoprice{}, "engineer", "POST", path, `{"label":"прогон 1","source_ref":"run.json"}`)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("ok: %d", w.Code)
+	}
+}
+
+func TestAutoprice_PutSkipped_Validation(t *testing.T) {
+	path := "/runs/" + apSID + "/skipped"
+	long := strings.Repeat("я", 2001)
+	tooMany := `{"items":[` + strings.Repeat(`{"position_id":"`+apPos+`","reason_code":"other"},`, 5000) + `{"position_id":"` + apPos + `","reason_code":"other"}]}`
+	for name, body := range map[string]string{
+		"битый JSON":          `x`,
+		"не UUID":             `{"items":[{"position_id":"zzz","reason_code":"other"}]}`,
+		"неизвестный код":     `{"items":[{"position_id":"` + apPos + `","reason_code":"bad"}]}`,
+		"пустой код":          `{"items":[{"position_id":"` + apPos + `"}]}`,
+		"длинная причина":     `{"items":[{"position_id":"` + apPos + `","reason_code":"other","reason":"` + long + `"}]}`,
+		"дубль позиции":       `{"items":[{"position_id":"` + apPos + `","reason_code":"other"},{"position_id":"` + strings.ToUpper(apPos) + `","reason_code":"no_match"}]}`,
+		"больше 5000 позиций": tooMany,
+	} {
+		f := &fakeAutoprice{}
+		w, m := doAutoprice(t, f, "engineer", "PUT", path, body)
+		if w.Code != http.StatusBadRequest || m["error"] != "bad_request" || f.called {
+			t.Fatalf("%s: status %d body %v called=%v", name, w.Code, m, f.called)
+		}
+	}
+	if w, _ := doAutoprice(t, &fakeAutoprice{}, "engineer", "PUT", "/runs/not-uuid/skipped", `{"items":[]}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("bad sid: %d", w.Code)
+	}
+}
+
+func TestAutoprice_PutSkipped_OKAndErrors(t *testing.T) {
+	path := "/runs/" + apSID + "/skipped"
+	f := &fakeAutoprice{}
+	body := `{"items":[{"position_id":"` + apPos + `","reason_code":"no_match","reason":"нет в базе"},{"position_id":"` + apSID + `","reason_code":"error"}]}`
+	w, m := doAutoprice(t, f, "engineer", "PUT", path, body)
+	if w.Code != http.StatusOK || m["count"] != float64(2) || len(f.skippedIn) != 2 ||
+		f.skippedIn[0].ReasonCode != "no_match" || f.skippedIn[0].Reason == nil || f.skippedIn[1].Reason != nil {
+		t.Fatalf("status %d body %v in %+v", w.Code, m, f.skippedIn)
+	}
+	// Пустой список — очистка.
+	f = &fakeAutoprice{}
+	if w, m := doAutoprice(t, f, "engineer", "PUT", path, `{"items":[]}`); w.Code != http.StatusOK || m["count"] != float64(0) || !f.called {
+		t.Fatalf("clear: status %d body %v called=%v", w.Code, m, f.called)
+	}
+	// Позиции вне тендера прогона — 400 со списком id.
+	f = &fakeAutoprice{err: &repository.MissingPositionsError{IDs: []string{apPos}}}
+	w, m = doAutoprice(t, f, "engineer", "PUT", path, body)
+	ids, _ := m["position_ids"].([]any)
+	if w.Code != http.StatusBadRequest || m["error"] != "bad_request" || len(ids) != 1 || ids[0] != apPos {
+		t.Fatalf("missing: status %d body %v", w.Code, m)
+	}
+	for err, want := range map[error]int{
+		repository.ErrAutopriceRunNotFound:  http.StatusNotFound,
+		repository.ErrAutopriceRunCancelled: http.StatusConflict,
+	} {
+		if w, _ := doAutoprice(t, &fakeAutoprice{err: err}, "engineer", "PUT", path, `{"items":[]}`); w.Code != want {
+			t.Fatalf("%v: status %d, want %d", err, w.Code, want)
+		}
+	}
+}
+
+func TestAutoprice_ListUnpriced(t *testing.T) {
+	path := "/runs/" + apSID + "/unpriced"
+	w, _ := doAutoprice(t, &fakeAutoprice{}, "engineer", "GET", path, "")
+	if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != "[]" {
+		t.Fatalf("empty: status %d body %q", w.Code, w.Body.String())
+	}
+	if w, _ := doAutoprice(t, &fakeAutoprice{err: repository.ErrAutopriceRunNotFound}, "engineer", "GET", path, ""); w.Code != http.StatusNotFound {
+		t.Fatalf("not found: %d", w.Code)
+	}
+	if w, _ := doAutoprice(t, &fakeAutoprice{}, "engineer", "GET", "/runs/not-uuid/unpriced", ""); w.Code != http.StatusBadRequest {
+		t.Fatalf("bad sid: %d", w.Code)
 	}
 }

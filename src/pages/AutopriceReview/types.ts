@@ -155,3 +155,25 @@ export interface IReviewPatch {
   questions?: IAutopriceQuestion[];
   findings?: IAutopriceFinding[];
 }
+
+/** Причина, вычисленная по данным БД. */
+export type UnpricedDerivedReason = 'no_review' | 'priced_outside_run' | 'no_volume' | 'empty';
+/** Причина из журнала загрузчика прогона. */
+export type UnpricedLoaderReason = 'no_match' | 'ambiguous' | 'no_volume' | 'no_price' | 'out_of_scope' | 'error' | 'other';
+
+/** Позиция тендера, не попавшая в расценку выбранного прогона. */
+export interface IUnpricedRow {
+  position_id: string;
+  position_number: number;
+  item_no: string | null;
+  work_name: string;
+  section_name: string | null;
+  unit_code: string | null;
+  volume: number | null;
+  is_additional: boolean;
+  items_count: number;
+  run_items_count: number;
+  derived_reason: UnpricedDerivedReason;
+  loader_reason_code: UnpricedLoaderReason | null;
+  loader_reason: string | null;
+}

@@ -4,6 +4,8 @@ import type {
   FindingResolution,
   FindingSeverity,
   MachineChangedField,
+  UnpricedDerivedReason,
+  UnpricedLoaderReason,
 } from './types';
 
 /** Роли, которым разрешено «Подтвердить» (зеркало AutopriceApproverRoles на бэкенде). */
@@ -96,3 +98,37 @@ export const CHANGED_TO_COLUMN: Record<
 /** Высота строки списка — фиксирована (виртуализация, 500+ строк). */
 export const LIST_ROW_HEIGHT = 48;
 export const LIST_ROW_HEIGHT_PHONE = 64;
+
+export const LOADER_REASON_LABELS: Record<UnpricedLoaderReason, string> = {
+  no_match: 'Нет аналога в базе',
+  ambiguous: 'Неоднозначно',
+  no_volume: 'Нет объёма',
+  no_price: 'Нет цены',
+  out_of_scope: 'Вне расценки',
+  error: 'Ошибка загрузчика',
+  other: 'Другое',
+};
+
+export const LOADER_REASON_COLORS: Record<UnpricedLoaderReason, string> = {
+  no_match: 'red',
+  ambiguous: 'orange',
+  no_volume: 'default',
+  no_price: 'red',
+  out_of_scope: 'default',
+  error: 'volcano',
+  other: 'default',
+};
+
+export const DERIVED_REASON_LABELS: Record<UnpricedDerivedReason, string> = {
+  no_review: 'Строки есть, проверки нет',
+  priced_outside_run: 'Расценена вне прогона',
+  no_volume: 'Заголовок / без объёма',
+  empty: 'Не расценена',
+};
+
+export const DERIVED_REASON_COLORS: Record<UnpricedDerivedReason, string> = {
+  no_review: 'gold',
+  priced_outside_run: 'blue',
+  no_volume: 'default',
+  empty: 'magenta',
+};

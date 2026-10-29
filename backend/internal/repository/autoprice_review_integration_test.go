@@ -253,3 +253,84 @@ func TestAutopriceIntegration_CancelGuard(t *testing.T) {
 		t.Fatalf("clean cancel: %+v, %v", res, err)
 	}
 }
+
+// ReplaceSkipped + ListUnpriced; нужна миграция 2026_10_autoprice_skipped.sql.
+func TestAutopriceIntegration_SkippedAndUnpriced(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	tenderID, pos1 := seedSourceTender(t, pool, "AP-C")
+	_, matID := ensureTestNames(t, pool)
+	repo, boq := NewAutopriceReviewRepo(pool), NewBoqRepo(pool)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM public.import_sessions WHERE tender_id=$1::uuid`, tenderID)
+	})
+	var pos2 string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO public.client_positions (tender_id, position_number, work_name)
+		VALUES ($1::uuid, 2, 'p2') RETURNING id::text`, tenderID).Scan(&pos2); err != nil {
+		t.Fatalf("seed pos2: %v", err)
+	}
+	run, err := repo.CreateRun(ctx, tenderID, rbActor, "r", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := func() map[string]string {
+		list, err := repo.ListUnpriced(ctx, run.ID)
+		if err != nil {
+			t.Fatalf("list unpriced: %v", err)
+		}
+		out := map[string]string{}
+		for _, u := range list {
+			out[u.PositionID] = u.DerivedReason
+			if u.LoaderReasonCode != nil {
+				out[u.PositionID] += "/" + *u.LoaderReasonCode
+			}
+		}
+		return out
+	}
+
+	// Без карточек обе позиции «не в авторасценке»; нет единицы и объёма — no_volume.
+	if got := reasons(); got[pos1] != "no_volume" || got[pos2] != "no_volume" {
+		t.Fatalf("no reviews: %v", got)
+	}
+	// Карточка есть — позиция не в списке; строки прогона без карточки — no_review.
+	if _, err := repo.UpsertReview(ctx, run.ID, pos1, rbActor, AutopriceReviewInput{}); err != nil {
+		t.Fatal(err)
+	}
+	apAddItem(t, boq, tenderID, pos2, matID, 10, &run.ID)
+	if got := reasons(); len(got) != 1 || got[pos2] != "no_review" {
+		t.Fatalf("after review: %v", got)
+	}
+
+	// Пропуск загрузчика возвращает позицию с карточкой в список, причина видна.
+	n, err := repo.ReplaceSkipped(ctx, run.ID, []AutopriceSkippedInput{
+		{PositionID: pos1, ReasonCode: "no_match", Reason: sptr("нет аналога")}})
+	if err != nil || n != 1 {
+		t.Fatalf("replace: %d, %v", n, err)
+	}
+	if got := reasons(); got[pos1] != "no_volume/no_match" || got[pos2] != "no_review" {
+		t.Fatalf("after skipped: %v", got)
+	}
+
+	// Чужая позиция — ошибка, прежний набор не тронут.
+	var mp *MissingPositionsError
+	_, err = repo.ReplaceSkipped(ctx, run.ID, []AutopriceSkippedInput{
+		{PositionID: "00000000-0000-4000-8000-000000000000", ReasonCode: "other"}})
+	if !errors.As(err, &mp) || len(mp.IDs) != 1 {
+		t.Fatalf("foreign position: %v", err)
+	}
+	if got := reasons(); got[pos1] != "no_volume/no_match" {
+		t.Fatalf("set must be intact: %v", got)
+	}
+
+	// Пустой список очищает набор.
+	if n, err := repo.ReplaceSkipped(ctx, run.ID, nil); err != nil || n != 0 {
+		t.Fatalf("clear: %d, %v", n, err)
+	}
+	if got := reasons(); len(got) != 1 {
+		t.Fatalf("after clear: %v", got)
+	}
+	if _, err := repo.ReplaceSkipped(ctx, "00000000-0000-4000-8000-000000000000", nil); !errors.Is(err, ErrAutopriceRunNotFound) {
+		t.Fatalf("unknown run: %v", err)
+	}
+}

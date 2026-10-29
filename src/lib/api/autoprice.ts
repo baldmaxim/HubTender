@@ -8,6 +8,7 @@ import type {
   IReviewDetail,
   IReviewPatch,
   IReviewsResponse,
+  IUnpricedRow,
 } from '../../pages/AutopriceReview/types';
 
 export const fetchAutopriceTenders = async (): Promise<IAutopriceTender[]> => {
@@ -25,6 +26,11 @@ export const fetchAutopriceReviews = (sessionId: string): Promise<IReviewsRespon
 
 export const fetchAutopricePosition = (sessionId: string, positionId: string): Promise<IPositionDetail> =>
   apiFetch<IPositionDetail>(`/api/v1/autoprice-runs/${sessionId}/positions/${positionId}`);
+
+export const fetchAutopriceUnpriced = async (sessionId: string): Promise<IUnpricedRow[]> => {
+  const res = await apiFetch<IUnpricedRow[]>(`/api/v1/autoprice-runs/${sessionId}/unpriced`);
+  return res ?? [];
+};
 
 export const patchAutopriceReview = (
   sessionId: string,
