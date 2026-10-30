@@ -497,7 +497,7 @@ func buildDeps(
 		tenderBriefH:      handlers.NewTenderBriefHandler(tenderSvc),
 		cbrH:              handlers.NewCBRHandler(cbrClient),
 		positionH:         handlers.NewPositionHandler(positionSvc),
-		positionWH:        handlers.NewPositionWriteHandler(positionSvc),
+		positionWH:        handlers.NewPositionWriteHandler(positionSvc).WithManualVolumeGate(autopriceRepo),
 		positionCostsH:    handlers.NewPositionCostsHandler(positionCostsSvc),
 		qualityH:          handlers.NewQualityHandler(qualitySvc, verifAIRepo),
 		verifSectionsH:    handlers.NewVerificationSectionsHandler(verifSectionsSvc),

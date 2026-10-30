@@ -16,6 +16,7 @@ import { isStaleApproval } from '../utils/reviewPolicy';
 import { useElementSize } from '../hooks/useElementSize';
 import { useColumnWidths } from '../hooks/useColumnWidths';
 import { ResizableHeaderCell } from './ResizableHeaderCell';
+import { VolumeSourceTag } from './VolumeSourceTag';
 import styles from '../AutopriceReview.module.css';
 
 interface IReviewTableProps {
@@ -38,9 +39,10 @@ const StatusTag: FC<{ row: IReviewRow }> = ({ row }) =>
     <Tag color={STATUS_COLORS[row.status]}>{STATUS_LABELS[row.status]}</Tag>
   );
 
-const Badges: FC<{ row: IReviewRow }> = ({ row }) => (
+const Badges: FC<{ row: IReviewRow; withVolume?: boolean }> = ({ row, withVolume = true }) => (
   <span className={styles.badges}>
     {row.basis && <Tag color={BASIS_COLORS[row.basis]}>{BASIS_LABELS[row.basis]}</Tag>}
+    {withVolume && <VolumeSourceTag source={row.volume_source} />}
     {row.questions.length > 0 && <Tag color="purple">вопросов {row.questions.length}</Tag>}
     {row.findings.length > 0 && <Tag color="gold">находок {row.findings.length}</Tag>}
   </span>
@@ -55,9 +57,16 @@ export const ReviewTable: FC<IReviewTableProps> = ({ rows, selectedId, isPhone, 
     const container = Math.max(size.width, 320);
     const statusRender = (_: unknown, r: IReviewRow) => <StatusTag row={r} />;
     if (isPhone) {
-      const nameWidth = Math.max(container - 56 - 110, 140);
+      // На телефоне ярлык объёма — под статусом: в строке меток он не помещается.
+      const phoneStatusRender = (_: unknown, r: IReviewRow) => (
+        <div className={styles.cellStack}>
+          <StatusTag row={r} />
+          <VolumeSourceTag source={r.volume_source} />
+        </div>
+      );
+      const nameWidth = Math.max(container - 56 - 136, 140);
       return {
-        scrollX: 56 + nameWidth + 110,
+        scrollX: 56 + nameWidth + 136,
         columns: [
           { title: '№', key: 'num', width: 56, render: (_: unknown, r) => positionLabel(r) },
           {
@@ -67,11 +76,11 @@ export const ReviewTable: FC<IReviewTableProps> = ({ rows, selectedId, isPhone, 
             render: (_: unknown, r) => (
               <div className={styles.cellStack}>
                 <span className={styles.ellipsis}>{r.work_name}</span>
-                <Badges row={r} />
+                <Badges row={r} withVolume={false} />
               </div>
             ),
           },
-          { title: 'Статус', key: 'status', width: 110, render: statusRender },
+          { title: 'Статус', key: 'status', width: 136, render: phoneStatusRender },
         ] as ColumnsType<IReviewRow>,
       };
     }

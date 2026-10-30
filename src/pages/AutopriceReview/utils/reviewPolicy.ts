@@ -1,5 +1,5 @@
 import { AUTOPRICE_APPROVER_ROLES } from '../constants';
-import type { AutopriceBasis, AutopriceStatus, IReviewRow } from '../types';
+import type { AutopriceBasis, AutopriceStatus, IReviewRow, VolumeSourceKind } from '../types';
 
 /** «Не подтверждено»: статус не approved/excluded ИЛИ подтверждение снято правками. */
 export const isNotApproved = (r: Pick<IReviewRow, 'status' | 'approval_stale'>): boolean =>
@@ -27,9 +27,12 @@ export const calcProgress = (rows: IReviewRow[]): IProgress => {
 
 export type StatusFilter = 'not_approved' | 'all' | 'stale' | AutopriceStatus;
 
+export type VolumeFilter = 'all' | VolumeSourceKind;
+
 export interface IReviewFilters {
   status: StatusFilter;
   basis: AutopriceBasis | null;
+  volume: VolumeFilter;
   section: string | null;
   hasQuestions: boolean;
   hasFindings: boolean;
@@ -40,6 +43,7 @@ export interface IReviewFilters {
 export const DEFAULT_FILTERS: IReviewFilters = {
   status: 'not_approved',
   basis: null,
+  volume: 'all',
   section: null,
   hasQuestions: false,
   hasFindings: false,
@@ -62,11 +66,16 @@ const matchStatus = (r: IReviewRow, f: StatusFilter): boolean => {
   }
 };
 
+/** Нет поля volume_source (старый ответ) или null — объём из ВОР. */
+const matchVolume = (r: IReviewRow, f: VolumeFilter): boolean =>
+  f === 'all' || (r.volume_source?.kind ?? 'customer_boq') === f;
+
 export const filterReviews = (rows: IReviewRow[], f: IReviewFilters): IReviewRow[] => {
   const q = f.search.trim().toLowerCase();
   return rows.filter((r) => {
     if (!matchStatus(r, f.status)) return false;
     if (f.basis && r.basis !== f.basis) return false;
+    if (!matchVolume(r, f.volume)) return false;
     if (f.section && r.section !== f.section) return false;
     if (f.hasQuestions && r.questions.length === 0) return false;
     if (f.hasFindings && r.findings.length === 0) return false;

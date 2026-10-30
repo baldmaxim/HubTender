@@ -74,6 +74,7 @@ func registerMachineRoutes(r chi.Router, d *deps, verifyCfg middleware.VerifyCon
 			Patch("/api/v1/items/{id}", d.boqWH.UpdateBoqItem)
 		r.With(middleware.RequireAPIKeyScopeResolved(apikey.ScopeTendersWrite, d.tenderOfPosition)).
 			Post("/api/v1/positions/{id}/recompute-totals", d.positionWH.RecomputePositionTotals)
+		registerPositionFieldsRoute(r, d.positionWH, d.tenderOfPosition)
 
 		// Проверка данных по ключу (конвейер проверки, этап 6). Хендлеры общие с
 		// UI; человек с JWT проходит гейт без ограничений. Маршруты сняты с
@@ -111,6 +112,14 @@ func registerMachineRoutes(r chi.Router, d *deps, verifyCfg middleware.VerifyCon
 func registerNomenclatureRoutes(r chi.Router, h *handlers.NomenclatureEnsureHandler) {
 	r.With(middleware.RequireAPIKeyScope(apikey.ScopeNomenclatureWrite, "")).
 		Post("/api/v1/nomenclature/ensure", h.Ensure)
+}
+
+// registerPositionFieldsRoute — PATCH полей позиции: человеку с JWT — все поля
+// как раньше; ключу с областью tenders:write — только manual_volume в тендере
+// с прогоном авторасценки (проверяет хендлер, см. positions_write_machine.go).
+func registerPositionFieldsRoute(r chi.Router, h *handlers.PositionWriteHandler, tenderOfPosition middleware.TenderResolver) {
+	r.With(middleware.RequireAPIKeyScopeResolved(apikey.ScopeTendersWrite, tenderOfPosition)).
+		Patch("/api/v1/positions/{id}/fields", h.UpdatePositionFields)
 }
 
 // registerAutopriceRoutes — подтверждение авторасценки (тест): машинная часть

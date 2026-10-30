@@ -181,7 +181,6 @@ func newRouter(
 		r.Patch("/api/v1/positions/note", d.positionWH.UpdatePositionsNote)
 		r.Post("/api/v1/positions/clear-boq", d.positionWH.ClearPositionsBoq)
 		r.Patch("/api/v1/positions/level", d.positionWH.ShiftPositionsLevel)
-		r.Patch("/api/v1/positions/{id}/fields", d.positionWH.UpdatePositionFields)
 		r.Post("/api/v1/items/{id}/recompute-linked-materials", d.boqWH.RecomputeLinkedMaterials)
 		r.Post("/api/v1/positions/{id}/copy-from", d.boqWH.CopyPositionItems)
 		r.Patch("/api/v1/positions/{id}", d.positionWH.UpdatePosition)

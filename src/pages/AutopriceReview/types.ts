@@ -57,6 +57,18 @@ export interface IAutopriceEvent {
   comment?: string | null;
 }
 
+export type VolumeSourceKind = 'ai_model' | 'conditional' | 'customer_boq';
+
+/** Источник объёма позиции: расчёт ИИ по модели, условный объём или ВОР Заказчика. */
+export interface IVolumeSource {
+  kind: VolumeSourceKind;
+  value?: number;
+  unit?: string;
+  label?: string;
+  ref?: string;
+  note?: string;
+}
+
 /** Элемент списка позиций прогона. */
 export interface IReviewRow {
   client_position_id: string;
@@ -82,6 +94,8 @@ export interface IReviewRow {
   decided_by_name: string | null;
   decided_at: string | null;
   updated_at: string;
+  /** Источник объёма; у старых ответов поля нет — считается null (объём из ВОР). */
+  volume_source?: IVolumeSource | null;
 }
 
 export interface IReviewDetail extends IReviewRow {
@@ -141,6 +155,8 @@ export interface IPositionInfo {
   work_name: string;
   unit_code: string | null;
   volume: number | null;
+  /** Сырой объём ВОР Заказчика (volume выше — с учётом ручной правки). */
+  customer_volume?: number | null;
 }
 
 export interface IPositionDetail {

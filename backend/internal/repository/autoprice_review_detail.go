@@ -18,6 +18,9 @@ type AutopricePosition struct {
 	WorkName       string   `json:"work_name"`
 	UnitCode       *string  `json:"unit_code"`
 	Volume         *float64 `json:"volume"`
+	// CustomerVolume — объём из ВОР Заказчика (client_positions.volume) без
+	// ручной правки; Volume = COALESCE(manual_volume, volume).
+	CustomerVolume *float64 `json:"customer_volume"`
 }
 
 // AutopriceMachineSnapshot — то, что записала авторасценка в строку (new_data
@@ -171,10 +174,10 @@ func (r *AutopriceReviewRepo) GetPositionDetail(ctx context.Context, sessionID, 
 	d := &AutopriceDetail{Review: review, Items: make([]AutopriceItem, 0), Deleted: make([]AutopriceDeletedItem, 0)}
 	if err := r.pool.QueryRow(ctx, `
 		SELECT id::text, position_number::float8, item_no, work_name, unit_code,
-		       COALESCE(manual_volume, volume)::float8
+		       COALESCE(manual_volume, volume)::float8, volume::float8
 		FROM public.client_positions WHERE id = $1`, positionID,
 	).Scan(&d.Position.ID, &d.Position.PositionNumber, &d.Position.ItemNo, &d.Position.WorkName,
-		&d.Position.UnitCode, &d.Position.Volume); err != nil {
+		&d.Position.UnitCode, &d.Position.Volume, &d.Position.CustomerVolume); err != nil {
 		return nil, fmt.Errorf("autoprice.GetPositionDetail: position: %w", err)
 	}
 

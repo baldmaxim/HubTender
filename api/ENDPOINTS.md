@@ -30,6 +30,7 @@
 | PATCH | `/api/v1/items/{id}` | `tenders:write` |
 | POST | `/api/v1/positions/{id}/recompute-totals` | `tenders:write` |
 | POST | `/api/v1/autoprice-runs/{sid}/items:bulk` | `tenders:write` |
+| PATCH | `/api/v1/positions/{id}/fields` | `tenders:write` (по ключу — только `manual_volume`, см. ниже) |
 | POST | `/api/v1/nomenclature/ensure` | `nomenclature:write` |
 | GET | `/api/v1/archive/positions/search` | `archive:read` |
 | POST | `/api/v1/archive/positions/suggest` | `archive:read` |
@@ -204,8 +205,8 @@ created_at, updated_at`.
 ```
 
 - **Позиция.** `position_id` — позиция тендера прогона, в запросе не повторяется. `review` — как тело
-  `PUT …/review` (`basis`, `pd_refs`, `pd_note`, `questions`, `findings`), `null` или отсутствует — карточку
-  не менять; новая карточка `pending`, `returned` после загрузки снова `pending`.
+  `PUT …/review` (`basis`, `pd_refs`, `pd_note`, `questions`, `findings`, `volume_source`), `null` или отсутствует —
+  карточку не менять; новая карточка `pending`, `returned` после загрузки снова `pending`.
 - **Строка.** Поля те же, что у `POST …/items` (`boq_item_type`, `quantity`, `unit_rate`, `currency_type`,
   `work_name_id`/`material_name_id` и т. д.) и теми же проверками; у работы обязателен `work_name_id`, у материала —
   `material_name_id`. `import_session_id` не нужен — строки всегда пишутся в прогон `{sid}`. Коммерческих полей
@@ -267,6 +268,32 @@ created_at, updated_at`.
 (`field` — по имени ограничения БД); невалидная карточка (`review.basis`, `review.findings`, …).
 
 Идемпотентности нет: при сетевой ошибке без ответа повторите запрос с `replace: true`, иначе строки задвоятся.
+
+### Источник объёма — `volume_source` в `PUT …/review` и в `review` пакета
+
+```json
+"volume_source":{"kind":"ai_model","value":2446.447,"unit":"м3","label":"…","ref":"…","note":"…"}
+```
+
+- Ключа нет — значение не меняется; `null` — сбросить; объект — записать (остальные поля карточки, как и раньше,
+  перезаписываются целиком). Хранится нормализованным: только эти ключи, пустые необязательные строки опускаются.
+- `kind` — `ai_model` | `conditional` | `customer_boq`. Для `ai_model` обязательны `value` (число > 0) и `unit`
+  (до 32 символов); для остальных `value`/`unit` необязательны (`value` ≥ 0). `label`/`ref`/`note` — до 300 символов.
+- Нарушение формата — 422 `invalid_volume_source` (в пакете с `position_id` и `field:"review.volume_source"`).
+- Выдаётся как `volume_source` (объект или `null`) в карточках `GET …/reviews` и в `review` `GET …/positions/{posId}`;
+  в позиции `GET …/positions/{posId}` добавлено `customer_volume` — объём ВОР Заказчика без ручной правки.
+
+### Объём позиции по ключу — `PATCH /api/v1/positions/{id}/fields`
+
+Человеку с JWT маршрут доступен как раньше (все поля). Ключу с `tenders:write` — только `manual_volume`
+(допустим ещё `tender_id`), тело `{"manual_volume": 2446.447}`; успех — 204.
+
+| Код | Причина |
+|---|---|
+| 403 `API_KEY_FIELD_DENIED` | в теле есть другое поле (`manual_note`, `work_name`, `unit_code`, …) |
+| 403 `AUTOPRICE_RUN_REQUIRED` | у тендера позиции нет неотменённого прогона авторасценки |
+| 409 `approved` | позиция подтверждена в неотменённом прогоне авторасценки (сначала `reopen`) |
+| 400 | нет `manual_volume`; 404 — позиции нет |
 
 ## Наименования работ и материалов — область `nomenclature:write`
 

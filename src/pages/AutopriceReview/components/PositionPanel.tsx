@@ -6,6 +6,7 @@ import type { AutopriceAction, IPositionDetail, IReviewPatch } from '../types';
 import { decisionText, formatNumber, positionLabel } from '../utils/format';
 import { getReviewCssVars } from '../utils/cssVars';
 import { isStaleApproval } from '../utils/reviewPolicy';
+import { formatVolumeValue, volumeSourceParts, volumesDiffer } from '../utils/volumeFormat';
 import { useReviewDraft } from '../hooks/useReviewDraft';
 import { useRowEditing } from '../hooks/useRowEditing';
 import { useWideScreen } from '../hooks/useWideScreen';
@@ -14,6 +15,7 @@ import { ItemsTable } from './ItemsTable';
 import { BasisSection } from './BasisSection';
 import { FindingsEditor } from './FindingsEditor';
 import { QuestionsEditor } from './QuestionsEditor';
+import { VolumeSourceTag } from './VolumeSourceTag';
 import { EventsList } from './EventsList';
 import { PanelActions } from './PanelActions';
 import { AnalogPicker } from '../../../components/AnalogPicker';
@@ -91,6 +93,13 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
   const { review, position } = detail;
   const locked = review.status === 'approved';
   const decision = decisionText(review, true);
+  const aiSource = review.volume_source?.kind === 'ai_model' ? review.volume_source : null;
+  const aiLine = aiSource ? volumeSourceParts(aiSource).join(' · ') : '';
+  const customerVolume = position.customer_volume ?? null;
+  const volumeDiff =
+    aiSource && customerVolume !== null && typeof aiSource.value === 'number' && volumesDiffer(customerVolume, aiSource.value)
+      ? `ВОР ${formatVolumeValue(customerVolume)} → ИИ ${formatVolumeValue(aiSource.value, aiSource.unit)}`
+      : '';
 
   // Несохранённые правки уходят вместе с действием: иначе после перезагрузки карточки они пропали бы.
   const handleAction = async (action: AutopriceAction, okText: string, comment?: string): Promise<boolean> => {
@@ -109,6 +118,7 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
             <Tag color={STATUS_COLORS[review.status]}>{STATUS_LABELS[review.status]}</Tag>
           )}
           {review.basis && <Tag color={BASIS_COLORS[review.basis]}>{BASIS_LABELS[review.basis]}</Tag>}
+          <VolumeSourceTag source={review.volume_source} />
         </div>
         <Button className={styles.closeBtn} type="text" icon={<CloseOutlined />} aria-label="Закрыть" onClick={onClose} />
       </div>
@@ -120,6 +130,8 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
             {position.volume !== null && `Объём: ${formatNumber(position.volume, 3)} ${position.unit_code ?? ''}`}
             {review.section ? ` · ${review.section}` : ''}
           </div>
+          {aiLine && <div className={styles.muted}>{aiLine}</div>}
+          {volumeDiff && <div className={styles.muted}>{volumeDiff}</div>}
           <div className={styles.decision}>
             <span className={styles.muted}>Решение: </span>
             {decision ?? <span className={styles.muted}>Решения ещё не было</span>}

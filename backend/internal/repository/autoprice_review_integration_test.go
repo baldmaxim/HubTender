@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -251,5 +252,83 @@ func TestAutopriceIntegration_CancelGuard(t *testing.T) {
 	res, err := logRepo.CancelSession(ctx, sid3, rbActor, false)
 	if err != nil || res.BoqDeleted != 1 {
 		t.Fatalf("clean cancel: %+v, %v", res, err)
+	}
+}
+
+func TestAutopriceIntegration_VolumeSourceAndGate(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	tenderID, posID := seedSourceTender(t, pool, "AP-VS")
+	_, matID := ensureTestNames(t, pool)
+	repo, boq := NewAutopriceReviewRepo(pool), NewBoqRepo(pool)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM public.import_sessions WHERE tender_id=$1::uuid`, tenderID)
+	})
+
+	// Шлюз manual_volume: позиции нет → ErrAutopricePositionNotFound; прогона нет → hasRun=false.
+	if _, _, _, err := repo.ManualVolumeGate(ctx, "00000000-0000-4000-8000-000000000999"); !errors.Is(err, ErrAutopricePositionNotFound) {
+		t.Fatalf("unknown position: %v", err)
+	}
+	if tid, hasRun, approved, err := repo.ManualVolumeGate(ctx, posID); err != nil || tid != tenderID || hasRun || approved {
+		t.Fatalf("no run: %q %v %v %v", tid, hasRun, approved, err)
+	}
+
+	run, err := repo.CreateRun(ctx, tenderID, rbActor, "прогон", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	apAddItem(t, boq, tenderID, posID, matID, 10, &run.ID)
+	if _, hasRun, approved, _ := repo.ManualVolumeGate(ctx, posID); !hasRun || approved {
+		t.Fatalf("run without approval: hasRun=%v approved=%v", hasRun, approved)
+	}
+
+	// volume_source: запись, сохранение при отсутствии ключа, сброс null.
+	src := []byte(`{"kind":"ai_model","value":2446.447,"unit":"м3"}`)
+	if _, err := repo.UpsertReview(ctx, run.ID, posID, rbActor, AutopriceReviewInput{VolumeSourceSet: true, VolumeSource: src}); err != nil {
+		t.Fatalf("insert with volume_source: %v", err)
+	}
+	vsOf := func() string {
+		reviews, err := repo.ListReviews(ctx, run.ID)
+		if err != nil || len(reviews) != 1 {
+			t.Fatalf("list reviews: %d, %v", len(reviews), err)
+		}
+		if got := apReview(t, repo, run.ID, posID).VolumeSource; string(got) != string(reviews[0].VolumeSource) {
+			t.Fatalf("detail %s != list %s", got, reviews[0].VolumeSource)
+		}
+		return string(reviews[0].VolumeSource)
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(vsOf()), &m); err != nil || m["kind"] != "ai_model" || m["value"] != 2446.447 || m["unit"] != "м3" {
+		t.Fatalf("volume_source after insert: %v, %v", m, err)
+	}
+	if _, err := repo.UpsertReview(ctx, run.ID, posID, rbActor, AutopriceReviewInput{Basis: sptr("ASSUMED")}); err != nil {
+		t.Fatal(err)
+	}
+	if got := vsOf(); got == "" {
+		t.Fatalf("volume_source must stay when the key is absent, got %q", got)
+	}
+	if _, err := repo.UpsertReview(ctx, run.ID, posID, rbActor, AutopriceReviewInput{VolumeSourceSet: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := vsOf(); got != "" { // NULL в БД → пустой RawMessage → "null" в JSON
+		t.Fatalf("volume_source after reset = %q, want NULL", got)
+	}
+	// CHECK страхует вид источника в обход хендлера.
+	if _, err := pool.Exec(ctx, `UPDATE public.autoprice_position_reviews SET volume_source='{"kind":"x"}'::jsonb WHERE import_session_id=$1::uuid`, run.ID); err == nil {
+		t.Fatal("check constraint must reject unknown kind")
+	}
+
+	// Подтверждённая позиция → approved=true; отменённый прогон не считается.
+	if _, err := repo.ApplyAction(ctx, run.ID, posID, rbActor, "approve", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, hasRun, approved, _ := repo.ManualVolumeGate(ctx, posID); !hasRun || !approved {
+		t.Fatalf("approved: hasRun=%v approved=%v", hasRun, approved)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE public.import_sessions SET cancelled_at = now() WHERE id=$1::uuid`, run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, hasRun, approved, _ := repo.ManualVolumeGate(ctx, posID); hasRun || approved {
+		t.Fatalf("cancelled run: hasRun=%v approved=%v", hasRun, approved)
 	}
 }

@@ -135,7 +135,7 @@ func (h *AutopriceBulkHandler) buildBulk(req autopriceBulkReq) ([]repository.Aut
 		if !isJSONNull(p.Review) {
 			var rr putAutopriceReviewReq
 			if err := json.Unmarshal(p.Review, &rr); err != nil {
-				return nil, &autopriceBulkInvalid{p.PositionID, "", "review", "review: ожидается объект {basis, pd_refs, pd_note, questions, findings}"}
+				return nil, &autopriceBulkInvalid{p.PositionID, "", "review", "review: ожидается объект {basis, pd_refs, pd_note, questions, findings, volume_source}"}
 			}
 			in, field, msg := buildAutopriceReviewInput(rr)
 			if msg != "" {
@@ -284,6 +284,11 @@ func (h *AutopriceBulkHandler) PostBulk(w http.ResponseWriter, r *http.Request) 
 
 	positions, inv := h.buildBulk(req)
 	if inv != nil {
+		if inv.Field == "review.volume_source" {
+			autopriceInvalidVolumeSource(w, inv.Message,
+				map[string]any{"position_id": inv.PositionID, "field": inv.Field})
+			return
+		}
 		autopriceInvalidItem(w, *inv)
 		return
 	}

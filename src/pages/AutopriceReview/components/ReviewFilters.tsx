@@ -3,7 +3,7 @@ import { Button, Input, Progress, Select } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { BASIS_LABELS, STATUS_LABELS } from '../constants';
 import type { AutopriceBasis } from '../types';
-import type { IProgress, IReviewFilters, StatusFilter } from '../utils/reviewPolicy';
+import type { IProgress, IReviewFilters, StatusFilter, VolumeFilter } from '../utils/reviewPolicy';
 import styles from '../AutopriceReview.module.css';
 
 interface IReviewFiltersProps {
@@ -30,6 +30,13 @@ const BASIS_OPTIONS = (Object.keys(BASIS_LABELS) as AutopriceBasis[]).map((b) =>
   value: b,
   label: BASIS_LABELS[b],
 }));
+
+const VOLUME_OPTIONS: { value: VolumeFilter; label: string }[] = [
+  { value: 'all', label: 'Объём: все' },
+  { value: 'ai_model', label: 'Объём: от ИИ' },
+  { value: 'conditional', label: 'Объём: условный' },
+  { value: 'customer_boq', label: 'Объём: из ВОР' },
+];
 
 export const ReviewFilters: FC<IReviewFiltersProps> = ({ filters, sections, progress, shown, onChange }) => {
   const percent = progress.total > 0 ? Math.round((progress.approved / progress.total) * 100) : 0;
@@ -68,6 +75,14 @@ export const ReviewFilters: FC<IReviewFiltersProps> = ({ filters, sections, prog
           placeholder="Основание"
           allowClear
           onChange={(basis) => onChange({ basis: basis ?? null })}
+          popupMatchSelectWidth={false}
+        />
+        <Select<VolumeFilter>
+          className={styles.filterSelect}
+          value={filters.volume}
+          options={VOLUME_OPTIONS}
+          aria-label="Объём"
+          onChange={(volume) => onChange({ volume })}
           popupMatchSelectWidth={false}
         />
         <Select<string>

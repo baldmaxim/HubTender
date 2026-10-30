@@ -57,6 +57,10 @@ type AutopriceReviewInput struct {
 	PdNote    *string
 	Questions json.RawMessage
 	Findings  json.RawMessage
+	// VolumeSourceSet — ключ volume_source был в теле: false — значение в БД
+	// не меняется; true — записать VolumeSource (нормализованный JSON), nil = NULL.
+	VolumeSourceSet bool
+	VolumeSource    []byte
 }
 
 // AutopriceReviewPatch — правка инженером; nil-поле не меняется.
@@ -216,22 +220,30 @@ func upsertReviewTx(ctx context.Context, tx pgx.Tx, sessionID, tenderID, positio
 		return nil, fmt.Errorf("autoprice.upsertReviewTx: event: %w", err)
 	}
 
+	var volumeSource *string
+	if in.VolumeSourceSet && in.VolumeSource != nil {
+		s := string(in.VolumeSource)
+		volumeSource = &s
+	}
 	if exists {
 		_, err = tx.Exec(ctx, `
 			UPDATE public.autoprice_position_reviews
 			SET basis = $3, pd_refs = $4::jsonb, pd_note = $5, questions = $6::jsonb, findings = $7::jsonb,
-			    status = $8, events = events || $9::jsonb, updated_at = now()
+			    status = $8, events = events || $9::jsonb,
+			    volume_source = CASE WHEN $10::boolean THEN $11::jsonb ELSE volume_source END,
+			    updated_at = now()
 			WHERE import_session_id = $1 AND client_position_id = $2`,
 			sessionID, positionID, in.Basis, nonNilJSON(in.PdRefs, "[]"), in.PdNote,
-			nonNilJSON(in.Questions, "[]"), nonNilJSON(in.Findings, "[]"), to, evJSON)
+			nonNilJSON(in.Questions, "[]"), nonNilJSON(in.Findings, "[]"), to, evJSON,
+			in.VolumeSourceSet, volumeSource)
 	} else {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO public.autoprice_position_reviews
 			    (import_session_id, tender_id, client_position_id, basis, pd_refs, pd_note,
-			     questions, findings, status, events)
-			VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9, $10::jsonb)`,
+			     questions, findings, status, events, volume_source)
+			VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9, $10::jsonb, $11::jsonb)`,
 			sessionID, tenderID, positionID, in.Basis, nonNilJSON(in.PdRefs, "[]"), in.PdNote,
-			nonNilJSON(in.Questions, "[]"), nonNilJSON(in.Findings, "[]"), to, evJSON)
+			nonNilJSON(in.Questions, "[]"), nonNilJSON(in.Findings, "[]"), to, evJSON, volumeSource)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("autoprice.upsertReviewTx: write: %w", err)

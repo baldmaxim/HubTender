@@ -272,10 +272,13 @@ type putAutopriceReviewReq struct {
 	PdNote    *string         `json:"pd_note"`
 	Questions json.RawMessage `json:"questions"`
 	Findings  json.RawMessage `json:"findings"`
+	// VolumeSource: ключа нет — не менять, null — сбросить, объект — записать.
+	VolumeSource json.RawMessage `json:"volume_source"`
 }
 
 // buildAutopriceReviewInput проверяет тело карточки и собирает вход репозитория.
-// При ошибке возвращает имя поля (basis, pd_refs, questions, findings) и текст.
+// При ошибке возвращает имя поля (basis, pd_refs, questions, findings,
+// volume_source) и текст.
 func buildAutopriceReviewInput(req putAutopriceReviewReq) (in repository.AutopriceReviewInput, field, msg string) {
 	if req.Basis != nil && !autopriceBasisValues[*req.Basis] {
 		return in, "basis", "basis: PD_CONFIRMED, ASSUMED, NOT_IN_PD или RESERVE."
@@ -300,7 +303,17 @@ func buildAutopriceReviewInput(req putAutopriceReviewReq) (in repository.Autopri
 		}
 		*c.dst = c.raw
 	}
+	set, vs, msg := buildVolumeSource(req.VolumeSource)
+	if msg != "" {
+		return in, "volume_source", msg
+	}
+	in.VolumeSourceSet, in.VolumeSource = set, vs
 	return in, "", ""
+}
+
+// autopriceInvalidVolumeSource — 422 invalid_volume_source (PUT review и пакет).
+func autopriceInvalidVolumeSource(w http.ResponseWriter, msg string, extras map[string]any) {
+	autopriceError(w, http.StatusUnprocessableEntity, "invalid_volume_source", msg, extras)
 }
 
 // PutReview handles PUT /api/v1/autoprice-runs/{sid}/positions/{posId}/review.
@@ -318,7 +331,11 @@ func (h *AutopriceReviewHandler) PutReview(w http.ResponseWriter, r *http.Reques
 		autopriceBadRequest(w, "Некорректный JSON.")
 		return
 	}
-	in, _, msg := buildAutopriceReviewInput(req)
+	in, field, msg := buildAutopriceReviewInput(req)
+	if field == "volume_source" {
+		autopriceInvalidVolumeSource(w, msg, nil)
+		return
+	}
 	if msg != "" {
 		autopriceBadRequest(w, msg)
 		return

@@ -118,6 +118,7 @@ type AutopriceReview struct {
 	PdNote           *string         `json:"pd_note"`
 	Questions        json.RawMessage `json:"questions"`
 	Findings         json.RawMessage `json:"findings"`
+	VolumeSource     json.RawMessage `json:"volume_source"`
 	Status           string          `json:"status"`
 	ApprovalStale    bool            `json:"approval_stale"`
 	EngineerComment  *string         `json:"engineer_comment"`
@@ -160,6 +161,30 @@ func (r *AutopriceReviewRepo) TenderOfRun(ctx context.Context, sessionID string)
 		return "", ErrAutopriceRunNotFound
 	}
 	return *tenderID, nil
+}
+
+// ManualVolumeGate — данные для записи manual_volume позиции по API-ключу:
+// тендер позиции, есть ли у него неотменённый прогон авторасценки и есть ли у
+// позиции подтверждённая (approved) карточка в таком прогоне. Нет позиции —
+// ErrAutopricePositionNotFound.
+func (r *AutopriceReviewRepo) ManualVolumeGate(ctx context.Context, positionID string) (tenderID string, hasRun, approved bool, err error) {
+	err = r.pool.QueryRow(ctx, `
+		SELECT cp.tender_id::text,
+		       EXISTS (SELECT 1 FROM public.import_sessions s
+		               WHERE s.tender_id = cp.tender_id AND s.source = $2 AND s.cancelled_at IS NULL),
+		       EXISTS (SELECT 1 FROM public.autoprice_position_reviews rv
+		               JOIN public.import_sessions s ON s.id = rv.import_session_id
+		               WHERE rv.client_position_id = cp.id AND rv.status = 'approved'
+		                 AND s.source = $2 AND s.cancelled_at IS NULL)
+		FROM public.client_positions cp WHERE cp.id = $1`,
+		positionID, AutopriceSource).Scan(&tenderID, &hasRun, &approved)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", false, false, ErrAutopricePositionNotFound
+		}
+		return "", false, false, fmt.Errorf("autoprice.ManualVolumeGate: %w", err)
+	}
+	return tenderID, hasRun, approved, nil
 }
 
 // CreateRun создаёт прогон авторасценки (import_sessions, source='autoprice').
@@ -276,7 +301,7 @@ func autopriceReviewQuery(withEvents bool, where string) string {
 	return `
 SELECT r.client_position_id::text, cp.position_number::float8, cp.item_no, cp.work_name, sec.name,
        COALESCE(agg.items_count, 0), COALESCE(agg.zero_count, 0),
-       r.basis, r.pd_refs, r.pd_note, r.questions, r.findings, r.status,
+       r.basis, r.pd_refs, r.pd_note, r.questions, r.findings, r.volume_source, r.status,
        ` + autopriceStaleExpr + `,
        r.engineer_comment, r.approved_by::text, u.full_name, r.approved_at,
        dec.e->>'action', NULLIF(dec.e->>'user_name', ''), (dec.e->>'at')::timestamptz,
@@ -314,7 +339,7 @@ ORDER BY cp.position_number, cp.id`
 func scanAutopriceReview(row pgx.Row, withEvents bool) (*AutopriceReview, error) {
 	v := &AutopriceReview{}
 	dest := []any{&v.ClientPositionID, &v.PositionNumber, &v.ItemNo, &v.WorkName, &v.Section,
-		&v.ItemsCount, &v.ZeroPriceCount, &v.Basis, &v.PdRefs, &v.PdNote, &v.Questions, &v.Findings,
+		&v.ItemsCount, &v.ZeroPriceCount, &v.Basis, &v.PdRefs, &v.PdNote, &v.Questions, &v.Findings, &v.VolumeSource,
 		&v.Status, &v.ApprovalStale, &v.EngineerComment, &v.ApprovedBy, &v.ApprovedByName,
 		&v.ApprovedAt, &v.DecidedAction, &v.DecidedByName, &v.DecidedAt, &v.UpdatedAt}
 	if withEvents {

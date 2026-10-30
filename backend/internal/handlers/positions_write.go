@@ -34,6 +34,7 @@ type positionWriteServicer interface {
 type PositionWriteHandler struct {
 	svc      positionWriteServicer
 	validate *validator.Validate
+	gate     manualVolumeGate // запись manual_volume по ключу (positions_write_machine.go)
 }
 
 // NewPositionWriteHandler creates a PositionWriteHandler.
@@ -413,6 +414,14 @@ func (h *PositionWriteHandler) UpdatePositionFields(w http.ResponseWriter, r *ht
 		apierr.BadRequest("missing position id").Render(w)
 		return
 	}
+	keyTender := ""
+	if middleware.APIKeyFromContext(r.Context()) != nil {
+		tid, ok := h.checkKeyManualVolume(w, r, id)
+		if !ok {
+			return
+		}
+		keyTender = tid
+	}
 	var req updatePositionFieldsReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apierr.BadRequest("invalid JSON body").Render(w)
@@ -421,6 +430,9 @@ func (h *PositionWriteHandler) UpdatePositionFields(w http.ResponseWriter, r *ht
 	if err := h.validate.Struct(req); err != nil {
 		apierr.BadRequest("validation failed: " + err.Error()).Render(w)
 		return
+	}
+	if keyTender != "" {
+		req.TenderID = keyTender // сброс кэша — по тендеру позиции, а не из тела
 	}
 	if err := h.svc.UpdatePositionFields(r.Context(), id, repository.UpdatePositionFieldsInput{
 		ManualVolume: req.ManualVolume,

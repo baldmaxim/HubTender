@@ -484,3 +484,142 @@ func TestAutopriceBulkRouteGate(t *testing.T) {
 		})
 	}
 }
+
+// fakePositionWrite — сервис позиций: записывает вызов UpdatePositionFields,
+// остальное handlers.PositionWriteHandler на этом маршруте не вызывает.
+type fakePositionWrite struct {
+	calls  int
+	gotID  string
+	gotIn  repository.UpdatePositionFieldsInput
+	gotTnd string
+}
+
+func (f *fakePositionWrite) ListPositions(context.Context, repository.PositionListParams) ([]repository.PositionListRow, error) {
+	return nil, nil
+}
+func (f *fakePositionWrite) ListBoqPreviewByPositions(context.Context, []string) ([]repository.BoqPreviewRow, error) {
+	return nil, nil
+}
+func (f *fakePositionWrite) GetPositionWithTender(context.Context, string) (*repository.PositionWithTenderRow, error) {
+	return nil, nil
+}
+func (f *fakePositionWrite) ListBoqItemsFullByPosition(context.Context, string) ([]repository.BoqItemFullRow, error) {
+	return nil, nil
+}
+func (f *fakePositionWrite) ListBoqItemsFullByTender(context.Context, string) ([]repository.BoqItemFullRow, error) {
+	return nil, nil
+}
+func (f *fakePositionWrite) GetPositionByID(context.Context, string) (*repository.PositionRow, error) {
+	return nil, nil
+}
+func (f *fakePositionWrite) CreatePosition(context.Context, repository.CreatePositionInput) (*repository.PositionRow, error) {
+	return nil, nil
+}
+func (f *fakePositionWrite) UpdatePosition(context.Context, string, repository.UpdatePositionInput, string) (*repository.PositionRow, error) {
+	return nil, nil
+}
+func (f *fakePositionWrite) BulkDeletePositions(context.Context, []string, string, string) error {
+	return nil
+}
+func (f *fakePositionWrite) CreateAdditionalPosition(context.Context, repository.CreateAdditionalPositionInput) (string, error) {
+	return "", nil
+}
+func (f *fakePositionWrite) UpdatePositionsNote(context.Context, []string, string, string) error {
+	return nil
+}
+func (f *fakePositionWrite) ClearPositionsBoq(context.Context, []string, string, string) error {
+	return nil
+}
+func (f *fakePositionWrite) ShiftPositionsLevel(context.Context, []string, int, string) error {
+	return nil
+}
+func (f *fakePositionWrite) RecomputePositionTotals(context.Context, string, string) error {
+	return nil
+}
+func (f *fakePositionWrite) UpdatePositionFields(_ context.Context, id string, in repository.UpdatePositionFieldsInput, tenderID string) error {
+	f.calls++
+	f.gotID, f.gotIn, f.gotTnd = id, in, tenderID
+	return nil
+}
+func (f *fakePositionWrite) BulkInsertPositions(context.Context, []repository.BulkPositionInsert, string) (int, error) {
+	return 0, nil
+}
+
+// fakeVolumeGate — репозиторий авторасценки: тендер позиции, есть ли прогон, подтверждена ли.
+type fakeVolumeGate struct {
+	tender   string
+	hasRun   bool
+	approved bool
+	err      error
+}
+
+func (f fakeVolumeGate) ManualVolumeGate(context.Context, string) (string, bool, bool, error) {
+	return f.tender, f.hasRun, f.approved, f.err
+}
+
+func TestPositionFieldsRouteGate(t *testing.T) {
+	const (
+		tender      = "11111111-1111-1111-1111-111111111111"
+		otherTender = "22222222-2222-2222-2222-222222222222"
+		path        = "/api/v1/positions/0f8fad5b-d9cb-469f-a165-70867728950e/fields"
+	)
+	writer := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"tenders:write"}}
+	readOnly := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"tenders:read"}}
+	forTender := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"tenders:write"}, AllowedTenderIDs: []string{tender}}
+	forOther := &middleware.APIKeyPrincipal{ID: "k", Scopes: []string{"tenders:write"}, AllowedTenderIDs: []string{otherTender}}
+	open := fakeVolumeGate{tender: tender, hasRun: true}
+	resolve := func(*http.Request) (string, error) { return tender, nil }
+
+	cases := []struct {
+		name      string
+		principal *middleware.APIKeyPrincipal
+		gate      fakeVolumeGate
+		body      string
+		status    int
+		code      string // поле "code" (проблема) или "error" (тело автопрайса)
+		wantCalls int
+	}{
+		{"ключ: своя позиция с прогоном", writer, open, `{"manual_volume":2446.447}`, 204, "", 1},
+		{"ключ: тендер ключа и tender_id в теле", forTender, open, `{"manual_volume":5,"tender_id":"` + tender + `"}`, 204, "", 1},
+		{"ключ: подтверждённая позиция", writer, fakeVolumeGate{tender: tender, hasRun: true, approved: true}, `{"manual_volume":5}`, 409, "approved", 0},
+		{"ключ: тендер вне списка", forOther, open, `{"manual_volume":5}`, 403, "API_KEY_TENDER_DENIED", 0},
+		{"ключ: тендер без прогона", writer, fakeVolumeGate{tender: tender}, `{"manual_volume":5}`, 403, "AUTOPRICE_RUN_REQUIRED", 0},
+		{"ключ: manual_note", writer, open, `{"manual_volume":5,"manual_note":"x"}`, 403, "API_KEY_FIELD_DENIED", 0},
+		{"ключ: work_name без manual_volume", writer, open, `{"work_name":"x"}`, 403, "API_KEY_FIELD_DENIED", 0},
+		{"ключ: нет manual_volume", writer, open, `{}`, 400, "", 0},
+		{"ключ: manual_volume null", writer, open, `{"manual_volume":null}`, 400, "", 0},
+		{"ключ: позиции нет", writer, fakeVolumeGate{err: repository.ErrAutopricePositionNotFound}, `{"manual_volume":5}`, 404, "", 0},
+		{"ключ без tenders:write", readOnly, open, `{"manual_volume":5}`, 403, "API_KEY_SCOPE_DENIED", 0},
+		{"JWT: work_name проходит", nil, fakeVolumeGate{}, `{"work_name":"Стяжка","manual_note":"x"}`, 204, "", 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			svc := &fakePositionWrite{}
+			r := chi.NewRouter()
+			r.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					ctx := context.WithValue(req.Context(), middleware.CtxUser, &middleware.AuthUser{ID: "u-1", Role: "engineer"})
+					if c.principal != nil {
+						ctx = context.WithValue(ctx, middleware.CtxAPIKey, c.principal)
+					}
+					next.ServeHTTP(w, req.WithContext(ctx))
+				})
+			})
+			registerPositionFieldsRoute(r, handlers.NewPositionWriteHandler(svc).WithManualVolumeGate(c.gate), resolve)
+
+			w, m := callRegistry(t, r, "PATCH", path, c.body)
+			code, _ := m["code"].(string)
+			if code == "" {
+				code, _ = m["error"].(string)
+			}
+			if w.Code != c.status || (c.code != "" && code != c.code) || svc.calls != c.wantCalls {
+				t.Fatalf("status %d code %q calls %d, ожидалось %d %s %d: %s", w.Code, code, svc.calls, c.status, c.code, c.wantCalls, w.Body.String())
+			}
+			if c.wantCalls == 1 && c.principal != nil {
+				if svc.gotIn.ManualVolume == nil || svc.gotTnd != tender || svc.gotIn.ManualNote != nil || svc.gotIn.WorkName != nil {
+					t.Fatalf("вызов сервиса: %+v tender %q", svc.gotIn, svc.gotTnd)
+				}
+			}
+		})
+	}
+}

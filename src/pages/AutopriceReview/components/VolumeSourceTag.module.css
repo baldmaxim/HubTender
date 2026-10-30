@@ -1,0 +1,34 @@
+.tag {
+  display: inline-block;
+  flex: none;
+  box-sizing: border-box;
+  max-width: 100%;
+  margin-inline-end: 4px;
+  padding: 0 6px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ai {
+  color: var(--apr-accent);
+  border-color: var(--apr-accent);
+  background: var(--apr-fill);
+  cursor: pointer;
+}
+
+.conditional {
+  color: var(--apr-muted);
+  border-color: var(--apr-border);
+}
+
+.tipLines {
+  overflow-wrap: anywhere;
+}
