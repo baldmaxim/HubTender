@@ -121,6 +121,11 @@ func (r *AnalogRepo) executeOnce(ctx context.Context, in AnalogExecuteInput, dry
 	if target == nil {
 		return nil, errAnalogTargetNotFound()
 	}
+	// Права — до идемпотентного replay и любой записи (предпросмотр тоже пишет
+	// под ROLLBACK, поэтому отказ и для него).
+	if err := checkAnalogEditAccess(ctx, tx, in.UserID, target.TenderID); err != nil {
+		return nil, err
+	}
 	if !dryRun {
 		replay, err := findAnalogReplay(ctx, tx, in)
 		if err != nil || replay != nil {

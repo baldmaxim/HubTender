@@ -52,6 +52,8 @@ func analogStatus(code string) int {
 	case repository.AnalogCodeTargetNotFound, repository.AnalogCodeSourceNotFound,
 		repository.AnalogCodeApplicationAbsent:
 		return http.StatusNotFound
+	case repository.AnalogCodeForbidden, repository.AnalogCodeDeadlinePassed:
+		return http.StatusForbidden
 	case repository.AnalogCodeStale, repository.AnalogCodeTargetLocked, repository.AnalogCodeTargetHasRows,
 		repository.AnalogCodeIdempotencyClash, repository.AnalogCodeForeignChildren, repository.AnalogCodeNotActive:
 		return http.StatusConflict

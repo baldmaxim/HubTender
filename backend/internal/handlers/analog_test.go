@@ -152,6 +152,8 @@ func TestAnalogHandler_ErrorFormat(t *testing.T) {
 		{&repository.AnalogError{Code: repository.AnalogCodeIdempotencyClash, Message: "x"}, 409, "ANALOG_IDEMPOTENCY_CONFLICT"},
 		{&repository.AnalogError{Code: repository.AnalogCodeForeignChildren, Message: "x"}, 409, "ANALOG_FOREIGN_CHILDREN"},
 		{&repository.AnalogError{Code: repository.AnalogCodeNotActive, Message: "x"}, 409, "ANALOG_NOT_ACTIVE"},
+		{&repository.AnalogError{Code: repository.AnalogCodeForbidden, Message: "x"}, 403, "ANALOG_FORBIDDEN"},
+		{&repository.AnalogError{Code: repository.AnalogCodeDeadlinePassed, Message: "x"}, 403, "ANALOG_DEADLINE_PASSED"},
 		{&repository.AnalogError{Code: repository.AnalogCodeScaleNeedsChoice, Message: "x"}, 400, "ANALOG_SCALE_NEEDS_DECISION"},
 		{&repository.AnalogError{Code: repository.AnalogCodeVolumeUnknown, Message: "x"}, 400, "ANALOG_VOLUME_UNKNOWN"},
 		{&repository.AnalogError{Code: repository.AnalogCodeScaleInvalid, Message: "x"}, 400, "ANALOG_SCALE_INVALID"},

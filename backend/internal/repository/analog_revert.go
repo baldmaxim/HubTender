@@ -20,14 +20,18 @@ func (r *AnalogRepo) Revert(ctx context.Context, applicationID, userID string) (
 
 	// Позиция нужна для advisory-лока: сначала читаем без блокировки, затем под
 	// локом перечитываем решение (его могли заменить новым применением).
-	var positionID string
+	var positionID, appTenderID string
 	if err := tx.QueryRow(ctx,
-		`SELECT client_position_id::text FROM public.analog_applications WHERE id = $1::uuid`,
-		applicationID).Scan(&positionID); err != nil {
+		`SELECT client_position_id::text, tender_id::text FROM public.analog_applications WHERE id = $1::uuid`,
+		applicationID).Scan(&positionID, &appTenderID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, analogErr(AnalogCodeApplicationAbsent, "Решение не найдено.", nil)
 		}
 		return nil, fmt.Errorf("analog.revert: load: %w", err)
+	}
+	// Права — до блокировок и любых изменений (в том числе повтора отмены).
+	if err := checkAnalogEditAccess(ctx, tx, userID, appTenderID); err != nil {
+		return nil, err
 	}
 	if err := lockAnalogPosition(ctx, tx, positionID); err != nil {
 		return nil, err
