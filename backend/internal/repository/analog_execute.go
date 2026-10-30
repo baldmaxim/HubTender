@@ -230,6 +230,10 @@ func (r *AnalogRepo) executeOnce(ctx context.Context, in AnalogExecuteInput, dry
 		srcIDs[i] = *row.ID
 	}
 	copyPrices := in.Request.CopyPrices
+	recalcScope := ComposeRecalcTargetOnly
+	if dryRun {
+		recalcScope = ComposeRecalcTargetPreview
+	}
 	res, err := composeTx(ctx, tx, ComposeInput{
 		TargetTenderID: target.TenderID,
 		ChangedBy:      in.UserID,
@@ -248,6 +252,10 @@ func (r *AnalogRepo) executeOnce(ctx context.Context, in AnalogExecuteInput, dry
 		ImportSessionID: &runID,
 		AuditOrigin:     "analog_apply",
 		AuditExtra:      map[string]any{"analog_application_id": appID},
+		// Строки пишутся только в цель: пересчёт всего тендера (на больших — до
+		// минуты с блокировкой) не нужен. DryRun compose не выставляем: откат
+		// делает сам execute, а new_item_id нужны ему и в предпросмотре.
+		RecalcScope: recalcScope,
 	})
 	if err != nil {
 		return nil, mapAnalogComposeError(err)
