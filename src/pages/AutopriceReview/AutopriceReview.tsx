@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Alert, Drawer, Empty, Select, Spin, Splitter, theme } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
@@ -43,13 +43,33 @@ const AutopriceReview: FC = () => {
   const navigate = useNavigate();
   const { openPositionTab } = useWorkspaceTabActions();
   const [searchParams, setSearchParams] = useSearchParams();
-  const list = useAutopriceList(searchParams.get('tenderId'));
+  const requestedPositionId = searchParams.get('positionId');
+  const requestedRunId = searchParams.get('runId');
+  const list = useAutopriceList(searchParams.get('tenderId'), requestedRunId);
   const [filters, setFilters] = useState<IReviewFilters>(DEFAULT_FILTERS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelWidth] = useState(readPanelWidth);
   const { tenderId, runId, reload } = list;
+  const openedPositionRef = useRef<string | null>(null);
+  const reloadedPositionRef = useRef<string | null>(null);
 
   useEffect(() => setSelectedId(null), [runId]);
+
+  // Deep-link ?runId=…&positionId=… (после «Подобрать аналог»): открываем позицию, как только она
+  // есть в списке выбранного прогона. Один раз на пару «прогон + позиция» — дальше выбор за пользователем.
+  useEffect(() => {
+    if (!requestedPositionId || !runId || (requestedRunId && requestedRunId !== runId)) return;
+    const key = `${runId}:${requestedPositionId}`;
+    if (openedPositionRef.current === key) return;
+    if (list.reviews.some((r) => r.client_position_id === requestedPositionId)) {
+      openedPositionRef.current = key;
+      setSelectedId(requestedPositionId);
+    } else if (!list.loading && reloadedPositionRef.current !== key) {
+      // Карточка позиции появилась уже после загрузки списка — перечитываем его один раз.
+      reloadedPositionRef.current = key;
+      reload();
+    }
+  }, [requestedPositionId, requestedRunId, runId, list.reviews, list.loading, reload]);
 
   // Выбор в фильтре пишем в URL: иначе повторный переход с тем же ?tenderId не переключил бы тендер.
   const { setTenderId } = list;
@@ -59,6 +79,8 @@ const AutopriceReview: FC = () => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.set('tenderId', value);
+        next.delete('runId');
+        next.delete('positionId');
         return next;
       }, { replace: true });
     },

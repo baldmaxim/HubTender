@@ -229,6 +229,15 @@ func checkBulkPositions(ctx context.Context, tx pgx.Tx, sessionID, tenderID stri
 // bulkReplaceDelete удаляет строки позиции, записанные этим прогоном, с тем же
 // аудитом DELETE, что у одиночного удаления. Возвращает число удалённых строк.
 func bulkReplaceDelete(ctx context.Context, tx pgx.Tx, sessionID, actorID, positionID string) (int, error) {
+	return deleteRunItemsTx(ctx, tx, sessionID, actorID, positionID, nil)
+}
+
+// deleteRunItemsTx удаляет строки позиции, принадлежащие прогону sessionID, с
+// аудитом DELETE. itemIDs == nil — все строки прогона в позиции; иначе только
+// перечисленные (отмена одного решения аналога). Если у удаляемых работ есть
+// дочерние строки вне удаляемого набора (ручные или чужого прогона), удаление
+// отклоняется (ErrAutopriceForeignChildren): каскад стёр бы их без следа.
+func deleteRunItemsTx(ctx context.Context, tx pgx.Tx, sessionID, actorID, positionID string, itemIDs []string) (int, error) {
 	// Дочерние строки заменяемых работ из чужого источника каскадом исчезли бы
 	// без аудита — отказываем до удаления.
 	var foreign bool
@@ -237,8 +246,10 @@ func bulkReplaceDelete(ctx context.Context, tx pgx.Tx, sessionID, actorID, posit
 			SELECT 1 FROM public.boq_items c
 			JOIN public.boq_items w ON w.id = c.parent_work_item_id
 			WHERE w.client_position_id = $1::uuid AND w.import_session_id = $2::uuid
-			  AND c.import_session_id IS DISTINCT FROM $2::uuid)`,
-		positionID, sessionID).Scan(&foreign); err != nil {
+			  AND ($3::uuid[] IS NULL OR w.id = ANY($3::uuid[]))
+			  AND CASE WHEN $3::uuid[] IS NULL THEN c.import_session_id IS DISTINCT FROM $2::uuid
+			           ELSE NOT (c.id = ANY($3::uuid[])) END)`,
+		positionID, sessionID, itemIDs).Scan(&foreign); err != nil {
 		return 0, fmt.Errorf("autoprice.BulkWrite: foreign children: %w", err)
 	}
 	if foreign {
@@ -248,7 +259,8 @@ func bulkReplaceDelete(ctx context.Context, tx pgx.Tx, sessionID, actorID, posit
 	rows, err := tx.Query(ctx, `
 		DELETE FROM public.boq_items
 		WHERE client_position_id = $1::uuid AND import_session_id = $2::uuid
-		RETURNING `+boqScanCols, positionID, sessionID)
+		  AND ($3::uuid[] IS NULL OR id = ANY($3::uuid[]))
+		RETURNING `+boqScanCols, positionID, sessionID, itemIDs)
 	if err != nil {
 		return 0, &AutopriceBulkError{PositionID: positionID, Err: fmt.Errorf("replace: delete: %w", err)}
 	}

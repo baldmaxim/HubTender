@@ -339,6 +339,7 @@ func writeComposeGroup(
 	}
 	newIDs, err := insertArchiveItemsTx(
 		ctx, tx, in.TargetTenderID, p.TargetPositionID, startSort, p.Items, in.Options,
+		in.ImportSessionID,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("archiveRepo.Compose: %w", err)
@@ -353,6 +354,7 @@ func writeComposeGroup(
 	}
 	if err := auditArchiveItemsTx(
 		ctx, tx, in.TargetTenderID, p.TargetPositionID, in.ChangedBy, newIDs, p.Items,
+		in.AuditOrigin, in.AuditExtra,
 	); err != nil {
 		return nil, nil, fmt.Errorf("archiveRepo.Compose: %w", err)
 	}

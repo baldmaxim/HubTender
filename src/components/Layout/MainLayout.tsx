@@ -28,7 +28,7 @@ import { IconSwap } from '../transitions';
 import { type Notification } from '../../lib/types';
 import { useRealtimeTopic } from '../../lib/realtime/useRealtimeTopic';
 import { listNotifications, deleteAllNotifications } from '../../lib/api/notifications';
-import { fetchAutopriceTenders } from '../../lib/api/autoprice';
+import { fetchAutopriceTenders, onAutopriceTendersChanged } from '../../lib/api/autoprice';
 
 const AUTOPRICE_REVIEW_PATH = '/autoprice-review';
 import { hasPageAccess, PAGE_LABELS } from '../../lib/types/types';
@@ -317,10 +317,15 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    fetchAutopriceTenders()
-      .then((list) => { if (!cancelled) setHasAutoprice(list.length > 0); })
-      .catch(() => { if (!cancelled) setHasAutoprice(false); });
-    return () => { cancelled = true; };
+    const load = () => {
+      fetchAutopriceTenders()
+        .then((list) => { if (!cancelled) setHasAutoprice(list.length > 0); })
+        .catch(() => { if (!cancelled) setHasAutoprice(false); });
+    };
+    load();
+    // Первое применение аналога создаёт прогон на лету — пункт меню должен появиться без перезагрузки.
+    const off = onAutopriceTendersChanged(load);
+    return () => { cancelled = true; off(); };
   }, [user]);
 
   const filteredMenuItems = useMemo(

@@ -77,7 +77,7 @@ INSERT INTO public.boq_items (
     parent_work_item_id, delivery_price_type, delivery_amount,
     currency_type, unit_rate,
     detail_cost_category_id, quote_link, description,
-    quote_price_date, quote_valid_until
+    quote_price_date, quote_valid_until, import_session_id
 )
 SELECT $1::uuid, $2::uuid, $3::int + inp.idx::int,
        inp.item_type::boq_item_type,
@@ -96,7 +96,8 @@ SELECT $1::uuid, $2::uuid, $3::int + inp.idx::int,
        NULLIF(inp.quote_link, ''),
        NULLIF(inp.description, ''),
        NULLIF(inp.quote_price_date, '')::date,
-       NULLIF(inp.quote_valid_until, '')::date
+       NULLIF(inp.quote_valid_until, '')::date,
+       $22::uuid
 FROM UNNEST(
     $4::text[], $5::text[], $6::text[], $7::text[], $8::text[],
     $9::numeric[], $10::numeric[], $11::numeric[], $12::numeric[],
@@ -121,7 +122,7 @@ RETURNING id::text, sort_number
 // Возвращает новые id в порядке items.
 func insertArchiveItemsTx(
 	ctx context.Context, tx pgx.Tx, tenderID, positionID string,
-	startSort int, items []plannedItem, opt ComposeOptions,
+	startSort int, items []plannedItem, opt ComposeOptions, importSessionID *string,
 ) ([]string, error) {
 	n := len(items)
 	if n == 0 {
@@ -147,6 +148,7 @@ func insertArchiveItemsTx(
 	quotePriceDates := make([]string, n)
 	quoteValidUntils := make([]string, n)
 
+	copyPrices := opt.CopyPrices == nil || *opt.CopyPrices
 	for i, it := range items {
 		s := it.src
 		itemTypes[i] = s.BoqItemType
@@ -162,12 +164,20 @@ func insertArchiveItemsTx(
 		deliveryAmounts[i] = s.DeliveryAmount
 		currencies[i] = derefOrEmpty(s.CurrencyType)
 		unitRates[i] = s.UnitRate
+		if !copyPrices {
+			// Цена не переносится: 0 = «не заполнена» (штатная проверка zero_price).
+			zero := 0.0
+			unitRates[i] = &zero
+			deliveryAmounts[i] = &zero
+		}
 		if opt.CopyDetailCostCategory {
 			detailCats[i] = derefOrEmpty(s.DetailCostCategoryID)
 		}
-		quoteLinks[i] = derefOrEmpty(s.QuoteLink)
+		if copyPrices {
+			quoteLinks[i] = derefOrEmpty(s.QuoteLink)
+		}
 		descriptions[i] = derefOrEmpty(s.Description)
-		if opt.CopyQuoteDates {
+		if opt.CopyQuoteDates && copyPrices {
 			// CHECK quote_valid_until >= quote_price_date: копируем обе или ни одной.
 			quotePriceDates[i] = derefOrEmpty(s.QuotePriceDate)
 			quoteValidUntils[i] = derefOrEmpty(s.QuoteValidUntil)
@@ -180,6 +190,7 @@ func insertArchiveItemsTx(
 		quantities, baseQuantities, consumption, conversion,
 		deliveryTypes, deliveryAmounts, currencies, unitRates,
 		detailCats, quoteLinks, descriptions, quotePriceDates, quoteValidUntils,
+		importSessionID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insertArchiveItemsTx: insert: %w", err)
@@ -261,20 +272,25 @@ type archiveAuditPayload struct {
 }
 
 // auditArchiveItemsTx пишет по одной INSERT-записи аудита на строку.
+// origin пуст — "archive_compose"; extra дописывается в payload, не перекрывая
+// ключи базового payload.
 func auditArchiveItemsTx(
 	ctx context.Context, tx pgx.Tx, tenderID, positionID, changedBy string,
-	newIDs []string, items []plannedItem,
+	newIDs []string, items []plannedItem, origin string, extra map[string]any,
 ) error {
+	if origin == "" {
+		origin = "archive_compose"
+	}
 	for i, id := range newIDs {
-		payload, err := json.Marshal(archiveAuditPayload{
+		payload, err := marshalArchiveAudit(archiveAuditPayload{
 			ID:               id,
 			ClientPositionID: positionID,
 			TenderID:         tenderID,
 			BoqItemType:      items[i].src.BoqItemType,
 			SourceItemID:     items[i].SourceItemID,
 			SourceTenderID:   items[i].SourceTender,
-			Origin:           "archive_compose",
-		})
+			Origin:           origin,
+		}, extra)
 		if err != nil {
 			return fmt.Errorf("auditArchiveItemsTx: marshal: %w", err)
 		}
@@ -283,6 +299,25 @@ func auditArchiveItemsTx(
 		}
 	}
 	return nil
+}
+
+// marshalArchiveAudit сериализует базовый payload и добавляет extra-ключи,
+// которых в базовом payload ещё нет.
+func marshalArchiveAudit(base archiveAuditPayload, extra map[string]any) ([]byte, error) {
+	b, err := json.Marshal(base)
+	if err != nil || len(extra) == 0 {
+		return b, err
+	}
+	m := map[string]any{}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	for k, v := range extra {
+		if _, taken := m[k]; !taken {
+			m[k] = v
+		}
+	}
+	return json.Marshal(m)
 }
 
 // lockTargetPositionTx проверяет, что позиция существует и принадлежит тендеру.

@@ -16,6 +16,7 @@ import { FindingsEditor } from './FindingsEditor';
 import { QuestionsEditor } from './QuestionsEditor';
 import { EventsList } from './EventsList';
 import { PanelActions } from './PanelActions';
+import { AnalogPicker } from '../../../components/AnalogPicker';
 import styles from '../AutopriceReview.module.css';
 
 interface IPositionPanelProps {
@@ -52,10 +53,14 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
   const rowEditing = useRowEditing({ positionId, tenderId, onSaved: onRowsChanged });
   const { activate } = rowEditing;
   const [editItemId, setEditItemId] = useState<string | null>(null);
+  const [analogOpen, setAnalogOpen] = useState(false);
   const wide = useWideScreen();
 
   // Сменилась позиция — лист закрываем.
-  useEffect(() => setEditItemId(null), [positionId]);
+  useEffect(() => {
+    setEditItemId(null);
+    setAnalogOpen(false);
+  }, [positionId]);
 
   const handleEditItem = useCallback(
     (itemId: string) => {
@@ -169,11 +174,25 @@ export const PositionPanel: FC<IPositionPanelProps> = ({
             {locked && <div className={styles.muted}>Позиция подтверждена — для правок переоткройте её.</div>}
           </div>
 
-          <PanelActions review={review} busy={busy} isApprover={isApprover} onAction={handleAction} />
+          <PanelActions
+            review={review}
+            busy={busy}
+            isApprover={isApprover}
+            onAction={handleAction}
+            onPickAnalog={() => setAnalogOpen(true)}
+          />
 
           <EventsList events={review.events ?? []} />
         </div>
       </Spin>
+
+      <AnalogPicker
+        open={analogOpen}
+        positionId={position.id}
+        onClose={() => setAnalogOpen(false)}
+        onApplied={() => void onRowsChanged()}
+        onReverted={() => void onRowsChanged()}
+      />
 
       <BoqItemSheet
         itemId={editItemId}

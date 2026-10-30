@@ -392,6 +392,16 @@ func newRouter(
 		r.Patch("/api/v1/autoprice-runs/{sid}/positions/{posId}/review", d.autopriceH.PatchReview)
 		r.Post("/api/v1/autoprice-runs/{sid}/positions/{posId}/review/action", d.autopriceH.Action)
 
+		// Расценка по реальному аналогу (пилот): поиск, предпросмотр, применение, отмена.
+		// Права — как у штатной записи строк BOQ (JWT; отдельного ролевого гейта там нет).
+		r.Get("/api/v1/positions/{id}/analogs", d.analogH.Search)
+		r.Get("/api/v1/analogs/sources/{srcId}", d.analogH.GetSource)
+		r.Post("/api/v1/positions/{id}/analog:preview", d.analogH.Preview)
+		r.Post("/api/v1/positions/{id}/analog:apply", d.analogH.Apply)
+		r.Get("/api/v1/positions/{id}/analog-applications", d.analogH.ListApplications)
+		r.Post("/api/v1/analog-applications/{id}/revert", d.analogH.Revert)
+		r.Get("/api/v1/positions/{id}/analog-next", d.analogH.Next)
+
 		// Projects + agreements + monthly completion.
 		r.Post("/api/v1/projects", d.projectsH.Create)
 		r.Patch("/api/v1/projects/{id}", d.projectsH.Update)

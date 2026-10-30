@@ -1,0 +1,401 @@
+/* Переменные --apn-* задаются из токенов antd на корне содержимого (Modal/Drawer рендерятся в body). */
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  color: var(--apn-text);
+  font-size: 14px;
+}
+
+.rootModal {
+  min-height: 240px;
+  height: auto;
+  max-height: calc(100dvh - 190px);
+}
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+.footer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--apn-border);
+  background: var(--apn-bg);
+}
+
+.footerSpacer {
+  flex: 1 1 auto;
+}
+
+.btn {
+  min-height: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.muted {
+  color: var(--apn-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sectionTitle {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* Сводка цели */
+.target {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--apn-border);
+  border-radius: var(--apn-radius);
+  background: var(--apn-fill);
+  min-width: 0;
+}
+
+.targetName {
+  font-weight: 600;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+}
+
+.chips :global(.ant-tag) {
+  margin: 0;
+  white-space: normal;
+}
+
+/* Поиск */
+.searchRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.searchInput,
+.searchInput input {
+  font-size: 16px;
+}
+
+.searchInput {
+  min-height: 44px;
+}
+
+/* Кандидаты */
+.hits {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--apn-border);
+  border-radius: var(--apn-radius);
+  background: var(--apn-bg);
+  min-width: 0;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  color: var(--apn-accent);
+}
+
+.empty {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--apn-muted);
+}
+
+.center {
+  display: grid;
+  place-items: center;
+  padding: 24px 0;
+}
+
+/* Состав */
+.panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.paneSwitch {
+  min-height: 44px;
+}
+
+.hint {
+  padding: 8px 12px;
+  border-radius: var(--apn-radius);
+  background: var(--apn-info-bg);
+  color: var(--apn-text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.tableWrap {
+  overflow: auto;
+  overscroll-behavior: contain;
+  max-width: 100%;
+  border: 1px solid var(--apn-border);
+  border-radius: var(--apn-radius);
+}
+
+.table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--apn-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--apn-fill-solid);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.nameCell {
+  min-width: 180px;
+  overflow-wrap: anywhere;
+}
+
+.childName {
+  display: inline-block;
+  padding-left: 14px;
+}
+
+.childMark {
+  margin-right: 4px;
+  color: var(--apn-muted);
+}
+
+.typeCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.typeKind {
+  color: var(--apn-muted);
+  font-size: 11px;
+}
+
+.rowDraft td {
+  background: var(--apn-fill);
+}
+
+.quoteLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.noDate {
+  color: var(--apn-warning);
+}
+
+/* Масштаб */
+.scale {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--apn-border);
+  border-radius: var(--apn-radius);
+}
+
+.radioRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.radioRow :global(.ant-radio-wrapper) {
+  align-items: flex-start;
+  min-height: 32px;
+  white-space: normal;
+}
+
+.factorInput {
+  width: 100%;
+  max-width: 220px;
+  min-height: 44px;
+}
+
+.factorInput input {
+  font-size: 16px;
+  min-height: 42px;
+}
+
+.switchRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.switchRow :global(.ant-switch) {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-weight: 600;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.done {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.doneActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* История */
+.historyItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--apn-border);
+}
+
+.historyItem:last-child {
+  border-bottom: none;
+}
+
+@media (min-width: 992px) {
+  .panes {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .searchRow {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .searchRow > :first-child {
+    flex: 1 1 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Оболочки: Modal (десктоп/планшет) и Drawer (телефон) */
+.modal :global(.ant-modal-content) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.modal :global(.ant-modal-body) {
+  padding: 0;
+}
+
+.modal :global(.ant-modal-header) {
+  margin: 0;
+  padding: 14px 16px;
+}
+
+.drawer :global(.ant-drawer-body) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.drawer :global(.ant-drawer-header) {
+  padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+}
+
+.rootDrawer {
+  height: calc(100dvh - 56px - env(safe-area-inset-top));
+}

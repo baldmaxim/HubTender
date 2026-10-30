@@ -13,6 +13,7 @@ import ItemsToolbar from './components/ItemsToolbar';
 import PositionHeader from './components/PositionHeader';
 import PositionLandscapeInfo from './components/PositionLandscapeInfo';
 import AddItemForm from './components/AddItemForm';
+import { AnalogOpenButton, PositionAnalogPicker } from './components/PositionAnalogPicker';
 import TemplateSelectModal from './components/TemplateSelectModal';
 import AuditHistoryTab from './components/AuditHistoryTab';
 import { BoqItemsImportModal } from './components/BoqItemsImportModal';
@@ -46,6 +47,8 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId, deepLinkItemI
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
   const [templateModalVisible, setTemplateModalVisible] = useState<boolean>(false);
   const [importModalVisible, setImportModalVisible] = useState<boolean>(false);
+  const [analogOpen, setAnalogOpen] = useState<boolean>(false);
+  const addFormRef = useRef<HTMLDivElement>(null);
   const [selectedCostCategoryId, setSelectedCostCategoryId] = useState<string | null>(null);
   const [costSearchText, setCostSearchText] = useState<string>('');
   const [activeTab, setActiveTab] = useState<string>('current');
@@ -381,7 +384,7 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId, deepLinkItemI
             children: (
               <>
                 {!isPhoneDevice && (
-                  <Card title="Добавление работ и материалов" style={{ marginBottom: 16 }}>
+                  <Card ref={addFormRef} title="Добавление работ и материалов" style={{ marginBottom: 16 }}>
                     <AddItemForm
                       works={works}
                       materials={materials}
@@ -406,7 +409,10 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId, deepLinkItemI
                 <Card
                   title={
                     isPhoneDevice ? (
-                      <span>Элементы позиции</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <span>Элементы позиции</span>
+                        <AnalogOpenButton onClick={() => setAnalogOpen(true)} disabled={isReadOnlyByDeadline} />
+                      </div>
                     ) : (
                       <ItemsToolbar
                         isDeleteMode={isDeleteMode}
@@ -422,6 +428,7 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId, deepLinkItemI
                         onApplyCostToAll={handleApplyCostToAll}
                         onOpenImport={() => setImportModalVisible(true)}
                         onClearAll={handleClearAllItems}
+                        onOpenAnalog={() => setAnalogOpen(true)}
                         itemsCount={items.length}
                         disabled={isReadOnlyByDeadline}
                         totalSum={totalSum}
@@ -452,6 +459,15 @@ const PositionItems: React.FC<PositionItemsProps> = ({ positionId, deepLinkItemI
           handleAddTemplate(templateId, () => {});
           setTemplateModalVisible(false);
         }}
+      />
+
+      {/* Подбор аналога: после применения/отмены строки позиции перечитываем */}
+      <PositionAnalogPicker
+        open={analogOpen}
+        positionId={positionId}
+        onClose={() => setAnalogOpen(false)}
+        onItemsChanged={fetchItems}
+        addFormRef={addFormRef}
       />
 
       {/* Модалка импорта из Excel */}

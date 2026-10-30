@@ -88,6 +88,7 @@ type deps struct {
 	autopriceRepo     *repository.AutopriceReviewRepo
 	autopriceH        *handlers.AutopriceReviewHandler
 	autopriceBulkH    *handlers.AutopriceBulkHandler
+	analogH           *handlers.AnalogHandler
 	importLogH        *handlers.ImportLogHandler
 	projectsH         *handlers.ProjectsHandler
 	objectsH          *handlers.ConstructionObjectsHandler
@@ -287,6 +288,9 @@ func buildDeps(
 	changeImpactSvc := services.NewChangeImpactService(changeImpactRepo)
 	reviewPackSvc := services.NewReviewPackService(reviewPackRepo)
 	archiveSvc := services.NewArchiveService(archiveRepo, inMemCache)
+	// Расценка по реальному аналогу: поиск идёт через архив, запись — в чёрновой прогон тендера.
+	analogH := handlers.NewAnalogHandler(
+		services.NewAnalogService(repository.NewAnalogRepo(pool), archiveSvc, inMemCache).WithRecalcQueue(recalcQueue))
 	apiAccessSvc := services.NewApiAccessService(rootCtx, apiAccessRepo)
 	pricingSvc := services.NewPricingService(pricingRepo, userRepo, libraryRepo, mcpOAuthRepo, services.PricingFeatures{
 		WriteEnabled: cfg.MCPWriteEnabled, TemplateWriteEnabled: cfg.MCPTemplateWriteEnabled,
@@ -537,6 +541,7 @@ func buildDeps(
 		autopriceRepo:     autopriceRepo,
 		autopriceH:        handlers.NewAutopriceReviewHandler(autopriceRepo),
 		autopriceBulkH:    autopriceBulkH,
+		analogH:           analogH,
 		projectsH:         handlers.NewProjectsHandler(projectsSvc),
 		objectsH:          handlers.NewConstructionObjectsHandler(constructionObjectsSvc),
 		objectPhotosH:     handlers.NewConstructionObjectPhotosHandler(constructionObjectPhotosSvc),

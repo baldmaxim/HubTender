@@ -287,6 +287,37 @@ created_at, updated_at`.
 - Ответ 200: `{"data":[{"index":0,"id":"…","kind":"work","name":"как в БД","unit":"м2","created":true}]}`
   в порядке запроса. Ограничение ключа по тендерам не действует (справочник общий).
 
+## Расценка по аналогу (пилот) — только JWT портала
+
+Не для ключей API: маршруты в JWT-группе, права те же, что у штатной записи строк BOQ
+(отдельного серверного гейта по ролям/дедлайну у неё нет). Ответы: `Cache-Control: no-store`,
+успех `{"data": …}`, ошибка `{"error":"<КОД>","message":"<по-русски>", …}`. Строки аналога
+пишутся в чёрновой прогон тендера (`import_sessions`: `source='autoprice'`,
+`label='Аналоги из архива'`, `file_name='analog-pilot'`, создаётся при первом применении);
+подтверждение — штатным `POST /autoprice-runs/{sid}/positions/{pid}/review/action`.
+
+| Маршрут | Что делает |
+|---|---|
+| `GET /api/v1/positions/{id}/analogs?q=&limit=` | кандидаты из архива (по умолчанию 3, максимум 30, `has_more`); единица и объём цели — только в скоринг |
+| `GET /api/v1/analogs/sources/{srcId}` | позиция-аналог целиком со строками и датами цен |
+| `POST /api/v1/positions/{id}/analog:preview` | предпросмотр (транзакция с ROLLBACK), `preview_token` |
+| `POST /api/v1/positions/{id}/analog:apply` | применение; тело = предпросмотр + `preview_token` + `idempotency_key` (uuid) |
+| `GET /api/v1/positions/{id}/analog-applications` | последние 20 решений по позиции |
+| `POST /api/v1/analog-applications/{id}/revert` | отмена решения (удаляет свои строки), идемпотентно |
+| `GET /api/v1/positions/{id}/analog-next` | следующая позиция тендера без строк и с единицей, либо `null` |
+
+Тело предпросмотра/применения: `{"source_position_id", "scale": {"mode": "none|volume_ratio|factor",
+"factor"?}, "copy_prices": bool}` — `mode` и `copy_prices` обязательны, без умолчаний.
+Коды ошибок: 400 `ANALOG_BAD_REQUEST`, `ANALOG_SCALE_NEEDS_DECISION` (разные единицы),
+`ANALOG_VOLUME_UNKNOWN` (нет/ноль объёма), `ANALOG_SCALE_INVALID`, `ANALOG_SOURCE_EMPTY`,
+`ANALOG_SOURCE_SAME_TENDER`, `MISSING_FX_RATE`; 404 `ANALOG_TARGET_NOT_FOUND`,
+`ANALOG_SOURCE_NOT_FOUND`, `ANALOG_APPLICATION_NOT_FOUND`; 409 `ANALOG_STALE` (`changed`:
+`source|target`), `ANALOG_TARGET_LOCKED`, `ANALOG_TARGET_HAS_ROWS`,
+`ANALOG_IDEMPOTENCY_CONFLICT`, `ANALOG_FOREIGN_CHILDREN`, `ANALOG_NOT_ACTIVE`; 422
+`INVALID_BOQ_PARENT`. Повтор `analog:apply` с тем же ключом и телом возвращает сохранённый
+результат (`replayed: true`) без второго комплекта строк. Миграция:
+`db/yandex/incremental/2026_10_analog_applications.sql`.
+
 ## Лимиты и поведение
 
 - Лимит запросов — `rate_limit_per_minute` на ключ (по умолчанию 120, окно — минута);

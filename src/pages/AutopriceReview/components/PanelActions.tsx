@@ -1,5 +1,6 @@
 import { useState, type FC } from 'react';
 import { Button, Popconfirm, Tooltip } from 'antd';
+import { BranchesOutlined } from '@ant-design/icons';
 import type { AutopriceAction, IReviewRow } from '../types';
 import { ReturnModal } from './ReturnModal';
 import styles from '../AutopriceReview.module.css';
@@ -9,10 +10,12 @@ interface IPanelActionsProps {
   busy: boolean;
   isApprover: boolean;
   onAction: (action: AutopriceAction, okText: string, comment?: string) => Promise<boolean>;
+  /** Открыть «Подобрать аналог» для этой позиции. */
+  onPickAnalog: () => void;
 }
 
 /** Кнопки перехода статуса. Подтверждение недоступно при строках без цены и без нужной роли. */
-export const PanelActions: FC<IPanelActionsProps> = ({ review, busy, isApprover, onAction }) => {
+export const PanelActions: FC<IPanelActionsProps> = ({ review, busy, isApprover, onAction, onPickAnalog }) => {
   const [returning, setReturning] = useState(false);
   const closed = review.status === 'approved' || review.status === 'excluded';
 
@@ -38,6 +41,9 @@ export const PanelActions: FC<IPanelActionsProps> = ({ review, busy, isApprover,
         </Tooltip>
       ) : (
         <>
+          <Button className={styles.actionBtn} icon={<BranchesOutlined />} disabled={busy} onClick={onPickAnalog}>
+            Подобрать аналог
+          </Button>
           <Tooltip title={approveHint}>
             <span>
               <Button

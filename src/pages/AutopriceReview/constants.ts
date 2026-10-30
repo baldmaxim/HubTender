@@ -69,6 +69,8 @@ export const ACTION_LABELS: Record<string, string> = {
   needs_customer: 'Ждём Заказчика',
   exclude: 'Исключено',
   reopen: 'Переоткрыто',
+  analog_apply: 'Применён аналог',
+  analog_revert: 'Аналог отменён',
 };
 
 /** Глаголы последнего решения («Решение» в списке и панели). */

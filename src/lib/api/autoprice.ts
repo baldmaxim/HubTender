@@ -56,3 +56,16 @@ export const autopriceErrorMessage = (err: unknown): string => {
   if (body && typeof body.message === 'string' && body.message) return body.message;
   return err instanceof Error ? err.message : 'Не удалось выполнить запрос';
 };
+
+const TENDERS_CHANGED_EVENT = 'autoprice-tenders-changed';
+
+/** Появился/изменился прогон авторасценки (например, первое применение аналога): меню перечитает список тендеров. */
+export const notifyAutopriceTendersChanged = (): void => {
+  window.dispatchEvent(new Event(TENDERS_CHANGED_EVENT));
+};
+
+/** Подписка на {@link notifyAutopriceTendersChanged}; возвращает отписку. */
+export const onAutopriceTendersChanged = (listener: () => void): (() => void) => {
+  window.addEventListener(TENDERS_CHANGED_EVENT, listener);
+  return () => window.removeEventListener(TENDERS_CHANGED_EVENT, listener);
+};

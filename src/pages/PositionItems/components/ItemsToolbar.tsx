@@ -1,5 +1,6 @@
 import { Button, AutoComplete } from 'antd';
 import { DeleteOutlined, ThunderboltOutlined, UploadOutlined } from '@ant-design/icons';
+import { AnalogOpenButton } from './PositionAnalogPicker';
 
 interface CostOption {
   value: string;
@@ -21,6 +22,7 @@ interface ItemsToolbarProps {
   onApplyCostToAll: () => void;
   onOpenImport: () => void;
   onClearAll: () => void;
+  onOpenAnalog: () => void;
   itemsCount: number;
   disabled: boolean;
   totalSum: number | null;
@@ -41,6 +43,7 @@ const ItemsToolbar: React.FC<ItemsToolbarProps> = ({
   onApplyCostToAll,
   onOpenImport,
   onClearAll,
+  onOpenAnalog,
   itemsCount,
   disabled,
   totalSum,
@@ -59,6 +62,7 @@ const ItemsToolbar: React.FC<ItemsToolbarProps> = ({
         </>
       ) : (
         <>
+          <AnalogOpenButton onClick={onOpenAnalog} disabled={disabled} />
           <AutoComplete
             value={costSearchText}
             onChange={(value) => setCostSearchText(value)}

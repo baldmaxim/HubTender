@@ -38,6 +38,10 @@ type ComposeOptions struct {
 	CopyDetailCostCategory bool
 	// QuantityDecimals — округление масштабированных количеств; nil = без округления.
 	QuantityDecimals *int
+	// CopyPrices — переносить цены источника; nil = переносить (как раньше).
+	// false → unit_rate = 0, delivery_amount = 0, quote_link и quote_* = NULL:
+	// строка остаётся «без цены» и не пройдёт штатную проверку zero_price.
+	CopyPrices *bool
 }
 
 // ScaleSpec — как пересчитывать количества конкретного источника.
@@ -93,6 +97,14 @@ type ComposeInput struct {
 	Verbose        bool
 	Options        ComposeOptions
 	Groups         []ComposeGroup
+	// ImportSessionID — прогон, к которому привязываются вставляемые строки
+	// (boq_items.import_session_id); nil — строки без прогона, как у архива.
+	ImportSessionID *string
+	// AuditOrigin — значение origin в payload аудита; пусто = "archive_compose".
+	AuditOrigin string
+	// AuditExtra — дополнительные ключи payload аудита (например,
+	// analog_application_id); ключи базового payload они не перекрывают.
+	AuditExtra map[string]any
 }
 
 // ComposeWarning — предупреждение по конкретной строке/источнику.

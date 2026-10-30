@@ -881,3 +881,21 @@ ALTER TABLE public.page_views ADD CONSTRAINT page_views_user_fkey
     FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_page_views_viewed_at
     ON public.page_views (viewed_at);
+
+-- ─── Решения «расценка по реальному аналогу» (пилот) ────────────────────────
+ALTER TABLE public.analog_applications ADD CONSTRAINT analog_applications_pkey PRIMARY KEY (id);
+ALTER TABLE public.analog_applications ADD CONSTRAINT analog_applications_idempotency_key_key UNIQUE (idempotency_key);
+ALTER TABLE public.analog_applications ADD CONSTRAINT analog_applications_scale_mode_check
+    CHECK (scale_mode IN ('none', 'volume_ratio', 'factor'));
+ALTER TABLE public.analog_applications ADD CONSTRAINT analog_applications_status_check
+    CHECK (status IN ('applied', 'superseded', 'reverted'));
+ALTER TABLE public.analog_applications ADD CONSTRAINT analog_applications_tender_id_fkey
+    FOREIGN KEY (tender_id) REFERENCES public.tenders(id) ON DELETE CASCADE;
+ALTER TABLE public.analog_applications ADD CONSTRAINT analog_applications_client_position_id_fkey
+    FOREIGN KEY (client_position_id) REFERENCES public.client_positions(id) ON DELETE CASCADE;
+ALTER TABLE public.analog_applications ADD CONSTRAINT analog_applications_import_session_id_fkey
+    FOREIGN KEY (import_session_id) REFERENCES public.import_sessions(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_analog_applications_position
+    ON public.analog_applications (client_position_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analog_applications_tender
+    ON public.analog_applications (tender_id);

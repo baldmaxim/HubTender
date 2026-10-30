@@ -1262,3 +1262,32 @@ CREATE TABLE IF NOT EXISTS public.page_views (
 );
 COMMENT ON TABLE public.page_views IS 'Просмотры страниц портала (для статистики использования)';
 COMMENT ON COLUMN public.page_views.page IS 'Путь-шаблон страницы без query и id, например /positions/:id';
+
+-- Решения «расценка по реальному аналогу» (пилот), см. 2026_10_analog_applications.sql.
+CREATE TABLE IF NOT EXISTS public.analog_applications (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    idempotency_key uuid NOT NULL,
+    tender_id uuid NOT NULL,
+    client_position_id uuid NOT NULL,
+    import_session_id uuid NOT NULL,
+    source_position_id uuid NOT NULL,
+    source_tender_id uuid NOT NULL,
+    source_item_ids uuid[] NOT NULL,
+    new_item_ids uuid[] NOT NULL,
+    scale_mode text NOT NULL,
+    scale_factor numeric NOT NULL,
+    source_volume numeric,
+    target_volume numeric,
+    copy_prices boolean NOT NULL,
+    source_fingerprint text NOT NULL,
+    target_fingerprint text NOT NULL,
+    source_snapshot jsonb NOT NULL,
+    request jsonb NOT NULL,
+    result jsonb NOT NULL,
+    status text NOT NULL DEFAULT 'applied',
+    created_by uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    reverted_by uuid,
+    reverted_at timestamp with time zone
+);
+COMMENT ON TABLE public.analog_applications IS 'Решения «расценка по реальному аналогу»: что взято из позиции-источника, правила масштаба и цен, созданные строки';
