@@ -1,6 +1,6 @@
 import { useMemo, type FC } from 'react';
-import { Button, Table, Tag, Tooltip } from 'antd';
-import { EllipsisOutlined } from '@ant-design/icons';
+import { Button, Popconfirm, Table, Tag, Tooltip } from 'antd';
+import { DeleteOutlined, EllipsisOutlined, SwapOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { IDeletedItem, IPositionItem } from '../types';
 import { formatDateTime } from '../utils/format';
@@ -29,27 +29,33 @@ interface IItemsTableProps {
   onEditItem?: (itemId: string) => void;
   /** Правка прямо в строке; без него таблица только показывает текст. */
   editing?: IItemsEditing;
+  /** Действия «Заменить» и «Удалить»; показываются, когда строки доступны для правки (editing.ready && canEdit). */
+  onReplaceItem?: (itemId: string) => void;
+  onDeleteItem?: (itemId: string) => Promise<void>;
 }
 
 const MIN_NAME_WIDTH = 120;
 const COLUMNS_STORAGE_KEY = 'autoprice-review:item-cols:v3';
 const EDIT_COL_WIDTH = 44;
+const ACTIONS_COL_WIDTH = 88;
 const DEFAULT_WIDTHS = { type: 96, unit: 56, qty: 96, price: 104, conv: 84, cons: 84 };
 const TABLE_COMPONENTS = { header: { cell: ResizableHeaderCell } };
 
-export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted, onEditItem, editing }) => {
+export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted, onEditItem, editing, onReplaceItem, onDeleteItem }) => {
   const { ref, size } = useElementSize<HTMLDivElement>();
   const { widths, setWidth } = useColumnWidths(COLUMNS_STORAGE_KEY, DEFAULT_WIDTHS);
 
   const works = useMemo(() => workIdSet(items), [items]);
   const summary = useMemo(() => summarizeItems(items), [items]);
+  const showActions = !!onReplaceItem && !!onDeleteItem && !!editing?.ready && !!editing.canEdit;
 
   const { columns, scrollX } = useMemo(() => {
     const resizable = (key: keyof typeof DEFAULT_WIDTHS) => ({
       width: widths[key],
       onHeaderCell: () => resizableHeaderProps(widths[key], (w) => setWidth(key, w)),
     });
-    const fixed = Object.values(widths).reduce((sum, w) => sum + w, 0) + (onEditItem ? EDIT_COL_WIDTH : 0);
+    const fixed = Object.values(widths).reduce((sum, w) => sum + w, 0) + (onEditItem ? EDIT_COL_WIDTH : 0) +
+      (showActions ? ACTIONS_COL_WIDTH : 0);
     // Наименование забирает остаток ширины панели и переносится по словам.
     const nameWidth = Math.max(size.width - fixed, MIN_NAME_WIDTH);
     const cols: ColumnsType<IPositionItem> = [
@@ -121,8 +127,51 @@ export const ItemsTable: FC<IItemsTableProps> = ({ items, deleted, onEditItem, e
         ),
       });
     }
+    if (showActions) {
+      cols.push({
+        title: '',
+        key: 'actions',
+        className: styles.editCell,
+        width: ACTIONS_COL_WIDTH,
+        align: 'center',
+        render: (_: unknown, item) => {
+          const linked = items.filter((i) => i.parent_work_item_id === item.id).length;
+          return (
+            <span className={styles.rowActions}>
+              <Tooltip title="Заменить">
+                <Button
+                  className={styles.editBtn}
+                  type="text"
+                  icon={<SwapOutlined />}
+                  aria-label={`Заменить: ${item.name}`}
+                  onClick={() => onReplaceItem(item.id)}
+                />
+              </Tooltip>
+              <Popconfirm
+                title="Удалить строку?"
+                description={linked > 0 ? `Привязанные материалы (${linked}) удалятся вместе с работой` : undefined}
+                okText="Удалить"
+                cancelText="Отмена"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => onDeleteItem(item.id)}
+              >
+                <Tooltip title="Удалить">
+                  <Button
+                    className={styles.editBtn}
+                    type="text"
+                    danger
+                    icon={<DeleteOutlined />}
+                    aria-label={`Удалить: ${item.name}`}
+                  />
+                </Tooltip>
+              </Popconfirm>
+            </span>
+          );
+        },
+      });
+    }
     return { columns: cols, scrollX: fixed + nameWidth };
-  }, [widths, setWidth, size.width, works, onEditItem, editing]);
+  }, [widths, setWidth, size.width, works, onEditItem, editing, items, showActions, onReplaceItem, onDeleteItem]);
 
   return (
     <div className={styles.section}>

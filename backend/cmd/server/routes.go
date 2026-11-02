@@ -388,6 +388,7 @@ func newRouter(
 		// авторасценки — в routes_machine.go (registerAutopriceRoutes).
 		r.Get("/api/v1/autoprice-tenders", d.autopriceH.ListTenders)
 		r.Get("/api/v1/autoprice-runs/{sid}/positions/{posId}", d.autopriceH.GetPosition)
+		r.Get("/api/v1/autoprice-runs/{sid}/unpriced", d.autopriceH.ListUnpriced)
 		r.Patch("/api/v1/autoprice-runs/{sid}/positions/{posId}/review", d.autopriceH.PatchReview)
 		r.Post("/api/v1/autoprice-runs/{sid}/positions/{posId}/review/action", d.autopriceH.Action)
 

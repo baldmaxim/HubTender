@@ -2,10 +2,7 @@ import { message } from 'antd';
 import type {
   ClientPosition,
   BoqItemInsert,
-  BoqItemType,
-  MaterialType,
   CurrencyType,
-  DeliveryPriceType,
   WorkLibraryFull,
   MaterialLibraryFull,
   BoqItemFull,
@@ -18,6 +15,7 @@ import {
   deleteBoqItemWithAudit,
 } from '../../../lib/api/boq';
 import type { BoqItemFieldPatch } from '../utils/boqFieldPatch';
+import { buildMaterialInsert, buildWorkInsert } from '../utils/boqInsertPayload';
 import { insertTemplateItems } from '../../../utils/insertTemplateItems';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getErrorMessage } from '../../../utils/errors';
@@ -84,23 +82,12 @@ export const useItemActions = ({
 
       const maxSort = Math.max(...items.map(i => i.sort_number || 0), 0);
 
-      const quantity = 1;
-      const unitRate = workLib.unit_rate || 0;
-      const rate = getCurrencyRate(workLib.currency_type as CurrencyType);
-      const totalAmount = quantity * unitRate * rate;
-
-      const newItem: BoqItemInsert = {
-        tender_id: position.tender_id,
-        client_position_id: position.id,
-        sort_number: maxSort + 1,
-        boq_item_type: workLib.item_type as BoqItemType,
-        work_name_id: workLib.work_name_id,
-        unit_code: workLib.unit,
-        quantity: quantity,
-        unit_rate: unitRate,
-        currency_type: workLib.currency_type as CurrencyType,
-        total_amount: totalAmount,
-      };
+      const newItem = buildWorkInsert(workLib, {
+        tenderId: position.tender_id,
+        positionId: position.id,
+        sortNumber: maxSort + 1,
+        currencyRate: getCurrencyRate(workLib.currency_type as CurrencyType),
+      });
 
       markTenderMutated();
       await insertBoqItemWithAudit(user?.id, newItem);
@@ -127,42 +114,13 @@ export const useItemActions = ({
       const maxSort = Math.max(...items.map(i => i.sort_number || 0), 0);
 
       // Для непривязанных материалов используем количество ГП из позиции
-      const gpVolume = position.manual_volume || 0;
-      // base_quantity должно быть > 0 из-за CHECK constraint
-      const baseQuantity = gpVolume > 0 ? gpVolume : 1;
-      const consumptionCoeff = matLib.consumption_coefficient || 1;
-      // Quantity теперь представляет базовое количество (без коэффициента расхода)
-      const quantity = baseQuantity;
-      const unitRate = matLib.unit_rate || 0;
-      const rate = getCurrencyRate(matLib.currency_type as CurrencyType);
-
-      let deliveryPrice = 0;
-      if (matLib.delivery_price_type === 'не в цене') {
-        deliveryPrice = unitRate * rate * 0.03; // Полная точность (5 знаков)
-      } else if (matLib.delivery_price_type === 'суммой' && matLib.delivery_amount) {
-        deliveryPrice = matLib.delivery_amount;
-      }
-
-      // Для непривязанных материалов применяем коэффициент расхода к итоговой сумме
-      const totalAmount = quantity * consumptionCoeff * (unitRate * rate + deliveryPrice);
-
-      const newItem: BoqItemInsert = {
-        tender_id: position.tender_id,
-        client_position_id: position.id,
-        sort_number: maxSort + 1,
-        boq_item_type: matLib.item_type as BoqItemType,
-        material_type: matLib.material_type as MaterialType,
-        material_name_id: matLib.material_name_id,
-        unit_code: matLib.unit,
-        quantity: quantity,
-        base_quantity: baseQuantity,
-        unit_rate: unitRate,
-        consumption_coefficient: matLib.consumption_coefficient,
-        currency_type: matLib.currency_type as CurrencyType,
-        delivery_price_type: matLib.delivery_price_type as DeliveryPriceType,
-        delivery_amount: matLib.delivery_amount,
-        total_amount: totalAmount,
-      };
+      const newItem = buildMaterialInsert(matLib, {
+        tenderId: position.tender_id,
+        positionId: position.id,
+        sortNumber: maxSort + 1,
+        currencyRate: getCurrencyRate(matLib.currency_type as CurrencyType),
+        gpVolume: position.manual_volume || 0,
+      });
 
       markTenderMutated();
       await insertBoqItemWithAudit(user?.id, newItem);

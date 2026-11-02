@@ -108,7 +108,30 @@ export const useRowEditing = ({ positionId, tenderId, onSaved }: IUseRowEditingP
     await onFieldSave(itemId, built.patch, { recomputeWorkId: built.recomputeWorkId });
   };
 
+  const mutationTopic = tenderId ?? boq.position?.tender_id ?? null;
+
+  /** Помечает топик тендера перед записью, чтобы не обрабатывать эхо собственной мутации. */
+  const markMutated = (): void => {
+    if (mutationTopic) markRealtimeMutation(`tender:${mutationTopic}`);
+  };
+
+  /** После вставки/удаления строк: перечитать строки, пересчитать итоги позиции, обновить панель. */
+  const finishMutation = async (): Promise<void> => {
+    await fetchItems();
+    if (positionId) {
+      try {
+        await recomputePositionTotals(positionId, mutationTopic);
+      } catch (error) {
+        console.error('Ошибка обновления итогов позиции:', getErrorMessage(error));
+      }
+    }
+    await onSaved();
+  };
+
   return {
+    tenderId: mutationTopic,
+    markMutated,
+    finishMutation,
     ready: items.length > 0,
     getFull,
     saveField,

@@ -571,3 +571,68 @@
   font-weight: 400;
   overflow-wrap: anywhere;
 }
+
+/* Режим «Не попали в расценку» */
+.modeSwitch :global(.ant-segmented-item-label) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding-inline: 8px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.modeSwitch :global(.ant-segmented-item) {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.unpricedRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.unpricedCheck {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+@media (min-width: 1280px) {
+  .modeSwitch {
+    max-width: 520px;
+  }
+
+  .unpricedRow {
+    grid-template-columns: minmax(260px, 360px) auto auto;
+  }
+}
+
+/* Строки действий в таблице строк расчёта: «Заменить» и «Удалить» рядом. */
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.replaceCurrent {
+  overflow-wrap: anywhere;
+}
+
+.replaceSearch {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.replaceSearch :global(.ant-select-selector) {
+  min-height: 44px;
+  align-items: center;
+}
+
+.replaceSearch :global(.ant-select-selection-search-input) {
+  font-size: 16px;
+}

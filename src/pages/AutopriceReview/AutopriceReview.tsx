@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Alert, Drawer, Empty, Select, Spin, Splitter, theme } from 'antd';
+import { Alert, Drawer, Empty, Segmented, Select, Spin, Splitter, theme } from 'antd';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspaceTabActions } from '../../contexts/WorkspaceTabsContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { buildPositionTabPath } from '../../lib/cache/workspaceTabsStorage';
 import { useAutopriceList } from './hooks/useAutopriceList';
 import { usePositionDetail } from './hooks/usePositionDetail';
+import { useUnpriced } from './hooks/useUnpriced';
 import { useWideScreen } from './hooks/useWideScreen';
 import { ReviewFilters } from './components/ReviewFilters';
 import { ReviewTable } from './components/ReviewTable';
+import { UnpricedFilters } from './components/UnpricedFilters';
+import { UnpricedTable } from './components/UnpricedTable';
 import { PositionPanel } from './components/PositionPanel';
 import { getReviewCssVars } from './utils/cssVars';
 import { readStorage, writeStorage } from './utils/safeStorage';
@@ -24,6 +27,8 @@ import {
   type IReviewFilters,
 } from './utils/reviewPolicy';
 import styles from './AutopriceReview.module.css';
+
+type ViewMode = 'review' | 'unpriced';
 
 const DRAWER_WIDTH = 640;
 const PANEL_WIDTH_KEY = 'autoprice-review:panel-width';
@@ -48,6 +53,7 @@ const AutopriceReview: FC = () => {
   const list = useAutopriceList(searchParams.get('tenderId'), requestedRunId);
   const [filters, setFilters] = useState<IReviewFilters>(DEFAULT_FILTERS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mode, setMode] = useState<ViewMode>('review');
   const [panelWidth] = useState(readPanelWidth);
   const { tenderId, runId, reload } = list;
   const openedPositionRef = useRef<string | null>(null);
@@ -63,6 +69,7 @@ const AutopriceReview: FC = () => {
     if (openedPositionRef.current === key) return;
     if (list.reviews.some((r) => r.client_position_id === requestedPositionId)) {
       openedPositionRef.current = key;
+      setMode('review');
       setSelectedId(requestedPositionId);
     } else if (!list.loading && reloadedPositionRef.current !== key) {
       // Карточка позиции появилась уже после загрузки списка — перечитываем его один раз.
@@ -88,6 +95,7 @@ const AutopriceReview: FC = () => {
   );
 
   const detail = usePositionDetail(runId, selectedId, reload);
+  const unpriced = useUnpriced(runId);
 
   const rows = useMemo(() => sortReviews(filterReviews(list.reviews, filters)), [list.reviews, filters]);
   const progress = useMemo(() => calcProgress(list.reviews), [list.reviews]);
@@ -122,6 +130,50 @@ const AutopriceReview: FC = () => {
     <Spin spinning={list.loading}>
       <ReviewTable rows={rows} selectedId={selectedId} isPhone={isPhone} onSelect={setSelectedId} />
     </Spin>
+  );
+
+  const reviewView = (
+    <>
+      <ReviewFilters
+        filters={filters}
+        sections={sections}
+        progress={progress}
+        shown={rows.length}
+        onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))}
+      />
+      {wide ? (
+        <Splitter
+          className={styles.splitter}
+          onResizeEnd={(sizes) => {
+            if (sizes.length > 1) writeStorage(PANEL_WIDTH_KEY, String(Math.round(sizes[1])));
+          }}
+        >
+          <Splitter.Panel min={480}>{table}</Splitter.Panel>
+          <Splitter.Panel className={styles.asidePanel} defaultSize={panelWidth} min={PANEL_WIDTH_MIN} max="65%">
+            {selectedId ? panel : <Empty description="Выберите позицию" />}
+          </Splitter.Panel>
+        </Splitter>
+      ) : (
+        <div className={styles.split}>
+          <div className={styles.listArea}>{table}</div>
+        </div>
+      )}
+    </>
+  );
+
+  const unpricedView = (
+    <>
+      {unpriced.error && <Alert type="error" showIcon message={unpriced.error} />}
+      <UnpricedFilters
+        filters={unpriced.filters}
+        shown={unpriced.visible.length}
+        total={unpriced.rows.length}
+        onChange={(patch) => unpriced.setFilters((f) => ({ ...f, ...patch }))}
+      />
+      <Spin spinning={unpriced.loading}>
+        <UnpricedTable rows={unpriced.visible} isPhone={isPhone} onOpen={handleOpenPosition} />
+      </Spin>
+    </>
   );
 
   const tenderOptions = list.tenders.map((t) => ({
@@ -169,30 +221,20 @@ const AutopriceReview: FC = () => {
         {list.error && <Alert type="error" showIcon message={list.error} />}
         {list.runId && (
           <>
-            <ReviewFilters
-              filters={filters}
-              sections={sections}
-              progress={progress}
-              shown={rows.length}
-              onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))}
+            <Segmented<ViewMode>
+              className={styles.modeSwitch}
+              block
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: 'review', label: `На проверке (${list.reviews.length})` },
+                {
+                  value: 'unpriced',
+                  label: `Не попали в расценку${unpriced.loading ? '' : ` (${unpriced.defaultCount})`}`,
+                },
+              ]}
             />
-            {wide ? (
-              <Splitter
-                className={styles.splitter}
-                onResizeEnd={(sizes) => {
-                  if (sizes.length > 1) writeStorage(PANEL_WIDTH_KEY, String(Math.round(sizes[1])));
-                }}
-              >
-                <Splitter.Panel min={480}>{table}</Splitter.Panel>
-                <Splitter.Panel className={styles.asidePanel} defaultSize={panelWidth} min={PANEL_WIDTH_MIN} max="65%">
-                  {selectedId ? panel : <Empty description="Выберите позицию" />}
-                </Splitter.Panel>
-              </Splitter>
-            ) : (
-              <div className={styles.split}>
-                <div className={styles.listArea}>{table}</div>
-              </div>
-            )}
+            {mode === 'unpriced' ? unpricedView : reviewView}
           </>
         )}
         {!list.runId && !list.error && <Empty description="У тендера нет действующих прогонов авторасценки" />}
@@ -204,7 +246,7 @@ const AutopriceReview: FC = () => {
     <div className={styles.page} style={getReviewCssVars(token)}>
       <h2 className={styles.title}>Подтверждение авторасценки</h2>
       {content}
-      {!wide && (
+      {!wide && mode === 'review' && (
         <Drawer
           open={!!selectedId}
           onClose={() => setSelectedId(null)}
