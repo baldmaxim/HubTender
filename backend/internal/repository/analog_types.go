@@ -233,6 +233,8 @@ const (
 	AnalogCodeForeignChildren   = "ANALOG_FOREIGN_CHILDREN"
 	AnalogCodeNotActive         = "ANALOG_NOT_ACTIVE"
 	AnalogCodeApplicationAbsent = "ANALOG_APPLICATION_NOT_FOUND"
+	AnalogCodeForbidden         = "ANALOG_FORBIDDEN"
+	AnalogCodeDeadlinePassed    = "ANALOG_DEADLINE_PASSED"
 )
 
 func analogErr(code, message string, extras map[string]any) *AnalogError {

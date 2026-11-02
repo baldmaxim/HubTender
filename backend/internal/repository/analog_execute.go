@@ -121,6 +121,11 @@ func (r *AnalogRepo) executeOnce(ctx context.Context, in AnalogExecuteInput, dry
 	if target == nil {
 		return nil, errAnalogTargetNotFound()
 	}
+	// Права — до идемпотентного replay и любой записи (предпросмотр тоже пишет
+	// под ROLLBACK, поэтому отказ и для него).
+	if err := checkAnalogEditAccess(ctx, tx, in.UserID, target.TenderID); err != nil {
+		return nil, err
+	}
 	if !dryRun {
 		replay, err := findAnalogReplay(ctx, tx, in)
 		if err != nil || replay != nil {
@@ -225,6 +230,10 @@ func (r *AnalogRepo) executeOnce(ctx context.Context, in AnalogExecuteInput, dry
 		srcIDs[i] = *row.ID
 	}
 	copyPrices := in.Request.CopyPrices
+	recalcScope := ComposeRecalcTargetOnly
+	if dryRun {
+		recalcScope = ComposeRecalcTargetPreview
+	}
 	res, err := composeTx(ctx, tx, ComposeInput{
 		TargetTenderID: target.TenderID,
 		ChangedBy:      in.UserID,
@@ -243,6 +252,10 @@ func (r *AnalogRepo) executeOnce(ctx context.Context, in AnalogExecuteInput, dry
 		ImportSessionID: &runID,
 		AuditOrigin:     "analog_apply",
 		AuditExtra:      map[string]any{"analog_application_id": appID},
+		// Строки пишутся только в цель: пересчёт всего тендера (на больших — до
+		// минуты с блокировкой) не нужен. DryRun compose не выставляем: откат
+		// делает сам execute, а new_item_id нужны ему и в предпросмотре.
+		RecalcScope: recalcScope,
 	})
 	if err != nil {
 		return nil, mapAnalogComposeError(err)

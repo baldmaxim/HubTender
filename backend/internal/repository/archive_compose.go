@@ -123,7 +123,17 @@ func composeTx(ctx context.Context, tx pgx.Tx, in ComposeInput) (*ComposeResult,
 	}
 
 	// Одна ревизия на всю команду. Тендеры-источники не трогаем и не бампаем.
-	revision, err := MarkTenderFinancialInputsChangedTx(ctx, tx, in.TargetTenderID, "archive_compose")
+	// Предпросмотр целевого режима ревизию не бампает (UPDATE tenders держал бы
+	// строку тендера до отката): берём текущую без записи.
+	preview := in.RecalcScope == ComposeRecalcTargetPreview
+	targetOnly := preview || in.RecalcScope == ComposeRecalcTargetOnly
+	var revision int64
+	var err error
+	if preview {
+		revision, err = currentFinancialInputRevisionTx(ctx, tx, in.TargetTenderID)
+	} else {
+		revision, err = MarkTenderFinancialInputsChangedTx(ctx, tx, in.TargetTenderID, "archive_compose")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
 	}
@@ -181,18 +191,26 @@ func composeTx(ctx context.Context, tx pgx.Tx, in ComposeInput) (*ComposeResult,
 	if err != nil {
 		return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
 	}
-	if err := RecomputePositionTotalsForTenderTx(ctx, tx, in.TargetTenderID); err != nil {
-		return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
-	}
-	if err := MaterializeCommercialForTenderTx(ctx, tx, in.TargetTenderID); err != nil {
-		return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
-	}
-	grand, err := RecalculateTenderGrandTotalTx(ctx, tx, in.TargetTenderID)
-	if err != nil {
-		return nil, fmt.Errorf("archiveRepo.Compose: grand total: %w", err)
-	}
-	if err := MarkTenderCalculationSucceededTx(ctx, tx, in.TargetTenderID, revision); err != nil {
-		return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
+	var grand *calc.CachedTenderGrandTotalResult
+	if targetOnly {
+		grand, err = recomputeTargetOnlyTx(ctx, tx, in, plans, allNewIDs, revision, preview)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if err := RecomputePositionTotalsForTenderTx(ctx, tx, in.TargetTenderID); err != nil {
+			return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
+		}
+		if err := MaterializeCommercialForTenderTx(ctx, tx, in.TargetTenderID); err != nil {
+			return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
+		}
+		grand, err = RecalculateTenderGrandTotalTx(ctx, tx, in.TargetTenderID)
+		if err != nil {
+			return nil, fmt.Errorf("archiveRepo.Compose: grand total: %w", err)
+		}
+		if err := MarkTenderCalculationSucceededTx(ctx, tx, in.TargetTenderID, revision); err != nil {
+			return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
+		}
 	}
 	if grand != nil {
 		res.CachedGrandTotal = grand.RoundedTotalDecimal
@@ -429,4 +447,78 @@ func fillComposeTotals(
 		}
 	}
 	return nil
+}
+
+// currentFinancialInputRevisionTx читает текущую ревизию входов тендера без
+// записи и без блокировки его строки.
+func currentFinancialInputRevisionTx(ctx context.Context, tx pgx.Tx, tenderID string) (int64, error) {
+	var rev int64
+	if err := tx.QueryRow(ctx,
+		`SELECT financial_input_revision FROM public.tenders WHERE id = $1::uuid`, tenderID).Scan(&rev); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, &CachedGrandTotalTenderNotFoundError{TenderID: tenderID}
+		}
+		return 0, fmt.Errorf("currentFinancialInputRevisionTx: %w", err)
+	}
+	return rev, nil
+}
+
+// recomputeTargetOnlyTx — пересчёт после вставки строк только в целевые позиции
+// (ComposeRecalcTargetOnly).
+//
+// Итоги: только целевые позиции (с нулём, если строк не осталось). Базовые суммы
+// остальных позиций не менялись: строки вставлены лишь в цель, total_amount
+// пересчитан только по новым id. client_positions.total_commercial_* этим путём
+// не пишутся нигде (устаревшие колонки), коммерция живёт в boq_items.
+//
+// Коммерция: расчёт по всему тендеру (читает записанные в транзакции строки), но
+// пишутся только реально изменившиеся строки и все новые — у свежей строки
+// commercial_markup мог не измениться при нулевых суммах, а писать её надо
+// как в полном пути.
+//
+// Предпросмотр (ComposeRecalcTargetPreview): коммерция, общий итог и статус расчёта пропускаются — наружу из
+// предпросмотра они не попадают, а откатываемая запись по всему тендеру держит
+// его строку и строки всех позиций.
+func recomputeTargetOnlyTx(
+	ctx context.Context, tx pgx.Tx, in ComposeInput, plans []plannedGroup, newIDs []string, revision int64,
+	preview bool,
+) (*calc.CachedTenderGrandTotalResult, error) {
+	posIDs := make([]string, 0, len(plans))
+	for _, p := range plans {
+		if p.TargetPositionID != "" {
+			posIDs = append(posIDs, p.TargetPositionID)
+		}
+	}
+	if err := recomputePositionTotalsByIDsTx(ctx, tx, posIDs); err != nil {
+		return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
+	}
+	if preview {
+		return nil, nil
+	}
+
+	computed, err := ComputeCommercialRows(ctx, tx, in.TargetTenderID)
+	if err != nil {
+		return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
+	}
+	isNew := make(map[string]bool, len(newIDs))
+	for _, id := range newIDs {
+		isNew[id] = true
+	}
+	rows := make([]CalculatedCommercialCostRow, 0, len(newIDs))
+	for _, c := range computed {
+		if c.Changed || isNew[c.Row.ID] {
+			rows = append(rows, c.Row)
+		}
+	}
+	if _, err := PersistCalculatedCommercialCostsTx(ctx, tx, in.TargetTenderID, rows); err != nil {
+		return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
+	}
+	grand, err := RecalculateTenderGrandTotalTx(ctx, tx, in.TargetTenderID)
+	if err != nil {
+		return nil, fmt.Errorf("archiveRepo.Compose: grand total: %w", err)
+	}
+	if err := MarkTenderCalculationSucceededTx(ctx, tx, in.TargetTenderID, revision); err != nil {
+		return nil, fmt.Errorf("archiveRepo.Compose: %w", err)
+	}
+	return grand, nil
 }

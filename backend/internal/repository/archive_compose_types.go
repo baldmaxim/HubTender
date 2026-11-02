@@ -105,7 +105,29 @@ type ComposeInput struct {
 	// AuditExtra — дополнительные ключи payload аудита (например,
 	// analog_application_id); ключи базового payload они не перекрывают.
 	AuditExtra map[string]any
+	// RecalcScope — объём пересчёта итогов после записи строк. Пусто — полный
+	// пересчёт тендера (поведение архива); задаётся только путём аналога.
+	RecalcScope ComposeRecalcScope
 }
+
+// ComposeRecalcScope — сколько тендера пересчитывает composeTx после вставки.
+type ComposeRecalcScope string
+
+const (
+	// ComposeRecalcTender — итоги всех позиций, коммерция всех строк тендера
+	// (по умолчанию, как у архивного compose).
+	ComposeRecalcTender ComposeRecalcScope = ""
+	// ComposeRecalcTargetOnly — только целевые позиции и реально изменившиеся
+	// (плюс новые) строки коммерции. Для вставки строк лишь в цель: базовые
+	// суммы прочих позиций не меняются. Ревизия, общий итог и статус расчёта
+	// тендера — как в полном пути.
+	ComposeRecalcTargetOnly ComposeRecalcScope = "target_only"
+	// ComposeRecalcTargetPreview — как ComposeRecalcTargetOnly, но для
+	// откатываемой транзакции: не пишутся ревизия, коммерция, общий итог и статус
+	// расчёта тендера (наружу они не попадают, а запись по всему тендеру держит
+	// его строку и строки всех позиций до отката). Ревизия в ответе — текущая.
+	ComposeRecalcTargetPreview ComposeRecalcScope = "target_preview"
+)
 
 // ComposeWarning — предупреждение по конкретной строке/источнику.
 type ComposeWarning struct {
