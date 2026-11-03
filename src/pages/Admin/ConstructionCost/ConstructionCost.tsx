@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Space, Modal, Form } from 'antd';
+import { Button, Space, Modal, Form, message } from 'antd';
 import {
   PlusOutlined,
   DeleteOutlined,
   ExclamationCircleOutlined,
   ExpandOutlined,
   CompressOutlined,
+  FileExcelOutlined,
 } from '@ant-design/icons';
 import { useConstructionCost, TreeNode } from './hooks/useConstructionCost.tsx';
 import { useUnitsManagement } from './hooks/useUnitsManagement';
@@ -13,6 +14,7 @@ import { useCategoryActions } from './hooks/useCategoryActions.tsx';
 import { CostTable } from './components/CostTable';
 import { ImportExcel } from './components/ImportExcel';
 import { CostModals } from './components/CostModals';
+import { exportCostCatalogToExcel } from './utils/exportCostCatalog';
 
 const { confirm } = Modal;
 
@@ -148,11 +150,20 @@ const ConstructionCost: React.FC = () => {
     });
   };
 
+  const handleExport = () => {
+    try {
+      exportCostCatalogToExcel(cost.data);
+    } catch (error) {
+      console.error('Ошибка экспорта:', error);
+      message.error('Не удалось сформировать файл Excel');
+    }
+  };
+
   return (
     <div style={{ margin: '-16px', padding: '24px' }}>
       <div>
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Space>
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <Space wrap>
             <Button
               icon={<ExpandOutlined />}
               onClick={cost.expandAll}
@@ -166,7 +177,14 @@ const ConstructionCost: React.FC = () => {
               Свернуть все
             </Button>
           </Space>
-          <Space>
+          <Space wrap>
+            <Button
+              icon={<FileExcelOutlined />}
+              onClick={handleExport}
+              disabled={cost.loading || cost.data.length === 0}
+            >
+              Экспорт в Excel
+            </Button>
             <ImportExcel
               availableUnits={units.availableUnits}
               uploading={uploading}
