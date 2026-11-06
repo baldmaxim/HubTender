@@ -149,38 +149,33 @@ const (
 	colWorkNameID = "work_name_id"
 )
 
+// listAllNames отдаёт справочник целиком одним запросом. Постраничная выборка
+// через OFFSET заново сортировала таблицу на каждой странице: на 34 тыс.
+// материалов ответ собирался ~16 с, дольше 10-секундного таймаута клиента, и
+// импорт из Excel падал с «Не удалось загрузить справочники».
 func (r *NomenclaturesRepo) listAllNames(ctx context.Context, table string) ([]NamedRow, error) {
-	const pageSize = 1000
-	out := make([]NamedRow, 0)
-	from := 0
-	for {
-		rows, err := r.pool.Query(ctx, fmt.Sprintf(`
-			SELECT id::text, name, unit::text,
-			       to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-			       to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-			FROM %s
-			ORDER BY name, id
-			LIMIT $1 OFFSET $2
-		`, table), pageSize, from)
-		if err != nil {
-			return nil, fmt.Errorf("nomenclaturesRepo.listAllNames %s: %w", table, err)
-		}
+	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
+		SELECT id::text, name, unit::text,
+		       to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		       to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM %s
+		ORDER BY name, id
+	`, table))
+	if err != nil {
+		return nil, fmt.Errorf("nomenclaturesRepo.listAllNames %s: %w", table, err)
+	}
+	defer rows.Close()
 
-		batch := make([]NamedRow, 0, pageSize)
-		for rows.Next() {
-			var rec NamedRow
-			if err := rows.Scan(&rec.ID, &rec.Name, &rec.Unit, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
-				rows.Close()
-				return nil, fmt.Errorf("nomenclaturesRepo.listAllNames %s scan: %w", table, err)
-			}
-			batch = append(batch, rec)
+	out := make([]NamedRow, 0, 1024)
+	for rows.Next() {
+		var rec NamedRow
+		if err := rows.Scan(&rec.ID, &rec.Name, &rec.Unit, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("nomenclaturesRepo.listAllNames %s scan: %w", table, err)
 		}
-		rows.Close()
-		out = append(out, batch...)
-		if len(batch) < pageSize {
-			break
-		}
-		from += pageSize
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("nomenclaturesRepo.listAllNames %s rows: %w", table, err)
 	}
 	return out, nil
 }
