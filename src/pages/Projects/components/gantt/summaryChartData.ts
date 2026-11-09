@@ -91,17 +91,14 @@ export const buildSummaryChartData = (
     ? monthsWithData[monthsWithData.length - 1]
     : null;
 
-  // Build actual data array (shows actual + forecast sum where actual exists)
+  // Build actual data array (only actual — forecast of the same month is not mixed in)
   const actualData = allMonths.map((m) => {
     // Stop at last month with actual data
     if (lastMonthWithActual && m.key > lastMonthWithActual.key) {
       return null;
     }
-    // If has actual, show actual + forecast (if forecast also exists in same month)
     if (monthlyActualTotals[m.key]) {
-      const actual = monthlyActualTotals[m.key];
-      const forecast = monthlyForecastTotals[m.key] || 0;
-      return (actual + forecast) / 1_000_000;
+      return monthlyActualTotals[m.key] / 1_000_000;
     }
     return null;
   });

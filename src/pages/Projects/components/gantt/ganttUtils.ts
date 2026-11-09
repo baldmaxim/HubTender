@@ -15,9 +15,10 @@ export interface MonthData {
 // Цель клика по мини-графику: проект + его цветовой индекс.
 export type ChartModalTarget = { project: ProjectFull; colorIndex: number };
 
+// Цвета факта по объектам. Без жёлтых/оранжевых — они зарезервированы за прогнозом (#faad14).
 export const COLORS = [
-  '#1890ff', '#52c41a', '#faad14', '#722ed1',
-  '#eb2f96', '#13c2c2', '#fa541c', '#2f54eb',
+  '#1890ff', '#52c41a', '#722ed1', '#13c2c2',
+  '#eb2f96', '#2f54eb', '#08979c', '#389e0d',
 ];
 
 export const formatMoney = (value: number): string => {
