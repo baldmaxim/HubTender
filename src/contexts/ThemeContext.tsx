@@ -3,15 +3,9 @@ import { flushSync } from 'react-dom';
 
 export type ThemeMode = 'light' | 'dark';
 
-/** Точка на экране, из которой расходится новая тема (центр нажатой кнопки). */
-export interface IThemeToggleOrigin {
-  x: number;
-  y: number;
-}
-
 interface ThemeContextType {
   theme: ThemeMode;
-  toggleTheme: (origin?: IThemeToggleOrigin) => void;
+  toggleTheme: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -46,16 +40,17 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   // Цвета на страницах приходят тремя путями с разной скоростью: стили antd (переход 0,2 с),
   // фон раскладки (0,3 с) и цвета, посчитанные в JS (мгновенно), — поэтому без общего снимка
-  // страница перекрашивалась кусками. Здесь вся перерисовка идёт синхронно под «замороженным»
-  // снимком старой темы, свои переходы элементов на это время выключены, а новая тема
-  // раскрывается кругом от кнопки (View Transitions API).
-  const toggleTheme = useCallback((origin?: IThemeToggleOrigin) => {
+  // страница перекрашивалась кусками. Здесь вся перерисовка идёт синхронно под снимком старой
+  // темы, свои переходы элементов на это время выключены, а новая тема проявляется поверх
+  // (View Transitions API, прозрачность — анимация идёт на композиторе и не дёргается).
+  // До снимка ничего не делаем: класс ставится в том же синхронном блоке, что и смена темы, —
+  // переходы не стартуют, а лишний пересчёт стилей не задерживает начало.
+  const toggleTheme = useCallback(() => {
     const root = document.documentElement;
     const apply = () => {
+      root.classList.add(THEME_SWITCHING_CLASS);
       flushSync(() => setTheme(prev => (prev === 'dark' ? 'light' : 'dark')));
     };
-
-    root.classList.add(THEME_SWITCHING_CLASS);
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduceMotion || !('startViewTransition' in document)) {
@@ -66,13 +61,6 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       }));
       return;
     }
-
-    const x = origin?.x ?? window.innerWidth / 2;
-    const y = origin?.y ?? 0;
-    const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
-    root.style.setProperty('--theme-reveal-x', `${x}px`);
-    root.style.setProperty('--theme-reveal-y', `${y}px`);
-    root.style.setProperty('--theme-reveal-r', `${radius}px`);
 
     const transition = document.startViewTransition(apply);
     transitionRef.current = transition;
