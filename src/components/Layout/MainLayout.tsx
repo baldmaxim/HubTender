@@ -258,6 +258,11 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
     ? new URLSearchParams(location.search).get('tenderId')
     : null;
   const { theme: currentTheme, toggleTheme } = useTheme();
+  // Новая тема раскрывается кругом из центра нажатого переключателя.
+  const handleToggleTheme = (el: Element) => {
+    const rect = el.getBoundingClientRect();
+    toggleTheme({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  };
   const { user, signOut } = useAuth();
   usePageViewTracking();
   const isGeneralDirector = user?.role_code === 'general_director';
@@ -500,7 +505,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
               // На телефоне (любая ориентация) — компактная кнопка-переключатель темы, без ярлыков.
               <Button
                 type="text"
-                onClick={toggleTheme}
+                onClick={(e) => handleToggleTheme(e.currentTarget)}
                 aria-label="Сменить тему"
                 icon={
                   currentTheme === 'dark'
@@ -513,7 +518,7 @@ const MainLayout: React.FC<MainLayoutProps> = () => {
                 <SunOutlined style={{ fontSize: '16px', color: currentTheme === 'light' ? '#faad14' : '#888' }} />
                 <Switch
                   checked={currentTheme === 'dark'}
-                  onChange={toggleTheme}
+                  onChange={(_checked, e) => handleToggleTheme(e.currentTarget)}
                   style={{ backgroundColor: currentTheme === 'dark' ? '#10b981' : '#ccc' }}
                 />
                 <MoonOutlined style={{ fontSize: '16px', color: currentTheme === 'dark' ? '#10b981' : '#888' }} />
