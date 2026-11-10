@@ -1,4 +1,6 @@
+import dayjs from 'dayjs';
 import type { DashboardStatus, TenderRegistryWithRelations, TenderStatus } from '../../../lib/types';
+import type { TWonYearFilter } from '../hooks/useWonYearFilter';
 import { getDashboardStatus } from './tenderMonitor';
 import type { TenderMonitorPalette } from './tenderMonitorTheme';
 
@@ -39,6 +41,18 @@ export function getKanbanColumn(tender: TenderRegistryWithRelations): KanbanColu
   // Архив без «Выиграли» в имени статуса считаем проигранным.
   return dashboard === 'archive' ? 'lost' : dashboard;
 }
+
+/** Скрыт ли тендер фильтром «Выиграли: текущий год» (касается только выигранных). */
+export const isHiddenByWonYearFilter = (
+  tender: TenderRegistryWithRelations,
+  filter: TWonYearFilter,
+  year: number
+): boolean => {
+  if (filter === 'all') return false;
+  if (getKanbanColumn(tender) !== 'won') return false;
+  if (!tender.submission_date) return true;
+  return dayjs(tender.submission_date).year() !== year;
+};
 
 // Статус справочника tender_statuses, который ставит перенос в колонку.
 // «Направлено» — псевдостатус (status_id = null + dashboard_status = 'sent'), как в карточке тендера.

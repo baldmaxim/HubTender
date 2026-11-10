@@ -1,10 +1,12 @@
 import React from 'react';
+import dayjs from 'dayjs';
 import { Empty, Input, Segmented, Skeleton, Space } from 'antd';
 import { ProjectOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import type { TenderRegistryWithRelations } from '../../../lib/types';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { useHorizontalSwipe } from '../../../hooks/useHorizontalSwipe';
+import type { TWonYearFilter } from '../hooks/useWonYearFilter';
 import {
   getDashboardStatus,
   type TenderMonitorSortDirection,
@@ -45,6 +47,9 @@ interface TenderMonitorTableProps {
   readOnly?: boolean;
   viewMode: TenderViewMode;
   onViewModeChange: (mode: TenderViewMode) => void;
+  /** Фильтр «Выиграли»: все годы или текущий. */
+  wonFilter: TWonYearFilter;
+  onWonFilterChange: (value: TWonYearFilter) => void;
   /** Канбан-доска (рендерит страница), показывается вместо списка. */
   kanban: React.ReactNode;
 }
@@ -86,6 +91,8 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
   readOnly,
   viewMode,
   onViewModeChange,
+  wonFilter,
+  onWonFilterChange,
   kanban,
 }) => {
   void onUpdate;
@@ -216,6 +223,18 @@ export const TenderMonitorTable: React.FC<TenderMonitorTableProps> = ({
               direction={sortField === 'total_cost' ? sortDirection : undefined}
               onClick={() => onSortChange('total_cost')}
             />
+            <div className="tm-won-filter">
+              <span className="tm-won-filter__label">Выиграли:</span>
+              <Segmented
+                aria-label="Выигранные тендеры"
+                options={[
+                  { label: 'Все', value: 'all' },
+                  { label: String(dayjs().year()), value: 'current_year' },
+                ]}
+                value={wonFilter}
+                onChange={(value) => onWonFilterChange(value as TWonYearFilter)}
+              />
+            </div>
           </Space>
         </div>
 

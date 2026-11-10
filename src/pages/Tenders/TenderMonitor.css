@@ -726,3 +726,17 @@
     animation: none;
   }
 }
+
+/* Фильтр «Выиграли: Все | год» в тулбаре — подпись и переключатель одной группой. */
+.tm-won-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tm-won-filter__label {
+  color: var(--tm-btn-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}

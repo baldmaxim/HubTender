@@ -34,7 +34,7 @@ const toPickerValue = (value: string | null) => {
 };
 
 // Отдельных кнопок «Удалить» у строк нет: строка без текста не сохраняется.
-function EditorFooter({ hint, palette, onAdd }: { hint: string; palette: TenderMonitorPalette; onAdd: () => void }) {
+function EditorAddBar({ hint, palette, onAdd }: { hint: string; palette: TenderMonitorPalette; onAdd: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
       <button type="button" className="tm-btn tm-btn--small" onClick={onAdd}>
@@ -64,11 +64,13 @@ export function ChronologyEditor({ rows, palette, onChange, onSubmit }: IChronol
   const addRow = () => {
     const key = nextDraftRowKey();
     setAddedKey(key);
-    onChange((prev) => [...prev, { key, date: dayjs().toISOString(), text: '', type: 'default' }]);
+    onChange((prev) => [{ key, date: dayjs().toISOString(), text: '', type: 'default' }, ...prev]);
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <EditorAddBar hint="Чтобы удалить строку, очистите описание" palette={palette} onAdd={addRow} />
+
       {rows.map((row) => (
         <div key={row.key} style={rowSectionStyle(palette, row.type === 'call_follow_up')}>
           <div style={{ display: 'grid', gridTemplateColumns: '120px 140px minmax(0, 1fr)', gap: 8, alignItems: 'start' }}>
@@ -99,8 +101,6 @@ export function ChronologyEditor({ rows, palette, onChange, onSubmit }: IChronol
           </div>
         </div>
       ))}
-
-      <EditorFooter hint="Чтобы удалить строку, очистите описание" palette={palette} onAdd={addRow} />
     </div>
   );
 }
@@ -155,11 +155,13 @@ export function PackageEditor({ rows, palette, onChange, onSubmit }: IPackageEdi
   const addRow = () => {
     const key = nextDraftRowKey();
     setAddedKey(key);
-    onChange((prev) => [...prev, { key, date: dayjs().toISOString(), text: '', link: '' }]);
+    onChange((prev) => [{ key, date: dayjs().toISOString(), text: '', link: '' }, ...prev]);
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <EditorAddBar hint="Чтобы удалить строку, очистите наименование" palette={palette} onAdd={addRow} />
+
       {rows.map((row) => (
         <div key={row.key} style={rowSectionStyle(palette, false)}>
           <div style={{ display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr)', gap: 8, alignItems: 'start' }}>
@@ -193,8 +195,6 @@ export function PackageEditor({ rows, palette, onChange, onSubmit }: IPackageEdi
           />
         </div>
       ))}
-
-      <EditorFooter hint="Чтобы удалить строку, очистите наименование" palette={palette} onAdd={addRow} />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useTenderData } from './hooks/useTenderData';
 import { useTenderDeleteMode } from './hooks/useTenderDeleteMode';
+import { useWonYearFilter } from './hooks/useWonYearFilter';
 import { TenderAddForm } from './components';
 import ImportTendersModal from './ImportTendersModal';
 import TenderMonitorModal from './components/TenderMonitorModal';
@@ -20,6 +21,7 @@ import { TenderPageActions } from './components/TenderPageActions';
 import { TenderSelectionContext } from './components/selection/tenderSelection';
 import { TenderSelectionBar } from './components/selection/TenderSelectionBar';
 import { TenderDeleteConfirm } from './components/selection/TenderDeleteConfirm';
+import { isHiddenByWonYearFilter } from './utils/tenderKanban';
 import {
   buildCallFollowUpItem,
   formatArea,
@@ -109,7 +111,7 @@ const Tenders: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TenderMonitorTab>('all');
   const [searchValue, setSearchValue] = useState('');
   const [sortField, setSortField] = useState<TenderMonitorSortField>('submission_date');
-  const [sortDirection, setSortDirection] = useState<TenderMonitorSortDirection>('asc');
+  const [sortDirection, setSortDirection] = useState<TenderMonitorSortDirection>('desc');
   const [selectedTender, setSelectedTender] = useState<TenderRegistryWithRelations | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailInitialTab, setDetailInitialTab] = useState<'info' | 'timeline' | 'package'>('info');
@@ -120,6 +122,7 @@ const Tenders: React.FC = () => {
   const [callDialogOpen, setCallDialogOpen] = useState(false);
   const [callSaving, setCallSaving] = useState(false);
 
+  const [wonFilter, setWonFilter] = useWonYearFilter();
   const { tenders, statuses, constructionScopes, tenderNumbers, loading, refetch } = useTenderData();
   const deleteMode = useTenderDeleteMode({ tenders, onDeleted: refetch });
 
@@ -132,10 +135,16 @@ const Tenders: React.FC = () => {
     setSelectedTender(updatedTender);
   }, [selectedTender, tenders]);
 
+  // Фильтр «Выиграли: текущий год» скрывает только выигранные тендеры других лет.
+  const scopedTenders = useMemo(() => {
+    const year = dayjs().year();
+    return tenders.filter((tender) => !isHiddenByWonYearFilter(tender, wonFilter, year));
+  }, [tenders, wonFilter]);
+
   const searchedTenders = useMemo(() => {
     const query = searchValue.trim().toLocaleLowerCase('ru-RU');
-    return query ? tenders.filter((tender) => getTenderSearchText(tender).includes(query)) : tenders;
-  }, [searchValue, tenders]);
+    return query ? scopedTenders.filter((tender) => getTenderSearchText(tender).includes(query)) : scopedTenders;
+  }, [searchValue, scopedTenders]);
 
   const visibleTenders = useMemo(() => {
     const filteredByTab =
@@ -176,14 +185,14 @@ const Tenders: React.FC = () => {
       archive: 0,
     } satisfies Record<TenderMonitorTab, number>;
 
-    tenders.forEach((tender) => {
+    scopedTenders.forEach((tender) => {
       const status = getDashboardStatus(tender);
       base.all += 1;
       base[status] += 1;
     });
 
     return base;
-  }, [tenders]);
+  }, [scopedTenders]);
 
   const callTenders = useMemo(() => tenders.filter((tender) => shouldShowCallAction(tender)), [tenders]);
   const needCallCount = callTenders.length;
@@ -214,7 +223,8 @@ const Tenders: React.FC = () => {
     }
 
     setSortField(field);
-    setSortDirection('asc');
+    // Дата подачи — новые сверху, площадь и сумма — по возрастанию.
+    setSortDirection(field === 'submission_date' ? 'desc' : 'asc');
   };
 
   const handleOpenTender = (
@@ -394,6 +404,8 @@ const Tenders: React.FC = () => {
               readOnly={isGeneralDirector || isMobile}
               viewMode={viewMode}
               onViewModeChange={handleViewModeChange}
+              wonFilter={wonFilter}
+              onWonFilterChange={setWonFilter}
               kanban={
                 <TenderKanbanBoard
                   tenders={boardTenders}

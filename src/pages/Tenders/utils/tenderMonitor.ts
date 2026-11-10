@@ -194,6 +194,13 @@ export function formatRubPerSquare(totalCost?: number | null, area?: number | nu
   return `${Math.round(totalCost / area).toLocaleString('ru-RU')} ₽`;
 }
 
+// Новые записи сверху, записи без даты — в конце.
+const compareByDateDesc = (left: { date: string | null }, right: { date: string | null }): number => {
+  if (!left.date) return right.date ? 1 : 0;
+  if (!right.date) return -1;
+  return dayjs(right.date).valueOf() - dayjs(left.date).valueOf();
+};
+
 export function getChronologyItems(tender: TenderRegistryWithRelations): ChronologyItem[] {
   return (tender.chronology_items || [])
     .map((item) => ({
@@ -201,11 +208,7 @@ export function getChronologyItems(tender: TenderRegistryWithRelations): Chronol
       text: item.text,
       type: item.type ?? 'default',
     }))
-    .sort((left, right) => {
-      if (!left.date) return 1;
-      if (!right.date) return -1;
-      return dayjs(left.date).valueOf() - dayjs(right.date).valueOf();
-    });
+    .sort(compareByDateDesc);
 }
 
 export function getPackageItems(tender: TenderRegistryWithRelations): TenderPackageItem[] {
@@ -215,11 +218,7 @@ export function getPackageItems(tender: TenderRegistryWithRelations): TenderPack
       text: item.text,
       link: item.link?.trim() || null,
     }))
-    .sort((left, right) => {
-      if (!left.date) return 1;
-      if (!right.date) return -1;
-      return dayjs(left.date).valueOf() - dayjs(right.date).valueOf();
-    });
+    .sort(compareByDateDesc);
 }
 
 export function getPackageLinkHref(link?: string | null): string | null {
@@ -358,22 +357,17 @@ export function sortTenders(
   const factor = direction === 'asc' ? 1 : -1;
 
   return [...tenders].sort((left, right) => {
-    const leftValue =
-      field === 'submission_date'
-        ? left.submission_date
-          ? dayjs(left.submission_date).valueOf()
-          : Number.MAX_SAFE_INTEGER
-        : field === 'area'
-          ? left.area || 0
-          : left.total_cost || 0;
-    const rightValue =
-      field === 'submission_date'
-        ? right.submission_date
-          ? dayjs(right.submission_date).valueOf()
-          : Number.MAX_SAFE_INTEGER
-        : field === 'area'
-          ? right.area || 0
-          : right.total_cost || 0;
+    // Без даты подачи — всегда в конце, при любом направлении.
+    if (field === 'submission_date') {
+      if (!left.submission_date && !right.submission_date) return 0;
+      if (!left.submission_date) return 1;
+      if (!right.submission_date) return -1;
+      const diff = dayjs(left.submission_date).valueOf() - dayjs(right.submission_date).valueOf();
+      return diff !== 0 ? diff * factor : left.title.localeCompare(right.title, 'ru-RU', { sensitivity: 'base' });
+    }
+
+    const leftValue = field === 'area' ? left.area || 0 : left.total_cost || 0;
+    const rightValue = field === 'area' ? right.area || 0 : right.total_cost || 0;
 
     if (leftValue < rightValue) {
       return -1 * factor;
