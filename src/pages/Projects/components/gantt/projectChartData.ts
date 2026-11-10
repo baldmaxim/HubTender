@@ -3,7 +3,7 @@ import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import type { ChartDataset } from 'chart.js';
 import type { ProjectFull, ProjectCompletion } from '../../../../lib/types/types';
-import { COLORS, MONTH_NAMES_SHORT } from './ganttUtils';
+import { COLORS, MONTH_NAMES_SHORT, isForecastMonth } from './ganttUtils';
 
 // Плагины идемпотентны — повторное extend безопасно (модуль может грузиться
 // раньше/позже GanttChart.tsx).
@@ -57,15 +57,17 @@ export const getProjectChartData = (
   const forecastData = sorted.map((c, idx) => {
     // If there's no actual data at all (lastActualIndex === -1), show all forecast
     if (lastActualIndex === -1) {
-      return c.forecast_amount && c.forecast_amount > 0 ? c.forecast_amount / 1_000_000 : null;
+      return isForecastMonth(c.year, c.month) && c.forecast_amount && c.forecast_amount > 0
+        ? c.forecast_amount / 1_000_000
+        : null;
     }
 
     // Include last actual point to connect the lines
     if (idx === lastActualIndex) {
       return (sorted[idx].actual_amount || 0) / 1_000_000;
     }
-    // Show forecast only after last actual
-    if (idx > lastActualIndex && c.forecast_amount && c.forecast_amount > 0) {
+    // Show forecast only after last actual (прошлые месяцы с forecast_amount — это план, не прогноз)
+    if (idx > lastActualIndex && isForecastMonth(c.year, c.month) && c.forecast_amount && c.forecast_amount > 0) {
       return c.forecast_amount / 1_000_000;
     }
     return null;
@@ -196,7 +198,8 @@ export const getFullProjectChartData = (
       const completion = projectCompletion.find(
         (c) => c.year === m.year && c.month === m.month
       );
-      return completion && completion.forecast_amount && completion.forecast_amount > 0
+      return completion && isForecastMonth(m.year, m.month) && completion.actual_amount <= 0
+        && completion.forecast_amount && completion.forecast_amount > 0
         ? completion.forecast_amount / 1_000_000
         : null;
     }
@@ -214,7 +217,8 @@ export const getFullProjectChartData = (
       const completion = projectCompletion.find(
         (c) => c.year === m.year && c.month === m.month
       );
-      return completion && completion.forecast_amount && completion.forecast_amount > 0
+      return completion && isForecastMonth(m.year, m.month) && completion.actual_amount <= 0
+        && completion.forecast_amount && completion.forecast_amount > 0
         ? completion.forecast_amount / 1_000_000
         : null;
     }

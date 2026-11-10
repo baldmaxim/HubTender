@@ -25,6 +25,7 @@ import { AutoFitText } from '../../../components/AutoFitText/AutoFitText';
 import {
   MONTH_NAMES_SHORT,
   formatMoney,
+  isForecastMonth,
   type MonthData,
   type ChartModalTarget,
 } from './gantt/ganttUtils';
@@ -198,7 +199,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         .reduce((sum, c) => {
           // Sum both actual and forecast
           const actual = c.actual_amount > 0 ? c.actual_amount : 0;
-          const forecast = c.forecast_amount && c.forecast_amount > 0 ? c.forecast_amount : 0;
+          // Прогноз — только текущий/будущие месяцы без факта (прошлое — это план)
+          const forecast = c.forecast_amount && c.forecast_amount > 0
+            && c.actual_amount <= 0 && isForecastMonth(c.year, c.month) ? c.forecast_amount : 0;
           return sum + actual + forecast;
         }, 0);
       totalsMap[key] = monthTotal;

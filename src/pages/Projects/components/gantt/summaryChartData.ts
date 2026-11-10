@@ -3,7 +3,7 @@ import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import type { ChartDataset } from 'chart.js';
 import type { ProjectFull, ProjectCompletion } from '../../../../lib/types/types';
-import { MONTH_NAMES_SHORT } from './ganttUtils';
+import { MONTH_NAMES_SHORT, isForecastMonth } from './ganttUtils';
 
 // Плагины идемпотентны — повторное extend безопасно.
 dayjs.extend(isSameOrAfter);
@@ -61,6 +61,7 @@ export const buildSummaryChartData = (
   // Group actual and forecast completion data by month (independently, only visible projects)
   const monthlyActualTotals: Record<string, number> = {};
   const monthlyForecastTotals: Record<string, number> = {};
+  const monthlyPlanTotals: Record<string, number> = {};
 
   completionData.forEach((c) => {
     if (!visibleProjectIds.has(c.project_id)) return; // Skip hidden projects
@@ -71,9 +72,13 @@ export const buildSummaryChartData = (
       monthlyActualTotals[key] = (monthlyActualTotals[key] || 0) + c.actual_amount;
     }
 
-    // Collect forecast amounts (independently from actual)
     if (c.forecast_amount && c.forecast_amount > 0) {
-      monthlyForecastTotals[key] = (monthlyForecastTotals[key] || 0) + c.forecast_amount;
+      // План — forecast_amount по всем месяцам
+      monthlyPlanTotals[key] = (monthlyPlanTotals[key] || 0) + c.forecast_amount;
+      // Прогноз — только месяцы не раньше текущего и без факта
+      if (isForecastMonth(c.year, c.month) && c.actual_amount <= 0) {
+        monthlyForecastTotals[key] = (monthlyForecastTotals[key] || 0) + c.forecast_amount;
+      }
     }
   });
 
@@ -132,8 +137,14 @@ export const buildSummaryChartData = (
     return null;
   });
 
+  // План: сумма forecast_amount по всем месяцам
+  const planData = allMonths.map((m) =>
+    monthlyPlanTotals[m.key] > 0 ? monthlyPlanTotals[m.key] / 1_000_000 : null,
+  );
+
   const hasActual = actualData.some(v => v !== null);
   const hasForecast = forecastData.some(v => v !== null);
+  const hasPlan = planData.some(v => v !== null);
 
   if (allMonths.length === 0 || (!hasActual && !hasForecast)) return null;
 
@@ -167,6 +178,23 @@ export const buildSummaryChartData = (
       spanGaps: true,
       datalabels: { display: false },
       label: 'Прогноз',
+    });
+  }
+
+  if (hasPlan) {
+    datasets.push({
+      data: planData,
+      borderColor: 'rgba(140, 140, 140, 0.55)',
+      tension: 0.3,
+      fill: false,
+      borderWidth: 1.5,
+      borderDash: [4, 4],
+      pointRadius: 0,
+      pointHoverRadius: 3,
+      spanGaps: true,
+      order: 10, // под фактом и прогнозом
+      datalabels: { display: false },
+      label: 'План',
     });
   }
 

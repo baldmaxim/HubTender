@@ -170,7 +170,10 @@ export const MonthlyCompletion: React.FC<MonthlyCompletionProps> = ({
 
   const totals = useMemo(() => {
     const actualTotal = displayRows.reduce((sum, r) => sum + (r.actual_amount || 0), 0);
-    const forecastTotal = displayRows.reduce((sum, r) => sum + (r.forecast_amount || 0), 0);
+    const forecastTotal = displayRows.reduce(
+      (sum, r) => sum + (!r.isPast && !(r.actual_amount > 0) ? r.forecast_amount || 0 : 0),
+      0,
+    );
     return { actualTotal, forecastTotal };
   }, [displayRows]);
 

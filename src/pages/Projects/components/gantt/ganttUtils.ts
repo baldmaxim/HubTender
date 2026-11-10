@@ -43,3 +43,11 @@ export const MONTH_NAMES_SHORT = [
   'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
   'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек',
 ];
+
+// Месяц не раньше текущего календарного — только такие значения forecast_amount считаются прогнозом
+// (в прошлых месяцах forecast_amount — это «план»).
+export const isForecastMonth = (year: number, month: number): boolean => {
+  const now = new Date();
+  const nowYear = now.getFullYear();
+  return year > nowYear || (year === nowYear && month >= now.getMonth() + 1);
+};

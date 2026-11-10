@@ -126,7 +126,7 @@ export const GanttTimeline: React.FC<{
             {months.map((month) => {
               const completion = getCompletionForMonth(project.id, month.year, month.month);
               const hasActual = completion && completion.actual_amount > 0;
-              const hasForecast = completion && !hasActual && completion.forecast_amount && completion.forecast_amount > 0;
+              const hasForecast = completion && !hasActual && !month.isPast && completion.forecast_amount && completion.forecast_amount > 0;
 
               // Check if month is within project timeline (from contract_date to construction_end_date)
               const startDate = project.contract_date
