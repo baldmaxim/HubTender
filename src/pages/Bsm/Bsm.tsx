@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo, useState } from 'react';
-import { Card, Table, Select, Tabs, Input, message, Button, Typography, Space } from 'antd';
+import { Card, Table, Select, Tabs, Input, message, Button, Typography, Space, Checkbox } from 'antd';
 import { SearchOutlined, FileExcelOutlined, LinkOutlined } from '@ant-design/icons';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -10,6 +10,7 @@ import { BsmTenderSelectionScreen } from './components/BsmTenderSelectionScreen'
 import { BsmCardList } from './components/BsmCardList';
 import { exportBsmToExcel } from './utils/bsmExport';
 import { isMaterial } from './utils/bsmStyles';
+import { useTableScrollY } from '../Analytics/ObjectComparison/hooks/useTableScrollY';
 
 const { Text } = Typography;
 
@@ -25,6 +26,7 @@ const Bsm: React.FC = () => {
   const deferredSearchText = useDeferredValue(searchText);
   const [activeTab, setActiveTab] = useState<'all' | 'materials' | 'works'>('all');
   const [selectedExpense, setSelectedExpense] = useState<string | null>(null);
+  const [hideDuplicates, setHideDuplicates] = useState(false);
 
   const {
     tenders,
@@ -74,8 +76,26 @@ const Bsm: React.FC = () => {
       const q = deferredSearchText.toLowerCase();
       filtered = filtered.filter(item => item.name.toLowerCase().includes(q));
     }
+    if (hideDuplicates) {
+      // Дубль — та же работа/материал (по наименованию) с той же единицей и ценой за ед.
+      // под другой затратой: оставляем первую строку.
+      const seen = new Set<string>();
+      filtered = filtered.filter(item => {
+        const key = `${item.boq_item_type}|${item.name.trim().toLowerCase()}|${item.unit_code}|${item.price_per_unit.toFixed(2)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
     return filtered;
-  }, [allItems, activeTab, selectedExpense, deferredSearchText]);
+  }, [allItems, activeTab, selectedExpense, deferredSearchText, hideDuplicates]);
+
+  // Таблица тянется до низа окна: высота тела считается от её верха (шапка/вкладки
+  // переносятся по-разному), константный calc() оставлял пустоту внизу.
+  const { ref: tableWrapRef, scrollY: tableScrollY } = useTableScrollY(
+    !!selectedTenderId && !isPhone && !isLandscapePhone,
+    `${selectedTenderId}|${loading}|${activeTab}|${filteredItems.length > 0}`,
+  );
 
   const columns = useMemo(
     () => buildBsmColumns(handleUpdateQuoteLink, readOnly),
@@ -119,16 +139,18 @@ const Bsm: React.FC = () => {
   }
 
   const renderTable = (fitToScreen: boolean) => (
-    <Table
-      bordered
-      dataSource={filteredItems}
-      columns={columns}
-      rowKey="id"
-      loading={loading}
-      pagination={false}
-      scroll={fitToScreen ? undefined : { x: 'max-content', y: 'calc(100dvh - 450px)' }}
-      size="middle"
-    />
+    <div ref={fitToScreen ? undefined : tableWrapRef}>
+      <Table
+        bordered
+        dataSource={filteredItems}
+        columns={columns}
+        rowKey="id"
+        loading={loading}
+        pagination={false}
+        scroll={fitToScreen ? undefined : { x: 'max-content', y: tableScrollY }}
+        size="middle"
+      />
+    </div>
   );
 
   // Поиск/фильтр: на телефоне над вкладками full-width, на десктопе — в tabBarExtraContent
@@ -163,6 +185,9 @@ const Bsm: React.FC = () => {
         onChange={(e) => setSearchText(e.target.value)}
         allowClear
       />
+      <Checkbox checked={hideDuplicates} onChange={(e) => setHideDuplicates(e.target.checked)}>
+        Скрыть дубли с одной ценой
+      </Checkbox>
     </Space>
   );
 
