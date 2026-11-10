@@ -82,8 +82,14 @@ export const buildSummaryChartData = (
     }
   });
 
-  // Find first and last month with actual data
-  const monthsWithActual = allMonths.filter((m) => monthlyActualTotals[m.key] > 0);
+  // Текущий и будущие месяцы не закрыты: их факт идёт в прогнозную линию, а не в «Факт»
+  const isOpenMonth = (key: string) => {
+    const [y, mo] = key.split('-').map(Number);
+    return isForecastMonth(y, mo);
+  };
+
+  // Find first and last month with actual data (only closed months)
+  const monthsWithActual = allMonths.filter((m) => monthlyActualTotals[m.key] > 0 && !isOpenMonth(m.key));
   const lastMonthWithActual = monthsWithActual.length > 0
     ? monthsWithActual[monthsWithActual.length - 1]
     : null;
@@ -115,23 +121,15 @@ export const buildSummaryChartData = (
       return null;
     }
 
-    // If this month has actual data, check if we need it for connection
-    if (monthlyActualTotals[m.key]) {
-      // Include last actual point to connect with forecast line after it
-      if (lastMonthWithActual && m.key === lastMonthWithActual.key) {
-        const actual = monthlyActualTotals[m.key];
-        const forecast = monthlyForecastTotals[m.key] || 0;
-        return (actual + forecast) / 1_000_000;
-      }
-      return null;
+    // Стык: последний закрытый месяц с фактом — та же точка, что у линии «Факт»
+    if (lastMonthWithActual && m.key === lastMonthWithActual.key) {
+      return monthlyActualTotals[m.key] / 1_000_000;
     }
 
-    // If no actual data but has forecast, show forecast (only after last actual month)
-    if (monthlyForecastTotals[m.key] && monthlyForecastTotals[m.key] > 0) {
-      // Only show forecast if we're after the last actual month (or if there's no actual at all)
-      if (!lastMonthWithActual || m.key > lastMonthWithActual.key) {
-        return monthlyForecastTotals[m.key] / 1_000_000;
-      }
+    // Открытые месяцы: уже полученный факт + прогноз остальных объектов
+    if (isOpenMonth(m.key)) {
+      const total = (monthlyActualTotals[m.key] || 0) + (monthlyForecastTotals[m.key] || 0);
+      return total > 0 ? total / 1_000_000 : null;
     }
 
     return null;
