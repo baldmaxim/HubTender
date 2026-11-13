@@ -15,6 +15,11 @@ import {
   calculateMarkupResult,
   type CalculationContext
 } from '../../utils/markupCalculator';
+import {
+  SUBCONTRACT_MATERIALS_GROWTH_KEYS,
+  SUBCONTRACT_WORKS_GROWTH_KEYS,
+  VAT_PARAM_KEYS,
+} from './percentSets';
 
 /**
  * Результат применения тактики
@@ -297,9 +302,50 @@ function isExcludedFromGrowth(
 }
 
 /**
+ * Перепривязывает baseIndex после удаления шагов (зеркало rewriteBaseIndices в Go).
+ * original — исходная цепочка (нужна для baseIndex удалённых шагов), filtered — оставшиеся
+ * шаги с исходными baseIndex, removedIndices — ИСХОДНЫЕ индексы удалённых шагов.
+ *
+ * Шаг, чья база удалена, наследует базу удалённого шага (рекурсивно), затем индекс
+ * сдвигается на число удалённых шагов перед ним. Пример: Рост(-1) → ООЗ(0) → ОФЗ(1) →
+ * НДС(2) → Прибыль(3). После удаления НДС Прибыль опирается на ОФЗ, а не на базу
+ * (иначе коэффициент 1,03 вместо 1,1×1,06×1,05×1,03). Цепочка, упёршаяся в -1
+ * (удалён первый шаг) или зациклившаяся, даёт -1.
+ */
+export function rewriteBaseIndices(
+  original: MarkupStep[],
+  filtered: MarkupStep[],
+  removedIndices: number[]
+): MarkupStep[] {
+  const removed = new Set(removedIndices);
+
+  return filtered.map((step) => {
+    let newBaseIndex = step.baseIndex;
+
+    for (let hops = 0; newBaseIndex >= 0 && newBaseIndex < original.length && removed.has(newBaseIndex); hops++) {
+      if (hops >= original.length) {
+        newBaseIndex = -1; // цикл наследования
+        break;
+      }
+      newBaseIndex = original[newBaseIndex].baseIndex;
+    }
+
+    if (newBaseIndex >= 0) {
+      const removedBefore = removedIndices.filter((i) => i < newBaseIndex).length;
+      newBaseIndex -= removedBefore;
+    }
+
+    return {
+      ...step,
+      baseIndex: newBaseIndex
+    };
+  });
+}
+
+/**
  * Фильтрует последовательность наценок, удаляя параметры роста субподряда для исключенных категорий
  */
-function filterSequenceForExclusions(
+export function filterSequenceForExclusions(
   sequence: MarkupStep[],
   isExcluded: boolean,
   itemType: string
@@ -308,10 +354,10 @@ function filterSequenceForExclusions(
     return sequence;
   }
 
-  // Определяем какой ключ роста нужно убрать в зависимости от типа элемента
-  const growthKeyToRemove = itemType === 'суб-раб'
-    ? 'subcontract_works_cost_growth'
-    : 'subcontract_materials_cost_growth';
+  // Определяем какие ключи роста (старый и новый списки) нужно убрать в зависимости от типа элемента
+  const growthKeysToRemove = itemType === 'суб-раб'
+    ? SUBCONTRACT_WORKS_GROWTH_KEYS
+    : SUBCONTRACT_MATERIALS_GROWTH_KEYS;
 
   // Находим индексы шагов, которые нужно удалить
   const removedIndices: number[] = [];
@@ -324,7 +370,7 @@ function filterSequenceForExclusions(
       step.operand5Key
     ].filter(Boolean);
 
-    if (operandKeys.includes(growthKeyToRemove)) {
+    if (growthKeysToRemove.some((k) => operandKeys.includes(k))) {
       removedIndices.push(index);
     }
   });
@@ -332,43 +378,17 @@ function filterSequenceForExclusions(
   // Фильтруем последовательность
   const filtered = sequence.filter((_, index) => !removedIndices.includes(index));
 
-  // ВАЖНО: Пересчитываем baseIndex для оставшихся шагов
-  // Если шаг ссылался на удаленный шаг, он должен ссылаться на базовую стоимость (-1)
-  // Если шаг ссылался на сохраненный шаг, нужно скорректировать индекс
-  return filtered.map((step) => {
-    let newBaseIndex = step.baseIndex;
-
-    if (newBaseIndex >= 0) {
-      // Проверяем, был ли удален шаг, на который ссылается baseIndex
-      if (removedIndices.includes(newBaseIndex)) {
-        // Если да, то теперь применяем к базовой стоимости
-        newBaseIndex = -1;
-      } else {
-        // Если нет, пересчитываем индекс с учетом удаленных шагов
-        // Считаем сколько шагов было удалено до текущего baseIndex
-        const removedBefore = removedIndices.filter(i => i < newBaseIndex).length;
-        newBaseIndex = newBaseIndex - removedBefore;
-      }
-    }
-
-    return {
-      ...step,
-      baseIndex: newBaseIndex
-    };
-  });
+  // Пересчитываем baseIndex для оставшихся шагов (шаг, опиравшийся на удалённый, наследует его базу)
+  return rewriteBaseIndices(sequence, filtered, removedIndices);
 }
 
 /**
  * Фильтрует последовательность, исключая шаги с НДС
  */
-function filterVATFromSequence(
+export function filterVATFromSequence(
   sequence: MarkupStep[],
   markupParameters: Map<string, number>
 ): { filtered: MarkupStep[]; vatCoefficient: number } {
-  // Ищем параметр НДС по ключу nds_22
-  const vatKey = 'nds_22';
-  const vatParamValue = markupParameters.get(vatKey) || 0;
-
   // Находим индексы шагов с НДС и определяем коэффициент
   const removedIndices: number[] = [];
   let vatCoefficient = 0;
@@ -382,10 +402,13 @@ function filterVATFromSequence(
       step.operand5Key
     ].filter(Boolean);
 
-    // Вариант 1: шаг ссылается на параметр nds_22
-    if (operandKeys.includes(vatKey) && vatParamValue > 0) {
+    // Вариант 1: шаг ссылается на параметр НДС (nds_22 или new_nds) с положительным значением
+    const vatParamKey = VAT_PARAM_KEYS.find(
+      (k) => operandKeys.includes(k) && (markupParameters.get(k) || 0) > 0
+    );
+    if (vatParamKey !== undefined) {
       removedIndices.push(index);
-      vatCoefficient = vatParamValue;
+      vatCoefficient = markupParameters.get(vatParamKey) || 0;
       return;
     }
 
@@ -424,23 +447,7 @@ function filterVATFromSequence(
   const filtered = sequence.filter((_, index) => !removedIndices.includes(index));
 
   // Пересчитываем baseIndex для оставшихся шагов
-  const result = filtered.map((step) => {
-    let newBaseIndex = step.baseIndex;
-
-    if (newBaseIndex >= 0) {
-      if (removedIndices.includes(newBaseIndex)) {
-        newBaseIndex = -1;
-      } else {
-        const removedBefore = removedIndices.filter(i => i < newBaseIndex).length;
-        newBaseIndex = newBaseIndex - removedBefore;
-      }
-    }
-
-    return {
-      ...step,
-      baseIndex: newBaseIndex
-    };
-  });
+  const result = rewriteBaseIndices(sequence, filtered, removedIndices);
 
   return { filtered: result, vatCoefficient };
 }

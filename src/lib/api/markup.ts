@@ -8,6 +8,7 @@ import type {
   PricingDistributionInsert,
   TenderMarkupPercentageInsert,
 } from '../types';
+import type { PercentSet } from '../../services/markupTactic/percentSets';
 import { apiFetch } from './client';
 
 // ─── markup_tactics ─────────────────────────────────────────────────────────
@@ -92,6 +93,7 @@ export interface MarkupParameterInput {
   is_active?: boolean;
   order_num?: number;
   default_value?: number;
+  percent_set?: PercentSet;
 }
 
 export async function createMarkupParameter(input: MarkupParameterInput): Promise<void> {

@@ -108,23 +108,34 @@ func (s SequenceStep) hasStringKey(target string) bool {
 }
 
 // rewriteBaseIndices re-points baseIndex after some original steps were removed.
-// removed holds ORIGINAL indices; filtered preserves original baseIndex values.
-func rewriteBaseIndices(filtered []SequenceStep, removed map[int]bool) []SequenceStep {
+// original — исходная цепочка (нужна для baseIndex удалённых шагов); removed holds
+// ORIGINAL indices; filtered preserves original baseIndex values.
+//
+// Шаг, чья база удалена, наследует базу удалённого шага (рекурсивно), затем индекс
+// сдвигается на число удалённых шагов перед ним. Пример: Рост(base -1) → ООЗ(0) →
+// ОФЗ(1) → НДС(2) → Прибыль(3). После удаления НДС Прибыль должна опираться на ОФЗ
+// (унаследовать base НДС), а не на базу: иначе коэффициент 1,03 вместо
+// 1,1×1,06×1,05×1,03. Если цепочка наследования упирается в -1 (удалён первый шаг)
+// или зацикливается — база -1.
+func rewriteBaseIndices(original, filtered []SequenceStep, removed map[int]bool) []SequenceStep {
 	out := make([]SequenceStep, len(filtered))
 	for i, step := range filtered {
 		nb := step.BaseIndex
-		if nb >= 0 {
-			if removed[nb] {
-				nb = -1
-			} else {
-				removedBefore := 0
-				for r := range removed {
-					if r < nb {
-						removedBefore++
-					}
-				}
-				nb -= removedBefore
+		for hops := 0; nb >= 0 && nb < len(original) && removed[nb]; hops++ {
+			if hops >= len(original) {
+				nb = -1 // цикл наследования
+				break
 			}
+			nb = original[nb].BaseIndex
+		}
+		if nb >= 0 {
+			removedBefore := 0
+			for r := range removed {
+				if r < nb {
+					removedBefore++
+				}
+			}
+			nb -= removedBefore
 		}
 		step.BaseIndex = nb
 		out[i] = step
@@ -132,19 +143,42 @@ func rewriteBaseIndices(filtered []SequenceStep, removed map[int]bool) []Sequenc
 	return out
 }
 
+// Ключи базовых процентов, на которые завязаны исключения роста субподряда и
+// выделение НДС. Два списка базовых процентов (markup_parameters.percent_set):
+// старый ('old') и новый ('new', префикс new_). Тактика ссылается на ключи
+// одного из списков; зеркало в src/services/markupTactic/percentSets.ts.
+var (
+	// Рост стоимости работ субподряда (суб-раб): старый и новый списки.
+	subcontractWorksGrowthKeys = []string{"subcontract_works_cost_growth", "new_subcontract_works_cost_growth"}
+	// Рост стоимости материалов субподряда (суб-мат): старый и новый списки.
+	subcontractMaterialsGrowthKeys = []string{"subcontract_materials_cost_growth", "new_subcontract_materials_cost_growth"}
+	// НДС: старый и новый списки.
+	vatParamKeys = []string{"nds_22", "new_nds"}
+)
+
+// hasAnyStringKey — шаг ссылается хотя бы на один ключ из набора.
+func (s SequenceStep) hasAnyStringKey(targets []string) bool {
+	for _, t := range targets {
+		if s.hasStringKey(t) {
+			return true
+		}
+	}
+	return false
+}
+
 // filterSequenceForExclusions drops subcontract-growth steps for excluded categories.
 func filterSequenceForExclusions(seq []SequenceStep, isExcluded bool, itemType string) []SequenceStep {
 	if !isExcluded {
 		return seq
 	}
-	growthKey := "subcontract_materials_cost_growth"
+	growthKeys := subcontractMaterialsGrowthKeys
 	if itemType == BoqSubRab {
-		growthKey = "subcontract_works_cost_growth"
+		growthKeys = subcontractWorksGrowthKeys
 	}
 
 	removed := map[int]bool{}
 	for i, step := range seq {
-		if step.hasStringKey(growthKey) {
+		if step.hasAnyStringKey(growthKeys) {
 			removed[i] = true
 		}
 	}
@@ -158,24 +192,28 @@ func filterSequenceForExclusions(seq []SequenceStep, isExcluded bool, itemType s
 			filtered = append(filtered, step)
 		}
 	}
-	return rewriteBaseIndices(filtered, removed)
+	return rewriteBaseIndices(seq, filtered, removed)
 }
 
 // filterVATFromSequence removes VAT step(s) and returns the VAT coefficient (in %)
-// to be applied separately. Two recognised forms: an operand keyed nds_22 (when the
-// param is positive), or a step whose name mentions НДС/NDS/VAT with a 1.xx numeric
+// to be applied separately. Two recognised forms: an operand keyed nds_22 / new_nds
+// (when the param is positive), or a step whose name mentions НДС/NDS/VAT with a 1.xx numeric
 // multiplier.
 func filterVATFromSequence(seq []SequenceStep, params map[string]float64) ([]SequenceStep, float64) {
-	const vatKey = "nds_22"
-	vatParamValue := params[vatKey] // 0 when absent
-
 	removed := map[int]bool{}
 	vatCoefficient := 0.0
 
 	for i, step := range seq {
-		if vatParamValue > 0 && step.hasStringKey(vatKey) {
-			removed[i] = true
-			vatCoefficient = vatParamValue
+		vatByParam := false
+		for _, k := range vatParamKeys {
+			if v := params[k]; v > 0 && step.hasStringKey(k) { // 0 when absent
+				removed[i] = true
+				vatCoefficient = v
+				vatByParam = true
+				break
+			}
+		}
+		if vatByParam {
 			continue
 		}
 
@@ -204,7 +242,7 @@ func filterVATFromSequence(seq []SequenceStep, params map[string]float64) ([]Seq
 			filtered = append(filtered, step)
 		}
 	}
-	return rewriteBaseIndices(filtered, removed), vatCoefficient
+	return rewriteBaseIndices(seq, filtered, removed), vatCoefficient
 }
 
 // calculateTypeCoefficient applies the sequence to base = 1 to get the multiplier.

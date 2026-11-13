@@ -2,6 +2,7 @@ import React from 'react';
 import { Typography, Space, InputNumber, Divider, theme } from 'antd';
 import { formatNumberWithSpaces, parseNumberWithSpaces } from '../../../../utils/numberFormat';
 import type { MarkupParameter, MarkupStep } from '../../../../lib/types';
+import { filterParamsBySet, PERCENT_SET_LABELS } from '../../../../services/markupTactic/percentSets';
 import type { TabKey } from '../types';
 import type { StepBuilder } from '../hooks/useStepBuilderState';
 import { calculateIntermediateResults, type GetPercent } from '../utils/sequenceCalc';
@@ -23,7 +24,6 @@ export const SequenceTab: React.FC<{
 }> = ({ tabKey, markupSequences, baseCosts, setBaseCosts, markupParameters, getPercent, builder }) => {
   const { token } = theme.useToken();
   const sequence = markupSequences[tabKey];
-  const availableMarkups = markupParameters;
 
   // Получаем промежуточные результаты
   const intermediateResults = calculateIntermediateResults(sequence, baseCosts[tabKey], getPercent);
@@ -45,7 +45,7 @@ export const SequenceTab: React.FC<{
   });
 
   // Опции для выбора операндов (наценки или пункты) с группировкой
-  const markupOptionsList = availableMarkups.map(markup => ({
+  const toMarkupOptions = (params: MarkupParameter[]) => params.map(markup => ({
     label: `${markup.label} (${parseFloat((markup.default_value || 0).toFixed(5))}%)`,
     value: `markup:${markup.key}`
   }));
@@ -68,8 +68,12 @@ export const SequenceTab: React.FC<{
 
   const operandOptions = [
     {
-      label: 'Наценки',
-      options: markupOptionsList
+      label: PERCENT_SET_LABELS.old,
+      options: toMarkupOptions(filterParamsBySet(markupParameters, 'old'))
+    },
+    {
+      label: PERCENT_SET_LABELS.new,
+      options: toMarkupOptions(filterParamsBySet(markupParameters, 'new'))
     },
     {
       label: 'Базовая стоимость',

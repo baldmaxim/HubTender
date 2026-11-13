@@ -1,4 +1,5 @@
 import type { BoqItemType } from './enums';
+import type { PercentSet } from '../../../services/markupTactic/percentSets';
 
 // =============================================
 // Типы для таблицы markup_parameters (справочник параметров наценок)
@@ -10,6 +11,7 @@ export interface MarkupParameterInsert {
   is_active?: boolean;
   order_num?: number;
   default_value?: number;
+  percent_set?: PercentSet;
 }
 
 export interface MarkupParameter extends MarkupParameterInsert {
@@ -17,6 +19,7 @@ export interface MarkupParameter extends MarkupParameterInsert {
   created_at: string;
   updated_at: string;
   default_value: number;
+  percent_set: PercentSet;
 }
 
 // =============================================

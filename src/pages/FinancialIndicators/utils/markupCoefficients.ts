@@ -56,9 +56,11 @@ export const resolveMarkupCoefficients = (
   tenderMarkupPercentages: TenderMarkupPercentageRow[] | null,
   { sequenceParameterKeys, sequenceNumberValues }: SequenceParams,
 ): MarkupCoefficients => {
+  // Поиск ведётся по подстрокам названий; у нового списка названия совпадают со старыми
+  // («НДС», «ОФЗ», «Прибыль…») — его строки в старый каскад не берём.
   const markupParams = (tenderMarkupPercentages || [])
     .map(tmp => tmp.markup_parameter)
-    .filter((p): p is NonNullable<typeof p> => p != null);
+    .filter((p): p is NonNullable<typeof p> => p != null && p.percent_set !== 'new');
 
   const percentagesMap = new Map<string, number>();
   tenderMarkupPercentages?.forEach(tmp => {

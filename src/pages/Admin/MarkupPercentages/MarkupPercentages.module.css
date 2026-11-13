@@ -1,0 +1,64 @@
+/* Только раскладка; цвета берутся из тем antd (Button, Typography, Alert, Segmented). */
+
+.choiceList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.choiceButton {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: auto;
+  min-height: 64px;
+  padding: 12px 16px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.choiceTitle {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.choiceHint {
+  font-size: 13px;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.setSwitch {
+  margin-bottom: 16px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.setSwitch :global(.ant-segmented-item-label) {
+  min-height: 44px;
+  line-height: 44px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.alert {
+  margin-bottom: 16px;
+}
+
+.tacticSelect {
+  width: 100%;
+  max-width: 320px;
+}
+
+@media (min-width: 576px) {
+  .setSwitch {
+    width: auto;
+  }
+}

@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS public.markup_parameters (
     order_num integer NOT NULL DEFAULT 0,
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now(),
-    default_value numeric NOT NULL DEFAULT 0
+    default_value numeric NOT NULL DEFAULT 0,
+    percent_set text NOT NULL DEFAULT 'old'
 );
 
 CREATE TABLE IF NOT EXISTS public.library_folders (

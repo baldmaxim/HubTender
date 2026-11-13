@@ -106,7 +106,7 @@ export const useMarkupParameters = ({
   const handleAddParameter = async () => {
     try {
       const values = await newParameterForm.validateFields();
-      const { parameterKey, parameterLabel } = values;
+      const { parameterKey, parameterLabel, percentSet } = values;
 
       // Проверяем, не существует ли уже параметр с таким ключом
       const existing = markupParameters.find(p => p.key === parameterKey);
@@ -125,6 +125,7 @@ export const useMarkupParameters = ({
         label: parameterLabel,
         is_active: true,
         order_num: maxOrderNum + 1,
+        percent_set: percentSet === 'new' ? 'new' : 'old',
       });
 
       message.success(`Параметр "${parameterLabel}" успешно добавлен!`);

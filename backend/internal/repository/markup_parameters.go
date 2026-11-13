@@ -14,6 +14,7 @@ type MarkupParameterRow struct {
 	IsActive     bool     `json:"is_active"`
 	OrderNum     *int     `json:"order_num,omitempty"`
 	DefaultValue *float64 `json:"default_value,omitempty"`
+	PercentSet   string   `json:"percent_set"`
 	CreatedAt    *string  `json:"created_at,omitempty"`
 	UpdatedAt    *string  `json:"updated_at,omitempty"`
 }
@@ -21,7 +22,7 @@ type MarkupParameterRow struct {
 func (r *MarkupRepo) ListActiveParameters(ctx context.Context) ([]MarkupParameterRow, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id::text, key, COALESCE(label, ''),
-		       COALESCE(is_active, true), order_num, default_value,
+		       COALESCE(is_active, true), order_num, default_value, percent_set,
 		       to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		       to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		FROM public.markup_parameters
@@ -36,7 +37,7 @@ func (r *MarkupRepo) ListActiveParameters(ctx context.Context) ([]MarkupParamete
 	for rows.Next() {
 		var p MarkupParameterRow
 		if err := rows.Scan(&p.ID, &p.Key, &p.Label, &p.IsActive, &p.OrderNum,
-			&p.DefaultValue, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			&p.DefaultValue, &p.PercentSet, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("markupRepo.ListActiveParameters scan: %w", err)
 		}
 		out = append(out, p)
@@ -50,13 +51,15 @@ type MarkupParameterInput struct {
 	IsActive     *bool    `json:"is_active"`
 	OrderNum     *int     `json:"order_num"`
 	DefaultValue *float64 `json:"default_value"`
+	// PercentSet — список базовых процентов: 'old' (по умолчанию) или 'new'.
+	PercentSet *string `json:"percent_set,omitempty"`
 }
 
 func (r *MarkupRepo) CreateParameter(ctx context.Context, in MarkupParameterInput) error {
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO public.markup_parameters (key, label, is_active, order_num, default_value)
-		VALUES ($1, $2, COALESCE($3, true), $4, $5)
-	`, in.Key, in.Label, in.IsActive, in.OrderNum, in.DefaultValue)
+		INSERT INTO public.markup_parameters (key, label, is_active, order_num, default_value, percent_set)
+		VALUES ($1, $2, COALESCE($3, true), $4, $5, COALESCE($6, 'old'))
+	`, in.Key, in.Label, in.IsActive, in.OrderNum, in.DefaultValue, in.PercentSet)
 	if err != nil {
 		return fmt.Errorf("markupRepo.CreateParameter: %w", err)
 	}
@@ -124,12 +127,13 @@ func listTenderMarkupPercentagesQ(ctx context.Context, q Querier, tenderID strin
 	rows, err := q.Query(ctx, `
 		SELECT tmp.id::text, tmp.tender_id::text, tmp.markup_parameter_id::text, tmp.value,
 		       mp.id::text, mp.key, COALESCE(mp.label, ''),
-		       COALESCE(mp.is_active, true), mp.order_num, mp.default_value,
+		       COALESCE(mp.is_active, true), mp.order_num, mp.default_value, mp.percent_set,
 		       to_char(mp.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		       to_char(mp.updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		FROM public.tender_markup_percentage tmp
 		LEFT JOIN public.markup_parameters mp ON mp.id = tmp.markup_parameter_id
 		WHERE tmp.tender_id = $1
+		ORDER BY mp.order_num ASC NULLS LAST
 	`, tenderID)
 	if err != nil {
 		return nil, fmt.Errorf("markupRepo.ListTenderMarkupPercentages: %w", err)
@@ -143,7 +147,7 @@ func listTenderMarkupPercentagesQ(ctx context.Context, q Querier, tenderID strin
 		)
 		if err := rows.Scan(&rec.ID, &rec.TenderID, &rec.MarkupParameterID, &rec.Value,
 			&mp.ID, &mp.Key, &mp.Label, &mp.IsActive, &mp.OrderNum, &mp.DefaultValue,
-			&mp.CreatedAt, &mp.UpdatedAt); err != nil {
+			&mp.PercentSet, &mp.CreatedAt, &mp.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("markupRepo.ListTenderMarkupPercentages scan: %w", err)
 		}
 		if mp.ID != "" {

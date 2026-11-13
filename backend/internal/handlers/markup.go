@@ -201,6 +201,10 @@ func (h *MarkupHandler) CreateParameter(w http.ResponseWriter, r *http.Request) 
 		apierr.BadRequest("invalid JSON body").Render(w)
 		return
 	}
+	if in.PercentSet != nil && *in.PercentSet != "old" && *in.PercentSet != "new" {
+		apierr.BadRequest("percent_set must be 'old' or 'new'").Render(w)
+		return
+	}
 	if err := h.svc.CreateParameter(r.Context(), in); err != nil {
 		apierr.InternalFromErr(w, r, err, "failed to create parameter")
 		return

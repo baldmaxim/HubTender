@@ -1,10 +1,17 @@
 import React from 'react';
-import { Card, Typography, Space, Form, Input, Button, List, Tag, Divider, Modal } from 'antd';
+import { Card, Typography, Space, Form, Input, Button, List, Tag, Divider, Modal, Select } from 'antd';
 import { SaveOutlined, PlusOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, EditOutlined, CloseOutlined } from '@ant-design/icons';
 import type { FormInstance } from 'antd';
 import type { MarkupParameter } from '../../../../lib/types';
+import { PERCENT_SET_LABELS, type PercentSet } from '../../../../services/markupTactic/percentSets';
 
 const { Title, Text } = Typography;
+
+const PERCENT_SET_SELECT_OPTIONS = (['old', 'new'] as const).map((value) => ({
+  value,
+  label: PERCENT_SET_LABELS[value],
+}));
+const DEFAULT_PERCENT_SET: PercentSet = 'old';
 
 /** Вкладка «Управление параметрами»: список параметров наценок с inline-
  *  редактированием, изменением порядка и модалкой добавления. */
@@ -119,6 +126,9 @@ export const ParametersTab: React.FC<{
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
                   <Tag color="blue" style={{ margin: 0 }}>#{index + 1}</Tag>
+                  <Tag color={markup.percent_set === 'new' ? 'green' : 'default'} style={{ margin: 0 }}>
+                    {markup.percent_set === 'new' ? 'Новые' : 'Старые'}
+                  </Tag>
                   {editingParameterId === markup.id ? (
                     <Input
                       value={editingParameterLabel}
@@ -192,6 +202,7 @@ export const ParametersTab: React.FC<{
         <Form
           form={newParameterForm}
           layout="vertical"
+          initialValues={{ percentSet: DEFAULT_PERCENT_SET }}
         >
           <Form.Item
             label="Ключ параметра"
@@ -215,6 +226,10 @@ export const ParametersTab: React.FC<{
             extra="Например: Новая наценка"
           >
             <Input placeholder="Новая наценка" />
+          </Form.Item>
+
+          <Form.Item label="Список базовых процентов" name="percentSet">
+            <Select options={PERCENT_SET_SELECT_OPTIONS} />
           </Form.Item>
 
           <Form.Item>

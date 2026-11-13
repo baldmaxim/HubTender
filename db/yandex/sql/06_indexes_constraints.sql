@@ -97,6 +97,7 @@ ALTER TABLE public.roles ADD CONSTRAINT roles_code_format CHECK (code ~ '^[a-z_]
 ALTER TABLE public.roles ADD CONSTRAINT roles_name_not_empty CHECK (btrim(name) <> ''::text);
 ALTER TABLE public.markup_parameters ADD CONSTRAINT markup_parameters_default_value_range CHECK (default_value >= (0)::numeric AND default_value <= 999.99);
 ALTER TABLE public.markup_parameters ADD CONSTRAINT markup_parameters_key_check CHECK (key ~ '^[a-z0-9_]+$'::text);
+ALTER TABLE public.markup_parameters ADD CONSTRAINT markup_parameters_percent_set_check CHECK (percent_set = ANY (ARRAY['old'::text, 'new'::text]));
 ALTER TABLE public.library_folders ADD CONSTRAINT library_folders_type_check CHECK (type = ANY (ARRAY['works'::text, 'materials'::text, 'templates'::text]));
 ALTER TABLE public.notifications ADD CONSTRAINT notifications_type_check CHECK (type = ANY (ARRAY['success'::text, 'info'::text, 'warning'::text, 'pending'::text]));
 ALTER TABLE public.users ADD CONSTRAINT users_email_check CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'::text);
