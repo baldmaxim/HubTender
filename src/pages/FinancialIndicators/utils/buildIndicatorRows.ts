@@ -1,5 +1,7 @@
 import type { getTenderInsuranceFI } from '../../../lib/api/fi';
 import type { DirectCostTotals, MarkupCoefficients, FinancialCalcResult, IndicatorRow } from '../types';
+import { scaleTotalsByVat } from './newSchemeCoefficients';
+import { applyNewSchemeLabels } from './newSchemeRowLabels';
 
 type InsuranceDataFI = Awaited<ReturnType<typeof getTenderInsuranceFI>> | null;
 
@@ -10,12 +12,15 @@ type InsuranceDataFI = Awaited<ReturnType<typeof getTenderInsuranceFI>> | null;
  */
 export const buildIndicatorRows = (
   calc: FinancialCalcResult,
-  totals: DirectCostTotals,
+  rawTotals: DirectCostTotals,
   coeffs: MarkupCoefficients,
   insuranceData: InsuranceDataFI,
   areaSp: number,
   areaClient: number,
 ): IndicatorRow[] => {
+  // Новая схема: суммы строк уже с НДС, поэтому и составы в тултипах берём с НДС.
+  const isNewScheme = coeffs.scheme === 'new' && coeffs.newScheme !== undefined;
+  const totals = isNewScheme && coeffs.newScheme ? scaleTotalsByVat(rawTotals, coeffs.newScheme) : rawTotals;
   const {
     subcontractTotal,
     su10Total,
@@ -341,6 +346,9 @@ export const buildIndicatorRows = (
           `Расчёт: ${grandTotal.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} / (1 + ${vatCoeff}%) × ${vatCoeff}% = ${vatCost.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} руб.`
     },
   ];
+
+  // Новая схема: суммы уже с НДС (computeIndicatorsNewScheme) — не домножаем, меняем подписи.
+  if (isNewScheme) return applyNewSchemeLabels(tableData, calc, coeffs);
 
   // Если НДС в конструкторе — умножаем каждую строку (1-15) на (1 + НДС%)
   // Строка 16 (ИТОГО) уже включает НДС (grandTotal), строка 17 — справочная

@@ -38,6 +38,8 @@ interface IndicatorsTableProps {
   discountNote?: string | null;
   /** Подзаголовок (объём строительства) в верхней строке Excel */
   volumeTitle?: string;
+  /** Схема расчёта (старая/по тактике нового списка) — для Excel-формул */
+  percentScheme?: 'old' | 'new';
 }
 
 export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
@@ -57,6 +59,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
   fxMissing,
   discountNote,
   volumeTitle,
+  percentScheme,
 }) => {
   const [editingSp, setEditingSp] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
@@ -69,7 +72,7 @@ export const IndicatorsTable: React.FC<IndicatorsTableProps> = ({
       message.error(formatFXUnavailable(fxMissing));
       return;
     }
-    void exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion, discountNote, volumeTitle, tenderId);
+    void exportFinancialIndicatorsToExcel(data, spTotal, customerTotal, tenderTitle, tenderVersion, discountNote, volumeTitle, tenderId, percentScheme);
   };
 
   const handleUpdateArea = async (field: 'area_sp' | 'area_client', value: number) => {

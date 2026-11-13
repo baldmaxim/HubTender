@@ -253,6 +253,7 @@ export const resolveMarkupCoefficients = (
   console.log('Final coefficient06 value:', coefficient06);
 
   return {
+    scheme: 'old',
     mechanizationCoeff,
     mvpGsmCoeff,
     warrantyCoeff,

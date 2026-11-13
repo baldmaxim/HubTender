@@ -12,6 +12,7 @@
 //   • каждой строке проставлен calc_key (роль) и coeff_pct — для Excel-формул
 //   • строки с нулевым итогом убраны (кроме ИТОГО), нумерация сквозная
 import type { DirectCostTotals, MarkupCoefficients, FinancialCalcResult, IndicatorRow } from '../types';
+import { scaleTotalsByVat } from './newSchemeCoefficients';
 
 const fmt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 const pctStr = (v: number) => (v > 0 ? `${parseFloat(v.toFixed(5))}%` : '');
@@ -26,13 +27,17 @@ const matTooltip = (label: string, osn: number, vsp: number, total: number): str
 export const buildTableRows = (
   baseRows: IndicatorRow[],
   calc: FinancialCalcResult,
-  totals: DirectCostTotals,
+  rawTotals: DirectCostTotals,
   coeffs: MarkupCoefficients,
   areaSp: number,
   areaClient: number,
 ): IndicatorRow[] => {
   const byNum = new Map(baseRows.map((r) => [r.row_number, r]));
-  const vatMul = coeffs.isVatInConstructor && coeffs.vatCoeff > 0 ? 1 + coeffs.vatCoeff / 100 : 1;
+  // Новая схема: суммы строк уже с НДС (vatMul = 1), а доп. строки считаем из прямых
+  // затрат, домноженных по типам на (1 + НДС цепочки). «Материалы» ниже — от исходных rawTotals.
+  const isNewScheme = coeffs.scheme === 'new' && coeffs.newScheme !== undefined;
+  const totals = isNewScheme && coeffs.newScheme ? scaleTotalsByVat(rawTotals, coeffs.newScheme) : rawTotals;
+  const vatMul = !isNewScheme && coeffs.isVatInConstructor && coeffs.vatCoeff > 0 ? 1 + coeffs.vatCoeff / 100 : 1;
 
   const spPer = (v: number) => (areaSp > 0 ? v / areaSp : 0);
   const clPer = (v: number) => (areaClient > 0 ? v / areaClient : 0);
@@ -104,7 +109,7 @@ export const buildTableRows = (
   const grandTotal = byNum.get(17)?.total_cost ?? 0;
   // «Материалы» = базовая стоимость основных материалов (мат осн + суб-мат осн),
   // без наценок и без НДС — совпадает с колонкой «Итого материалы» на Коммерции.
-  const materialsRow = totals.materialsBasic + totals.subcontractMaterialsBasic;
+  const materialsRow = rawTotals.materialsBasic + rawTotals.subcontractMaterialsBasic;
   const worksRow = grandTotal - materialsRow;
 
   const rows: IndicatorRow[] = [
@@ -159,7 +164,7 @@ export const buildTableRows = (
     keep(10, { calc_key: 'unforeseeable', coeff_pct: coeffs.unforeseeableCoeff }),
     keep(11, { calc_key: 'ooz', coeff_pct: coeffs.overheadOwnForcesCoeff }),
     keep(12, { calc_key: 'ooz_sub', coeff_pct: coeffs.overheadSubcontractCoeff }),
-    keep(13, { indicator_name: 'ОФЗ (без субподряда)', calc_key: 'ofz', coeff_pct: coeffs.generalCostsCoeff }),
+    keep(13, { indicator_name: isNewScheme ? 'ОФЗ' : 'ОФЗ (без субподряда)', calc_key: 'ofz', coeff_pct: coeffs.generalCostsCoeff }),
     keep(14, { calc_key: 'profit', coeff_pct: coeffs.profitOwnForcesCoeff }),
     keep(15, { calc_key: 'profit_sub', coeff_pct: coeffs.profitSubcontractCoeff }),
     keep(16, { indicator_name: 'Страхование от судимостей, 3% от продаваемых помещений', calc_key: 'insurance' }),
@@ -169,8 +174,8 @@ export const buildTableRows = (
     mk({
       name: 'Материалы', total: materialsRow, calc_key: 'row_materials',
       tooltip: `Базовая стоимость основных материалов (прямые затраты):\n` +
-        `Материалы осн.: ${fmt(totals.materialsBasic)}\n` +
-        `+ Субматериалы осн.: ${fmt(totals.subcontractMaterialsBasic)}\n` +
+        `Материалы осн.: ${fmt(rawTotals.materialsBasic)}\n` +
+        `+ Субматериалы осн.: ${fmt(rawTotals.subcontractMaterialsBasic)}\n` +
         `= ${fmt(materialsRow)} руб.`,
     }),
   ];

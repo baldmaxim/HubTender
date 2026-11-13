@@ -73,6 +73,7 @@ const FinancialIndicators: React.FC = () => {
     customerTotal,
     isVatInConstructor,
     vatCoefficient,
+    percentScheme,
     fxMissing,
     loadTenders,
     fetchFinancialIndicators,
@@ -314,6 +315,7 @@ const FinancialIndicators: React.FC = () => {
       fxMissing={fxMissing}
       discountNote={discountNote}
       volumeTitle={volumeTitle}
+      percentScheme={percentScheme}
     />
   );
 
@@ -336,6 +338,7 @@ const FinancialIndicators: React.FC = () => {
       fxMissing={fxMissing}
       discountNote={discountNote}
       volumeTitle={volumeTitle}
+      percentScheme={percentScheme}
       fitToScreen
     />
   );

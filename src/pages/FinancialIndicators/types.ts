@@ -59,8 +59,48 @@ export interface DirectCostTotals {
   totalCommercialWork: number;
 }
 
+// Строки, по которым раскладывается приращение цепочки новой схемы (по ключу параметра шага).
+export type NewSchemeRowKey =
+  | 'growthSubWorks'
+  | 'growthSubMaterials'
+  | 'overheadSub'
+  | 'generalCosts'
+  | 'profit'
+  | 'other';
+
+// Коэффициент одного варианта цепочки (тип BOQ-элемента, возможно «исключённый» из роста).
+export interface INewSchemeVariant {
+  /** Результат цепочки на базе 1 без НДС. */
+  coeff: number;
+  /** НДС цепочки, % (0 — НДС в тактике нет). */
+  vatPct: number;
+  /** Приращения по строкам; Σ строго равна coeff − 1. */
+  increments: Record<NewSchemeRowKey, number>;
+}
+
+// Коэффициенты новой схемы (расчёт по тактике наценок), по вариантам цепочек.
+export interface INewSchemeCoefficients {
+  work: INewSchemeVariant;
+  material: INewSchemeVariant;
+  subWork: INewSchemeVariant;
+  /** суб-раб из категорий-исключений роста (цепочка без шага роста). */
+  subWorkExcluded: INewSchemeVariant;
+  subMaterial: INewSchemeVariant;
+  subMaterialExcluded: INewSchemeVariant;
+  workComp: INewSchemeVariant;
+  materialComp: INewSchemeVariant;
+  /** Значение new_nds тендера, % — для страхования и справочного НДС. */
+  vatMainPct: number;
+  /** Есть ли хотя бы одна цепочка с НДС. */
+  anyVat: boolean;
+}
+
 // Разрешённые коэффициенты наценок тендера (проценты) + признак НДС в конструкторе.
 export interface MarkupCoefficients {
+  /** 'old' — жёсткий каскад «Базовой схемы»; 'new' — расчёт по тактике нового списка процентов. */
+  scheme: 'old' | 'new';
+  /** Коэффициенты цепочек (только для scheme 'new'). */
+  newScheme?: INewSchemeCoefficients;
   mechanizationCoeff: number;
   mvpGsmCoeff: number;
   warrantyCoeff: number;

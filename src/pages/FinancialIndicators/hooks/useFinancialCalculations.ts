@@ -8,7 +8,8 @@ import {
   listSubcontractGrowthExclusions,
   type BoqItemWithPosition,
 } from '../../../lib/api/fi';
-import { listTenderMarkupPercentages } from '../../../lib/api/markup';
+import { listActiveMarkupParameters, listTenderMarkupPercentages } from '../../../lib/api/markup';
+import { inferTacticPercentSet } from '../../../services/markupTactic/percentSets';
 import { createSystemNotification } from '../../../lib/api/notifications';
 import { getErrorMessage } from '../../../utils/errors';
 // Этап 0.1.2.3b/3b.1: FI не импортирует клиентский redistribution pipeline —
@@ -29,6 +30,7 @@ import type { IndicatorRow } from '../types';
 import { aggregateDirectCosts } from '../utils/aggregateDirectCosts';
 import { extractSequenceParams, resolveMarkupCoefficients } from '../utils/markupCoefficients';
 import { computeIndicators } from '../utils/computeIndicators';
+import { buildNewSchemeCoefficients, buildNewSchemeMarkupCoefficients } from '../utils/newSchemeCoefficients';
 import { buildIndicatorRows } from '../utils/buildIndicatorRows';
 import { buildTableRows } from '../utils/buildTableRows';
 import { getFiDiscounts, type FiDiscountSettings } from '../../../lib/api/fiDiscounts';
@@ -81,6 +83,8 @@ export const useFinancialCalculations = () => {
   const [customerTotal, setCustomerTotal] = useState<number>(0);
   const [isVatInConstructor, setIsVatInConstructor] = useState<boolean>(false);
   const [vatCoefficient, setVatCoefficient] = useState<number>(0);
+  // Схема расчёта: 'new' — по тактике с новым списком базовых процентов.
+  const [percentScheme, setPercentScheme] = useState<'old' | 'new'>('old');
   // Fail-closed: валюты без курса → показатели не рассчитываются, Alert/«—».
   const [fxMissing, setFxMissing] = useState<CurrencyType[]>([]);
   // Снижение: null — выключено или не настроено, страница считает как обычно.
@@ -119,6 +123,13 @@ export const useFinancialCalculations = () => {
 
     setLoading(true);
     try {
+      // Все активные параметры нужны, чтобы определить список процентов тактики;
+      // грузим параллельно с остальным. Сбой → считаем по старой схеме.
+      const allParamsPromise = listActiveMarkupParameters().catch((paramsError) => {
+        console.error('Ошибка загрузки параметров наценок:', paramsError);
+        return [];
+      });
+
       let tender;
       try {
         tender = await getTenderById(selectedTenderId);
@@ -200,7 +211,23 @@ export const useFinancialCalculations = () => {
       const areaClient = tender?.area_client || 0;
 
       // Разрешение коэффициентов наценок + признак «НДС в конструкторе»
-      const coeffs = resolveMarkupCoefficients(tenderMarkupPercentages, sequenceParams);
+      const allParams = await allParamsPromise;
+      const scheme = inferTacticPercentSet(tactic?.sequences, allParams);
+      let coeffs;
+      if (scheme === 'new' && tactic?.sequences) {
+        // Только проценты тендера (без default_value) — как у движка.
+        const paramValues = new Map<string, number>();
+        tenderMarkupPercentages?.forEach((tmp) => {
+          if (tmp.markup_parameter) paramValues.set(tmp.markup_parameter.key, tmp.value);
+        });
+        coeffs = buildNewSchemeMarkupCoefficients(
+          buildNewSchemeCoefficients(tactic.sequences, paramValues),
+          paramValues,
+        );
+      } else {
+        coeffs = resolveMarkupCoefficients(tenderMarkupPercentages, sequenceParams);
+      }
+      setPercentScheme(coeffs.scheme);
       setVatCoefficient(coeffs.vatCoeff);
       setIsVatInConstructor(coeffs.isVatInConstructor);
 
@@ -308,6 +335,7 @@ export const useFinancialCalculations = () => {
     loading,
     isVatInConstructor,
     vatCoefficient,
+    percentScheme,
     fxMissing,
     fetchFinancialIndicators,
     // Снижение

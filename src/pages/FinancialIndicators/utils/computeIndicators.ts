@@ -2,6 +2,7 @@
 // rendered and exported, never POSTed/persisted. Authoritative money math is
 // backend/internal/calc. See docs/CALCULATION_SOURCE_OF_TRUTH.md.
 import type { DirectCostTotals, MarkupCoefficients, FinancialCalcResult } from '../types';
+import { computeIndicatorsNewScheme } from './computeIndicatorsNewScheme';
 
 /**
  * Формульный расчёт финансовых показателей (строки 1-18) из прямых затрат
@@ -26,6 +27,10 @@ export const computeIndicators = (
   // строк и заметная просадка с открытым DevTools, поэтому глушим.
   options?: { quiet?: boolean },
 ): FinancialCalcResult => {
+  // Тактика нового списка процентов — расчёт по цепочкам тактики (отдельный файл).
+  if (coeffs.scheme === 'new' && coeffs.newScheme) {
+    return computeIndicatorsNewScheme(totals, coeffs.newScheme, insuranceCost);
+  }
   const quiet = options?.quiet === true;
   const {
     subcontractWorks,

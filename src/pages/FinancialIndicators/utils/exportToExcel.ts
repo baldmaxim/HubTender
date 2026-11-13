@@ -22,6 +22,8 @@ export async function exportFinancialIndicatorsToExcel(
   volumeTitle?: string,
   /** Тендер — для блока «Выжимка для руководства» под таблицей. */
   tenderId?: string,
+  /** Схема расчёта: для 'new' строки наценок в Excel — значениями, без формул. */
+  scheme?: 'old' | 'new',
 ) {
   if (data.length === 0) {
     message.warning('Нет данных для экспорта');
@@ -29,7 +31,7 @@ export async function exportFinancialIndicatorsToExcel(
   }
 
   const brief = tenderId ? await loadBriefForExport(tenderId) : null;
-  const ws = buildFinancialSheet({ data, spTotal, customerTotal, tenderTitle, discountNote, volumeTitle, brief });
+  const ws = buildFinancialSheet({ data, spTotal, customerTotal, tenderTitle, discountNote, volumeTitle, brief, scheme });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Финансовые показатели');
 

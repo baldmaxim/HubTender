@@ -97,6 +97,8 @@ export interface SheetInput {
   volumeTitle?: string;
   /** Выжимка для руководства — блок под таблицей; null/пусто — блока нет. */
   brief?: BriefSheetInput | null;
+  /** Схема расчёта: в 'new' строки наценок пишутся значениями (формула базы по тактике другая). */
+  scheme?: 'old' | 'new';
   /** Дата верхней строки (по умолчанию — сегодня). Тесты передают фикс. дату. */
   today?: Date;
 }
@@ -147,7 +149,7 @@ export function buildFinancialSheet(input: SheetInput): XLSX.WorkSheet {
   data.forEach((row, i) => {
     const rIdx = i + 3;
     const rExcel = i + 4;
-    const isMarkup = num(row.coeff_pct) > 0 && (LITERAL_BASE.has(row.calc_key || '') || Boolean(FORMULA_BASES[row.calc_key || '']));
+    const isMarkup = input.scheme !== 'new' && num(row.coeff_pct) > 0 && (LITERAL_BASE.has(row.calc_key || '') || Boolean(FORMULA_BASES[row.calc_key || '']));
 
     // numFmt задаём и через .z, и внутри стиля (.s.numFmt) — xlsx-js-style строит
     // xf из стиля, поэтому формат обязан лежать в .s, иначе колонка = «Общий».
