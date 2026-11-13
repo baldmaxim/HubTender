@@ -29,7 +29,6 @@ import {
   inferTacticPercentSet,
   type PercentSet,
 } from '../../../services/markupTactic/percentSets';
-import { PercentSetChoiceModal } from './PercentSetChoiceModal';
 import { PercentagesTab } from './PercentagesTab';
 import { TenderPicker } from './TenderPicker';
 
@@ -77,9 +76,8 @@ const MarkupPercentages: React.FC = () => {
   const [currentMarkupId, setCurrentMarkupId] = useState<string | null>(null);
   const [markupParameters, setMarkupParameters] = useState<MarkupParameter[]>([]);
   const [loadingParameters, setLoadingParameters] = useState(false);
-  // Список базовых процентов: при каждом открытии страницы спрашиваем заново (не запоминаем).
+  // Список базовых процентов: по умолчанию — список сохранённой тактики тендера, иначе старый; переключается на вкладке.
   const [percentSet, setPercentSet] = useState<PercentSet>('old');
-  const [choiceOpen, setChoiceOpen] = useState(true);
   // Тактика тендера, сохранённая в БД (для предупреждения о смене списка).
   const [savedTacticId, setSavedTacticId] = useState<string | null>(null);
   // Значения, сохранённые у тендера (ключ → %): чтобы не стирать строки другого списка.
@@ -99,18 +97,6 @@ const MarkupPercentages: React.FC = () => {
   }, [tactics, savedTacticId, markupParameters]);
   const selectedTacticName = tactics.find((t) => t.id === selectedTacticId)?.name ?? null;
 
-  const choiceModal = (
-    <PercentSetChoiceModal
-      open={choiceOpen}
-      oldCount={filterParamsBySet(markupParameters, 'old').length}
-      newLabels={filterParamsBySet(markupParameters, 'new').map((p) => p.label)}
-      onChoose={(set) => {
-        setPercentSet(set);
-        setChoiceOpen(false);
-      }}
-    />
-  );
-
   const loadSavedTacticId = async (tenderId: string) => {
     setSavedTacticId(null);
     try {
@@ -119,6 +105,12 @@ const MarkupPercentages: React.FC = () => {
       console.error('Ошибка загрузки тактики тендера:', error);
     }
   };
+
+  // Умолчание списка — список сохранённой тактики тендера (нет тактики — старый).
+  // Зависит только от savedSet: ручное переключение на вкладке не перебивается.
+  useEffect(() => {
+    setPercentSet(savedSet ?? 'old');
+  }, [savedSet]);
 
   // Порядок расчёта по умолчанию — при выборе тендера, смене списка и после загрузки данных.
   useEffect(() => {
@@ -341,123 +333,117 @@ const MarkupPercentages: React.FC = () => {
   // Если тендер не выбран, показываем только выбор тендера
   if (!selectedTenderId) {
     return (
-      <>
-        {choiceModal}
-        <TenderPicker
-          tenders={tenders}
-          selectedTenderTitle={selectedTenderTitle}
-          selectedVersion={selectedVersion}
-          titleOptions={getTenderTitles()}
-          versionOptions={selectedTenderTitle ? getVersionsForTitle(selectedTenderTitle) : []}
-          onTitleChange={handleTenderTitleChange}
-          onVersionChange={handleVersionChange}
-          onPickTender={(tender) => {
-            setSelectedTenderId(tender.id);
-            setSelectedTenderTitle(tender.title);
-            setSelectedVersion(tender.version || 1);
-            void loadSavedTacticId(tender.id);
-            fetchMarkupData(tender.id);
-          }}
-        />
-      </>
+      <TenderPicker
+        tenders={tenders}
+        selectedTenderTitle={selectedTenderTitle}
+        selectedVersion={selectedVersion}
+        titleOptions={getTenderTitles()}
+        versionOptions={selectedTenderTitle ? getVersionsForTitle(selectedTenderTitle) : []}
+        onTitleChange={handleTenderTitleChange}
+        onVersionChange={handleVersionChange}
+        onPickTender={(tender) => {
+          setSelectedTenderId(tender.id);
+          setSelectedTenderTitle(tender.title);
+          setSelectedVersion(tender.version || 1);
+          void loadSavedTacticId(tender.id);
+          fetchMarkupData(tender.id);
+        }}
+      />
     );
   }
 
   return (
-    <>
-      {choiceModal}
-      <Card
-        bordered={false}
-        headStyle={{ borderBottom: 'none', paddingBottom: 0 }}
-        title={
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-              <Space size="middle" wrap>
-                <Space size="small">
-                  <Text type="secondary" style={{ fontSize: 16 }}>Тендер:</Text>
-                  <Select
-                    className="tender-select"
-                    placeholder="Выберите тендер"
-                    value={selectedTenderTitle}
-                    onChange={handleTenderTitleChange}
-                    showSearch
-                    optionFilterProp="children"
-                    filterOption={(input, option) =>
-                      (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                    }
-                    options={getTenderTitles()}
-                    style={{ width: 350, fontSize: 16 }}
-                    allowClear
-                  />
-                </Space>
-                <Space size="small">
-                  <Text type="secondary" style={{ fontSize: 16 }}>Версия:</Text>
-                  <Select
-                    placeholder="Версия"
-                    value={selectedVersion}
-                    onChange={handleVersionChange}
-                    disabled={!selectedTenderTitle}
-                    options={selectedTenderTitle ? getVersionsForTitle(selectedTenderTitle) : []}
-                    style={{ width: 140 }}
-                  />
-                </Space>
-              </Space>
-              <div>
-                <Space>
-                  <Button
-                    icon={<ReloadOutlined />}
-                    onClick={handleReset}
-                    disabled={!selectedTenderId}
-                  >
-                    Сбросить
-                  </Button>
-                  <Button
-                    type="primary"
-                    icon={<SaveOutlined />}
-                    onClick={handleSave}
-                    loading={saving}
-                    disabled={!selectedTenderId || (percentSet === 'new' && tacticsOfSet.length === 0)}
-                  >
-                    Сохранить
-                  </Button>
-                </Space>
-              </div>
-            </div>
-          </Space>
-        }
-      >
-        <Tabs
-          defaultActiveKey="percentages"
-          items={[
-            {
-              key: 'percentages',
-              label: 'Базовые проценты',
-              children: (
-                <PercentagesTab
-                  form={form}
-                  loading={loading || loadingParameters}
-                  allParams={markupParameters}
-                  setParams={setParams}
-                  percentSet={percentSet}
-                  onPercentSetChange={setPercentSet}
-                  setTactics={tacticsOfSet}
-                  selectedTacticId={selectedTacticId}
-                  onTacticChange={handleTacticChange}
-                  tenderId={selectedTenderId}
-                  savedSet={savedSet}
-                  selectedTacticName={selectedTacticName}
+    <Card
+      bordered={false}
+      headStyle={{ borderBottom: 'none', paddingBottom: 0 }}
+      title={
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <Space size="middle" wrap>
+              <Space size="small">
+                <Text type="secondary" style={{ fontSize: 16 }}>Тендер:</Text>
+                <Select
+                  className="tender-select"
+                  placeholder="Выберите тендер"
+                  value={selectedTenderTitle}
+                  onChange={handleTenderTitleChange}
+                  showSearch
+                  optionFilterProp="children"
+                  filterOption={(input, option) =>
+                    (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                  options={getTenderTitles()}
+                  style={{ width: 350, fontSize: 16 }}
+                  allowClear
                 />
-              ),
-            },
-            {
-              key: 'subcontract_growth',
-              label: 'Рост субподряда',
-              children: <SubcontractGrowthTab tenderId={selectedTenderId} />,
-            },
-          ]}
-        />
-      </Card>
-    </>
+              </Space>
+              <Space size="small">
+                <Text type="secondary" style={{ fontSize: 16 }}>Версия:</Text>
+                <Select
+                  placeholder="Версия"
+                  value={selectedVersion}
+                  onChange={handleVersionChange}
+                  disabled={!selectedTenderTitle}
+                  options={selectedTenderTitle ? getVersionsForTitle(selectedTenderTitle) : []}
+                  style={{ width: 140 }}
+                />
+              </Space>
+            </Space>
+            <div>
+              <Space>
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={handleReset}
+                  disabled={!selectedTenderId}
+                >
+                  Сбросить
+                </Button>
+                <Button
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  onClick={handleSave}
+                  loading={saving}
+                  disabled={!selectedTenderId || (percentSet === 'new' && tacticsOfSet.length === 0)}
+                >
+                  Сохранить
+                </Button>
+              </Space>
+            </div>
+          </div>
+        </Space>
+      }
+    >
+      <Tabs
+        defaultActiveKey="percentages"
+        items={[
+          {
+            key: 'percentages',
+            label: 'Базовые проценты',
+            children: (
+              <PercentagesTab
+                form={form}
+                loading={loading || loadingParameters}
+                allParams={markupParameters}
+                setParams={setParams}
+                percentSet={percentSet}
+                onPercentSetChange={setPercentSet}
+                setTactics={tacticsOfSet}
+                selectedTacticId={selectedTacticId}
+                onTacticChange={handleTacticChange}
+                tenderId={selectedTenderId}
+                savedSet={savedSet}
+                selectedTacticName={selectedTacticName}
+              />
+            ),
+          },
+          {
+            key: 'subcontract_growth',
+            label: 'Рост субподряда',
+            children: <SubcontractGrowthTab tenderId={selectedTenderId} />,
+          },
+        ]}
+      />
+    </Card>
   );
 };
 
