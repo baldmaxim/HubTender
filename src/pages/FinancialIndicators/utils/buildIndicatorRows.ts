@@ -1,6 +1,5 @@
 import type { getTenderInsuranceFI } from '../../../lib/api/fi';
 import type { DirectCostTotals, MarkupCoefficients, FinancialCalcResult, IndicatorRow } from '../types';
-import { scaleTotalsByVat } from './newSchemeCoefficients';
 import { applyNewSchemeLabels } from './newSchemeRowLabels';
 
 type InsuranceDataFI = Awaited<ReturnType<typeof getTenderInsuranceFI>> | null;
@@ -18,9 +17,9 @@ export const buildIndicatorRows = (
   areaSp: number,
   areaClient: number,
 ): IndicatorRow[] => {
-  // Новая схема: суммы строк уже с НДС, поэтому и составы в тултипах берём с НДС.
+  // Новая схема: строки без домножения на НДС (НДС — приращение шага цепочки).
   const isNewScheme = coeffs.scheme === 'new' && coeffs.newScheme !== undefined;
-  const totals = isNewScheme && coeffs.newScheme ? scaleTotalsByVat(rawTotals, coeffs.newScheme) : rawTotals;
+  const totals = rawTotals;
   const {
     subcontractTotal,
     su10Total,
@@ -83,6 +82,10 @@ export const buildIndicatorRows = (
     vatCoeff,
     isVatInConstructor,
   } = coeffs;
+
+  // Новая схема: приращение шага НДС для графиков лежит в строке 10 («Прочие наценки и НДС»),
+  // чтобы строки 2-16 сходились с ИТОГО; «Таблица» (buildTableRows) выделяет НДС отдельной строкой.
+  const row10Cost = isNewScheme ? unforeseeableCost + vatCost : unforeseeableCost;
 
   const tableData: IndicatorRow[] = [
     {
@@ -218,9 +221,9 @@ export const buildIndicatorRows = (
       row_number: 10,
       indicator_name: 'Непредвиденные',
       coefficient: unforeseeableCoeff > 0 ? `${parseFloat(unforeseeableCoeff.toFixed(5))}%` : '',
-      sp_cost: areaSp > 0 ? unforeseeableCost / areaSp : 0,
-      customer_cost: areaClient > 0 ? unforeseeableCost / areaClient : 0,
-      total_cost: unforeseeableCost,
+      sp_cost: areaSp > 0 ? row10Cost / areaSp : 0,
+      customer_cost: areaClient > 0 ? row10Cost / areaClient : 0,
+      total_cost: row10Cost,
       tooltip: `Формула: (Работы + 0,6к + Материалы + МБП + СМ) × ${unforeseeableCoeff}%\n` +
                `Работы: ${worksSu10Only.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}\n` +
                `+ 0,6к: ${coefficient06Cost.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}\n` +
@@ -347,7 +350,7 @@ export const buildIndicatorRows = (
     },
   ];
 
-  // Новая схема: суммы уже с НДС (computeIndicatorsNewScheme) — не домножаем, меняем подписи.
+  // Новая схема: суммы без домножения на НДС (computeIndicatorsNewScheme) — меняем подписи.
   if (isNewScheme) return applyNewSchemeLabels(tableData, calc, coeffs);
 
   // Если НДС в конструкторе — умножаем каждую строку (1-15) на (1 + НДС%)

@@ -34,7 +34,7 @@ export const LITERAL_BASE = new Set(['growth_sub_work', 'growth_sub_mat']);
 
 // Слагаемые «Прямых затрат» и ИТОГО (calc_key в порядке строк buildTableRows).
 const DIRECT_PARTS = ['subcontract_work', 'subcontract_mat', 'work_su10', 'materials_su10', 'reserve', 'mechanization', 'mvp', 'warranty'];
-const TOTAL_PARTS = [...DIRECT_PARTS, 'coef16', 'growth_work', 'growth_mat', 'growth_sub_work', 'growth_sub_mat', 'unforeseeable', 'ooz', 'ooz_sub', 'ofz', 'profit', 'profit_sub', 'insurance'];
+const TOTAL_PARTS = [...DIRECT_PARTS, 'coef16', 'growth_work', 'growth_mat', 'growth_sub_work', 'growth_sub_mat', 'unforeseeable', 'ooz', 'ooz_sub', 'ofz', 'vat', 'profit', 'profit_sub', 'insurance'];
 
 // Диапазон F{первая}:F{последняя} по присутствующим строкам группы. Нулевые строки
 // из таблицы убраны (buildTableRows), порядок сохранён — оставшиеся идут подряд.

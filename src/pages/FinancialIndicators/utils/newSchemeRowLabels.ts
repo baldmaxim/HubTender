@@ -7,6 +7,15 @@ const pct = (v: number) => `${parseFloat(v.toFixed(5))}%`;
 
 const BY_TACTIC = 'Расчёт по тактике наценок (новый список процентов): цепочка каждого типа затрат применяется к базе строки BOQ';
 
+/** Тултип строки «Прочие наценки» (только наценки цепочек вне роста/ООЗ/ОФЗ/НДС/прибыли). */
+export const newSchemeOtherTooltip = (calc: FinancialCalcResult): string =>
+  `${BY_TACTIC}.\nЧасть наценок цепочек, не относящаяся к росту, ООЗ, ОФЗ, НДС и прибыли: ${fmt(calc.unforeseeableCost)} руб.`;
+
+/** Тултип строки «НДС» новой схемы: шаг НДС цепочки тактики, на базе суммы после ОФЗ. */
+export const newSchemeVatTooltip = (calc: FinancialCalcResult, vatPct: number): string =>
+  `${BY_TACTIC}.\nНДС${vatPct > 0 ? ` (${pct(vatPct)})` : ''} — шаг цепочки тактики (после ОФЗ, перед «Прибыль (скидка)»), ` +
+  `суммы остальных строк — без НДС.\nНДС: ${fmt(calc.vatCost)} руб.`;
+
 export const applyNewSchemeLabels = (
   rows: IndicatorRow[],
   calc: FinancialCalcResult,
@@ -15,7 +24,7 @@ export const applyNewSchemeLabels = (
   const vatPct = coeffs.vatCoeff;
   const patch: Record<number, Partial<IndicatorRow>> = {
     1: {
-      tooltip: `Состав прямых затрат${coeffs.isVatInConstructor ? ' (с НДС)' : ''}:\n` +
+      tooltip: `Состав прямых затрат (без НДС):\n` +
         `1. Субподряд: ${fmt(calc.subcontractTotal)}\n` +
         `2. Работы + Материалы СУ-10: ${fmt(calc.su10Total)}\n` +
         `3. Запас на сдачу объекта: ${fmt(calc.reserveForDeliveryTotal)}\n` +
@@ -28,9 +37,12 @@ export const applyNewSchemeLabels = (
         `Итого: ${fmt(calc.totalCostGrowth)} руб.`,
     },
     10: {
-      indicator_name: 'Прочие наценки',
+      indicator_name: 'Прочие наценки и НДС',
       coefficient: '',
-      tooltip: `${BY_TACTIC}.\nЧасть наценок цепочек, не относящаяся к росту, ООЗ, ОФЗ и прибыли: ${fmt(calc.unforeseeableCost)} руб.`,
+      tooltip: `${BY_TACTIC}.\n` +
+        `Прочие наценки цепочек: ${fmt(calc.unforeseeableCost)} руб.\n` +
+        `НДС${vatPct > 0 ? ` (${pct(vatPct)})` : ''} (шаг цепочки): ${fmt(calc.vatCost)} руб.\n` +
+        `Итого: ${fmt(calc.unforeseeableCost + calc.vatCost)} руб.`,
     },
     12: {
       indicator_name: 'ООЗ Субподряда',
@@ -42,16 +54,12 @@ export const applyNewSchemeLabels = (
     },
     15: {
       indicator_name: 'Прибыль (скидка)',
-      tooltip: `${BY_TACTIC}.\nПрибыль (скидка) (${pct(coeffs.profitSubcontractCoeff)}): ${fmt(calc.profitSubcontractCost)} руб.`,
+      tooltip: `${BY_TACTIC}.\nПрибыль (скидка) (${pct(coeffs.profitSubcontractCoeff)}) считается от суммы после НДС: ${fmt(calc.profitSubcontractCost)} руб.`,
     },
     18: {
       indicator_name: vatPct > 0 ? `В том числе НДС ${pct(vatPct)}` : 'В том числе НДС',
       coefficient: vatPct > 0 ? pct(vatPct) : '',
-      tooltip: coeffs.isVatInConstructor
-        ? `НДС цепочек тактики (суммы строк уже с НДС), плюс НДС ${pct(vatPct)} на страхование.\n` +
-          `Сумма без НДС: ${fmt(calc.grandTotalBeforeVAT)}\nНДС: ${fmt(calc.vatCost)} руб.`
-        : `НДС в тактике нет: ИТОГО / (1 + ${pct(vatPct)}) × ${pct(vatPct)}\n` +
-          `ИТОГО: ${fmt(calc.grandTotal)}\nНДС: ${fmt(calc.vatCost)} руб.`,
+      tooltip: `${newSchemeVatTooltip(calc, vatPct)}\nВходит в ИТОГО (${fmt(calc.grandTotal)}); без НДС: ${fmt(calc.grandTotalBeforeVAT)} руб.`,
     },
   };
   return rows.map((row) => (patch[row.row_number] ? { ...row, ...patch[row.row_number] } : row));

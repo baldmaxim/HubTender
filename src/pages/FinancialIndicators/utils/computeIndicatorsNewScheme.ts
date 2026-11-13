@@ -8,8 +8,10 @@ import type {
 } from '../types';
 
 /**
- * «Новая схема» (тактика с новым списком базовых процентов): итог строки BOQ =
- * база × коэффициент цепочки × (1 + НДС%), как у движка. Суммы строк уже с НДС.
+ * «Новая схема» (тактика с новым списком базовых процентов): строки считаются ровно по цепочке
+ * тактики на базе BOQ, шаг НДС остаётся в цепочке — его приращение идёт в отдельную строку «НДС».
+ * Прямые затраты и все строки — БЕЗ домножения на (1 + НДС); страхование — как пришло.
+ * ИТОГО = Σ коммерческих стоимостей BOQ + страхование.
  *
  * Расчёт ЛИНЕЕН и ОДНОРОДЕН по полям `totals` и по `insuranceCost` (никаких округлений,
  * min/max, ступеней; исключённая база = subcontractWorks − subcontractWorksForGrowth может
@@ -26,19 +28,17 @@ export const computeIndicatorsNewScheme = (
     growthSubMaterials: 0,
     overheadSub: 0,
     generalCosts: 0,
+    vat: 0,
     profit: 0,
     other: 0,
   };
-  let vatTotal = 0;
 
-  // Прямые затраты варианта с НДС; строки и НДС накапливаются в замыкании.
+  // Приращения варианта цепочки накапливаются в замыкании; прямые затраты — без наценок.
   const applyVariant = (base: number, v: INewSchemeVariant): number => {
-    const f = 1 + v.vatPct / 100;
     (Object.keys(rows) as NewSchemeRowKey[]).forEach((key) => {
-      rows[key] += base * v.increments[key] * f;
+      rows[key] += base * v.increments[key];
     });
-    vatTotal += (base * v.coeff * v.vatPct) / 100;
-    return base * f;
+    return base;
   };
 
   const subWorksNormal = totals.subcontractWorksForGrowth;
@@ -57,10 +57,8 @@ export const computeIndicatorsNewScheme = (
 
   const directCostsTotal = subcontractTotal + su10Total + reserveForDeliveryTotal;
 
-  // Страхование: НДС добавляется сверху, только если он есть в тактике.
-  const vatMain = ns.vatMainPct / 100;
-  const insurance = ns.anyVat ? insuranceCost * (1 + vatMain) : insuranceCost;
-  if (ns.anyVat) vatTotal += insuranceCost * vatMain;
+  // Страхование — отдельная строка той суммой, что пришла, без НДС.
+  const insurance = insuranceCost;
 
   const totalCostGrowth = rows.growthSubWorks + rows.growthSubMaterials;
   const grandTotal =
@@ -68,13 +66,14 @@ export const computeIndicatorsNewScheme = (
     totalCostGrowth +
     rows.overheadSub +
     rows.generalCosts +
+    rows.vat +
     rows.profit +
     rows.other +
     insurance;
 
-  // НДС в тактике нет — справочно выделяем из ИТОГО, как в старой схеме.
-  const vatCost = ns.anyVat ? vatTotal : (grandTotal / (1 + vatMain)) * vatMain;
-  const grandTotalBeforeVAT = ns.anyVat ? grandTotal - vatCost : grandTotal;
+  // «В том числе НДС» (строка 18 графиков) — сумма приращений шагов НДС цепочек.
+  const vatCost = rows.vat;
+  const grandTotalBeforeVAT = grandTotal - vatCost;
 
   return {
     subcontractTotal,

@@ -1,16 +1,13 @@
 // Коэффициенты «новой схемы» финансовых показателей: расчёт ПО ТАКТИКЕ наценок
 // (тендеры, чья тактика ссылается на новый список базовых процентов).
-// Повторяет шаги движка по строке BOQ (services/markupTactic/calculation.ts):
-// цепочка типа → исключения роста (суб-раб/суб-мат) → отделение НДС → цепочка на базе 1.
+// Цепочка типа → исключения роста (суб-раб/суб-мат) → цепочка на базе 1 КАК ЕСТЬ:
+// шаг НДС остаётся в цепочке на своей позиции (приращение идёт в строку «НДС»),
+// а не вырезается и не домножается сверху, как в движке.
 import type { MarkupSequences, MarkupStep } from '../../../lib/types';
-import {
-  filterSequenceForExclusions,
-  filterVATFromSequence,
-} from '../../../services/markupTactic/calculation';
-import { NEW_PERCENT_KEYS } from '../../../services/markupTactic/percentSets';
+import { filterSequenceForExclusions } from '../../../services/markupTactic/calculation';
+import { NEW_PERCENT_KEYS, VAT_PARAM_KEYS } from '../../../services/markupTactic/percentSets';
 import { calculateMarkupResult } from '../../../utils/markupCalculator';
 import type {
-  DirectCostTotals,
   INewSchemeCoefficients,
   INewSchemeVariant,
   MarkupCoefficients,
@@ -24,6 +21,7 @@ const ROW_BY_PARAM_KEY: Record<string, NewSchemeRowKey> = {
   [NEW_PERCENT_KEYS.overheadSubcontract]: 'overheadSub',
   [NEW_PERCENT_KEYS.generalCosts]: 'generalCosts',
   [NEW_PERCENT_KEYS.profitDiscount]: 'profit',
+  ...Object.fromEntries(VAT_PARAM_KEYS.map((key) => [key, 'vat' as const])),
 };
 
 const emptyIncrements = (): Record<NewSchemeRowKey, number> => ({
@@ -31,13 +29,13 @@ const emptyIncrements = (): Record<NewSchemeRowKey, number> => ({
   growthSubMaterials: 0,
   overheadSub: 0,
   generalCosts: 0,
+  vat: 0,
   profit: 0,
   other: 0,
 });
 
-const IDENTITY_VARIANT = (vatPct: number): INewSchemeVariant => ({
+const IDENTITY_VARIANT = (): INewSchemeVariant => ({
   coeff: 1,
-  vatPct,
   increments: emptyIncrements(),
 });
 
@@ -58,20 +56,19 @@ const rowKeyOfStep = (step: MarkupStep): NewSchemeRowKey => {
   return ROW_BY_PARAM_KEY[[...keys][0]] ?? 'other';
 };
 
-/** Вариант цепочки: коэффициент на базе 1, НДС и разложение приращений по строкам. */
+/** Вариант цепочки: коэффициент на базе 1 (с НДС шага цепочки) и разложение приращений по строкам. */
 const buildVariant = (
   sequence: MarkupStep[] | undefined,
   excludedType: 'суб-раб' | 'суб-мат' | null,
   paramValues: Map<string, number>,
 ): INewSchemeVariant => {
   // Пустая цепочка типа — движок строки не пересчитывает: ×1, без наценки.
-  if (!sequence || sequence.length === 0) return IDENTITY_VARIANT(0);
+  if (!sequence || sequence.length === 0) return IDENTITY_VARIANT();
 
-  const afterExclusions = excludedType
+  const filtered = excludedType
     ? filterSequenceForExclusions(sequence, true, excludedType)
     : sequence;
-  const { filtered, vatCoefficient } = filterVATFromSequence(afterExclusions, paramValues);
-  if (filtered.length === 0) return IDENTITY_VARIANT(vatCoefficient);
+  if (filtered.length === 0) return IDENTITY_VARIANT();
 
   const { commercialCost: coeff, stepResults } = calculateMarkupResult({
     baseAmount: 1,
@@ -96,7 +93,24 @@ const buildVariant = (
   const sum = Object.values(increments).reduce((acc, v) => acc + v, 0);
   increments.other += coeff - 1 - sum;
 
-  return { coeff, vatPct: vatCoefficient, increments };
+  return { coeff, increments };
+};
+
+/** Фактическая ставка НДС, %: параметр шага НДС (new_nds / nds_22) в цепочках тактики; 0 — шага нет. */
+const findVatRate = (sequences: MarkupSequences, paramValues: Map<string, number>): number => {
+  let rate = 0;
+  Object.values(sequences).forEach((steps: MarkupStep[] | undefined) => {
+    steps?.forEach((step) => {
+      if (rowKeyOfStep(step) !== 'vat') return;
+      const keys = [step.operand1Key, step.operand2Key, step.operand3Key, step.operand4Key, step.operand5Key];
+      keys.forEach((key) => {
+        if (key !== undefined && VAT_PARAM_KEYS.includes(String(key))) {
+          rate = Math.max(rate, paramValues.get(String(key)) ?? 0);
+        }
+      });
+    });
+  });
+  return rate;
 };
 
 /**
@@ -116,10 +130,6 @@ export const buildNewSchemeCoefficients = (
   const workComp = buildVariant(sequences['раб-комп.'], null, paramValues);
   const materialComp = buildVariant(sequences['мат-комп.'], null, paramValues);
 
-  const variants = [
-    work, material, subWork, subWorkExcluded, subMaterial, subMaterialExcluded, workComp, materialComp,
-  ];
-
   return {
     work,
     material,
@@ -129,8 +139,7 @@ export const buildNewSchemeCoefficients = (
     subMaterialExcluded,
     workComp,
     materialComp,
-    vatMainPct: paramValues.get(NEW_PERCENT_KEYS.vat) ?? 0,
-    anyVat: variants.some((v) => v.vatPct > 0),
+    vatMainPct: findVatRate(sequences, paramValues),
   };
 };
 
@@ -156,38 +165,7 @@ export const buildNewSchemeMarkupCoefficients = (
   profitSubcontractCoeff: paramValues.get(NEW_PERCENT_KEYS.profitDiscount) ?? 0,
   unforeseeableCoeff: 0,
   vatCoeff: newScheme.vatMainPct,
-  isVatInConstructor: newScheme.anyVat,
+  // НДС — отдельная строка со своим приращением (не домножение строк), поэтому
+  // графики/детализация не должны умножать суммы на (1 + НДС).
+  isVatInConstructor: false,
 });
-
-/**
- * Прямые затраты, домноженные по типам на (1 + НДС цепочки) — для отображения строк
- * «с НДС» (в новой схеме суммы строк уже содержат НДС). Множитель типа — по обычному
- * варианту цепочки (у исключённого НДС тот же: фильтр исключений НДС не затрагивает).
- */
-export const scaleTotalsByVat = (
-  totals: DirectCostTotals,
-  ns: INewSchemeCoefficients,
-): DirectCostTotals => {
-  const f = (v: INewSchemeVariant) => 1 + v.vatPct / 100;
-  const fSubWork = f(ns.subWork);
-  const fSubMat = f(ns.subMaterial);
-  const fWork = f(ns.work);
-  const fMat = f(ns.material);
-  return {
-    ...totals,
-    subcontractWorks: totals.subcontractWorks * fSubWork,
-    subcontractWorksForGrowth: totals.subcontractWorksForGrowth * fSubWork,
-    subcontractMaterials: totals.subcontractMaterials * fSubMat,
-    subcontractMaterialsForGrowth: totals.subcontractMaterialsForGrowth * fSubMat,
-    subcontractMaterialsBasic: totals.subcontractMaterialsBasic * fSubMat,
-    subcontractMaterialsAux: totals.subcontractMaterialsAux * fSubMat,
-    subcontractMaterialsForGrowthBasic: totals.subcontractMaterialsForGrowthBasic * fSubMat,
-    subcontractMaterialsForGrowthAux: totals.subcontractMaterialsForGrowthAux * fSubMat,
-    works: totals.works * fWork,
-    materials: totals.materials * fMat,
-    materialsBasic: totals.materialsBasic * fMat,
-    materialsAux: totals.materialsAux * fMat,
-    worksComp: totals.worksComp * f(ns.workComp),
-    materialsComp: totals.materialsComp * f(ns.materialComp),
-  };
-};

@@ -6,13 +6,14 @@
 //   • «Субподряд» → «Субподряд работы» + «Субподряд материалы»
 //   • «Работы + Материалы СУ-10» → «Работы СУ-10» + «Материалы СУ-10»
 //   • «Рост стоимости» → 4 строки (раб/мат СУ-10, раб/мат субподряд)
-//   • строка «В том числе НДС» убрана
+//   • строка «В том числе НДС» убрана; в новой схеме вместо неё — «НДС X%» (шаг цепочки
+//     тактики) между «ОФЗ» и «Прибыль (скидка)»
 //   • после ИТОГО добавлены «Работы» и «Материалы»
 //   • у материальных строк — тултип осн/вспом (как у строк наценок)
 //   • каждой строке проставлен calc_key (роль) и coeff_pct — для Excel-формул
 //   • строки с нулевым итогом убраны (кроме ИТОГО), нумерация сквозная
 import type { DirectCostTotals, MarkupCoefficients, FinancialCalcResult, IndicatorRow } from '../types';
-import { scaleTotalsByVat } from './newSchemeCoefficients';
+import { newSchemeOtherTooltip, newSchemeVatTooltip } from './newSchemeRowLabels';
 
 const fmt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 const pctStr = (v: number) => (v > 0 ? `${parseFloat(v.toFixed(5))}%` : '');
@@ -33,10 +34,9 @@ export const buildTableRows = (
   areaClient: number,
 ): IndicatorRow[] => {
   const byNum = new Map(baseRows.map((r) => [r.row_number, r]));
-  // Новая схема: суммы строк уже с НДС (vatMul = 1), а доп. строки считаем из прямых
-  // затрат, домноженных по типам на (1 + НДС цепочки). «Материалы» ниже — от исходных rawTotals.
+  // Новая схема: строки без домножения на НДС (vatMul = 1); НДС — отдельная строка (шаг цепочки).
   const isNewScheme = coeffs.scheme === 'new' && coeffs.newScheme !== undefined;
-  const totals = isNewScheme && coeffs.newScheme ? scaleTotalsByVat(rawTotals, coeffs.newScheme) : rawTotals;
+  const totals = rawTotals;
   const vatMul = !isNewScheme && coeffs.isVatInConstructor && coeffs.vatCoeff > 0 ? 1 + coeffs.vatCoeff / 100 : 1;
 
   const spPer = (v: number) => (areaSp > 0 ? v / areaSp : 0);
@@ -161,10 +161,32 @@ export const buildTableRows = (
         `= ${fmt(gSubMat)} руб.`,
     }),
 
-    keep(10, { calc_key: 'unforeseeable', coeff_pct: coeffs.unforeseeableCoeff }),
+    // Новая схема: base-строка 10 содержит НДС (для графиков) — в таблице берём «Прочие наценки» отдельно.
+    keep(10, {
+      calc_key: 'unforeseeable',
+      coeff_pct: coeffs.unforeseeableCoeff,
+      ...(isNewScheme
+        ? {
+            indicator_name: 'Прочие наценки',
+            total_cost: calc.unforeseeableCost,
+            sp_cost: spPer(calc.unforeseeableCost),
+            customer_cost: clPer(calc.unforeseeableCost),
+            tooltip: newSchemeOtherTooltip(calc),
+          }
+        : {}),
+    }),
     keep(11, { calc_key: 'ooz', coeff_pct: coeffs.overheadOwnForcesCoeff }),
     keep(12, { calc_key: 'ooz_sub', coeff_pct: coeffs.overheadSubcontractCoeff }),
     keep(13, { indicator_name: isNewScheme ? 'ОФЗ' : 'ОФЗ (без субподряда)', calc_key: 'ofz', coeff_pct: coeffs.generalCostsCoeff }),
+    ...(isNewScheme
+      ? [
+          mk({
+            name: `НДС ${pctStr(coeffs.vatCoeff) || ''}`.trim(), total: calc.vatCost, calc_key: 'vat',
+            coefficient: pctStr(coeffs.vatCoeff), coeff_pct: coeffs.vatCoeff,
+            tooltip: newSchemeVatTooltip(calc, coeffs.vatCoeff),
+          }),
+        ]
+      : []),
     keep(14, { calc_key: 'profit', coeff_pct: coeffs.profitOwnForcesCoeff }),
     keep(15, { calc_key: 'profit_sub', coeff_pct: coeffs.profitSubcontractCoeff }),
     keep(16, { indicator_name: 'Страхование от судимостей, 3% от продаваемых помещений', calc_key: 'insurance' }),

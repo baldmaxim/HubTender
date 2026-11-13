@@ -65,15 +65,14 @@ export type NewSchemeRowKey =
   | 'growthSubMaterials'
   | 'overheadSub'
   | 'generalCosts'
+  | 'vat'
   | 'profit'
   | 'other';
 
 // Коэффициент одного варианта цепочки (тип BOQ-элемента, возможно «исключённый» из роста).
 export interface INewSchemeVariant {
-  /** Результат цепочки на базе 1 без НДС. */
+  /** Результат цепочки на базе 1 (шаг НДС — внутри цепочки, на своей позиции). */
   coeff: number;
-  /** НДС цепочки, % (0 — НДС в тактике нет). */
-  vatPct: number;
   /** Приращения по строкам; Σ строго равна coeff − 1. */
   increments: Record<NewSchemeRowKey, number>;
 }
@@ -89,10 +88,8 @@ export interface INewSchemeCoefficients {
   subMaterialExcluded: INewSchemeVariant;
   workComp: INewSchemeVariant;
   materialComp: INewSchemeVariant;
-  /** Значение new_nds тендера, % — для страхования и справочного НДС. */
+  /** Фактическая ставка НДС шага цепочки, % (0 — шага НДС с положительной ставкой нет). */
   vatMainPct: number;
-  /** Есть ли хотя бы одна цепочка с НДС. */
-  anyVat: boolean;
 }
 
 // Разрешённые коэффициенты наценок тендера (проценты) + признак НДС в конструкторе.
