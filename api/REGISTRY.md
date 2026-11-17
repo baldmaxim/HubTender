@@ -89,6 +89,36 @@ Base URL: `https://gp.su10.ru`. Все пути ниже начинаются с
 
 Под карточкой — кнопки `tc:` и `te:`. Если тендера нет — `404 REGISTRY_NOT_FOUND`.
 
+### `GET /tender-registry/export` — область `registry:read`
+
+Полный перечень тендеров для внешних систем (импорт в стороннюю базу). В выдаче **все** строки
+перечня: и архивные, и тендеры, по которым ещё нет расчёта. Без параметров, без пагинации и
+без ограничения по числу строк — один ответ.
+
+Ключ: область `registry:read`, **список тендеров не задавать** (ограниченный ключ получит
+`403 API_KEY_TENDER_DENIED`). Только по ключу (`X-API-Key`); сессия портала — `403 API_KEY_REQUIRED`.
+
+```json
+{"data": [
+  {"id": "…", "tender_number": "330", "title": "ЖК Ода", "client_name": "ООО Ромашка",
+   "object_address": "г. Алматы, …", "dashboard_status": "sent",
+   "status": {"id": "…", "name": "Направлено"}, "is_archived": false,
+   "construction_scope": {"id": "…", "name": "Монолит"}, "area": 12345.6,
+   "submission_date": "2026-09-30T00:00:00Z", "updated_at": "2026-10-02T08:15:00Z"},
+  {"id": "…", "tender_number": null, "title": "Школа", "client_name": "ГУ Отдел",
+   "object_address": null, "dashboard_status": null, "status": null, "is_archived": true,
+   "construction_scope": null, "area": null, "submission_date": null, "updated_at": null}
+]}
+```
+
+- В каждом объекте всегда все 12 полей; пустое значение — `null` (поле не пропускается).
+- `status` и `construction_scope` — `{id, name}` или `null`.
+- Даты — строки RFC3339 в UTC.
+- Порядок — как в списке портала (`sort_order` по возрастанию), при равенстве — по `id`; стабилен между вызовами.
+- Пустой перечень — `{"data": []}`.
+- Ошибки: 401 — ключ не передан или неверен; 403 — `API_KEY_REQUIRED`, `API_KEY_SCOPE_DENIED`,
+  `API_KEY_TENDER_DENIED`; 429 — превышен лимит вызовов ключа в минуту (см. «Ошибки» ниже).
+
 ### `POST /tender-registry/reminders/claim` — область `registry:write`
 
 Тело: `{"chat_id": -1001234567890}` — чат, куда бот отправит напоминания.

@@ -80,6 +80,7 @@ type deps struct {
 	notificationsH      *handlers.NotificationsHandler
 	tenderRegistryH     *handlers.TenderRegistryHandler
 	registryBotH        *handlers.TenderRegistryBotHandler
+	registryExportH     *handlers.TenderRegistryExportHandler
 	verifBotH           *handlers.VerificationBotHandler
 	costsH              *handlers.CostsHandler
 	nomenclaturesH      *handlers.NomenclaturesHandler
@@ -531,6 +532,7 @@ func buildDeps(
 		positionFiltersH:  handlers.NewPositionFiltersHandler(positionFiltersSvc),
 		notificationsH:    handlers.NewNotificationsHandler(notificationsSvc),
 		tenderRegistryH:   handlers.NewTenderRegistryHandler(tenderRegistrySvc),
+		registryExportH:   handlers.NewTenderRegistryExportHandler(tenderRegistrySvc),
 		registryBotH: handlers.NewTenderRegistryBotHandler(services.NewTenderRegistryBotService(
 			repository.NewTenderRegistryBotRepo(pool), cfg.AppBaseURL)),
 		costsH:         handlers.NewCostsHandler(costsSvc),

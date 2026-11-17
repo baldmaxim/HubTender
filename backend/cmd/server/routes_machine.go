@@ -102,6 +102,7 @@ func registerMachineRoutes(r chi.Router, d *deps, verifyCfg middleware.VerifyCon
 		registerAutopriceRoutes(r, d)
 
 		registerRegistryBotRoutes(r, d.registryBotH)
+		registerRegistryExportRoute(r, d.registryExportH)
 		registerVerificationBotRoutes(r, d.verifBotH)
 	})
 }
@@ -171,6 +172,15 @@ func registerRegistryBotRoutes(r chi.Router, h *handlers.TenderRegistryBotHandle
 	r.With(requireAPIKey, regRead).Get("/api/v1/tender-registry/{id}/card", h.Card)
 	r.With(requireAPIKey, regWrite).Post("/api/v1/tender-registry/reminders/claim", h.ClaimReminders)
 	r.With(requireAPIKey, regWrite).Post("/api/v1/tender-registry/{id}/chronology", h.AppendChronology)
+}
+
+// registerRegistryExportRoute — полный перечень тендеров для внешнего импортёра
+// (api/REGISTRY.md): только по ключу с областью registry:read, без ограничения
+// по тендерам. Статичный /export не пересекается с /{id}/card и не затеняет
+// JWT-маршрут GET /api/v1/tender-registry (другой путь).
+func registerRegistryExportRoute(r chi.Router, h *handlers.TenderRegistryExportHandler) {
+	regRead := middleware.RequireAPIKeyScopeResolved(apikey.ScopeRegistryRead, registryDeniesRestrictedKey)
+	r.With(requireAPIKey, regRead).Get("/api/v1/tender-registry/export", h.Export)
 }
 
 // registerVerificationBotRoutes — бот рассылки замечаний «Проверки данных» для
