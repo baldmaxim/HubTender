@@ -5,6 +5,21 @@ export interface SectionPosition {
   parent_position_id?: string | null;
 }
 
+// ДОП следует за своей позицией: если родитель в наборе, ДОП тоже считается отобранной.
+// Возвращает новый Set, входной не мутируется.
+export function withParentAdditionals<T extends SectionPosition>(
+  positions: T[],
+  ids: ReadonlySet<string>
+): Set<string> {
+  const result = new Set<string>(ids);
+  for (const pos of positions) {
+    if (pos.is_additional && pos.parent_position_id && ids.has(pos.parent_position_id)) {
+      result.add(pos.id);
+    }
+  }
+  return result;
+}
+
 export function collectSectionDescendants<T extends SectionPosition>(
   positions: T[],
   sectionPositionId: string
@@ -32,11 +47,5 @@ export function collectSectionDescendants<T extends SectionPosition>(
     result.add(pos.id);
   }
 
-  for (const pos of positions) {
-    if (pos.is_additional && pos.parent_position_id && result.has(pos.parent_position_id)) {
-      result.add(pos.id);
-    }
-  }
-
-  return result;
+  return withParentAdditionals(positions, result);
 }

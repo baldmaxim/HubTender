@@ -21,7 +21,7 @@ import AddAdditionalPositionModal from './AddAdditionalPositionModal';
 import { MassBoqImportModal } from './components/MassBoqImportModal';
 import SmartImportWizard from './components/SmartImportWizard';
 import type { Tender } from '../../lib/types';
-import { collectSectionDescendants } from '../../utils/positions/collectSectionDescendants';
+import { collectSectionDescendants, withParentAdditionals } from '../../utils/positions/collectSectionDescendants';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { filterPositionsBySearch } from './utils/positionSearch';
 import { useUndoHotkey } from './hooks/useUndoHotkey';
@@ -197,14 +197,24 @@ const ClientPositions: React.FC = () => {
       .sort((a, b) => b.value - a.value);
   }, [tenders, selectedTenderTitle, shouldFilterArchived]);
 
+  // ДОП следует за своей позицией: выводим при чтении, в сохранённый набор не обязаны входить.
+  const effectiveSelectedIds = useMemo(
+    () => withParentAdditionals(clientPositions, selectedPositionIds),
+    [clientPositions, selectedPositionIds]
+  );
+  const effectiveTempIds = useMemo(
+    () => withParentAdditionals(clientPositions, tempSelectedPositionIds),
+    [clientPositions, tempSelectedPositionIds]
+  );
+
   // Фильтрация позиций в зависимости от активного фильтра
   const displayedPositions = useMemo(() => {
     if (!isFilterActive || selectedPositionIds.size === 0 || showAllPositions) {
       return clientPositions;
     }
     // Строгая фильтрация: показываем только выбранные позиции
-    return clientPositions.filter(pos => selectedPositionIds.has(pos.id));
-  }, [clientPositions, isFilterActive, selectedPositionIds, showAllPositions]);
+    return clientPositions.filter(pos => effectiveSelectedIds.has(pos.id));
+  }, [clientPositions, isFilterActive, selectedPositionIds, effectiveSelectedIds, showAllPositions]);
 
   const searchedPositions = useMemo(
     () => filterPositionsBySearch(displayedPositions, deferredPositionSearchQuery),
@@ -220,9 +230,9 @@ const ClientPositions: React.FC = () => {
       return totalSum;
     }
     let sum = 0;
-    for (const id of selectedPositionIds) sum += positionCounts[id]?.total ?? 0;
+    for (const id of effectiveSelectedIds) sum += positionCounts[id]?.total ?? 0;
     return sum;
-  }, [isFilterActive, selectedPositionIds, showAllPositions, totalSum, positionCounts]);
+  }, [isFilterActive, selectedPositionIds, effectiveSelectedIds, showAllPositions, totalSum, positionCounts]);
 
   // Card sticky (top:0): чтобы панель фильтра/импорта доходила до верха при скролле, высота
   // <Card> должна быть ≥ области скролла. tbody целим в «залипшее» состояние: viewport -
@@ -390,7 +400,7 @@ const ClientPositions: React.FC = () => {
   };
 
   const handleApplyFilter = async () => {
-    const positionIds = Array.from(tempSelectedPositionIds);
+    const positionIds = Array.from(effectiveTempIds);
     await saveFilter(positionIds);
     setShowAllPositions(false);
   };
@@ -515,7 +525,7 @@ const ClientPositions: React.FC = () => {
           leafPositionIndices={leafPositionIndices}
           readOnly={isReadOnlyByDeadline}
           isFilterActive={isFilterActive}
-          filterSelectedCount={selectedPositionIds.size}
+          filterSelectedCount={effectiveSelectedIds.size}
           totalPositionsCount={clientPositions.length}
           onRowClick={handleRowClick}
           onOpenAdditionalModal={handleOpenAdditionalModal}
@@ -554,13 +564,13 @@ const ClientPositions: React.FC = () => {
           canDeletePositions={canDeletePositions}
           onExportToExcel={() => handleExportToExcel(
             selectedTender,
-            isFilterActive && !showAllPositions ? selectedPositionIds : null
+            isFilterActive && !showAllPositions ? effectiveSelectedIds : null
           )}
           onMassImport={() => setMassImportModalOpen(true)}
           onSmartImport={() => setSmartImportOpen(true)}
           searchQuery={positionSearchQuery}
           onSearchQueryChange={setPositionSearchQuery}
-          tempSelectedPositionIds={tempSelectedPositionIds}
+          tempSelectedPositionIds={effectiveTempIds}
           onToggleFilterCheckbox={handleToggleFilterCheckbox}
           onApplyFilter={handleApplyFilter}
           onClearFilter={handleClearFilter}

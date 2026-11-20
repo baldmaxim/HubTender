@@ -159,23 +159,33 @@ export const PositionTable: React.FC<PositionTableProps> = ({
       width: 60,
       align: 'center',
       fixed: 'left',
-      render: (_, record) => (
-        <Tag
-          color={tempSelectedPositionIds.has(record.id) ? 'blue' : 'default'}
-          style={{
-            cursor: readOnly ? 'not-allowed' : 'pointer',
-            margin: 0,
-            opacity: readOnly ? 0.5 : 1,
-            pointerEvents: readOnly ? 'none' : 'auto',
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFilterCheckbox?.(record.id);
-          }}
-        >
-          {tempSelectedPositionIds.has(record.id) ? <CheckOutlined /> : <span style={{ width: 14, display: 'inline-block' }}></span>}
-        </Tag>
-      ),
+      render: (_, record) => {
+        // ДОП отбирается вместе со своей позицией — отдельно её не переключаем.
+        const followsParent = Boolean(
+          record.is_additional &&
+          record.parent_position_id &&
+          tempSelectedPositionIds.has(record.parent_position_id)
+        );
+        return (
+          <Tag
+            color={tempSelectedPositionIds.has(record.id) ? 'blue' : 'default'}
+            title={followsParent ? 'ДОП отбирается вместе со своей позицией' : undefined}
+            style={{
+              cursor: readOnly ? 'not-allowed' : followsParent ? 'default' : 'pointer',
+              margin: 0,
+              opacity: readOnly ? 0.5 : 1,
+              pointerEvents: readOnly ? 'none' : 'auto',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (followsParent) return;
+              onToggleFilterCheckbox?.(record.id);
+            }}
+          >
+            {tempSelectedPositionIds.has(record.id) ? <CheckOutlined /> : <span style={{ width: 14, display: 'inline-block' }}></span>}
+          </Tag>
+        );
+      },
     },
     {
       title: <div style={{ textAlign: 'center' }}>№</div>,
