@@ -73,8 +73,9 @@ export default function CommerceTable({
     // только в скалярном итоге, см. computeCommerceTotals / «Финансовые показатели»).
     if (!distributeToRows) return 0;
     if (pos.insurance_share != null) return pos.insurance_share;
-    return summary.totalWorks > 0
-      ? insuranceTotal * ((pos.work_cost_total || 0) / summary.totalWorks)
+    // Отрицательные позиции страхование не получают: вес = max(0, работы).
+    return summary.totalWorksPositive > 0
+      ? insuranceTotal * (Math.max(0, pos.work_cost_total || 0) / summary.totalWorksPositive)
       : 0;
   };
 
@@ -216,7 +217,7 @@ export default function CommerceTable({
       render: (_, record) => {
         const materialCost = record.material_cost_total || 0;
         const total = record.commercial_total || 0;
-        const percentage = total > 0 ? ((materialCost / total) * 100).toFixed(1) : '0.0';
+        const percentage = total !== 0 ? ((materialCost / total) * 100).toFixed(1) : '0.0';
 
         return (
           <div>
@@ -236,7 +237,7 @@ export default function CommerceTable({
       render: (_, record) => {
         const workCost = (record.work_cost_total || 0) + insShare(record);
         const total = (record.commercial_total || 0) + insShare(record);
-        const percentage = total > 0 ? ((workCost / total) * 100).toFixed(1) : '0.0';
+        const percentage = total !== 0 ? ((workCost / total) * 100).toFixed(1) : '0.0';
 
         return (
           <div>

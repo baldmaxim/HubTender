@@ -592,3 +592,72 @@ func TestInsurancePolicy_ZeroBase(t *testing.T) {
 		t.Fatalf("error fields wrong: %+v", allocErr)
 	}
 }
+
+// «Как поз. 115»: позиция с работой +X и суб-мат с большой отрицательной ценой
+// (работы позиции < 0), категория в целях правила, страхование > 0 — расчёт,
+// валидаторы и prepared проходят; отрицательная строка инертна; страхование
+// отрицательной позиции = 0, вся страховка у позиции с положительной базой.
+func TestNegativeSubMatPosition_Like115(t *testing.T) {
+	a1, b1 := "a1", "b1"
+	items := []BoqItemWithCosts{
+		{ID: "src", ClientPositionID: "p2", DetailCostCategoryID: &a1, BoqItemType: BoqRab, TotalCommercialWorkCost: 1000},
+		{ID: "rab", ClientPositionID: "p1", DetailCostCategoryID: &b1, BoqItemType: BoqRab, TotalCommercialWorkCost: 500},
+		{ID: "sub", ClientPositionID: "p1", DetailCostCategoryID: &b1, BoqItemType: BoqSubMat, TotalCommercialWorkCost: -2000},
+	}
+	d2c := map[string]string{"a1": "A", "b1": "B"}
+	rules, err := ValidateAndNormalizeRedistributionRules(RedistributionRulesInput{
+		Deductions: []RedistributionSourceRuleInput{detailSource("a1", 10)},
+		Targets:    []RedistributionTargetInput{detailTarget("b1")},
+	}, RedistributionValidationContext{
+		KnownCategories:  map[string]string{"A": "A", "B": "B"},
+		KnownDetails:     map[string]string{"a1": "a1", "b1": "b1"},
+		DetailToCategory: d2c,
+		BoqItems:         items,
+	})
+	if err != nil {
+		t.Fatalf("rules: %v", err)
+	}
+
+	calc := CalculateRedistribution(items, rules.Sources, rules.Targets, d2c)
+	if err := ValidateRedistributionCalculation(items, calc); err != nil {
+		t.Fatalf("calculation invariants: %v", err)
+	}
+	byID := map[string]RedistributionResult{}
+	for _, r := range calc.Results {
+		byID[r.BoqItemID] = r
+	}
+	if sub := byID["sub"]; sub.DeductedAmount != 0 || sub.AddedAmount != 0 || sub.FinalWorkCost != -2000 {
+		t.Fatalf("negative row must be inert: %+v", sub)
+	}
+	if rab := byID["rab"]; !nearEps(rab.AddedAmount, 100) || !nearEps(rab.FinalWorkCost, 600) {
+		t.Fatalf("positive target must take the whole pool: %+v", rab)
+	}
+
+	v1, v2 := 1.0, 1.0
+	out, err := BuildPreparedRedistribution(PreparedRedistributionInput{
+		Positions: []PreparedPositionInput{
+			{ID: "p1", PositionNumber: 1, WorkName: "w", UnitCode: "м2", ClientVolume: &v1},
+			{ID: "p2", PositionNumber: 2, WorkName: "w", UnitCode: "м2", ClientVolume: &v2},
+		},
+		BoqItems:        items,
+		CategoryResults: calc.Results,
+		Insurance:       &InsuranceInput{AptPriceM2: 100, AptArea: 10, JudicialPct: 50, TotalPct: 100}, // 500
+	})
+	if err != nil {
+		t.Fatalf("prepared: %v", err)
+	}
+	if err := ValidatePreparedRedistribution(out); err != nil {
+		t.Fatalf("prepared validation: %v", err)
+	}
+	rows := map[string]PreparedPositionRow{}
+	for _, r := range out.Rows {
+		rows[r.PositionID] = r
+	}
+	// p1: 500 + 100 − 2000 = −1400 < 0 → страховка 0; p2: 900 → вся страховка.
+	if !nearEps(rows["p1"].WorkCostRounded, -1400) || rows["p1"].InsuranceAmount != 0 {
+		t.Fatalf("negative position must get no insurance: %+v", rows["p1"])
+	}
+	if !nearEps(rows["p2"].InsuranceAmount, 500) || !nearEps(out.Summary.InsuranceAllocated, 500) {
+		t.Fatalf("all insurance must go to the positive position: %+v", rows["p2"])
+	}
+}

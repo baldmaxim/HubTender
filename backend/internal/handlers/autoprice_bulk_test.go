@@ -150,7 +150,7 @@ func TestAutopriceBulk_Invalid422(t *testing.T) {
 		{"parent_ref на себя", abBody(apPos, abMat("m1", "m1")), apPos, "m1", "parent_ref"},
 		{"работа с parent_ref", `{"positions":[{"position_id":"` + apPos + `","items":[` + abWork("w1") + `,{"ref":"w2","parent_ref":"w1","boq_item_type":"раб","work_name_id":"` + abWorkNm + `"}]}]}`, apPos, "w2", "parent_ref"},
 		{"parent_work_item_id", abBody(apPos, abWork("w1"), `{"ref":"m1","boq_item_type":"мат","material_name_id":"`+abMatNm+`","parent_work_item_id":"`+apPos+`"}`), apPos, "m1", "parent_work_item_id"},
-		{"validate-тег", abBody(apPos, `{"ref":"w1","boq_item_type":"раб","work_name_id":"`+abWorkNm+`","unit_rate":-1}`), apPos, "w1", "unit_rate"},
+		{"validate-тег", abBody(apPos, `{"ref":"w1","boq_item_type":"раб","work_name_id":"`+abWorkNm+`","quantity":-1}`), apPos, "w1", "quantity"},
 		{"не uuid в поле", abBody(apPos, `{"ref":"w1","boq_item_type":"раб","work_name_id":"zzz"}`), apPos, "w1", "work_name_id"},
 		{"неизвестный тип", abBody(apPos, `{"ref":"w1","boq_item_type":"прочее","work_name_id":"`+abWorkNm+`"}`), apPos, "w1", "boq_item_type"},
 		{"работа без work_name_id", abBody(apPos, `{"ref":"w1","boq_item_type":"раб"}`), apPos, "w1", "work_name_id"},

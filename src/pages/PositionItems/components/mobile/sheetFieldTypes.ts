@@ -39,7 +39,8 @@ export type SheetControlSpec =
   // Без min/max НАМЕРЕННО: rc-input-number не эмитит onChange для значений вне
   // диапазона, поэтому валидатор их не увидел бы, а поле показывало бы введённое
   // «0,5» при драфте со старым значением. Единственный гейт — validateField.
-  | { kind: 'number'; precision: number }
+  // allowNegative: цена строки (минус разрешён) — на iOS decimal-клавиатура без «−».
+  | { kind: 'number'; precision: number; allowNegative?: boolean }
   | { kind: 'text'; textarea?: boolean }
   | { kind: 'select'; options: Array<{ value: string; label: string }> }
   | { kind: 'currency' }

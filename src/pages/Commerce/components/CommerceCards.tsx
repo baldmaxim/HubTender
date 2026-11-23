@@ -120,11 +120,13 @@ function CommerceCardsInner({
   // только .map ниже — иначе доля страхования в каждой карточке и весь блок «Итого»
   // молча посчитаются по видимой части и покажут неверные ДЕНЬГИ, а не просто лаг.
   let totalWorks = 0;
+  let totalWorksPositive = 0;
   let totalBase = 0;
   let totalMaterials = 0;
   let totalCommercial = 0;
   for (const p of positions) {
     totalWorks += p.work_cost_total || 0;
+    totalWorksPositive += Math.max(0, p.work_cost_total || 0);
     totalBase += p.base_total || 0;
     totalMaterials += p.material_cost_total || 0;
     totalCommercial += p.commercial_total || 0;
@@ -134,7 +136,10 @@ function CommerceCardsInner({
     // только в скалярном итоге totalWorksWithIns / «Финансовые показатели»).
     if (!distributeToRows) return 0;
     if (pos.insurance_share != null) return pos.insurance_share;
-    return totalWorks > 0 ? insuranceTotal * ((pos.work_cost_total || 0) / totalWorks) : 0;
+    // Отрицательные позиции страхование не получают: вес = max(0, работы).
+    return totalWorksPositive > 0
+      ? insuranceTotal * (Math.max(0, pos.work_cost_total || 0) / totalWorksPositive)
+      : 0;
   };
   const totalWorksWithIns = totalWorks + insuranceTotal;
   const totalCommercialWithIns = totalCommercial + insuranceTotal;
@@ -171,7 +176,7 @@ function CommerceCardsInner({
           {insuranceTotal > 0 && (
             <Metric label="в т.ч. страхование" value={formatCommercialCost(insuranceTotal)} color="#10b981" />
           )}
-          <Metric label="Коэфф." value={(totalBase > 0 ? totalCommercialWithIns / totalBase : 1).toFixed(4)} strong />
+          <Metric label="Коэфф." value={(totalBase !== 0 ? totalCommercialWithIns / totalBase : 1).toFixed(4)} strong />
         </div>
       </Card>
       )}

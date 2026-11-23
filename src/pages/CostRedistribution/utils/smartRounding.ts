@@ -7,8 +7,13 @@
 
 import type { ResultRow } from '../components/Results/ResultsTableColumns';
 
-function roundTo2(value: number): number {
-  return Math.round(value * 100) / 100;
+/**
+ * Округление до 2 знаков симметрично «от нуля» (как Go math.Round); −0 → 0.
+ * Для v >= 0 совпадает с Math.round(v * 100) / 100.
+ */
+export function roundTo2(value: number): number {
+  const rounded = (Math.sign(value) * Math.round(Math.abs(value) * 100)) / 100;
+  return rounded === 0 ? 0 : rounded;
 }
 
 export function smartRoundResults(results: ResultRow[]): ResultRow[] {

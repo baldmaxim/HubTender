@@ -136,7 +136,12 @@ export function validateField(
       if (notFinite(q) || q <= 0) return 'Количество должно быть больше 0';
       return null;
     }
-    case 'unit_rate':
+    case 'unit_rate': {
+      // Цена может быть отрицательной (скидка/зачёт) — любое конечное число.
+      const v = draft as number | null;
+      if (notFinite(v)) return 'Введите число';
+      return null;
+    }
     case 'delivery_amount': {
       const v = draft as number | null;
       if (notFinite(v) || v < 0) return 'Введите число не менее 0';

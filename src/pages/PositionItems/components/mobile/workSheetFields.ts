@@ -74,7 +74,7 @@ export const WORK_SHEET_FIELDS: SheetField[] = [
         ? `${formatRu2(ctx.item.unit_rate)} ${currencySymbols[ctx.item.currency_type || 'RUB']}`
         : DASH,
     toDraft: (ctx) => ctx.item.unit_rate ?? null,
-    control: { kind: 'number', precision: 2 },
+    control: { kind: 'number', precision: 2, allowNegative: true },
   },
   {
     key: 'currency_type',

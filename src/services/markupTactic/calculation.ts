@@ -563,7 +563,7 @@ export function calculateBoqItemCost(
 
     // Итоговый коэффициент наценки с учетом НДС
     const totalCommercialCost = materialCost + workCost;
-    const markupCoefficient = baseAmount > 0
+    const markupCoefficient = baseAmount !== 0
       ? totalCommercialCost / baseAmount
       : 1;
 

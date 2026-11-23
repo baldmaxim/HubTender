@@ -64,8 +64,10 @@ export function applyRedistributionPipeline(
       });
 
   const roundedRows = smartRoundResults(adjustedRows);
+  // База страхования — только положительная часть: отрицательные позиции
+  // страхование не получают (max(0, работы)).
   const totalWorksBase = roundedRows.reduce(
-    (sum, row) => sum + (row.rounded_total_works ?? row.total_works_after),
+    (sum, row) => sum + Math.max(0, row.rounded_total_works ?? row.total_works_after),
     0,
   );
 
@@ -73,7 +75,7 @@ export function applyRedistributionPipeline(
     insuranceTotal > 0 && totalWorksBase > 0
       ? roundedRows.map((row) => {
           const worksAfter = row.rounded_total_works ?? row.total_works_after;
-          const insuranceShare = insuranceTotal * (worksAfter / totalWorksBase);
+          const insuranceShare = insuranceTotal * (Math.max(0, worksAfter) / totalWorksBase);
           const newWorks = worksAfter + insuranceShare;
           return {
             ...row,

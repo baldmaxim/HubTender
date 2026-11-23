@@ -66,20 +66,20 @@ func (e *CommercialResultSetMismatchError) Code() string { return "COMMERCIAL_RE
 // validateCalculatedCommercialRows enforces the persistable-result invariants
 // BEFORE any DB mutation. Pure and unit-testable.
 //
-// No arbitrary upper bound is imposed on cost or markup — only finiteness and
-// non-negativity, plus id integrity (non-empty, unique).
+// No arbitrary upper bound is imposed on cost or markup. Rules: all three
+// values are finite; the markup coefficient is non-negative; material and work
+// costs MAY be negative (отрицательная цена строки), but must not have strictly
+// opposite signs (одно > 0, другое < 0) — зеркало прежней строгости для
+// положительных строк; plus id integrity (non-empty, unique).
 func validateCalculatedCommercialRows(rows []CalculatedCommercialCostRow) error {
 	seen := make(map[string]struct{}, len(rows))
 
-	checkMoney := func(id, field string, v float64) error {
+	checkFinite := func(id, field string, v float64) error {
 		if math.IsNaN(v) {
 			return &InvalidCommercialCalculationResultError{ItemID: id, Field: field, Reason: "NaN"}
 		}
 		if math.IsInf(v, 0) {
 			return &InvalidCommercialCalculationResultError{ItemID: id, Field: field, Reason: "не является конечным числом (Inf)"}
-		}
-		if v < 0 {
-			return &InvalidCommercialCalculationResultError{ItemID: id, Field: field, Reason: "отрицательное значение"}
 		}
 		return nil
 	}
@@ -93,14 +93,21 @@ func validateCalculatedCommercialRows(rows []CalculatedCommercialCostRow) error 
 		}
 		seen[r.ID] = struct{}{}
 
-		if err := checkMoney(r.ID, "commercial_markup", r.CommercialMarkup); err != nil {
+		if err := checkFinite(r.ID, "commercial_markup", r.CommercialMarkup); err != nil {
 			return err
 		}
-		if err := checkMoney(r.ID, "total_commercial_material_cost", r.TotalCommercialMaterialCost); err != nil {
+		if r.CommercialMarkup < 0 {
+			return &InvalidCommercialCalculationResultError{ItemID: r.ID, Field: "commercial_markup", Reason: "отрицательное значение"}
+		}
+		if err := checkFinite(r.ID, "total_commercial_material_cost", r.TotalCommercialMaterialCost); err != nil {
 			return err
 		}
-		if err := checkMoney(r.ID, "total_commercial_work_cost", r.TotalCommercialWorkCost); err != nil {
+		if err := checkFinite(r.ID, "total_commercial_work_cost", r.TotalCommercialWorkCost); err != nil {
 			return err
+		}
+		if (r.TotalCommercialMaterialCost > 0 && r.TotalCommercialWorkCost < 0) ||
+			(r.TotalCommercialMaterialCost < 0 && r.TotalCommercialWorkCost > 0) {
+			return &InvalidCommercialCalculationResultError{ItemID: r.ID, Field: "total_commercial_work_cost", Reason: "материалы и работы разных знаков"}
 		}
 	}
 	return nil

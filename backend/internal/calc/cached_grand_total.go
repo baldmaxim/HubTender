@@ -7,6 +7,8 @@
 //		    round2dec( Σ(total_commercial_material_cost + total_commercial_work_cost)
 //		               + current tender insurance total )
 //
+//	  - commercial material/work totals are SIGNED (a row with a negative unit
+//	    price yields negative commercial cost); insurance stays non-negative;
 //	  - inputs are the MATERIALIZED server-generated commercial values, read from
 //	    PostgreSQL NUMERIC as EXACT decimal strings (::text) — float64 is NOT an
 //	    authoritative money representation on this path;
@@ -82,15 +84,17 @@ func (e *InvalidCachedGrandTotalInputError) Error() string {
 // NOTE: this is NOT calc.CalculateGrandTotal — that legacy function is the
 // Financial-Indicators formula breakdown (отдельный путь, этап 0.1.2.4b).
 func CalculateCachedTenderGrandTotal(in CachedTenderGrandTotalInput) (*CachedTenderGrandTotalResult, error) {
-	material, err := parseTotalInput("commercial_material_total", in.CommercialMaterialTotal)
+	// Коммерция материалов/работ — со знаком (отрицательная цена строки);
+	// страхование — только неотрицательное.
+	material, err := parseTotalInput("commercial_material_total", in.CommercialMaterialTotal, true)
 	if err != nil {
 		return nil, err
 	}
-	work, err := parseTotalInput("commercial_work_total", in.CommercialWorkTotal)
+	work, err := parseTotalInput("commercial_work_total", in.CommercialWorkTotal, true)
 	if err != nil {
 		return nil, err
 	}
-	insurance, err := parseTotalInput("insurance_total", in.InsuranceTotalDecimal)
+	insurance, err := parseTotalInput("insurance_total", in.InsuranceTotalDecimal, false)
 	if err != nil {
 		return nil, err
 	}
@@ -113,8 +117,14 @@ func CalculateCachedTenderGrandTotal(in CachedTenderGrandTotalInput) (*CachedTen
 }
 
 // parseTotalInput maps decimal-parse failures onto the established typed error.
-func parseTotalInput(field, s string) (*big.Rat, error) {
-	v, perr := parseNonNegativeDecimalRat(field, s)
+// signed=true — значение со знаком (коммерция материалов/работ); false —
+// строго неотрицательное (страхование).
+func parseTotalInput(field, s string, signed bool) (*big.Rat, error) {
+	parse := parseNonNegativeDecimalRat
+	if signed {
+		parse = parseDecimalRat
+	}
+	v, perr := parse(field, s)
 	if perr != nil {
 		var mde *MoneyDecimalError
 		if asMoneyErr(perr, &mde) {

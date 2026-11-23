@@ -88,6 +88,14 @@ function buildBoqItemIndex(
 }
 
 /**
+ * Вес строки в перераспределении: max(0, работы). Строки с отрицательными
+ * работами инертны (не источник, не получатель) — 1:1 с Go redistributionWeight.
+ */
+export function redistributionWeight(work: number): number {
+  return work < 0 ? 0 : work;
+}
+
+/**
  * Шаг 1: Вычисление сумм вычета для каждого правила
  */
 export function calculateDeductions(
@@ -122,9 +130,9 @@ export function calculateDeductions(
       continue;
     }
 
-    // Суммировать стоимость работ
+    // Суммировать вес строк = max(0, работы): отрицательные строки инертны
     const totalCost = itemsInCategory.reduce(
-      (sum, item) => sum + item.total_commercial_work_cost,
+      (sum, item) => sum + redistributionWeight(item.total_commercial_work_cost),
       0
     );
 
@@ -168,16 +176,24 @@ export function applyDeductions(
   for (const [, { deductedAmount, affectedItems }] of deductions) {
     if (affectedItems.length === 0) continue;
 
-    // Рассчитать общую стоимость затронутых элементов
-    const totalCost = affectedItems.reduce((sum, itemId) => {
+    // Рассчитать общий вес затронутых элементов (max(0, работы))
+    let totalCost = 0;
+    let nonNegativeCount = 0;
+    for (const itemId of affectedItems) {
       const item = boqItemsMap.get(itemId);
-      return sum + (item?.total_commercial_work_cost || 0);
-    }, 0);
+      if (!item) continue;
+      totalCost += redistributionWeight(item.total_commercial_work_cost);
+      if (item.total_commercial_work_cost >= 0) nonNegativeCount++;
+    }
 
     if (totalCost === 0) {
-      // Деление на ноль - равномерное распределение как fallback
-      const deductPerItem = deductedAmount / affectedItems.length;
+      // Деление на ноль - равномерное распределение как fallback,
+      // только среди строк с работами >= 0
+      if (nonNegativeCount === 0) continue;
+      const deductPerItem = deductedAmount / nonNegativeCount;
       for (const itemId of affectedItems) {
+        const item = boqItemsMap.get(itemId);
+        if (!item || item.total_commercial_work_cost < 0) continue;
         const current = itemDeductions.get(itemId)!;
         itemDeductions.set(itemId, {
           ...current,
@@ -192,7 +208,7 @@ export function applyDeductions(
       const item = boqItemsMap.get(itemId);
       if (!item) continue;
 
-      const proportion = item.total_commercial_work_cost / totalCost;
+      const proportion = redistributionWeight(item.total_commercial_work_cost) / totalCost;
       const deductForItem = deductedAmount * proportion;
 
       const current = itemDeductions.get(itemId)!;
@@ -250,16 +266,19 @@ export function calculateAdditions(
     return itemAdditions;
   }
 
-  // Рассчитать общую базу для пропорционального распределения
+  // Рассчитать общую базу для пропорционального распределения (веса max(0, работы))
   const totalTargetCost = targetItems.reduce(
-    (sum, item) => sum + item.total_commercial_work_cost,
+    (sum, item) => sum + redistributionWeight(item.total_commercial_work_cost),
     0
   );
 
   if (totalTargetCost === 0) {
-    // Деление на ноль - равномерное распределение
-    const addPerItem = totalDeduction / targetItems.length;
-    for (const item of targetItems) {
+    // Деление на ноль - равномерное распределение только среди целей с работами >= 0;
+    // таких нет — всем 0 (дисбаланс поймает проверка баланса)
+    const recipients = targetItems.filter((item) => item.total_commercial_work_cost >= 0);
+    if (recipients.length === 0) return itemAdditions;
+    const addPerItem = totalDeduction / recipients.length;
+    for (const item of recipients) {
       itemAdditions.set(item.id, addPerItem);
     }
     return itemAdditions;
@@ -267,7 +286,7 @@ export function calculateAdditions(
 
   // Пропорциональное распределение
   for (const item of targetItems) {
-    const proportion = item.total_commercial_work_cost / totalTargetCost;
+    const proportion = redistributionWeight(item.total_commercial_work_cost) / totalTargetCost;
     const addAmount = totalDeduction * proportion;
     itemAdditions.set(item.id, addAmount);
   }

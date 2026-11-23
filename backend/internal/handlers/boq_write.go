@@ -94,7 +94,7 @@ type createBoqItemReq struct {
 	Quantity               *float64 `json:"quantity" validate:"omitempty,gte=0"`
 	BaseQuantity           *float64 `json:"base_quantity" validate:"omitempty,gt=0"`
 	ConversionCoefficient  *float64 `json:"conversion_coefficient" validate:"omitempty,gt=0"`
-	UnitRate               *float64 `json:"unit_rate" validate:"omitempty,gte=0"`
+	UnitRate               *float64 `json:"unit_rate" validate:"omitempty"`
 	CurrencyType           *string  `json:"currency_type"`
 	DeliveryPriceType      *string  `json:"delivery_price_type"`
 	DeliveryAmount         *float64 `json:"delivery_amount" validate:"omitempty,gte=0"`
@@ -118,7 +118,7 @@ type updateBoqItemReq struct {
 	Description            *string  `json:"description"`
 	UnitCode               *string  `json:"unit_code"`
 	Quantity               *float64 `json:"quantity" validate:"omitempty,gte=0"`
-	UnitRate               *float64 `json:"unit_rate" validate:"omitempty,gte=0"`
+	UnitRate               *float64 `json:"unit_rate" validate:"omitempty"`
 	CurrencyType           *string  `json:"currency_type"`
 	DeliveryPriceType      *string  `json:"delivery_price_type"`
 	DeliveryAmount         *float64 `json:"delivery_amount" validate:"omitempty,gte=0"`

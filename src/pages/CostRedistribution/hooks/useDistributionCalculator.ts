@@ -39,7 +39,10 @@ export function useDistributionCalculator(
   // Выполнить расчет
   const calculate = useCallback((): RedistributionCalculationResult | null => {
     // Валидация правил
-    const validation = validateRedistributionRules(sourceRules, targetCosts);
+    const validation = validateRedistributionRules(sourceRules, targetCosts, {
+      boqItems,
+      detailCategoriesMap,
+    });
 
     if (!validation.isValid) {
       const errorMessages = getErrorMessages(validation.errors);

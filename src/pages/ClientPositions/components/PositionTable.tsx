@@ -344,7 +344,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
             {(counts.works > 0 || counts.materials > 0) && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
                 {/* Сумма */}
-                {total > 0 && (
+                {total !== 0 && (
                   <Text
                     style={{
                       fontWeight: 600,

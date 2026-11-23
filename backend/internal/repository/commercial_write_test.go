@@ -28,14 +28,13 @@ func TestValidateCalculatedCommercialRows_Valid(t *testing.T) {
 	}
 }
 
-// 2/3/4/5/6. NaN, ±Inf and negatives are rejected in EVERY money field.
+// 2/3/4/5. NaN and ±Inf are rejected in EVERY money field.
 func TestValidateCalculatedCommercialRows_InvalidNumbers(t *testing.T) {
 	fields := []string{"commercial_markup", "total_commercial_material_cost", "total_commercial_work_cost"}
 	bad := map[string]float64{
 		"NaN":  math.NaN(),
 		"+Inf": math.Inf(1),
 		"-Inf": math.Inf(-1),
-		"neg":  -0.01,
 	}
 
 	for _, field := range fields {
@@ -63,6 +62,46 @@ func TestValidateCalculatedCommercialRows_InvalidNumbers(t *testing.T) {
 					t.Fatalf("Code() = %q", ie.Code())
 				}
 			})
+		}
+	}
+}
+
+// Отрицательная наценка (коэффициент) по-прежнему отклоняется.
+func TestValidateCalculatedCommercialRows_NegativeMarkup(t *testing.T) {
+	r := row("11111111-1111-1111-1111-111111111111", -0.01, 1, 1)
+	err := validateCalculatedCommercialRows([]CalculatedCommercialCostRow{r})
+	var ie *InvalidCommercialCalculationResultError
+	if !errors.As(err, &ie) {
+		t.Fatalf("expected InvalidCommercialCalculationResultError, got %v", err)
+	}
+	if ie.Field != "commercial_markup" {
+		t.Fatalf("Field = %q, want commercial_markup", ie.Field)
+	}
+}
+
+// Отрицательная цена строки: материал ≤ 0 и работа ≤ 0 принимаются.
+func TestValidateCalculatedCommercialRows_NonPositivePair(t *testing.T) {
+	pairs := [][2]float64{{-100, -25}, {-100, 0}, {0, -25}, {0, 0}, {-0.01, -1e12}}
+	for _, p := range pairs {
+		r := row("11111111-1111-1111-1111-111111111111", 1.25, p[0], p[1])
+		if err := validateCalculatedCommercialRows([]CalculatedCommercialCostRow{r}); err != nil {
+			t.Fatalf("mat=%v work=%v rejected: %v", p[0], p[1], err)
+		}
+	}
+}
+
+// Материал и работа строго противоположных знаков отклоняются.
+func TestValidateCalculatedCommercialRows_MixedSigns(t *testing.T) {
+	pairs := [][2]float64{{100, -25}, {-100, 25}, {0.01, -0.01}}
+	for _, p := range pairs {
+		r := row("11111111-1111-1111-1111-111111111111", 1.25, p[0], p[1])
+		err := validateCalculatedCommercialRows([]CalculatedCommercialCostRow{r})
+		var ie *InvalidCommercialCalculationResultError
+		if !errors.As(err, &ie) {
+			t.Fatalf("mat=%v work=%v: expected InvalidCommercialCalculationResultError, got %v", p[0], p[1], err)
+		}
+		if ie.Field != "total_commercial_work_cost" || ie.Reason != "материалы и работы разных знаков" {
+			t.Fatalf("mat=%v work=%v: Field=%q Reason=%q", p[0], p[1], ie.Field, ie.Reason)
 		}
 	}
 }

@@ -12,6 +12,7 @@ import type { PreparedRow } from '../../../services/redistributionPipeline';
 import { cellBorderStyle, headerStyle, NUM_FMT_2 } from '../../../utils/excel/styles';
 import { setFormula, writeSheetWithFrozenHeader } from '../../../utils/excel/sheetWriter';
 import { computeSectionRanges, sumExcludingSections } from '../../../utils/excel/sectionSubtotals';
+import { roundTo2 } from './smartRounding';
 
 interface ExportData {
   rows: PreparedRow[];
@@ -44,13 +45,12 @@ export function exportRedistributionToExcel(data: ExportData): void {
   ];
 
   const createRow = (resultRow: PreparedRow) => {
-    const materialUnitPrice =
-      Math.round((resultRow.rounded_material_unit_price ?? resultRow.material_unit_price ?? 0) * 100) / 100;
+    const materialUnitPrice = roundTo2(
+      resultRow.rounded_material_unit_price ?? resultRow.material_unit_price ?? 0
+    );
     const totalWorksAfter = resultRow.rounded_total_works ?? resultRow.total_works_after;
     const workUnitPriceAfter =
-      resultRow.quantity > 0
-        ? Math.round((totalWorksAfter / resultRow.quantity) * 100) / 100
-        : 0;
+      resultRow.quantity > 0 ? roundTo2(totalWorksAfter / resultRow.quantity) : 0;
     const totalMaterials = resultRow.rounded_total_materials ?? resultRow.total_materials;
 
     let fullName = '';

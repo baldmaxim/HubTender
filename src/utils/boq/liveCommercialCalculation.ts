@@ -159,6 +159,6 @@ export function calculateLiveCommercialAmounts(
     materialCost,
     workCost,
     commercialTotal,
-    markupCoefficient: liveCommercialCosts?.markupCoefficient ?? (baseAmount > 0 ? commercialTotal / baseAmount : 1),
+    markupCoefficient: liveCommercialCosts?.markupCoefficient ?? (baseAmount !== 0 ? commercialTotal / baseAmount : 1),
   };
 }

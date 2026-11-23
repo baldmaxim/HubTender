@@ -52,7 +52,8 @@ const SheetControl: React.FC<SheetControlProps> = ({
           precision={spec.precision}
           style={FULL}
           // type="number" нельзя: запятая-разделитель + parser требуют текстового инпута.
-          inputMode="decimal"
+          // Для цены (allowNegative) — text: на iOS decimal-клавиатура не содержит «−».
+          inputMode={spec.allowNegative ? 'text' : 'decimal'}
           decimalSeparator=","
           parser={(value) => parseFloat((value ?? '').replace(/\s/g, '').replace(/,/g, '.'))}
         />

@@ -183,7 +183,7 @@ function buildPositionsFromBoqItems(
       commercial_total: commercialTotal,
       material_cost_total: totals?.materialCostTotal || 0,
       work_cost_total: totals?.workCostTotal || 0,
-      markup_percentage: baseTotal > 0 ? commercialTotal / baseTotal : 1,
+      markup_percentage: baseTotal !== 0 ? commercialTotal / baseTotal : 1,
       items_count: totals?.itemsCount || 0,
     } as PositionWithCommercialCost;
   });
@@ -491,7 +491,7 @@ export function useCommerceData(isActive = true) {
           // отображается как отдельная надбавка через insurance_share).
           const newCommercialTotal = (p.material_cost_total || 0) + newWorkCost;
           const newMarkup =
-            (p.base_total || 0) > 0 ? newCommercialTotal / (p.base_total || 1) : 1;
+            (p.base_total || 0) !== 0 ? newCommercialTotal / (p.base_total || 1) : 1;
           return {
             ...p,
             work_cost_total: newWorkCost,
@@ -539,7 +539,7 @@ export function useCommerceData(isActive = true) {
     }
 
     const difference = commercialTotal - baseTotal;
-    const markupPercentage = baseTotal > 0 ? (difference / baseTotal) * 100 : 0;
+    const markupPercentage = baseTotal !== 0 ? (difference / baseTotal) * 100 : 0;
 
     return {
       base: baseTotal,

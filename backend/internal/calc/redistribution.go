@@ -119,10 +119,11 @@ func CalculateDeductions(
 			continue
 		}
 
+		// Вес строки = max(0, работы): отрицательные строки инертны (не источник).
 		totalCost := 0.0
 		ids := make([]string, 0, len(itemsInCategory))
 		for _, item := range itemsInCategory {
-			totalCost += item.TotalCommercialWorkCost
+			totalCost += redistributionWeight(item.TotalCommercialWorkCost)
 			ids = append(ids, item.ID)
 		}
 
@@ -140,6 +141,15 @@ func CalculateDeductions(
 	}
 
 	return deductions
+}
+
+// redistributionWeight — вес строки в перераспределении: max(0, работы).
+// Строки с отрицательными работами инертны (не источник, не получатель).
+func redistributionWeight(work float64) float64 {
+	if work < 0 {
+		return 0
+	}
+	return work
 }
 
 // ApplyDeductions — step 2: distribute each deduction across its items,
@@ -166,17 +176,29 @@ func ApplyDeductions(
 			continue
 		}
 
+		// Вес строки = max(0, работы); строки с работами < 0 вычет не получают.
 		totalCost := 0.0
+		nonNegative := 0
 		for _, id := range bucket.AffectedItems {
 			if it, ok := boqItemsMap[id]; ok {
-				totalCost += it.TotalCommercialWorkCost
+				totalCost += redistributionWeight(it.TotalCommercialWorkCost)
+				if it.TotalCommercialWorkCost >= 0 {
+					nonNegative++
+				}
 			}
 		}
 
 		if totalCost == 0 {
-			// Equal split fallback (div-by-zero guard).
-			perItem := bucket.DeductedAmount / float64(len(bucket.AffectedItems))
+			// Equal split fallback (div-by-zero guard) — только среди строк с работами >= 0.
+			if nonNegative == 0 {
+				continue
+			}
+			perItem := bucket.DeductedAmount / float64(nonNegative)
 			for _, id := range bucket.AffectedItems {
+				it, ok := boqItemsMap[id]
+				if !ok || it.TotalCommercialWorkCost < 0 {
+					continue
+				}
 				current := itemDeductions[id]
 				itemDeductions[id] = struct{ Original, Deducted float64 }{
 					Original: current.Original,
@@ -191,7 +213,7 @@ func ApplyDeductions(
 			if !ok {
 				continue
 			}
-			proportion := item.TotalCommercialWorkCost / totalCost
+			proportion := redistributionWeight(item.TotalCommercialWorkCost) / totalCost
 			deductForItem := bucket.DeductedAmount * proportion
 
 			current := itemDeductions[id]
@@ -243,10 +265,14 @@ func CalculateAdditions(
 
 	var targetItems []BoqItemWithCosts
 	totalTargetCost := 0.0
+	nonNegativeTargets := 0
 	for _, item := range boqItems {
 		if isTargetItem(item) {
 			targetItems = append(targetItems, item)
-			totalTargetCost += item.TotalCommercialWorkCost
+			totalTargetCost += redistributionWeight(item.TotalCommercialWorkCost)
+			if item.TotalCommercialWorkCost >= 0 {
+				nonNegativeTargets++
+			}
 		}
 	}
 
@@ -255,15 +281,22 @@ func CalculateAdditions(
 	}
 
 	if totalTargetCost == 0 {
-		perItem := totalDeduction / float64(len(targetItems))
+		// Равное деление — только среди целей с работами >= 0; таких нет — всем 0
+		// (дисбаланс поймает проверка баланса).
+		if nonNegativeTargets == 0 {
+			return itemAdditions
+		}
+		perItem := totalDeduction / float64(nonNegativeTargets)
 		for _, item := range targetItems {
-			itemAdditions[item.ID] = perItem
+			if item.TotalCommercialWorkCost >= 0 {
+				itemAdditions[item.ID] = perItem
+			}
 		}
 		return itemAdditions
 	}
 
 	for _, item := range targetItems {
-		proportion := item.TotalCommercialWorkCost / totalTargetCost
+		proportion := redistributionWeight(item.TotalCommercialWorkCost) / totalTargetCost
 		itemAdditions[item.ID] = totalDeduction * proportion
 	}
 

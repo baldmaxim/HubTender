@@ -97,7 +97,7 @@ func (e *evaluator) checkBoqInputs() {
 //	filled applicable required fields / all applicable required fields × 100
 //
 // Calculation completeness — поля, без которых сумма строки не считается
-// корректно: quantity (>0), unit_rate (>0) и, ТОЛЬКО для валютных строк,
+// корректно: quantity (>0), unit_rate (≠0, отрицательная цена допустима) и, ТОЛЬКО для валютных строк,
 // положительный курс их валюты (поле применимо не ко всем строкам — RUB-строка
 // не ухудшает знаменатель).
 //
@@ -126,7 +126,7 @@ func (e *evaluator) completeness() (calcPct, reviewPct float64) {
 		if it.Quantity != nil && *it.Quantity > 0 {
 			calcFilled++
 		}
-		if it.UnitRate != nil && *it.UnitRate > 0 {
+		if it.UnitRate != nil && *it.UnitRate != 0 {
 			calcFilled++
 		}
 		if it.CurrencyType != "" && it.CurrencyType != "RUB" {

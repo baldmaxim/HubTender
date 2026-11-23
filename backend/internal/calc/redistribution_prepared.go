@@ -304,7 +304,13 @@ func CalculateInsuranceTotal(in *InsuranceInput) (float64, error) {
 
 // round2 mirrors the TS Math.round(v*100)/100 for the non-negative money this
 // pipeline produces (half up).
-func round2(v float64) float64 { return math.Round(v*100) / 100 }
+func round2(v float64) float64 {
+	r := math.Round(v*100) / 100
+	if r == 0 {
+		return 0 // нормализуем −0 в 0
+	}
+	return r
+}
 
 // ─── the pipeline ────────────────────────────────────────────────────────────
 
@@ -552,9 +558,10 @@ func BuildPreparedRedistribution(in PreparedRedistributionInput) (*PreparedRedis
 	// Stage 0.1.2.3b.1 policy: non-zero insurance with a zero eligible base is
 	// a BLOCKING typed error — the total can neither be allocated nor silently
 	// dropped from the final totals. (zero insurance + zero base stays valid.)
+	// Отрицательные позиции страхование не получают: база и доля — по max(0, работы).
 	roundedBase := 0.0
 	for _, r := range rows {
-		roundedBase += r.WorkCostRounded
+		roundedBase += math.Max(0, r.WorkCostRounded)
 	}
 	if insuranceTotal > redistributionBalanceTolerance && roundedBase <= redistributionBalanceTolerance {
 		return nil, &InvalidInsuranceAllocationError{
@@ -567,7 +574,7 @@ func BuildPreparedRedistribution(in PreparedRedistributionInput) (*PreparedRedis
 	for i := range rows {
 		share := 0.0
 		if insuranceTotal > 0 && roundedBase > 0 {
-			share = insuranceTotal * (rows[i].WorkCostRounded / roundedBase)
+			share = insuranceTotal * (math.Max(0, rows[i].WorkCostRounded) / roundedBase)
 		}
 		rows[i].InsuranceAmount = share
 		rows[i].FinalWorkCost = rows[i].WorkCostRounded + share

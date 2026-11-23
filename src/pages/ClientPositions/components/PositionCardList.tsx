@@ -116,7 +116,7 @@ const PositionCard = React.memo<PositionCardProps>(({ record, index, isLeaf, cli
             {'  '}
             М: <span style={{ color: '#1890ff', fontWeight: 600 }}>{counts.materials}</span>
           </span>
-          {counts.total > 0 && (
+          {counts.total !== 0 && (
             <Text strong style={{ fontSize: 15, color: '#389e0d' }}>
               {formatRu(Math.round(counts.total))}
             </Text>

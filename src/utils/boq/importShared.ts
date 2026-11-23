@@ -29,7 +29,8 @@ export const buildNomenclatureLookupKey = (name: string, unit: string): string =
 
 export const parseNumber = (value: unknown): number | undefined => {
   if (value === null || value === undefined || value === '') return undefined;
-  const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : Number(value);
+  // U+2212 (типографский минус «−», как в ru-RU форматировании Excel) → ASCII «-».
+  const num = typeof value === 'string' ? parseFloat(value.replace('\u2212', '-').replace(',', '.')) : Number(value);
   return isNaN(num) ? undefined : num;
 };
 

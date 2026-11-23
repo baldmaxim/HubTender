@@ -33,7 +33,8 @@ export function exportCommerceToExcel(
     return currentLevel >= nextLevel;
   };
 
-  const totalWorksBase = positions.reduce((sum, pos) => sum + (pos.work_cost_total ?? 0), 0);
+  // База разноса страхования — только положительные работы (отрицательные позиции страхование не получают).
+  const totalWorksBase = positions.reduce((sum, pos) => sum + Math.max(0, pos.work_cost_total ?? 0), 0);
   // Если у позиции уже есть pre-computed insurance_share из общего pipeline
   // (страница «Перераспределение» = единый источник правды), используем его —
   // числа совпадут с CR. Иначе fallback на пропорциональное разнесение.
@@ -43,7 +44,7 @@ export function exportCommerceToExcel(
     if (!distributeToRows) return 0;
     if (pos.insurance_share != null) return pos.insurance_share;
     return totalWorksBase > 0
-      ? insuranceTotal * ((pos.work_cost_total ?? 0) / totalWorksBase)
+      ? insuranceTotal * (Math.max(0, pos.work_cost_total ?? 0) / totalWorksBase)
       : 0;
   };
 

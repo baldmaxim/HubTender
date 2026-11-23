@@ -245,7 +245,7 @@ export const useClientPositions = () => {
         nextCounts[id] = { works: 0, materials: 0, total: 0 };
       }
       setPositionCounts(nextCounts);
-      setTotalSum((s) => Math.max(0, s - removed));
+      setTotalSum((s) => s - removed);
 
       const nextPositions = clientPositions.map((p) =>
         ids.has(p.id)
@@ -303,7 +303,7 @@ export const useClientPositions = () => {
         delete nextCounts[id];
       }
       setPositionCounts(nextCounts);
-      setTotalSum((s) => Math.max(0, s - removed));
+      setTotalSum((s) => s - removed);
 
       const nextPositions = clientPositions.filter((p) => !ids.has(p.id));
       setRowCacheRows(nextPositions);

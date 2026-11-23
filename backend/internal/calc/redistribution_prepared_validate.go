@@ -48,22 +48,12 @@ func ValidatePreparedRedistribution(p *PreparedRedistribution) error {
 					Field: r.PositionID + "." + v.name, Reason: "non-finite value"}
 			}
 		}
-		// Costs are non-negative (rounding of a non-negative works base cannot
-		// produce a negative row; adjustments are validated not to drain below 0).
-		for _, v := range []struct {
-			name string
-			val  float64
-		}{
-			{"material_cost", r.MaterialCost},
-			{"work_cost_rounded", r.WorkCostRounded},
-			{"insurance_amount", r.InsuranceAmount},
-			{"final_work_cost", r.FinalWorkCost},
-			{"final_position_total", r.FinalPositionTotal},
-		} {
-			if v.val < -preparedMoneyTolerance {
-				return &InvalidPreparedRedistributionResultError{
-					Field: r.PositionID + "." + v.name, Actual: v.val, Reason: "negative cost"}
-			}
+		// Стоимости материалов/работ/итога могут быть отрицательными (отрицательная
+		// цена строки BOQ разрешена; конечность проверена выше). Страхование —
+		// только неотрицательное: отрицательные позиции его не получают.
+		if r.InsuranceAmount < -preparedMoneyTolerance {
+			return &InvalidPreparedRedistributionResultError{
+				Field: r.PositionID + ".insurance_amount", Actual: r.InsuranceAmount, Reason: "negative cost"}
 		}
 
 		// §18.6-9 — per-row identities of the canonical order.

@@ -431,6 +431,52 @@ func TestCalculationInvariants(t *testing.T) {
 	}
 }
 
+// Отрицательный original: вычет/начисление обязаны быть нулевыми; иначе отказ.
+func TestCalculationInvariants_NegativeOriginal(t *testing.T) {
+	items := []BoqItemWithCosts{
+		{ID: "n1", ClientPositionID: "p1", BoqItemType: BoqSubMat, TotalCommercialWorkCost: -200},
+	}
+	inert := RedistributionCalculationResult{
+		Results: []RedistributionResult{{BoqItemID: "n1", OriginalWorkCost: -200, FinalWorkCost: -200}},
+	}
+	if err := ValidateRedistributionCalculation(items, inert); err != nil {
+		t.Fatalf("inert negative row must pass: %v", err)
+	}
+
+	var calcErr *InvalidRedistributionCalculationResultError
+	added := RedistributionCalculationResult{
+		Results: []RedistributionResult{{BoqItemID: "n1", OriginalWorkCost: -200, AddedAmount: 50, FinalWorkCost: -150}},
+	}
+	if err := ValidateRedistributionCalculation(items, added); !errors.As(err, &calcErr) {
+		t.Fatalf("negative row with added must be rejected, got %v", err)
+	}
+	deducted := RedistributionCalculationResult{
+		Results: []RedistributionResult{{BoqItemID: "n1", OriginalWorkCost: -200, DeductedAmount: 50, FinalWorkCost: -250}},
+	}
+	if err := ValidateRedistributionCalculation(items, deducted); !errors.As(err, &calcErr) {
+		t.Fatalf("negative row with deducted must be rejected, got %v", err)
+	}
+}
+
+// Цели только из строк с отрицательной стоимостью работ — получателей нет.
+func TestRulesValidation_NegativeOnlyTargets(t *testing.T) {
+	vctx := rulesCtx()
+	vctx.BoqItems[2].TotalCommercialWorkCost = -300 // единственная строка цели b1
+	in := RedistributionRulesInput{
+		Deductions: []RedistributionSourceRuleInput{detailSource("a1", 10)},
+		Targets:    []RedistributionTargetInput{detailTarget("b1")},
+	}
+	_, err := ValidateAndNormalizeRedistributionRules(in, vctx)
+	expectIssue(t, err, "EMPTY_EFFECTIVE_TARGET")
+
+	// Источник только из отрицательных строк — не ошибка (вычет 0).
+	vctx2 := rulesCtx()
+	vctx2.BoqItems[0].TotalCommercialWorkCost = -1000
+	if _, err := ValidateAndNormalizeRedistributionRules(in, vctx2); err != nil {
+		t.Fatalf("negative-only source must be valid: %v", err)
+	}
+}
+
 // errors.As must survive the repository → service %w chain for every typed error.
 func TestRedistributionErrors_SurviveWrapping(t *testing.T) {
 	wrap := func(e error) error {

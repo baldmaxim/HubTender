@@ -92,7 +92,7 @@ func (r *PositionCostsRepo) GetPositionsWithCosts(
 		    COALESCE(SUM(b.total_commercial_material_cost), 0)                                    AS material_cost_total,
 		    COALESCE(SUM(b.total_commercial_work_cost), 0)                                        AS work_cost_total,
 		    CASE
-		        WHEN COALESCE(SUM(b.total_amount), 0) > 0
+		        WHEN COALESCE(SUM(b.total_amount), 0) <> 0
 		            THEN COALESCE(SUM(COALESCE(b.total_commercial_material_cost,0) + COALESCE(b.total_commercial_work_cost,0)), 0)
 		                 / SUM(b.total_amount)
 		        ELSE 1

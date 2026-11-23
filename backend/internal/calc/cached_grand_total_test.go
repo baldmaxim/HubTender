@@ -155,6 +155,32 @@ func TestCachedGrandTotal_AlreadyRoundedUnchanged(t *testing.T) {
 	}
 }
 
+// Отрицательная цена строки: коммерция материалов/работ принимается со знаком,
+// округление — decimal half away from zero (симметрично для минуса).
+func TestCachedGrandTotal_SignedCommercial(t *testing.T) {
+	cases := []struct {
+		name string
+		in   CachedTenderGrandTotalInput
+		want string
+	}{
+		{"negative material", CachedTenderGrandTotalInput{CommercialMaterialTotal: "-100.5", CommercialWorkTotal: "0", InsuranceTotalDecimal: "0"}, "-100.50"},
+		{"negative work", CachedTenderGrandTotalInput{CommercialMaterialTotal: "0", CommercialWorkTotal: "-0.01", InsuranceTotalDecimal: "0"}, "-0.01"},
+		{"negative + positive", CachedTenderGrandTotalInput{CommercialMaterialTotal: "-50", CommercialWorkTotal: "200", InsuranceTotalDecimal: "10"}, "160.00"},
+		{"both negative + insurance", CachedTenderGrandTotalInput{CommercialMaterialTotal: "-100", CommercialWorkTotal: "-200", InsuranceTotalDecimal: "50"}, "-250.00"},
+		{"rounding half away from zero (negative)", CachedTenderGrandTotalInput{CommercialMaterialTotal: "-1.005", CommercialWorkTotal: "0", InsuranceTotalDecimal: "0"}, "-1.01"},
+		{"rounding 2.675 mirrored", CachedTenderGrandTotalInput{CommercialMaterialTotal: "-2.675", CommercialWorkTotal: "0", InsuranceTotalDecimal: "0"}, "-2.68"},
+		{"cancels to zero → no negative zero", CachedTenderGrandTotalInput{CommercialMaterialTotal: "-5", CommercialWorkTotal: "5", InsuranceTotalDecimal: "0"}, "0.00"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := mustCGT(t, tc.in)
+			if out.RoundedTotalDecimal != tc.want {
+				t.Fatalf("rounded = %q, want %q", out.RoundedTotalDecimal, tc.want)
+			}
+		})
+	}
+}
+
 // §16.8-12 / §7.5 — malformed inputs are typed errors, never a successful 0.
 func TestCachedGrandTotal_MalformedInputs(t *testing.T) {
 	huge := strings.Repeat("9", maxDecimalDigits+1)
@@ -174,8 +200,6 @@ func TestCachedGrandTotal_MalformedInputs(t *testing.T) {
 		{"NaN string", CachedTenderGrandTotalInput{CommercialMaterialTotal: "NaN"}, "commercial_material_total", "MALFORMED_DECIMAL"},
 		{"Infinity string", CachedTenderGrandTotalInput{CommercialWorkTotal: "Infinity"}, "commercial_work_total", "MALFORMED_DECIMAL"},
 		{"rational form", CachedTenderGrandTotalInput{InsuranceTotalDecimal: "1/3"}, "insurance_total", "MALFORMED_DECIMAL"},
-		{"negative material", CachedTenderGrandTotalInput{CommercialMaterialTotal: "-1"}, "commercial_material_total", "NEGATIVE_VALUE"},
-		{"negative work", CachedTenderGrandTotalInput{CommercialWorkTotal: "-0.01"}, "commercial_work_total", "NEGATIVE_VALUE"},
 		{"negative insurance", CachedTenderGrandTotalInput{InsuranceTotalDecimal: "-5"}, "insurance_total", "NEGATIVE_VALUE"},
 		{"overflow material", CachedTenderGrandTotalInput{CommercialMaterialTotal: huge}, "commercial_material_total", "OVERFLOW"},
 		{"overflow insurance", CachedTenderGrandTotalInput{InsuranceTotalDecimal: huge + ".99"}, "insurance_total", "OVERFLOW"},

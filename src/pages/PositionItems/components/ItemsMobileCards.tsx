@@ -126,7 +126,7 @@ const ItemsMobileCards: React.FC<ItemsMobileCardsProps> = ({
               {item.unit_rate ? `${formatRu2(item.unit_rate)} ${symbol}` : '-'}
             </Field>
             <Field label="Итого">
-              <span style={{ color: '#10b981' }}>{total > 0 ? formatRu(total) : '-'}</span>
+              <span style={{ color: '#10b981' }}>{total !== 0 ? formatRu(total) : '-'}</span>
             </Field>
           </Card>
         );

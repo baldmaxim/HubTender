@@ -356,7 +356,7 @@ func CalculateBoqItemCost(
 
 	total := matCost + workCost
 	coefOut := 1.0
-	if baseAmount > 0 {
+	if baseAmount != 0 {
 		coefOut = total / baseAmount
 	}
 	return BoqItemCostResult{MaterialCost: matCost, WorkCost: workCost, MarkupCoefficient: coefOut}, true

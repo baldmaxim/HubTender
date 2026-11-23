@@ -340,14 +340,26 @@ func ValidateAndNormalizeRedistributionRules(
 			}
 		}
 		targetSet := map[string]bool{}
+		// Строки с отрицательной стоимостью работ инертны — получателем не бывают.
+		nonNegativeByID := make(map[string]bool, len(vctx.BoqItems))
+		for _, it := range vctx.BoqItems {
+			nonNegativeByID[it.ID] = it.TotalCommercialWorkCost >= 0
+		}
+		recipients := 0
 		for _, tg := range targets {
 			for _, id := range effectiveTargetItems(vctx.BoqItems, tg, vctx.DetailToCategory) {
+				if !targetSet[id] && nonNegativeByID[id] {
+					recipients++
+				}
 				targetSet[id] = true // union dedupes the effective target set
 			}
 		}
 		if len(targetSet) == 0 {
 			issues = append(issues, issue("targets", "EMPTY_EFFECTIVE_TARGET",
 				"Целевые правила не находят ни одного BOQ-элемента — добавлять некуда"))
+		} else if recipients == 0 {
+			issues = append(issues, issue("targets", "EMPTY_EFFECTIVE_TARGET",
+				"Нет строк-получателей с неотрицательной стоимостью работ — добавлять некуда"))
 		}
 		overlap := make([]string, 0)
 		for id := range sourceSet {

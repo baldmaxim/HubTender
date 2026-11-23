@@ -220,11 +220,18 @@ func ValidateRedistributionCalculation(
 				return &InvalidRedistributionCalculationResultError{Field: r.BoqItemID + "." + v.name, Reason: "non-finite value"}
 			}
 		}
-		if r.OriginalWorkCost < 0 || r.DeductedAmount < 0 || r.AddedAmount < 0 {
-			return &InvalidRedistributionCalculationResultError{Field: r.BoqItemID, Reason: "negative amount"}
-		}
-		if r.FinalWorkCost < -redistributionRowEpsilon {
-			return &InvalidRedistributionCalculationResultError{Field: r.BoqItemID, Reason: "negative final_work_cost"}
+		if r.OriginalWorkCost < 0 {
+			// Отрицательная строка инертна: вычет и начисление нулевые.
+			if math.Abs(r.DeductedAmount) > redistributionRowEpsilon || math.Abs(r.AddedAmount) > redistributionRowEpsilon {
+				return &InvalidRedistributionCalculationResultError{Field: r.BoqItemID, Reason: "negative row must be inert: deducted/added must be zero"}
+			}
+		} else {
+			if r.DeductedAmount < 0 || r.AddedAmount < 0 {
+				return &InvalidRedistributionCalculationResultError{Field: r.BoqItemID, Reason: "negative amount"}
+			}
+			if r.FinalWorkCost < -redistributionRowEpsilon {
+				return &InvalidRedistributionCalculationResultError{Field: r.BoqItemID, Reason: "negative final_work_cost"}
+			}
 		}
 		if math.Abs(r.FinalWorkCost-(r.OriginalWorkCost-r.DeductedAmount+r.AddedAmount)) > redistributionRowEpsilon {
 			return &InvalidRedistributionCalculationResultError{Field: r.BoqItemID, Reason: "final != original - deducted + added"}

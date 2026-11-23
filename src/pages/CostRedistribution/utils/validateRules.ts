@@ -2,7 +2,7 @@
  * Утилиты для валидации правил перераспределения
  */
 
-import type { SourceRule, TargetCost } from './calculateDistribution';
+import type { BoqItemWithCosts, SourceRule, TargetCost } from './calculateDistribution';
 
 export interface ValidationError {
   field: string;
@@ -113,6 +113,34 @@ export function validateTargetCosts(targetCosts: TargetCost[]): ValidationError[
 }
 
 /**
+ * Эффективные цели: есть хотя бы одна строка-получатель с неотрицательной
+ * стоимостью работ (отрицательные строки инертны). Зеркало Go EMPTY_EFFECTIVE_TARGET.
+ */
+export function validateEffectiveTargets(
+  targetCosts: TargetCost[],
+  boqItems: BoqItemWithCosts[],
+  detailCategoriesMap?: Map<string, string>
+): ValidationError[] {
+  const hasRecipient = boqItems.some((item) => {
+    if (item.detail_cost_category_id === null || item.total_commercial_work_cost < 0) return false;
+    const detailId = item.detail_cost_category_id;
+    return targetCosts.some((target) =>
+      target.level === 'detail'
+        ? !!target.detail_cost_category_id && target.detail_cost_category_id === detailId
+        : !!target.category_id && detailCategoriesMap?.get(detailId) === target.category_id
+    );
+  });
+
+  if (hasRecipient) return [];
+  return [
+    {
+      field: 'targetCosts',
+      message: 'Нет строк-получателей с неотрицательной стоимостью работ — добавлять некуда',
+    },
+  ];
+}
+
+/**
  * Проверка конфликта: категория не может быть одновременно в источниках и целях
  */
 export function validateNoConflicts(
@@ -152,7 +180,8 @@ export function validateNoConflicts(
  */
 export function validateRedistributionRules(
   sourceRules: SourceRule[],
-  targetCosts: TargetCost[]
+  targetCosts: TargetCost[],
+  context?: { boqItems: BoqItemWithCosts[]; detailCategoriesMap?: Map<string, string> }
 ): {
   isValid: boolean;
   errors: ValidationError[];
@@ -171,6 +200,13 @@ export function validateRedistributionRules(
   if (sourceErrors.length === 0 && targetErrors.length === 0) {
     const conflictErrors = validateNoConflicts(sourceRules, targetCosts);
     allErrors.push(...conflictErrors);
+
+    // Эффективные цели — только если переданы строки BOQ (пустой набор не проверяем)
+    if (context && context.boqItems.length > 0) {
+      allErrors.push(
+        ...validateEffectiveTargets(targetCosts, context.boqItems, context.detailCategoriesMap)
+      );
+    }
   }
 
   return {

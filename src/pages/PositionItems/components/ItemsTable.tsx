@@ -362,9 +362,9 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
       align: 'center',
       render: (_: unknown, record: BoqItemFull) => {
         const total = calculateTotal(record);
-        const displayValue = total > 0 ? `${formatRu2(total)}` : '-';
+        const displayValue = total !== 0 ? `${formatRu2(total)}` : '-';
 
-        if (total > 0) {
+        if (total !== 0) {
           const qty = record.quantity || 0;
           const price = record.unit_rate || 0;
           const rate = getCurrencyRate(record.currency_type || 'RUB');
