@@ -101,6 +101,9 @@ func newRouter(
 		r.Use(compressMW)
 		r.Use(authMW)
 		templateAdminMW := middleware.RequireRoles(map[string]bool{"veduschiy_inzhener": true, "administrator": true, "developer": true})
+		// Добавление работ и материалов в библиотеку — те же роли, что у MCP-скоупа
+		// ScopeLibraryCreate (mcpauth/service.go). Правка, удаление, папки и шаблоны — templateAdminMW.
+		libraryCreateMW := middleware.RequireRoles(map[string]bool{"engineer": true, "veduschiy_inzhener": true, "administrator": true, "developer": true})
 
 		r.Get("/api/v1/me", d.meH.GetMe)
 		r.Get("/api/v1/me/permissions", d.meH.GetPermissions)
@@ -272,11 +275,11 @@ func newRouter(
 
 		// Library — WorksTab (works_library CRUD).
 		r.Get("/api/v1/library/works", d.libraryH.ListWorks)
-		r.With(templateAdminMW).Post("/api/v1/library/works", d.libraryH.CreateWork)
+		r.With(libraryCreateMW).Post("/api/v1/library/works", d.libraryH.CreateWork)
 		r.With(templateAdminMW).Patch("/api/v1/library/works/{id}", d.libraryH.UpdateWork)
 		r.With(templateAdminMW).Delete("/api/v1/library/works/{id}", d.libraryH.DeleteWork)
 		r.Get("/api/v1/library/materials", d.libraryH.ListMaterials)
-		r.With(templateAdminMW).Post("/api/v1/library/materials", d.libraryH.CreateMaterial)
+		r.With(libraryCreateMW).Post("/api/v1/library/materials", d.libraryH.CreateMaterial)
 		r.With(templateAdminMW).Patch("/api/v1/library/materials/{id}", d.libraryH.UpdateMaterial)
 		r.With(templateAdminMW).Delete("/api/v1/library/materials/{id}", d.libraryH.DeleteMaterial)
 		r.Get("/api/v1/library/folders", d.libraryH.ListFolders)
