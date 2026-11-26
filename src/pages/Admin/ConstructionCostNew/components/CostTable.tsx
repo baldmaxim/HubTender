@@ -48,6 +48,13 @@ const CostTable: React.FC<CostTableProps> = ({
 }) => {
   const { theme } = useTheme();
 
+  // Работы/материалы за единицу: сумма ÷ объём строки, как «Итого работ/материалы за ед.» в выгрузке Excel
+  const renderPerUnit = (amount: number, record: CostRow) => {
+    if (!(record.volume > 0)) return null;
+    const text = (amount / record.volume).toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+    return record.is_category || record.is_location ? <Text strong>{text}</Text> : text;
+  };
+
   // Базовые колонки (категория, вид, локация, объем, ед., цена за ед.)
   const baseColumns: ColumnsType<CostRow> = [
     {
@@ -189,27 +196,23 @@ const CostTable: React.FC<CostTableProps> = ({
     },
   ];
 
-  // Детальные колонки (мат., раб., суб-мат., суб-раб.)
+  // Детальные колонки (мат./ед., раб./ед., суб-мат., суб-раб.)
   const detailedColumns: ColumnsType<CostRow> = [
     {
-      title: <div style={{ textAlign: 'center' }}>Мат.</div>,
-      key: 'materials_total',
+      title: <div style={{ textAlign: 'center' }}>Мат./ед.</div>,
+      key: 'materials_per_unit',
       width: 100,
       align: 'right',
-      render: (_: unknown, record: CostRow) => {
-        const total = record.materials_cost + record.materials_comp_cost;
-        return total.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
-      },
+      render: (_: unknown, record: CostRow) =>
+        renderPerUnit(record.materials_cost + record.sub_materials_cost + record.materials_comp_cost, record),
     },
     {
-      title: <div style={{ textAlign: 'center' }}>Раб.</div>,
-      key: 'works_total',
+      title: <div style={{ textAlign: 'center' }}>Раб./ед.</div>,
+      key: 'works_per_unit',
       width: 100,
       align: 'right',
-      render: (_: unknown, record: CostRow) => {
-        const total = record.works_cost + record.works_comp_cost;
-        return total.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
-      },
+      render: (_: unknown, record: CostRow) =>
+        renderPerUnit(record.works_cost + record.sub_works_cost + record.works_comp_cost, record),
     },
     {
       title: <div style={{ textAlign: 'center' }}>Суб-мат.</div>,
@@ -419,12 +422,9 @@ const CostTable: React.FC<CostTableProps> = ({
                   </>
                 ) : viewMode === 'detailed' ? (
                   <>
-                    <Table.Summary.Cell index={6} align="right">
-                      <Text strong>{(totals.materials + totals.materialsComp).toLocaleString('ru-RU', { maximumFractionDigits: 0 })}</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={7} align="right">
-                      <Text strong>{(totals.works + totals.worksComp).toLocaleString('ru-RU', { maximumFractionDigits: 0 })}</Text>
-                    </Table.Summary.Cell>
+                    {/* Мат./ед. и Раб./ед. — значения за единицу, общего итога у них нет */}
+                    <Table.Summary.Cell index={6} />
+                    <Table.Summary.Cell index={7} />
                     <Table.Summary.Cell index={8} align="right">
                       <Text strong>{totals.subMaterials.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}</Text>
                     </Table.Summary.Cell>
