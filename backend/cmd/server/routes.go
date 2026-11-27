@@ -101,9 +101,9 @@ func newRouter(
 		r.Use(compressMW)
 		r.Use(authMW)
 		templateAdminMW := middleware.RequireRoles(map[string]bool{"veduschiy_inzhener": true, "administrator": true, "developer": true})
-		// Добавление работ и материалов в библиотеку — те же роли, что у MCP-скоупа
-		// ScopeLibraryCreate (mcpauth/service.go). Правка, удаление, папки и шаблоны — templateAdminMW.
-		libraryCreateMW := middleware.RequireRoles(map[string]bool{"engineer": true, "veduschiy_inzhener": true, "administrator": true, "developer": true})
+		// Добавление работ и материалов в библиотеку — роли MCP-скоупа ScopeLibraryCreate
+		// (mcpauth/service.go) плюс «Старший группы». Правка, удаление, папки и шаблоны — templateAdminMW.
+		libraryCreateMW := middleware.RequireRoles(map[string]bool{"engineer": true, "senior_group": true, "veduschiy_inzhener": true, "administrator": true, "developer": true})
 
 		r.Get("/api/v1/me", d.meH.GetMe)
 		r.Get("/api/v1/me/permissions", d.meH.GetPermissions)
